@@ -63,14 +63,20 @@ def parse_ts(s: str | None) -> dt.datetime | None:
     return (base - sign * dt.timedelta(hours=hh, minutes=mm)).replace(tzinfo=UTC)
 
 
-def sh(cmd: list[str], timeout: int = 60, stdin: str | None = None, stderr: bool = False) -> str:
+def sh(cmd: list[str], timeout: int = 60, stdin: str | None = None, stderr: bool = False,
+       failed: list | None = None) -> str:
     """stdout of `cmd`, "" on any failure; stderr=True merges stderr in (`docker logs` replays a container's
-    stderr on its own stderr, and Zenod logs failed jobs with console.error: ZAL-A11)."""
+    stderr on its own stderr, and Zenod logs failed jobs with console.error: ZAL-A11). A failure is appended to
+    `failed` when given (ZAL-A18: a cached window must not move past a read that failed)."""
     try:
         r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT if stderr else subprocess.PIPE,
                            text=True, timeout=timeout, input=stdin)
+        if r.returncode and failed is not None:
+            failed.append(cmd[2:4])
         return r.stdout
     except Exception:
+        if failed is not None:
+            failed.append(cmd[2:4])
         return ""
 
 
@@ -139,9 +145,176 @@ def log_spans(cont: dict | None, past: list[dict], since: dt.datetime, until: dt
     return spans
 
 
+# ZAL-A18: what the last run already read lives on VPS1 (0600; counts and timestamps only), so each run reads only
+# new access-log bytes, container logs since the last run and journals since the last run. Re-reading the whole
+# day's Traefik log (265 MB by afternoon) and 7 days of container logs every 5 min cost VPS1 ~25 s of CPU a run.
+CACHE_VERSION = 1
+TRAEFIK_LOG = "/etc/dokploy/traefik/dynamic/access.log"
+
+
+def cache_path(name: str) -> str:
+    d = os.environ.get("ZENOD_HEALTH_CACHE_DIR") or os.path.expanduser("~/.local/state/zenod-health-remote")
+    return os.path.join(d, name)
+
+
+def load_cache(name: str) -> dict:
+    try:
+        c = json.load(open(cache_path(name)))
+        return c if c.get("v") == CACHE_VERSION else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def save_cache(name: str, c: dict) -> None:
+    p = cache_path(name)
+    os.makedirs(os.path.dirname(p), mode=0o700, exist_ok=True)
+    c["v"] = CACHE_VERSION
+    fd = os.open(p + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(c, f, separators=(",", ":"))
+    os.replace(p + ".tmp", p)
+
+
+def tail_new(path: str, mark: dict | None, cat: tuple = ("sudo", "-n", "cat")) -> tuple[list[str], dict, bool]:
+    """(complete lines appended to the root-only `path` since `mark`, the new mark, read from the start?). The only
+    sudo rule is `cat` of the whole file, so the already-read bytes still stream through a pipe but are dropped
+    unparsed. The mark is inode + byte offset + the first bytes: logrotate's copytruncate keeps the inode, so a
+    file shorter than the offset or with different first bytes is a new day's file and is read from the start."""
+    mark = mark or {}
+    try:
+        ino = os.stat(path).st_ino
+    except OSError:
+        return [], {}, True
+    p = subprocess.Popen([*cat, path], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        head = p.stdout.read(256)
+        off, old = int(mark.get("off") or 0), bytes.fromhex(mark.get("head") or "")
+        fresh = not (mark.get("ino") == ino and old and head[:len(old)] == old)
+        if fresh:
+            off = 0
+        left = off - len(head)
+        while left > 0:
+            got = len(p.stdout.read(min(left, 1 << 20)))
+            if not got:
+                break
+            left -= got
+        if left > 0:            # shorter than the offset: truncated by the rotation, read the new file
+            p.kill()
+            p.wait()
+            return tail_new(path, None, cat)
+        data = head[off:] + p.stdout.read()
+        p.wait(timeout=60)
+    except Exception:
+        p.kill()
+        p.wait()
+        return [], mark, False
+    end = data.rfind(b"\n") + 1      # a half-written last line waits for the next run
+    newoff = off + end
+    return (data[:end].decode("utf-8", "replace").splitlines(),
+            {"ino": ino, "off": newoff, "head": head[:min(256, newoff)].hex()}, fresh)
+
+
+def zenod_fold(z: dict, lines: list[tuple[dt.datetime, str]]) -> None:
+    """Fold zenod-mt log lines (oldest first) into the cached running state `z`."""
+    for t, rest in lines:
+        s = int(t.timestamp())
+        mk = str(s - s % 60)
+        z["lines"][mk] = z["lines"].get(mk, 0) + 1
+        m = re.match(r"\[task-job\] \S+ done: (\w+)", rest)
+        if m:
+            z["lastJob"] = {"at": iso(t), "kind": m.group(1)}
+            z["jobs"].append(s)
+            if m.group(1) in CAPTURE_KINDS:
+                z["capturesFailingSince"] = None
+            if m.group(1) == "chat":
+                z["chat"] = (z["chat"] + [iso(t)])[-50:]
+        # ZAL-A8: a save that failed with no save finished after it (kind logged since ZAL-A8; older lines count
+        # only when the vault guard refused them)
+        m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)
+        if m and (m.group(1) in CAPTURE_KINDS or (m.group(1) is None and "filing_recovery_pending" in rest)):
+            z["capturesFailingSince"] = z["capturesFailingSince"] or iso(t)
+        m = re.match(r"\[memory-search\] tier-0 index, ([\d.]+) ms \((\d+) rows", rest)
+        if m:
+            z["lastIndex"] = {"at": iso(t), "ms": float(m.group(1)), "rows": int(m.group(2))}
+        err = None
+        if rest.startswith("{"):
+            try:
+                j = json.loads(rest)
+                if int(j.get("level", 0)) >= 50:
+                    err = str(j.get("event") or "log level error")[:60]
+            except Exception:
+                pass
+        elif re.search(r"\b(error|failed|exception|uncaught)\b", rest, re.I) and "unknown format" not in rest:
+            err = "error line" + (" (" + re.sub(r"[^a-z_.-]", "", rest.split()[0].lower())[:30] + ")" if rest.split() else "")
+        if err:
+            z["lastError"] = {"at": iso(t), "what": err}
+            z["errs"].append(s)
+
+
+def phylax_fold(p: dict, lines: list[tuple[dt.datetime, str]]) -> None:
+    for t, rest in lines:
+        s = int(t.timestamp())
+        if rest.startswith("[whatsapp][diag] markRead"):
+            p["lastInbound"] = iso(t)
+            p["inboundTimes"] = (p["inboundTimes"] + [iso(t)])[-200:]
+            p["inbound"].append(s)
+        elif rest.startswith("[whatsapp][health]"):
+            try:
+                j = json.loads(rest.split("]", 2)[2].strip())
+            except Exception:
+                j = {}
+            if j.get("event") == "reconnect_scheduled":
+                p["lastReconnect"] = {"at": iso(t), "reason": str(j.get("reason") or "")[:60]}
+                p["reconn"].append(s)
+        elif rest.startswith("{"):
+            try:
+                j = json.loads(rest)
+                if int(j.get("level", 0)) >= 50:
+                    p["lastError"] = {"at": iso(t), "what": str(j.get("event") or "log level error")[:60]}
+                    p["errs"].append(s)
+            except Exception:
+                pass
+
+
+def access_fold(hosts: dict, lines: list[str]) -> None:
+    for line in lines:
+        if '"RequestHost":"' not in line or 'zenod.dev"' not in line:
+            continue
+        try:
+            j = json.loads(line)
+        except Exception:
+            continue
+        h = hosts.get(j.get("RequestHost"))
+        if h is None:
+            continue
+        t = parse_ts(j.get("StartUTC"))
+        if not t:
+            continue
+        s = int(t.timestamp())
+        path = j.get("RequestPath") or ""
+        status = int(j.get("DownstreamStatus") or 0)
+        if not path.startswith("/api/health"):
+            h["lastReal"] = iso(t)
+            h["real"].append(s)
+        if status >= 500:
+            h["last5xx"], h["status5xx"] = iso(t), status
+            h["e5xx"].append(s)
+
+
+def _since(xs: list[int], cut: float) -> list[int]:
+    return [x for x in xs if x >= cut]
+
+
+def _within(e, cut: dt.datetime):
+    """A cached last-event value only while its time is still inside the window the old full read covered."""
+    at = e.get("at") if isinstance(e, dict) else e
+    return e if at and parse_ts(at) >= cut else None
+
+
 def remote() -> dict:
     out: dict = {"at": iso(now())}
     sudo = ["sudo", "-n"]
+    cache = load_cache("probe.json")
 
     # containers
     ids = sh(sudo + ["docker", "ps", "-aq", "--no-trunc"]).split()
@@ -174,13 +347,25 @@ def remote() -> dict:
     out["dokploy"] = apps
 
     t_now = now()
-    until = iso(t_now)
+    day = t_now - dt.timedelta(hours=24)
+    week = t_now - dt.timedelta(days=7)
+    dcut, wcut = day.timestamp(), week.timestamp()
 
-    def logs(svc: str, since: dt.datetime) -> list[tuple[dt.datetime, str]]:
+    # container logs: only the window since the last run (falls back to the whole 7 days on a first run or an
+    # old cache), folded into the cached state; docker logs is asked up to 2 s ago so no line lands in no window
+    until = t_now - dt.timedelta(seconds=2)
+    lu = parse_ts(cache.get("logsUntil"))
+    since = lu if lu and week < lu < until else week
+    if since == week:
+        cache["zenod"] = cache["phylax"] = None
+
+    failed: list = []
+
+    def logs(svc: str) -> list[tuple[dt.datetime, str]]:
         res = []
-        for cid, s, u in log_spans(conts.get(svc), past.get(svc, []), since, t_now):
+        for cid, s, u in log_spans(conts.get(svc), past.get(svc, []), since, until):
             raw = sh(sudo + ["docker", "logs", "--since", s, "--until", u, "--timestamps", cid], timeout=90,
-                     stderr=True)
+                     stderr=True, failed=failed)
             for line in raw.splitlines():
                 ts, _, rest = line.partition(" ")
                 t = parse_ts(ts)
@@ -188,111 +373,57 @@ def remote() -> dict:
                     res.append((t, rest))
         return sorted(res, key=lambda x: x[0])   # stdout and stderr arrive as two streams
 
-    day = t_now - dt.timedelta(hours=24)
-    week = t_now - dt.timedelta(days=7)
-
     # zenod-mt
-    z = {"lastJob": None, "jobs24h": 0, "lastIndex": None, "lastError": None, "errors24h": 0, "lines": 0,
-         "capturesFailingSince": None, "chatReplies": []}
-    for t, rest in logs(ZENOD_SVC, week):
-        z["lines"] += 1
-        m = re.match(r"\[task-job\] \S+ done: (\w+)", rest)
-        if m:
-            z["lastJob"] = {"at": iso(t), "kind": m.group(1)}
-            if t >= day:
-                z["jobs24h"] += 1
-            if m.group(1) in CAPTURE_KINDS:
-                z["capturesFailingSince"] = None
-            if m.group(1) == "chat" and t >= day:
-                z["chatReplies"] = (z["chatReplies"] + [iso(t)])[-50:]
-        # ZAL-A8: a save that failed with no save finished after it (kind logged since ZAL-A8; older lines count
-        # only when the vault guard refused them)
-        m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)
-        if m and (m.group(1) in CAPTURE_KINDS or (m.group(1) is None and "filing_recovery_pending" in rest)):
-            z["capturesFailingSince"] = z["capturesFailingSince"] or iso(t)
-        m = re.match(r"\[memory-search\] tier-0 index, ([\d.]+) ms \((\d+) rows", rest)
-        if m:
-            z["lastIndex"] = {"at": iso(t), "ms": float(m.group(1)), "rows": int(m.group(2))}
-        err = None
-        if rest.startswith("{"):
-            try:
-                j = json.loads(rest)
-                if int(j.get("level", 0)) >= 50:
-                    err = str(j.get("event") or "log level error")[:60]
-            except Exception:
-                pass
-        elif re.search(r"\b(error|failed|exception|uncaught)\b", rest, re.I) and "unknown format" not in rest:
-            err = "error line" + (" (" + re.sub(r"[^a-z_.-]", "", rest.split()[0].lower())[:30] + ")" if rest.split() else "")
-        if err:
-            z["lastError"] = {"at": iso(t), "what": err}
-            if t >= day:
-                z["errors24h"] += 1
-    out["zenod_log"] = z
+    zc = cache.get("zenod") or {"lastJob": None, "jobs": [], "lastIndex": None, "lastError": None, "errs": [],
+                                "lines": {}, "capturesFailingSince": None, "chat": []}
+    zenod_fold(zc, logs(ZENOD_SVC))
+    zc["jobs"], zc["errs"] = _since(zc["jobs"], dcut), _since(zc["errs"], dcut)
+    zc["lines"] = {k: n for k, n in zc["lines"].items() if int(k) + 60 > wcut}
+    zc["chat"] = [x for x in zc["chat"] if parse_ts(x) >= day]
+    for k in ("lastJob", "lastIndex", "lastError"):
+        zc[k] = _within(zc[k], week)
+    out["zenod_log"] = {
+        "lastJob": zc["lastJob"], "jobs24h": len(zc["jobs"]), "lastIndex": zc["lastIndex"],
+        "lastError": zc["lastError"], "errors24h": len(zc["errs"]), "lines": sum(zc["lines"].values()),
+        "capturesFailingSince": zc["capturesFailingSince"], "chatReplies": zc["chat"]}
 
     # phylax
-    p = {"lastInbound": None, "inbound24h": 0, "lastReconnect": None, "reconnects24h": 0, "lastError": None,
-         "errors24h": 0, "inboundTimes": []}
-    for t, rest in logs(PHYLAX_SVC, week):
-        if rest.startswith("[whatsapp][diag] markRead"):
-            p["lastInbound"] = iso(t)
-            p["inboundTimes"] = (p["inboundTimes"] + [iso(t)])[-200:]
-            if t >= day:
-                p["inbound24h"] += 1
-        elif rest.startswith("[whatsapp][health]"):
-            try:
-                j = json.loads(rest.split("]", 2)[2].strip())
-            except Exception:
-                j = {}
-            if j.get("event") == "reconnect_scheduled":
-                p["lastReconnect"] = {"at": iso(t), "reason": str(j.get("reason") or "")[:60]}
-                if t >= day:
-                    p["reconnects24h"] += 1
-        elif rest.startswith("{"):
-            try:
-                j = json.loads(rest)
-                if int(j.get("level", 0)) >= 50:
-                    p["lastError"] = {"at": iso(t), "what": str(j.get("event") or "log level error")[:60]}
-                    if t >= day:
-                        p["errors24h"] += 1
-            except Exception:
-                pass
-    out["phylax_log"] = p
+    pc = cache.get("phylax") or {"lastInbound": None, "inbound": [], "lastReconnect": None, "reconn": [],
+                                 "lastError": None, "errs": [], "inboundTimes": []}
+    phylax_fold(pc, logs(PHYLAX_SVC))
+    pc["inbound"], pc["reconn"], pc["errs"] = (_since(pc[k], dcut) for k in ("inbound", "reconn", "errs"))
+    pc["inboundTimes"] = [x for x in pc["inboundTimes"] if parse_ts(x) >= week]
+    for k in ("lastInbound", "lastReconnect", "lastError"):
+        pc[k] = _within(pc[k], week)
+    out["phylax_log"] = {
+        "lastInbound": pc["lastInbound"], "inbound24h": len(pc["inbound"]), "lastReconnect": pc["lastReconnect"],
+        "reconnects24h": len(pc["reconn"]), "lastError": pc["lastError"], "errors24h": len(pc["errs"]),
+        "inboundTimes": pc["inboundTimes"]}
+    # a failed read: this run shows what it got (as before), the next run reads the whole 7 days again
+    if failed:
+        cache.update(zenod=None, phylax=None, logsUntil=None)
+    else:
+        cache.update(zenod=zc, phylax=pc, logsUntil=iso(until))
 
-    # Traefik access log: last real request and last 5xx per host (health checks excluded)
-    hosts = {h: {"lastReal": None, "real24h": 0, "last5xx": None, "status5xx": None, "n5xx24h": 0}
-             for h in ("zenod.dev", "cloud.zenod.dev", "phylax.zenod.dev")}
-    raw = sh(sudo + ["cat", "/etc/dokploy/traefik/dynamic/access.log"], timeout=60)
-    for line in raw.splitlines()[-400000:]:
-        if '"RequestHost":"' not in line:
-            continue
-        try:
-            j = json.loads(line)
-        except Exception:
-            continue
-        h = hosts.get(j.get("RequestHost"))
-        if h is None:
-            continue
-        t = parse_ts(j.get("StartUTC"))
-        if not t:
-            continue
-        path = j.get("RequestPath") or ""
-        status = int(j.get("DownstreamStatus") or 0)
-        if not path.startswith("/api/health"):
-            h["lastReal"] = iso(t)
-            if t >= day:
-                h["real24h"] += 1
-        if status >= 500:
-            h["last5xx"], h["status5xx"] = iso(t), status
-            if t >= day:
-                h["n5xx24h"] += 1
-    out["access"] = hosts
+    # Traefik access log: last real request and last 5xx per host (health checks excluded), since the file's
+    # rotation like the old whole-file read, but only the bytes added since the last run are parsed
+    lines, cache["accessMark"], fresh = tail_new(TRAEFIK_LOG, cache.get("accessMark"))
+    hosts = None if fresh else cache.get("access")
+    hosts = hosts or {h: {"lastReal": None, "real": [], "last5xx": None, "status5xx": None, "e5xx": []}
+                      for h in ("zenod.dev", "cloud.zenod.dev", "phylax.zenod.dev")}
+    access_fold(hosts, lines)
+    for h in hosts.values():
+        h["real"], h["e5xx"] = _since(h["real"], dcut), _since(h["e5xx"], dcut)
+    cache["access"] = hosts
+    out["access"] = {k: {"lastReal": h["lastReal"], "real24h": len(h["real"]), "last5xx": h["last5xx"],
+                         "status5xx": h["status5xx"], "n5xx24h": len(h["e5xx"])} for k, h in hosts.items()}
 
     # journals
-    def journal(unit: str, since: str, user: bool = False) -> list[tuple[dt.datetime, str]]:
+    def journal(unit: str, since: str, user: bool = False, failed: list | None = None) -> list[tuple[dt.datetime, str]]:
         cmd = (["journalctl", "--user"] if user else sudo + ["journalctl"]) + \
             ["-u", unit, "--since", since, "--no-pager", "-o", "short-iso"]
         res = []
-        for line in sh(cmd).splitlines():
+        for line in sh(cmd, failed=failed).splitlines():
             ts = line.split(" ", 1)[0]
             t = parse_ts(ts)
             if t and "systemd[" not in line and "sudo[" not in line:
@@ -302,13 +433,24 @@ def remote() -> dict:
     dp = journal("infra-vps-deploy-poller", "-30min", user=True)
     dp = [x for x in dp if "deploy-poller zenod-mt" in x[1]]
     out["deploy_poller"] = {"at": iso(dp[-1][0]), "msg": dp[-1][1][:120]} if dp else None
-    rolls = [x for x in journal("infra-vps-deploy-poller", "-14d", user=True)
+    # the last roll (14 days) and the keeper's last plan or drill (35 days): journals since the last run, the
+    # newest match carried in the cache (a minute of overlap; a repeat only re-finds the same last line)
+    ja, jfail = parse_ts(cache.get("journalAt")), []
+    inc = ja and t_now - dt.timedelta(days=14) < ja <= t_now
+    if not inc:
+        cache["lastRoll"] = cache["keeperLast"] = cache["watchdogRun"] = None
+    js = f"@{int(ja.timestamp()) - 60}" if inc else None
+    rolls = [x for x in journal("infra-vps-deploy-poller", js or "-14d", user=True, failed=jfail)
              if "deploy-poller zenod-mt" in x[1] and "noop" not in x[1]]
-    out["deploy_last_roll"] = {"at": iso(rolls[-1][0]), "msg": rolls[-1][1][:120]} if rolls else None
+    if rolls:
+        cache["lastRoll"] = {"at": iso(rolls[-1][0]), "msg": rolls[-1][1][:120]}
+    out["deploy_last_roll"] = _within(cache.get("lastRoll"), t_now - dt.timedelta(days=14))
 
     # S5 watchdog (user timer) and its sender: every queued alert id (watchdog and this page) must show up as
     # `alert=sent id=<id>` in the relay watchdog's log, which delivers the HQ queue to Jordi's "HQ — vps1 alerts" thread.
-    runs = journal("zenod-health-watchdog", "-24h", user=True)
+    runs = journal("zenod-health-watchdog", js or "-24h", user=True, failed=jfail)   # ~13k lines a day: incremental too
+    if runs:
+        cache["watchdogRun"] = iso(runs[-1][0])
     sent_log = os.path.expanduser("~/agent_team_m0/relay-watchdog.log")
     sent = set()
     try:
@@ -342,7 +484,7 @@ def remote() -> dict:
         "deliveredNo24h": undelivered, "lastAlert": iso(last_alert), "lastDelivered": iso(last_sent),
         "timer": sh(["systemctl", "--user", "show", "zenod-health-watchdog.timer", "-p", "ActiveState",
                      "--value"]).strip(),
-        "lastRun": iso(runs[-1][0]) if runs else None,
+        "lastRun": _within(cache.get("watchdogRun"), day),
         "retiredRootTimer": sh(["systemctl", "show", "zenod-watchdog.timer", "-p", "ActiveState", "--value"]).strip(),
     }
 
@@ -357,8 +499,12 @@ def remote() -> dict:
                                        for x in proofs]}
     else:
         out["readiness"] = None
-    rk = [x for x in journal("zenod-readiness-keeper", "-35d") if "] plan " in x[1] or "drill" in x[1]]
-    out["keeper_last"] = {"at": iso(rk[-1][0]), "msg": rk[-1][1][-80:]} if rk else None
+    rk = [x for x in journal("zenod-readiness-keeper", js or "-35d", failed=jfail)
+          if "] plan " in x[1] or "drill" in x[1]]
+    if rk:
+        cache["keeperLast"] = {"at": iso(rk[-1][0]), "msg": rk[-1][1][-80:]}
+    out["keeper_last"] = _within(cache.get("keeperLast"), t_now - dt.timedelta(days=35))
+    cache["journalAt"] = None if jfail else iso(t_now)
 
     # tester-watch aggregate (redacted, no Stripe): counts and newest timestamps only
     try:
@@ -397,6 +543,7 @@ def remote() -> dict:
     out["disk_root_pct"] = int(df[1].split()[4].rstrip("%")) if len(df) > 1 else None
     dg = journal("infra-vps-disk-guard", "-30min", user=True)
     out["disk_guard"] = {"at": iso(dg[-1][0]), "msg": dg[-1][1][:100]} if dg else None
+    save_cache("probe.json", cache)
     return out
 
 

@@ -2,8 +2,9 @@
 Description=EPIC-6 S1 it.5: timeline numbers every 15 min
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=15min
+# ZAL-A18: :07, :22, :37, :52, off the quarter hours (see epic6-s1-health-probe.timer)
+OnCalendar=*:07/15
+AccuracySec=5s
 Persistent=true
 
 [Install]

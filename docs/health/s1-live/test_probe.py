@@ -40,5 +40,75 @@ class LogSpans(unittest.TestCase):
                          [("d", "2026-11-01T19:45:00Z", "2026-11-08T19:45:00Z")])
 
 
+class TailNew(unittest.TestCase):
+    """ZAL-A18: the access log is read from where the last run stopped; logrotate's copytruncate keeps the inode."""
+
+    def setUp(self):
+        import tempfile
+        self.d = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.d.name, "access.log")
+
+    def tearDown(self):
+        self.d.cleanup()
+
+    def write(self, text, mode="a"):
+        with open(self.path, mode) as f:
+            f.write(text)
+
+    def read(self, mark):
+        return P.tail_new(self.path, mark, cat=("cat",))
+
+    def test_only_new_complete_lines_are_returned(self):
+        self.write('{"n":1}\n{"n":2}\n{"n":3')
+        lines, mark, fresh = self.read(None)
+        self.assertEqual((lines, fresh), (['{"n":1}', '{"n":2}'], True))
+        self.write('}\n{"n":4}\n')
+        lines, mark, fresh = self.read(mark)
+        self.assertEqual((lines, fresh), (['{"n":3}', '{"n":4}'], False))
+        self.assertEqual(self.read(mark)[:2], ([], mark))
+
+    def test_copytruncate_rotation_reads_the_new_file_from_the_start(self):
+        self.write("".join(f'{{"day":1,"n":{i}}}\n' for i in range(100)))
+        _, mark, _ = self.read(None)
+        self.write('{"day":2,"n":0}\n', mode="r+")     # same inode, new first bytes
+        with open(self.path, "r+") as f:
+            f.truncate(len('{"day":2,"n":0}\n'))
+        lines, _, fresh = self.read(mark)
+        self.assertEqual((lines, fresh), (['{"day":2,"n":0}'], True))
+
+    def test_a_short_file_grows_past_its_first_256_bytes(self):
+        self.write('{"a":1}\n')
+        _, mark, _ = self.read(None)
+        self.write("".join(f'{{"b":{i}}}\n' for i in range(60)))
+        lines, mark, fresh = self.read(mark)
+        self.assertFalse(fresh)
+        self.assertEqual(len(lines), 60)
+        self.write('{"c":1}\n')
+        self.assertEqual(self.read(mark)[0], ['{"c":1}'])
+
+    def test_an_emptied_file_starts_over(self):
+        self.write('{"a":1}\n')
+        _, mark, _ = self.read(None)
+        open(self.path, "w").close()
+        self.assertEqual(self.read(mark)[0::2], ([], True))
+
+
+class Folds(unittest.TestCase):
+    def test_incremental_folds_equal_one_whole_read(self):
+        t = [P.parse_ts(f"2026-11-09T10:{m:02d}:00Z") for m in range(6)]
+        lines = [(t[0], "[task-job] a done: store"), (t[1], "[task-job] b failed (store): x"),
+                 (t[2], "[task-job] c done: chat"), (t[3], '{"level":50,"event":"boom"}'),
+                 (t[4], "[memory-search] tier-0 index, 12.5 ms (40 rows"), (t[5], "[task-job] d failed (store): y")]
+        new = lambda: {"lastJob": None, "jobs": [], "lastIndex": None, "lastError": None, "errs": [], "lines": {},
+                       "capturesFailingSince": None, "chat": []}
+        whole, parts = new(), new()
+        P.zenod_fold(whole, lines)
+        P.zenod_fold(parts, lines[:2])
+        P.zenod_fold(parts, lines[2:])
+        self.assertEqual(whole, parts)
+        self.assertEqual(whole["capturesFailingSince"], "2026-11-09T10:01:00Z")   # a chat job is not a save
+        self.assertEqual(len(whole["jobs"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,9 @@
 Description=EPIC-6 S3 prod smoke battery every 15 min
 
 [Timer]
-OnCalendar=*:0/15
+# ZAL-A18: :11, :26, :41, :56, off the quarter hours (see epic6-s1-health-probe.timer); its checks already run one
+# at a time, the delay below spreads them inside the minute
+OnCalendar=*:11/15
 RandomizedDelaySec=30
 Persistent=true
 

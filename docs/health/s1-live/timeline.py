@@ -189,6 +189,107 @@ PHYLAX_SVC = "app-index-back-end-panel-6zm3qg"
 TRAEFIK = "/etc/dokploy/traefik/dynamic"
 
 
+# ZAL-A18: the collector runs every 15 min for the last 3 h but re-read the whole Traefik access log each time;
+# the bytes and container-log window already read are now remembered on VPS1 (0600, counts and durations only).
+# Same helpers as probe.py (each file is piped to VPS1 on its own, so they cannot share a module).
+CACHE_VERSION = 1
+
+
+def cache_path(name: str) -> str:
+    d = os.environ.get("ZENOD_HEALTH_CACHE_DIR") or os.path.expanduser("~/.local/state/zenod-health-remote")
+    return os.path.join(d, name)
+
+
+def load_cache(name: str) -> dict:
+    try:
+        c = json.load(open(cache_path(name)))
+        return c if c.get("v") == CACHE_VERSION else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def save_cache(name: str, c: dict) -> None:
+    p = cache_path(name)
+    os.makedirs(os.path.dirname(p), mode=0o700, exist_ok=True)
+    c["v"] = CACHE_VERSION
+    fd = os.open(p + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(c, f, separators=(",", ":"))
+    os.replace(p + ".tmp", p)
+
+
+def tail_new(path: str, mark: dict | None, cat: tuple = ("sudo", "-n", "cat")) -> tuple[list[str], dict, bool]:
+    """(complete lines appended to the root-only `path` since `mark`, the new mark, read from the start?). The only
+    sudo rule is `cat` of the whole file, so the already-read bytes still stream through a pipe but are dropped
+    unparsed. The mark is inode + byte offset + the first bytes: logrotate's copytruncate keeps the inode, so a
+    file shorter than the offset or with different first bytes is a new day's file and is read from the start."""
+    mark = mark or {}
+    try:
+        ino = os.stat(path).st_ino
+    except OSError:
+        return [], {}, True
+    p = subprocess.Popen([*cat, path], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        head = p.stdout.read(256)
+        off, old = int(mark.get("off") or 0), bytes.fromhex(mark.get("head") or "")
+        fresh = not (mark.get("ino") == ino and old and head[:len(old)] == old)
+        if fresh:
+            off = 0
+        left = off - len(head)
+        while left > 0:
+            got = len(p.stdout.read(min(left, 1 << 20)))
+            if not got:
+                break
+            left -= got
+        if left > 0:            # shorter than the offset: truncated by the rotation, read the new file
+            p.kill()
+            p.wait()
+            return tail_new(path, None, cat)
+        data = head[off:] + p.stdout.read()
+        p.wait(timeout=60)
+    except Exception:
+        p.kill()
+        p.wait()
+        return [], mark, False
+    end = data.rfind(b"\n") + 1      # a half-written last line waits for the next run
+    newoff = off + end
+    return (data[:end].decode("utf-8", "replace").splitlines(),
+            {"ino": ino, "off": newoff, "head": head[:min(256, newoff)].hex()}, fresh)
+
+
+START = re.compile(r'"StartUTC":"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)[.\dZ]')
+
+
+def _fold_access(cb: dict, lines: list[str], hosts: dict) -> None:
+    """Hour buckets of the access log since cb["since"]; cb["first"] is the earliest line the file holds."""
+    lo = parse_ts(cb["since"])
+    for line in lines:
+        if '"RequestHost":"' not in line:
+            continue
+        m = START.search(line)      # every host counts for the file's first moment, read without parsing JSON
+        if m and (cb["first"] is None or m.group(1) + "Z" < cb["first"]):
+            cb["first"] = m.group(1) + "Z"
+        if 'zenod.dev"' not in line:
+            continue
+        try:
+            j = json.loads(line)
+        except ValueError:
+            continue
+        t = parse_ts(j.get("StartUTC"))
+        if not t:
+            continue
+        cid = hosts.get(j.get("RequestHost"))
+        if not cid or t < lo:
+            continue
+        b = cb["b"].setdefault(cid, {}).setdefault(hkey(t), {})
+        status = int(j.get("DownstreamStatus") or 0)
+        b["s"] = worst(b.get("s"), "amber" if status >= 500 else ("green" if 0 < status < 500 else None))
+        if cid == "site" and not (j.get("RequestPath") or "").startswith("/api/health"):
+            b["v"] = b.get("v", 0) + 1
+        if cid == "cloud" and j.get("Duration") is not None:
+            cb["d"].setdefault(hkey(t), []).append(float(j["Duration"]) / 1e6)
+
+
 def remote_hours(since: dt.datetime) -> dict:
     """Per component: {"from": ISO first moment the source covers, "h": {hour: {"v": n, "s": status?}}}."""
     sudo = ["sudo", "-n"]
@@ -214,41 +315,41 @@ def remote_hours(since: dt.datetime) -> dict:
             bucket(cid, t).setdefault("v", 0)
             t += dt.timedelta(hours=1)
 
-    # Traefik access log (current file plus any rotated ones the sudo rules allow)
+    # Traefik access log (current file plus any rotated ones the sudo rules allow): the current file is read from
+    # where the last run stopped; rotated ones (none in this directory since logrotate's olddir) still read whole
+    cache = load_cache("timeline.json")
     files = [f for f in sh(sudo + ["ls", TRAEFIK]).split() if re.fullmatch(r"access\.log(\.\d+)?(\.gz)?", f)]
     hosts = {"zenod.dev": "site", "cloud.zenod.dev": "cloud", "phylax.zenod.dev": "phylax"}
-    durs: dict[tuple[str, str], list[float]] = {}
-    first = None
+    cb = cache.get("access")
+    reset = not cb or parse_ts(cb["since"]) > since
+    lines, mark, fresh = tail_new(f"{TRAEFIK}/access.log", None if reset else cache.get("accessMark")) \
+        if "access.log" in files else ([], {}, True)
+    if reset or fresh:
+        cb = {"since": iso(since), "first": None, "b": {}, "d": {}}
+    _fold_access(cb, lines, hosts)
+    work = json.loads(json.dumps(cb))
     for f in sorted(files, reverse=True):
-        p = f"{TRAEFIK}/{f}"
-        raw = sh(sudo + (["zcat", p] if f.endswith(".gz") else ["cat", p]), timeout=120)
-        for line in raw.splitlines():
-            if '"RequestHost":"' not in line:
-                continue
-            try:
-                j = json.loads(line)
-            except ValueError:
-                continue
-            t = parse_ts(j.get("StartUTC"))
-            if not t:
-                continue
-            first = t if first is None or t < first else first
-            cid = hosts.get(j.get("RequestHost"))
-            if not cid or t < since:
-                continue
-            b = bucket(cid, t)
-            status = int(j.get("DownstreamStatus") or 0)
-            b["s"] = worst(b.get("s"), "amber" if status >= 500 else ("green" if 0 < status < 500 else None))
-            if cid == "site" and not (j.get("RequestPath") or "").startswith("/api/health"):
-                b["v"] = b.get("v", 0) + 1
-            if cid == "cloud" and j.get("Duration") is not None:
-                durs.setdefault((cid, hkey(t)), []).append(float(j["Duration"]) / 1e6)
+        if f != "access.log":
+            p = f"{TRAEFIK}/{f}"
+            _fold_access(work, sh(sudo + (["zcat", p] if f.endswith(".gz") else ["cat", p]), timeout=120).splitlines(),
+                         hosts)
+    first = parse_ts(work["first"])
+    for cid, hs in work["b"].items():
+        for k, b in hs.items():
+            if k >= hkey(since):
+                comp(cid)["h"][k] = b
     for cid in hosts.values():
         cover(cid, first)
     zero_fill("site", first)
-    for (cid, k), xs in durs.items():
-        xs.sort()
-        out[cid]["h"][k]["v"] = round(xs[len(xs) // 2], 1)
+    for k, xs in work["d"].items():
+        if k >= hkey(since):
+            xs.sort()
+            out["cloud"]["h"][k]["v"] = round(xs[len(xs) // 2], 1)
+    cut = hkey(max(parse_ts(cb["since"]), (t_now - dt.timedelta(hours=6)).replace(minute=0, second=0, microsecond=0)))
+    cb["since"] = cut + ":00:00Z"
+    cb["b"] = {cid: {k: b for k, b in hs.items() if k >= cut} for cid, hs in cb["b"].items()}
+    cb["d"] = {k: xs for k, xs in cb["d"].items() if k >= cut}
+    cache.update(access=cb, accessMark=mark)
 
     # container logs (only since each running container started: docker drops a container's log on redeploy)
     ids = sh(sudo + ["docker", "ps", "-aq", "--no-trunc"]).split()
@@ -264,43 +365,67 @@ def remote_hours(since: dt.datetime) -> dict:
                 if s.get("Running"):
                     started[svc] = (p[0], parse_ts(s.get("StartedAt")))
 
-    def logs(svc: str):
+    def logs(svc: str, fold) -> tuple[dt.datetime | None, dict]:
+        """Hour buckets of the running container's log since max(since, its start), the window already read kept
+        in the cache; a new container or an earlier `since` reads the window again."""
         if svc not in started:
-            return None, []
+            return None, {}
         cid_, st_ = started[svc]
         s = max(since, (st_ or since) - dt.timedelta(seconds=1))
-        raw = sh(sudo + ["docker", "logs", "--since", iso(s), "--until", iso(t_now), "--timestamps", cid_], timeout=120)
-        res = []
-        for line in raw.splitlines():
-            ts, _, rest = line.partition(" ")
-            t = parse_ts(ts)
-            if t:
-                res.append((t, rest))
-        return st_, res
+        c = cache.get(svc)
+        if not c or c["cid"] != cid_ or parse_ts(c["since"]) > s or not parse_ts(c["until"]):
+            c = {"cid": cid_, "since": iso(s), "until": iso(s), "h": {}}
+        until = t_now - dt.timedelta(seconds=2)
+        failed = []
+        if parse_ts(c["until"]) < until:
+            try:
+                r = subprocess.run(sudo + ["docker", "logs", "--since", c["until"], "--until", iso(until), "--timestamps",
+                                           cid_], capture_output=True, text=True, timeout=120)
+                raw, failed = r.stdout, ([1] if r.returncode else [])
+            except Exception:
+                raw, failed = "", [1]
+            for line in raw.splitlines():
+                ts, _, rest = line.partition(" ")
+                t = parse_ts(ts)
+                if t:
+                    fold(c["h"].setdefault(hkey(t), {}), rest)
+            c["until"] = iso(until)
+        h = {k: b for k, b in c["h"].items() if k >= hkey(s)}
+        cut = hkey(t_now - dt.timedelta(hours=6))
+        c["h"] = {k: b for k, b in c["h"].items() if k >= cut}
+        c["since"] = max(c["since"], cut + ":00:00Z")
+        cache[svc] = None if failed else c      # a failed read: the next run reads the window again
+        return st_, h
 
-    st_, zl = logs(ZENOD_SVC)
-    cover("database", st_), cover("memory_index", st_)
-    zero_fill("database", st_)
-    ms: dict[str, list[float]] = {}
-    for t, rest in zl:
+    def zfold(b: dict, rest: str) -> None:
         if re.match(r"\[task-job\] \S+ done: \w+", rest):
-            b = bucket("database", t)
-            b["v"] = b.get("v", 0) + 1
+            b["n"] = b.get("n", 0) + 1
         m = re.match(r"\[memory-search\] tier-0 index, ([\d.]+) ms", rest)
         if m:
-            ms.setdefault(hkey(t), []).append(float(m.group(1)))
-            bucket("memory_index", t)["s"] = "green"
-    for k, xs in ms.items():
-        xs.sort()
-        out["memory_index"]["h"][k]["v"] = round(xs[len(xs) // 2])
+            b.setdefault("ms", []).append(float(m.group(1)))
 
-    st_, pl = logs(PHYLAX_SVC)
+    def pfold(b: dict, rest: str) -> None:
+        if rest.startswith("[whatsapp][diag] markRead"):
+            b["n"] = b.get("n", 0) + 1
+
+    st_, zl = logs(ZENOD_SVC, zfold)
+    cover("database", st_), cover("memory_index", st_)
+    zero_fill("database", st_)
+    for k, b in zl.items():
+        if b.get("n"):
+            bucket("database", hstart(k))["v"] = b["n"]
+        if b.get("ms"):
+            xs = sorted(b["ms"])
+            bucket("memory_index", hstart(k))["s"] = "green"
+            out["memory_index"]["h"][k]["v"] = round(xs[len(xs) // 2])
+
+    st_, pl = logs(PHYLAX_SVC, pfold)
     cover("phylax", st_)
     zero_fill("phylax", st_)
-    for t, rest in pl:
-        if rest.startswith("[whatsapp][diag] markRead"):
-            b = bucket("phylax", t)
-            b["v"] = b.get("v", 0) + 1
+    for k, b in pl.items():
+        if b.get("n"):
+            bb = bucket("phylax", hstart(k))
+            bb["v"] = bb.get("v", 0) + b["n"]
     # phylax.zenod.dev coverage: the earlier of the container log and the access log
     if out["phylax"].get("from") and first:
         out["phylax"]["from"] = iso(max(since, min(first, st_ or first)))
@@ -392,6 +517,7 @@ def remote_hours(since: dt.datetime) -> dict:
             b["s"] = worst(b.get("s"), {"OK": "green", "WARN": "amber", "CRIT": "red"}.get(mm.group(1)))
 
     out["traefik_from"] = iso(first)
+    save_cache("timeline.json", cache)
     return out
 
 

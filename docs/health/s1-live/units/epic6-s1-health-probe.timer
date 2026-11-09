@@ -2,8 +2,10 @@
 Description=EPIC-6 S1 live health inventory probe every 5 min
 
 [Timer]
-OnBootSec=1min
-OnUnitActiveSec=5min
+# ZAL-A18: fixed minutes off the hour marks where VPS1's other jobs start (:03, :08, ... :58); the timeline runs at
+# :07/:22/:37/:52 and the smoke battery at :11/:26/:41/:56, so no two of the three start in the same minute.
+OnCalendar=*:03/5
+AccuracySec=5s
 Persistent=true
 
 [Install]
