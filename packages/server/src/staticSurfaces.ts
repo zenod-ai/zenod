@@ -49,6 +49,26 @@ export function siteNotFound(siteDist: string | undefined): (c: Context) => Resp
   };
 }
 
+// ZAL-A20: http -> https behind Cloudflare. The tunnel lands every request on
+// Traefik over one scheme, so the visitor's own scheme only survives in
+// Cloudflare's Cf-Visitor header. Without that header (local, self-host) nothing changes.
+export function cloudflareHttpsRedirect(): MiddlewareHandler {
+  return async (c, next) => {
+    let scheme: unknown;
+    try {
+      scheme = (JSON.parse(c.req.header("cf-visitor") ?? "{}") as { scheme?: unknown }).scheme;
+    } catch {
+      scheme = undefined;
+    }
+    if (scheme !== "http") return next();
+    const url = new URL(c.req.url);
+    const host = requestHost(c.req.header("x-forwarded-host") ?? c.req.header("host") ?? url.hostname);
+    if (!host) return next();
+    const method = c.req.method;
+    return c.redirect(`https://${host}${url.pathname}${url.search}`, method === "GET" || method === "HEAD" ? 301 : 308);
+  };
+}
+
 export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurfaceOptions): void {
   const noCache: Pick<ServeStaticOptions<ServerEnv>, "onFound"> = {
     onFound: (_path, c) => c.header("Cache-Control", "no-cache, no-store, must-revalidate"),

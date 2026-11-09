@@ -2383,6 +2383,32 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("sends plain-http visitors behind Cloudflare to https, path and query kept (ZAL-A20)", async () => {
+    const dataDir = await tempDir();
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: { ACCOUNT_STATE_SECRET: "static-test-secret", CHASSIS_VAULT_MASTER_KEY },
+    });
+    try {
+      const plain = { host: "zenod.dev", "cf-visitor": '{"scheme":"http"}' };
+      const get = await unit.app.request("/pricing?x=1", { headers: plain });
+      expect(get.status).toBe(301);
+      expect(get.headers.get("location")).toBe("https://zenod.dev/pricing?x=1");
+      const head = await unit.app.request("/", { method: "HEAD", headers: { ...plain, host: "cloud.zenod.dev" } });
+      expect(head.status).toBe(301);
+      expect(head.headers.get("location")).toBe("https://cloud.zenod.dev/");
+      const post = await unit.app.request("/mcp", { method: "POST", headers: plain });
+      expect(post.status).toBe(308);
+      expect(post.headers.get("location")).toBe("https://zenod.dev/mcp");
+      const secure = await unit.app.request("/api/health", { headers: { ...plain, "cf-visitor": '{"scheme":"https"}' } });
+      expect(secure.status).toBe(200);
+      expect((await unit.app.request("/api/health", { headers: { host: "zenod.dev" } })).status).toBe(200);
+    } finally {
+      unit.close();
+    }
+  });
+
   it("keeps the deployed token-path MCP route on the integrated app", async () => {
     const dataDir = await tempDir();
     const tenants = createMemoryTenantStore([{ token: "path-token", tenant: { id: "tenant-path" } }]);
