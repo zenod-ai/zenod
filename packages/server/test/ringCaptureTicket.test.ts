@@ -521,6 +521,8 @@ describe("Ring capture context ticket", () => {
         },
       }],
     });
+    // The stubbed WhatsApp link counts as open (receipts wait for it, ZAL-A16).
+    vi.spyOn(phylax.phylaxRuntime.whatsapp, "isConnected").mockReturnValue(true);
     const whatsappSend = vi.spyOn(phylax.phylaxRuntime.whatsapp, "sendText")
       .mockResolvedValue({ sentMessageId: "wa-terminal-receipt" });
     const telegramSend = vi.spyOn(phylax.phylaxRuntime.telegram, "sendText")

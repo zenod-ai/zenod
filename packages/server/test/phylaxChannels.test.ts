@@ -37,6 +37,17 @@ import { PhylaxUsagePausedError } from "../src/phylaxUsageMeter.js";
 
 const dirs: string[] = [];
 
+/** A socket whose WhatsApp link opens as soon as the gateway listens (ZAL-A16). */
+function openOnBind() {
+  return {
+    on(eventName: string, listener: (...args: never[]) => void) {
+      if (eventName === "connection.update") {
+        queueMicrotask(() => (listener as unknown as (update: Record<string, unknown>) => void)({ connection: "open" }));
+      }
+    },
+  };
+}
+
 vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@whiskeysockets/baileys")>();
   return {
@@ -1683,7 +1694,7 @@ describe("PhylaxChannelsOrgan", () => {
 
     const attempts: string[] = [];
     const socketFactory = async () => ({
-      ev: { on() {} },
+      ev: openOnBind(),
       user: { id: "34999999999@s.whatsapp.net" },
       async sendMessage(_jid: string, content: { text?: string }, options?: { messageId?: string }) {
         expect(content.text).toBe(receiptText);
@@ -1727,6 +1738,125 @@ describe("PhylaxChannelsOrgan", () => {
       expect(attempts).toHaveLength(1);
     } finally {
       await restarted.close();
+    }
+  });
+
+  it("holds Saved receipts finished during a restart until WhatsApp reconnects, then sends each once (ZAL-A16)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-receipts-after-reconnect-"));
+    dirs.push(dataDir);
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+    };
+    const receipts = [
+      { id: "provider-held-receipt-1", text: "Saved ✓ first" },
+      { id: "provider-held-receipt-2", text: "Saved ✓ second" },
+    ];
+    const schema = new PhylaxChannelsOrgan({ dataDir, routes: { resolve: () => route } });
+    await schema.close();
+    const journal = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+    const seededWhatsApp = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    const now = Date.now();
+    for (const receipt of receipts) {
+      // Finished while Phylax was restarting: terminal, never claimed or sent.
+      journal.prepare(
+        `INSERT INTO phylax_capture_jobs (
+           tenant_id, channel, provider_message_id, sender, chat_id,
+           conversation_key, tool, job_id, state, receipt_text, evidence_ref,
+           delivered_at, created_at, updated_at
+         ) VALUES ('alpha', 'whatsapp', ?, ?, ?, ?, 'store_memory', ?, 'done', ?, NULL, NULL, ?, ?)`,
+      ).run(
+        receipt.id,
+        "34611111111",
+        "34611111111@s.whatsapp.net",
+        "whatsapp:34611111111",
+        `job-${receipt.id}`,
+        receipt.text,
+        now,
+        now,
+      );
+      seededWhatsApp.recordChannelForwarding({
+        providerMessageId: receipt.id,
+        tenantId: "alpha",
+        senderId: "34611111111",
+        downstreamDestination: "zenod.test#tenant:alpha",
+        replyText: receipt.text,
+      });
+    }
+    journal.close();
+    seededWhatsApp.close();
+
+    // Like Baileys: a socket that has not opened yet throws "Connection Closed".
+    let opened = false;
+    let connectionUpdate: ((update: Record<string, unknown>) => void) | undefined;
+    const sent: string[] = [];
+    const runtime = new PhylaxPortedRuntime(
+      dataDir,
+      new PhylaxChannelsOrgan({ dataDir, routes: { resolve: () => route } }),
+      {},
+      {
+        whatsappSocketFactory: async () => ({
+          ev: {
+            on(eventName, listener) {
+              if (eventName === "connection.update") {
+                connectionUpdate = listener as (update: Record<string, unknown>) => void;
+              }
+            },
+          },
+          user: { id: "34999999999@s.whatsapp.net" },
+          async sendMessage(_jid, content, options) {
+            if (!opened) throw new Error("Connection Closed");
+            sent.push(content.text);
+            return { key: { id: options?.messageId ?? `sent-${sent.length}` } };
+          },
+        }),
+      },
+    );
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    const logs: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((line: unknown) => { logs.push(String(line)); });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const claims = () => {
+      const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+      try {
+        return db.prepare(
+          `SELECT provider_message_id AS id, delivered_at AS deliveredAt, delivery_completed_at AS completedAt
+           FROM phylax_capture_jobs ORDER BY provider_message_id`,
+        ).all() as Array<{ id: string; deliveredAt: number | null; completedAt: number | null }>;
+      } finally {
+        db.close();
+      }
+    };
+    try {
+      await runtime.start();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      // Before the link is up nothing is sent, nothing fails and no claim is kept.
+      expect(sent).toEqual([]);
+      expect(error).not.toHaveBeenCalled();
+      expect(claims()).toEqual(receipts.map((receipt) => ({ id: receipt.id, deliveredAt: null, completedAt: null })));
+      expect(logs.filter((line) => line.includes("terminal_receipt.deferred"))).toHaveLength(2);
+
+      opened = true;
+      connectionUpdate?.({ connection: "open" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(sent.sort()).toEqual(receipts.map((receipt) => receipt.text).sort());
+      expect(claims().every((row) => row.completedAt !== null)).toBe(true);
+      expect(logs).toEqual(expect.arrayContaining([
+        expect.stringContaining('"event":"terminal_receipt.retry_after_reconnect"'),
+        expect.stringContaining('"provider_message_id":"provider-held-receipt-1"'),
+      ]));
+      expect(logs.filter((line) => line.includes("terminal_receipt.sent"))).toHaveLength(2);
+
+      // Another reconnect never sends them again.
+      connectionUpdate?.({ connection: "open" });
+      await runtime.organ.resumePendingCaptures();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(sent).toHaveLength(2);
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+      await runtime.close();
     }
   });
 
@@ -1791,7 +1921,7 @@ describe("PhylaxChannelsOrgan", () => {
       {},
       {
         whatsappSocketFactory: async () => ({
-          ev: { on() {} },
+          ev: openOnBind(),
           user: { id: "34999999999@s.whatsapp.net" },
           async sendMessage(_jid, _content, options) {
             const id = options?.messageId ?? "";
@@ -1807,11 +1937,15 @@ describe("PhylaxChannelsOrgan", () => {
       providerMode: "self_host_dev",
       acceptAll: true,
     });
+    // The link opens on bind, so the reconnect retry and start() both reach
+    // this receipt (ZAL-A16); they share one in-flight send. The crash holds
+    // for this whole process.
     vi.spyOn(firstRuntime.whatsappStore, "completeOutboundIntent")
-      .mockImplementationOnce(() => {
+      .mockImplementation(() => {
         throw new Error("simulated crash after provider success before outbound audit");
       });
     await firstRuntime.start();
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(attempts).toHaveLength(1);
     expect(attempts[0]).not.toBe("");
     expect(firstRuntime.whatsappStore.recoverableReceiptIntent("alpha", sourceMessageId))
@@ -1843,7 +1977,7 @@ describe("PhylaxChannelsOrgan", () => {
       {},
       {
         whatsappSocketFactory: async () => ({
-          ev: { on() {} },
+          ev: openOnBind(),
           user: { id: "34999999999@s.whatsapp.net" },
           async sendMessage(_jid, _content, options) {
             const id = options?.messageId ?? "";
@@ -4607,7 +4741,7 @@ describe("ported gateway integration", () => {
     }, {
       probeVoiceDuration: async () => 60,
       whatsappSocketFactory: async () => ({
-        ev: { on() {} },
+        ev: openOnBind(),
         async sendMessage(_jid, content) {
           sent.push(content.text);
           return { key: { id: `overlap-receipt-${sent.length}` } };

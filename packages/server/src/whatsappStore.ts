@@ -2241,6 +2241,12 @@ export class WhatsAppStore {
     }
   }
 
+  /** The provider id of an intent another path already sent, or null (ZAL-A16). */
+  sentOutboundIntentId(intentId: string): string | null {
+    const intent = this.outboundIntentById(intentId);
+    return intent?.state === "sent" ? intent.sentProviderMessageId ?? intent.providerMessageId : null;
+  }
+
   completeOutboundIntent(
     intent: WhatsAppOutboundIntent,
     outcome: { sentMessageId: string; raw?: unknown },

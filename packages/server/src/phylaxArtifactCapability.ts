@@ -19,6 +19,13 @@ export function phylaxArtifactCapabilitySecret(env: NodeJS.ProcessEnv): string {
   return createHmac("sha256", root).update(ARTIFACT_CAPABILITY_PURPOSE, "utf8").digest("base64url");
 }
 
+/**
+ * How long Zenod may fetch a staged WhatsApp/Telegram media file. It was 24 h
+ * until ZAL-A16: a media save replayed two days later, after a filing outage,
+ * got 404 because its link had expired, and the message was lost.
+ */
+export const PHYLAX_ARTIFACT_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+
 export function createPhylaxArtifactCapabilityUrl(input: {
   baseUrl: string;
   secret: string;

@@ -33,6 +33,7 @@ import {
 } from "./phylaxManagementMcp.js";
 import {
   createPhylaxArtifactCapabilityUrl,
+  PHYLAX_ARTIFACT_LINK_TTL_MS,
   phylaxArtifactCapabilitySecret,
   verifyPhylaxArtifactCapability,
 } from "./phylaxArtifactCapability.js";
@@ -1087,7 +1088,10 @@ function createTenantOrgan(
         secret: artifactCapabilitySecret,
         tenantId,
         file: artifactId,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1_000,
+        // ZAL-A16: a media save replayed after a filing outage fetched a link
+        // that had expired after 24 h and was answered 404. Keep links valid
+        // for the whole retry window.
+        expiresAt: Date.now() + PHYLAX_ARTIFACT_LINK_TTL_MS,
       });
     },
   });
