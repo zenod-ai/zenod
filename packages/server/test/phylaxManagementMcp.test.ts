@@ -14,7 +14,11 @@ import {
   PHYLAX_MANAGEMENT_TOOL_NAMES,
 } from "../src/phylaxManagementMcp.js";
 import type { PhylaxInstanceMode } from "../src/phylaxInstance.js";
-import { createPhylaxUnit } from "../src/phylaxUnit.js";
+import {
+  createPhylaxUnit,
+  PHYLAX_NOTIFY_PROFILE,
+  PHYLAX_NOTIFY_TOOL_NAMES,
+} from "../src/phylaxUnit.js";
 
 const dirs: string[] = [];
 const servers: ServerType[] = [];
@@ -128,6 +132,38 @@ describe("tenant-safe Phylax management MCP", () => {
     } finally {
       await ordinary.close();
       await managed.close();
+      await unit.close();
+    }
+  });
+
+  it("limits a notify-profile token to notify and channel_status", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-notify-profile-"));
+    dirs.push(dataDir);
+    const tenants = new SqliteTenantStore({ dataDir });
+    tenants.provisionTenant({ tenant: { id: "alpha" } });
+    const notifyToken = ensureServiceToken(tenants, "alpha", PHYLAX_NOTIFY_PROFILE);
+    const { unit, base } = await startUnit(dataDir, tenants, "zenod");
+
+    expect((await fetch(`${base}/api/phylax/settings`, {
+      headers: { authorization: `Bearer ${notifyToken}` },
+    })).status).toBe(404);
+
+    const notifier = await clientFor(base, notifyToken);
+    try {
+      const names = (await notifier.listTools()).tools.map((tool) => tool.name);
+      expect(names.sort()).toEqual([...PHYLAX_NOTIFY_TOOL_NAMES].sort());
+      expect(names).not.toContain("send_message");
+
+      const status = structured(await notifier.callTool({ name: "channel_status", arguments: {} }));
+      expect(status.status).toBeDefined();
+
+      const refused = await notifier.callTool({
+        name: "send_message",
+        arguments: { channel: "whatsapp", recipient: "+10000000000", text: "x" },
+      }).catch((error: unknown) => ({ isError: true, error }));
+      expect(refused.isError).toBe(true);
+    } finally {
+      await notifier.close();
       await unit.close();
     }
   });
