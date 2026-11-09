@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zenod · the librarian of your memory (mockup)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="pg-top">
+  <div class="pg-eyebrow">Zenod · mockup for your yes · 9 Nov 2026</div>
+  <h1 class="pg-h1">Zenod stops calling itself your hosted workspace and becomes <em>the librarian of your memory</em>.</h1>
+  <p class="pg-lede">One box. Zenod picks one of four modes (keep it, look it up, talk it over, make it a job), labels every reply so you see what it did, and you tap the label to change it. Today the Send and “Ask the desk” pair hides the mode, which is why “who are you?” went wrong.</p>
+  <p class="pg-try">Try it: tap a green label under a reply, type in the box, or open Personas and press “Talk it over”. All memories here are made up.</p>
+</header>
+
+<div class="pg-frames" role="group" aria-label="Screen size">
+  <button data-frame="desktop" aria-pressed="true">Desktop</button>
+  <button data-frame="phone" aria-pressed="false">Phone</button>
+</div>
+
+<main id="z-stage" class="z-stage" data-frame="desktop">
+  <div id="z-app" class="z-app">
+    <div class="z-top">
+      <div class="z-brand">
+        <span class="z-logo" aria-hidden="true">Z</span>
+        <div><div class="z-title">Zenod <span>·</span> the librarian of your memory</div></div>
+      </div>
+      <nav class="z-tabs" role="tablist">
+        <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+        <button role="tab" data-tab="inbox" aria-selected="false">Inbox <span class="z-count">1</span></button>
+        <button role="tab" data-tab="personas" aria-selected="false">Personas</button>
+        <button role="tab" data-tab="memory" aria-selected="false">Memory</button>
+      </nav>
+    </div>
+
+    <section data-pane="chat" class="z-pane z-chatpane">
+      <div id="z-scroll" class="z-scroll"><div id="z-log" class="z-log"></div></div>
+      <div id="z-talkbar" class="z-talkbar" hidden>Talking with <b id="z-talkname"></b> · it reads your memory, nothing is changed <button id="z-endtalk" class="z-link">End the talk</button></div>
+      <form id="z-form" class="z-form">
+        <input id="z-input" autocomplete="off" placeholder="Talk to your librarian" aria-label="Talk to your librarian">
+        <button class="z-send" type="submit">Send</button>
+      </form>
+      <p class="z-foot">Zenod picks the mode and says which. Tap the label to change it.</p>
+    </section>
+
+    <section data-pane="inbox" class="z-pane z-pad" hidden>
+      <h2 class="z-h2">Inbox</h2>
+      <div class="z-item">
+        <div class="z-card-k">Job · memory desk · working</div>
+        <div class="z-card-t">Untangle the two flats</div>
+        <p>Splitting 14 notes into Home › Flat hunt › Gràcia and Home › Flat hunt › Sant Antoni. Notes it cannot place will wait here for you.</p>
+        <div class="z-item-acts"><button class="z-btn">Stop</button></div>
+      </div>
+      <div class="z-item">
+        <div class="z-card-k">From Weekly recap · Sunday</div>
+        <div class="z-card-t">You wrote about the flat hunt every day this week</div>
+        <p>9 notes, most about light and price. Two mention Pau.</p>
+        <div class="z-item-acts"><button class="z-btn" data-talk="Weekly recap">Talk it over</button></div>
+      </div>
+    </section>
+
+    <section data-pane="personas" class="z-pane z-pad" hidden>
+      <h2 class="z-h2">Personas</h2>
+      <p class="z-quiet">Helpers that read your memory. They work on their own at night, or you can talk one through with them now.</p>
+      <div id="z-personas"></div>
+    </section>
+
+    <section data-pane="memory" class="z-pane z-pad" hidden>
+      <h2 class="z-h2">Your memory</h2>
+      <p class="z-quiet">The library is yours. Zenod keeps it in order.</p>
+      <ul class="z-tree">
+        <li>Health<ul><li>Running <span>41</span></li><li>Sleep <span>12</span></li></ul></li>
+        <li>Home<ul><li>Bathroom renovation <span>7</span></li><li>Flat hunt <span>14</span></li></ul></li>
+        <li>People<ul><li>Ana <span>5</span></li><li>Pau <span>9</span></li></ul></li>
+      </ul>
+    </section>
+
+    <div id="z-menu" class="z-menu" role="menu" hidden></div>
+  </div>
+</main>
+
+<section class="pg-build">
+  <h2>How we would build it</h2>
+  <p>Most of this exists. Three of the four modes already come out of today's Send decision. Talking a memory through with a persona is new, and it is about half the work.</p>
+  <table>
+    <tr><th>Mode</th><th>What exists today</th><th>What is new</th></tr>
+    <tr><td><b>Keep</b> · label “Kept”</td><td>Send already decides “keep”, saves the message and shows where it was filed.</td><td>The label, and the folder named in the first line.</td></tr>
+    <tr><td><b>Look up</b> · “Looked up”</td><td>Send already answers from your memory and shows each memory it used, checked against its source.</td><td>The label, and the source card shown first.</td></tr>
+    <tr><td><b>Talk it over</b> · “Talking”</td><td>Nothing yet. Personas only run on a schedule and leave notes in the Inbox.</td><td>A talk with one of the existing personas that reads your memory and answers back and forth. It changes nothing in your memory. Started from the box, from Personas or from an Inbox note. We copy the shape of Epic Team's desk chat (one running conversation run by a persona) into Zenod. We do not link the two.</td></tr>
+    <tr><td><b>Job on the memory</b> · “Job sent”</td><td>Send already decides “job” and hands it to the memory desk, and the result lands in the Inbox. “Ask the desk” does the same without the decision.</td><td>The label. “Ask the desk” goes away, and “Make it a job” in the label's menu replaces it.</td></tr>
+    <tr><td><b>Everywhere</b></td><td>The header says “Your hosted workspace”.</td><td>The new title, the box text “Talk to your librarian”, the label with its tap-to-change menu (it redoes the same message in the chosen mode), and a direct answer to “who are you?”.</td></tr>
+  </table>
+  <p><b>Rough size:</b> about a week of work. Talk it over is half of it. The labels, the switch and the new words are the other half. It goes live in one release behind the usual checks.</p>
+  <p><b>Kept as it is:</b> WhatsApp replies do not change. This is the web app only, unless you ask for WhatsApp too. How memories are filed and found does not change either.</p>
+  <p><b>Then we check it:</b> on a fixed set of your real messages, Zenod has to pick the right mode at least 9 times in 10, and “who are you?” has to get a direct answer.</p>
+  <h3>Screens</h3>
+  <div class="pg-shots">
+    <figure><img src="desktop-chat.png" alt="Desktop: the chat with the four labelled replies"><figcaption>Desktop: one box, four labelled replies</figcaption></figure>
+    <figure><img src="desktop-switch.png" alt="Desktop: tapping a label opens the switch menu"><figcaption>Tap a label to change the mode</figcaption></figure>
+    <figure><img src="phone-chat.png" alt="Phone: the same chat"><figcaption>Phone</figcaption></figure>
+    <figure><img src="phone-personas.png" alt="Phone: Personas with Talk it over"><figcaption>Personas: each one has Talk it over</figcaption></figure>
+    <figure><img src="phone-talk.png" alt="Phone: a talk started from Personas"><figcaption>The talk it starts, in the same chat</figcaption></figure>
+  </div>
+</section>
+<script src="app.js"></script>
+</body>
+</html>
