@@ -126,6 +126,24 @@
      "draft": true
     }
    ]
+  },
+  {
+   "id": "helpers-and-inbox",
+   "title": "Helpers and your inbox",
+   "intro": "Helpers read your memory and leave cards you act on.",
+   "features": [
+    {
+     "id": "suggestion-cards",
+     "title": "Act on a helper's suggestion with one tap",
+     "text": "Helpers read your memory on their own schedule and leave suggestions in your inbox. Press Do it and the change is made as one job you can undo, change the words first, say not now with a reason, talk it over, or leave feedback by typing or with a voice note that the helper reads on its next run.",
+     "rows": [
+      "E14-S25",
+      "E14-S26"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    }
+   ]
   }
  ]
 }
