@@ -119,7 +119,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | A17 opened ready: header and logo only on /connect and /pricing | Jordi's own words 2026-11-08 (E73-A1 D3): "for znot.dev, let's keep the landing page as up to date as possible"; zenod-social had to drop /connect from the testers deck because it still shows the old Bodoni Z and dark header; the full restyle (A7, A11) stays parked as he left it | desk/inbox/2026-11-09-zenod-social-zenod-dev-connect-still-shows-the-old-bo.md |
 | 2026-11-09 | commits named under their rows | worker and desk-note commits | A15: c6de50d ; A17: 4be2453 (desk note) ; Q4 follow-up, agent_team ask_brain 60 s: 5ca87fe, e58233e (desk notes) |
 | 2026-11-09 | commits named under their rows | desk closes and worker commits | A16: d59c0ad ; A17: f2712e0, ec19bba ; Q4 follow-up desk closes: c39e072, 0669217 |
-| 2026-11-09 | decided by Delivery Manager: A18 opened ready from the infra-vps desk note | our checks re-read a 265 MB log every few minutes and burst VPS1 CPU at the hour marks; fixing our own load is tier do; rollback revert | desk/inbox/2026-11-09-infra-vps-vps1-load-spikes-zenod-probe-and-timelin.md, d6444350 |
+| 2026-11-09 | decided by Delivery Manager: A18 opened ready from the infra-vps desk note | our checks re-read a 265 MB log every few minutes and burst VPS1 CPU at the hour marks; fixing our own load is tier do; rollback revert | desk/inbox/2026-11-09-infra-vps-vps1-load-spikes-zenod-probe-and-timelin.md, d6444350, row opened 5c05498 |
 
 
 ## Spine Map
