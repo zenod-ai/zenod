@@ -14,7 +14,7 @@ import { createEngine } from "./engine/engine.js";
 import { discoverTree } from "./engine/treeDiscover.js";
 import { rediscoverTree, refileAgentLeaves } from "./engine/treeSweep.js";
 import { mergeSmallLeaves } from "./engine/treeMergeLeaves.js";
-import { moveReportLines, planReportLines } from "./engine/reportLines.js";
+import { moveReportLines, moveRollupLines, planReportLines, planRollupLines } from "./engine/reportLines.js";
 import { applyNoteLinks, planNoteLinks } from "./engine/noteLinker.js";
 import { TrackedWrites } from "./engine/treePlacement.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
@@ -47,6 +47,7 @@ function usage(): string {
     "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
     "  tree link-notes [--apply] [--partial] [--skip REF,REF] [--today YYYY-MM-DD] [--json]  list your voice notes no topic page holds, whole or in part (dry run); --apply links each point of a note no page cites (with --partial also the dropped points of half-filed notes) as a provisional leaf on its subject's branch (no commit)",
     "  tree merge-leaves [--apply] [--today YYYY-MM-DD] [--min-age DAYS] [--max-words N] [--json]  list small provisional leaves on the same subject as a sibling or parent page (dry run); --apply merges each into that page word for word and leaves a pointer page, as the weekly sweep does (no commit)",
+    "  tree rollup-lines [--apply] [--json]  list your own lines under an Ops rollup heading (dry run); --apply moves them just above it, text unchanged (no commit)",
     "  tree report-lines [--apply] [--today YYYY-MM-DD] [--json]  list agent-report lines on your pages (dry run); --apply moves them to Archive/Agent reports/ with their page and line (no commit)",
     "  index rebuild             rebuild the tier-0 memory index (SQLite FTS5 beside the vault) from scratch; idempotent",
     "  index search <query>      query the tier-0 index (refreshes changed files first), with tree paths and timing",
@@ -326,6 +327,17 @@ async function main(): Promise<number> {
         }
         for (const line of plan.lines) console.log(`${line.page}:${line.line}  ${line.text.slice(0, 160)}`);
         console.log(`${plan.lines.length} report line(s) on ${new Set(plan.lines.map(line => line.page)).size} page(s) · ${plan.citedLines} cited line(s) on ${plan.pagesScanned} page(s) checked${written ? ` · ${written.length} file(s) written` : " · dry run"}`);
+        return 0;
+      }
+      if (sub === "rollup-lines") {
+        const plan = await planRollupLines(vaultPath());
+        const written = rest.includes("--apply") ? await moveRollupLines(vaultPath(), plan) : null;
+        if (rest.includes("--json")) {
+          console.log(JSON.stringify({ pages: plan, written }, null, 2));
+          return 0;
+        }
+        for (const page of plan) for (const line of page.lines) console.log(`${page.page}:${line.line}  ${line.text.slice(0, 160)}`);
+        console.log(`${plan.reduce((n, page) => n + page.lines.length, 0)} line(s) of yours under a rollup heading on ${plan.length} page(s)${written ? ` · ${written.length} file(s) written` : " · dry run"}`);
         return 0;
       }
       if (sub === "seed") {

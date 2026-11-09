@@ -6,6 +6,7 @@ import { parseNote, serializeNote } from "../vault/frontmatter.js";
 import { derivedNodeId } from "../vault/memoryWeights.js";
 import { extractCitations, pageRevision, catalogSections, SUMMARY_MAX_CHARS, type PageIndexEntry, type VaultSnapshot } from "../vault/pages.js";
 import { buildTreeIndex, type TreeIndex } from "../vault/tree.js";
+import { outsideOpsRollup } from "../vault/captureOrigin.js";
 
 /** Character budgets, not provider token counts. Historical bodies remain untouched. */
 export { SUMMARY_MAX_CHARS } from "../vault/pages.js";
@@ -308,7 +309,7 @@ function focusedSection(body: string, evidence: string): Section | undefined {
     const text = body.slice(start, end);
     const heading = match[0].toLowerCase();
     return { start, end, text, score: terms.filter((term) => heading.includes(term)).length };
-  }).filter((section) => section.score > 0 && section.text.length <= SECTION_CONTEXT_MAX_CHARS)
+  }).filter((section) => section.score > 0 && section.text.length <= SECTION_CONTEXT_MAX_CHARS && !/^## Ops rollup\s*$/i.test(section.text.split("\n")[0]!))
     .sort((a, b) => b.score - a.score || a.start - b.start)[0];
 }
 
@@ -345,14 +346,14 @@ export async function composeFocusedPage(llm: Pick<BrainLlm, "composePage">, inp
   }
   const body = section
     ? original.body.slice(0, section.start) + next.body.trimEnd() + "\n\n" + original.body.slice(section.end)
-    : original.body + (original.body.endsWith("\n") ? "\n" : "\n\n") + next.body.trimStart();
+    : outsideOpsRollup(original.body, head => head + (head.endsWith("\n") ? "\n" : "\n\n") + next.body.trimStart());
   if (extractCitations(original.body).some(({ date, anchor }) => !body.includes(`[[${date}#^${anchor}`))) return "Composition removed prior citations.\n";
   // Preserve identity, custom metadata and historical summary text when shortening an oversized legacy summary.
   const priorSummary = String(original.frontmatter!.summary ?? "");
   const history = Array.from(priorSummary).length > SUMMARY_MAX_CHARS && !body.includes(priorSummary)
     ? `\n\n## Previous summary\n\n${priorSummary}\n` : "";
   return serializeNote({ ...original.frontmatter, updated: input.today, summary: next.frontmatter.summary,
-    description: next.frontmatter.summary, ...(aliases.length ? { aliasEvidence: aliases } : {}), zid }, body + history);
+    description: next.frontmatter.summary, ...(aliases.length ? { aliasEvidence: aliases } : {}), zid }, outsideOpsRollup(body, head => head + history));
 }
 
 /** Shorten only a touched legacy summary and retain its exact former text in the body. */
@@ -362,7 +363,7 @@ export function boundExistingSummary(raw: string): string {
   const bounded = compact(frontmatter.summary, SUMMARY_MAX_CHARS);
   if (bounded === frontmatter.summary) return raw;
   return serializeNote({ ...frontmatter, summary: bounded, description: bounded },
-    body + `\n\n## Previous summary\n\n${frontmatter.summary}\n`);
+    outsideOpsRollup(body, head => head + `\n\n## Previous summary\n\n${frontmatter.summary}\n`));
 }
 
 function validatedAliases(page: Classification["pages"][number] | undefined, title: string, evidence: string, citation: string) {

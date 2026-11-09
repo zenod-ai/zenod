@@ -93,6 +93,23 @@ export function withoutOpsRollup(body: string): string {
   return body.slice(0, start) + (next < 0 ? "" : `\n${rest.slice(next)}`);
 }
 
+/**
+ * E12-S29: add to the end of a page without landing under its `## Ops rollup` heading.
+ * `edit` gets the page up to the rollup section when that section is the page's last
+ * one (the whole page otherwise) and returns it with its addition; the rollup section
+ * is put back after it unchanged. Before this, topic filing appended the person's own
+ * lines after the rollup, so they read as agent traffic and dropped out of the page text.
+ */
+export function outsideOpsRollup(raw: string, edit: (head: string) => string): string {
+  const heading = "## Ops rollup";
+  const at = raw.startsWith(`${heading}\n`) ? 0 : raw.indexOf(`\n${heading}\n`) + 1;
+  if (at === 0 && !raw.startsWith(`${heading}\n`)) return edit(raw);
+  const section = raw.slice(at);
+  if (/^## /m.test(section.slice(heading.length + 1))) return edit(raw);
+  const head = edit(raw.slice(0, at).replace(/\n+$/, "\n")).replace(/\s+$/, "");
+  return `${head}${head ? "\n\n" : ""}${section}`;
+}
+
 const HEADING_RE = /^## (\d{2}:\d{2}) (.*?)\s+\^(e-[0-9a-f]{6})\s*$/;
 
 /** Parse one `Log/YYYY-MM-DD.md` file into its entries. */

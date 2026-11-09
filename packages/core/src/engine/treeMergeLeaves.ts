@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseNote } from "../vault/frontmatter.js";
+import { outsideOpsRollup } from "../vault/captureOrigin.js";
 import { basenameOf } from "../vault/files.js";
 import { buildTreeIndex } from "../vault/tree.js";
 import { parentRef, tokens, TrackedWrites } from "./treePlacement.js";
@@ -213,7 +214,7 @@ async function frontmatterOf(vaultPath: string, path: string): Promise<Record<st
 async function mergeInto(vaultPath: string, writes: TrackedWrites, leaf: SmallLeaf, into: { path: string; title: string }, today: string): Promise<void> {
   const targetRaw = await readFile(join(vaultPath, into.path), "utf8");
   const section = [`## ${leaf.title}`, "", `Merged from [[${leaf.path.replace(/\.md$/, "")}|${leaf.title}]] by the weekly sweep on ${today}: its captures, word for word.`, "", leaf.blocks.join("\n\n"), ""].join("\n");
-  await writes.write(into.path, `${withAlias(targetRaw, leaf.title).replace(/\n*$/, "\n")}\n${section}`);
+  await writes.write(into.path, outsideOpsRollup(withAlias(targetRaw, leaf.title), head => `${head.replace(/\n*$/, "\n")}\n${section}`));
   await writes.write(leaf.path, pointerPage(leaf.raw, into, today));
   // Every capture block now sits in the page byte for byte, or nothing is kept.
   const written = await readFile(join(vaultPath, into.path), "utf8");

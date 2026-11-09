@@ -92,3 +92,78 @@ export async function moveReportLines(vaultPath: string, plan: ReportLinesPlan, 
   await writes.write(MOVED_REPORT_LINES_PATH, `${head}${head.endsWith("\n") ? "" : "\n"}\n${moved.join("\n")}`);
   return writes.paths;
 }
+
+/**
+ * E12-S29: the person's own lines that sit under a page's `## Ops rollup` heading (topic
+ * filing appended after the rollup section before E12-S29). The rollup section keeps its
+ * intro, its dated rollup lines and any agent report line (those are `planReportLines`'
+ * to move); every other line is the person's and belongs above it.
+ */
+export interface RollupLinesPage {
+  page: string;
+  /** 1-based line numbers, in page order, and their text. */
+  lines: { line: number; text: string }[];
+}
+
+const ROLLUP_INTRO = "Agent ops reports (";
+
+export async function planRollupLines(vaultPath: string): Promise<RollupLinesPage[]> {
+  const files = await listMarkdownFiles(vaultPath);
+  const captures = await readLogCaptures(vaultPath, files.filter(file => file.startsWith("Log/")));
+  const out: RollupLinesPage[] = [];
+  for (const page of files.filter(file => MEANING_FOLDERS[file.split("/")[0] ?? ""])) {
+    const raw = await readFile(join(vaultPath, page), "utf8").catch(() => null);
+    if (raw === null || !raw.includes(`\n${OPS_ROLLUP_HEADING}\n`)) continue;
+    const lines = raw.split("\n");
+    const found: RollupLinesPage["lines"] = [];
+    let inRollup = false;
+    for (let i = lines[0] === "---" ? lines.indexOf("---", 1) + 1 : 0; i < lines.length; i++) {
+      const text = lines[i]!;
+      if (/^## /.test(text)) { inRollup = text.trim() === OPS_ROLLUP_HEADING; continue; }
+      if (!inRollup || !text.trim() || ROLLUP_LINE_RE.test(text) || text.startsWith(ROLLUP_INTRO)) continue;
+      const citations = [...text.matchAll(CITATION_RE)].map(match => captures.get(`${match[1]}#^${match[2]}`));
+      if (citations.length && citations.every(capture => capture && isAgentOpsReport(`${capture.title}\n${capture.content}`, capture.source))) continue;
+      found.push({ line: i + 1, text });
+    }
+    if (found.length) out.push({ page, lines: found });
+  }
+  return out;
+}
+
+/**
+ * Move each planned line, text unchanged and in its order, to just above the rollup
+ * heading it sat under (the end of the section before it). Blank lines between moved
+ * lines stay with them; a page whose lines changed since planning is left alone.
+ * Returns the paths written; the caller commits them as one revision.
+ */
+export async function moveRollupLines(vaultPath: string, plan: RollupLinesPage[], writes: TrackedWrites = new TrackedWrites(vaultPath)): Promise<string[]> {
+  for (const { page, lines: planned } of plan) {
+    const lines = (await readFile(join(vaultPath, page), "utf8")).split("\n");
+    if (planned.some(line => lines[line.line - 1] !== line.text)) continue;
+    const moving = new Set(planned.map(line => line.line - 1));
+    const out: string[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i]!.trim() !== OPS_ROLLUP_HEADING) { out.push(lines[i++]!); continue; }
+      let end = i + 1;
+      while (end < lines.length && !/^## /.test(lines[end]!)) end++;
+      const indexes = [...Array(end - i - 1).keys()].map(k => k + i + 1);
+      const moved = indexes.filter(k => moving.has(k));
+      if (!moved.length) { out.push(...lines.slice(i, end)); i = end; continue; }
+      // The moved block runs from the first to the last moved line, blank lines inside it kept.
+      const block = lines.slice(moved[0], moved.at(-1)! + 1).filter((text, k) => moving.has(moved[0]! + k) || !text.trim())
+        .join("\n").replace(/\n{3,}/g, "\n\n").split("\n");
+      while (out.length && !out.at(-1)!.trim()) out.pop();
+      out.push("", ...block, "");
+      const kept = indexes.filter(k => !moving.has(k)).map(k => lines[k]!);
+      // Collapse the blank lines the move left behind in the rollup section.
+      const section = [lines[i]!, ...kept].join("\n").replace(/\n{3,}/g, "\n\n").replace(/\n+$/, "");
+      out.push(...section.split("\n"), ...(end < lines.length ? [""] : []));
+      i = end;
+    }
+    let next = out.join("\n");
+    if (!next.endsWith("\n")) next += "\n";
+    await writes.write(page, next);
+  }
+  return writes.paths;
+}

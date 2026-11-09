@@ -13,7 +13,7 @@ import {
 } from "../vault/tree.js";
 import { lintTreeIndex, type TreeLintIssue } from "../vault/treeLint.js";
 import { entryHeading } from "./evidence.js";
-import { isPersonSource, readsAsAgentReport } from "../vault/captureOrigin.js";
+import { isPersonSource, outsideOpsRollup, readsAsAgentReport } from "../vault/captureOrigin.js";
 
 /**
  * Tree placement (EPIC-9 E9-2b; audit §5 filing rules 2–6, docs/LIBRARIAN-DOCTRINE.md
@@ -312,7 +312,7 @@ export async function writeProvisionalLeaf(
     if (existing.includes(citation) && existing.includes(quoted.split("\n")[0]!)) return { path, parent: choice.path };
     const fields = index.fields.get(path);
     if (fields?.provisional) {
-      await writes.write(path, `${existing}${existing.endsWith("\n") ? "\n" : "\n\n"}${block}`);
+      await writes.write(path, outsideOpsRollup(existing, head => `${head}${head.endsWith("\n") ? "\n" : "\n\n"}${block}`));
       return { path, parent: choice.path };
     }
     title = `${safeTitle(input.title ?? input.content)} ${n}`;
@@ -356,7 +356,10 @@ export async function appendOpsRollup(
  */
 function appendToSection(raw: string, heading: string, intro: string, line: string): string {
   const at = raw.indexOf(`\n${heading}\n`);
-  if (at < 0) return `${raw}${raw.endsWith("\n") ? "\n" : "\n\n"}${heading}\n\n${intro}\n\n${line}\n`;
+  if (at < 0) {
+    const add = (head: string) => `${head}${head.endsWith("\n") ? "\n" : "\n\n"}${heading}\n\n${intro}\n\n${line}\n`;
+    return heading === OPS_ROLLUP_HEADING ? add(raw) : outsideOpsRollup(raw, add);
+  }
   const start = at + heading.length + 2;
   const nextHeading = raw.slice(start).search(/^## /m);
   const end = nextHeading < 0 ? raw.length : start + nextHeading;
