@@ -4,9 +4,12 @@ import { rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { SqliteCredentialVault, type CredentialVault } from "./credentialVault.js";
+import type { BackgroundRoute } from "./backgroundRoute.js";
 import {
   createBrainLlm,
+  isLlmAllowanceExceededError,
   JevClient,
+  withBackgroundRoute,
   withJevClassify,
   type BrainLlm,
   createEngine,
@@ -328,6 +331,8 @@ export class Runtime {
   readonly tenantId: string;
   private readonly tenantMonthlyAllowanceUsd: number | null;
   private readonly tenantAllowanceEnforced: boolean;
+  /** Hosted background route to DeepSeek (EPIC-14 S10 round 4); null = everything on the primary route. */
+  private readonly backgroundRoute: BackgroundRoute | null;
   private allowanceCache: { at: number; spendUsd: number; byFeature: Record<UsageFeature, number> } | null = null;
   private allowanceLoggedAt = 0;
   private readonly vaultBindingSource?: VaultProviderBindingSource;
@@ -386,6 +391,8 @@ export class Runtime {
       tenantMonthlyAllowanceUsd?: number | null;
       /** Block AI work once the allowance is used up (default true); false = log-only shadow mode. */
       tenantAllowanceEnforced?: boolean;
+      /** Background jobs on DeepSeek's own API (backgroundRoute.ts); null/absent = no change. */
+      backgroundRoute?: BackgroundRoute | null;
       googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
       vaultProviderBinding?: VaultProviderBindingSource;
       onVaultBindingUpdate?: (input: {
@@ -425,6 +432,7 @@ export class Runtime {
     );
     this.tenantMonthlyAllowanceUsd = options.tenantMonthlyAllowanceUsd ?? null;
     this.tenantAllowanceEnforced = options.tenantAllowanceEnforced ?? true;
+    this.backgroundRoute = options.backgroundRoute ?? null;
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     const subscriberEnv = options.subscriberEnv ?? process.env;
     if (subscribersEnabled(subscriberEnv)) {
@@ -762,7 +770,16 @@ export class Runtime {
         if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
       },
     });
-    const llm = this.withJevClassification(primaryLlm);
+    const background = this.backgroundLlm(organizerReasoningEffort);
+    const routed = background && this.backgroundRoute
+      ? withBackgroundRoute(primaryLlm, background, {
+          filing: this.backgroundRoute.jobs.filing === "deepseek",
+          desk: this.backgroundRoute.jobs.desk === "deepseek",
+          onFallback: ({ method, status, parked }) =>
+            console.warn(`[background] tenant=${this.tenantId} ${method} fell back to openrouter status=${status ?? "error"}${parked ? " (deepseek parked 10 min)" : ""}`),
+        })
+      : primaryLlm;
+    const llm = this.withJevClassification(routed);
     // The chat/MCP Drive tools enqueue onto the background ingest queue.
     const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
     // Mesh: peer-agent delegation tools, available to any agent (vault or not).
@@ -1025,12 +1042,49 @@ export class Runtime {
   }
 
   /**
+   * The DeepSeek model for background jobs (EPIC-14 S10 round 4), or null when the route is off.
+   * Same allowance check and usage ledger as the primary route, so caps are unchanged; the tenant
+   * id travels as DeepSeek's user_id.
+   */
+  private backgroundLlm(
+    organizerReasoningEffort?: "none" | "low",
+    onUsage?: (report: LlmUsageReport) => void,
+    feature?: UsageFeature,
+  ): BrainLlm | null {
+    const route = this.backgroundRoute;
+    if (!route) return null;
+    const check = () => this.checkTenantAllowance();
+    return createBrainLlm({
+      provider: "deepseek",
+      apiKey: route.apiKey,
+      askModel: route.model,
+      chatModel: route.model,
+      classifyModel: route.model,
+      ...(organizerReasoningEffort ? { organizerReasoningEffort } : {}),
+      ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
+      user: this.tenantId,
+      ...(this.settings.platformLlmActive()
+        ? { onBeforeCall: feature ? () => withFeature(feature, check) : check }
+        : {}),
+      onUsage: onUsage ?? ((report) => {
+        this.usageStore.record(report);
+        if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
+      }),
+    });
+  }
+
+  /**
    * A persona's model: the cheap chat model (one call, no tools), opened per run so the usage it
    * reports is this run's alone. Every call is checked against and counted in the tenant's AI
    * allowance, like any other call on the platform key.
    */
   personaModel(): PersonaModel {
     let last: { inputTokens: number; outputTokens: number; costUsd: number } | null = null;
+    const record = (report: LlmUsageReport) => {
+      this.usageStore.record(report, Date.now(), "personas");
+      last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
+    };
+    const background = this.backgroundRoute?.jobs.personas === "deepseek" ? this.backgroundLlm(undefined, record, "personas") : null;
     const llm = createBrainLlm({
       provider: this.settings.provider(),
       apiKey: this.settings.activeApiKey()!,
@@ -1039,15 +1093,22 @@ export class Runtime {
       ...(this.settings.platformLlmActive() && this.settings.openrouterUser()
         ? { user: this.settings.openrouterUser()!, onBeforeCall: () => withFeature("personas", () => this.checkTenantAllowance()) }
         : {}),
-      onUsage: (report) => {
-        this.usageStore.record(report, Date.now(), "personas");
-        last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
-      },
+      onUsage: record,
     });
     return {
       complete: async (input) => {
         last = null;
-        const text = await llm.streamMemoryChat!(input, () => {});
+        let text: string | null = null;
+        if (background) {
+          try {
+            text = await background.streamMemoryChat!(input, () => {});
+          } catch (error) {
+            if (isLlmAllowanceExceededError(error)) throw error;
+            console.warn(`[background] tenant=${this.tenantId} persona fell back to openrouter status=${(error as { statusCode?: number }).statusCode ?? "error"}`);
+            last = null;
+          }
+        }
+        if (text === null) text = await llm.streamMemoryChat!(input, () => {});
         const usage = last ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 };
         return { text, ...usage };
       },

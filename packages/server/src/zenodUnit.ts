@@ -69,6 +69,7 @@ import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
 import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
 import { subscribersEnabled } from "./subscribers.js";
+import { backgroundRouteFromEnv, startBackgroundBalanceMonitor, type BackgroundRoute } from "./backgroundRoute.js";
 import {
   ZENOD_PUBLISHED_SKILL,
   ZENOD_SKILL_BUNDLE_PATH,
@@ -121,6 +122,17 @@ function requestCredential(request: Request): string | null {
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
+  private backgroundRouteCache: { route: BackgroundRoute | null } | null = null;
+
+  /** EPIC-14 S10 round 4: background jobs on DeepSeek once the host has its key; starts the balance monitor /api/health reads. */
+  private get backgroundRoute(): BackgroundRoute | null {
+    if (!this.backgroundRouteCache) {
+      const route = backgroundRouteFromEnv(this.env);
+      startBackgroundBalanceMonitor(route);
+      this.backgroundRouteCache = { route };
+    }
+    return this.backgroundRouteCache.route;
+  }
 
   constructor(
     private readonly env: NodeJS.ProcessEnv = process.env,
@@ -173,6 +185,7 @@ export class ZenodRuntimePool {
         ...jevSettingFallbacks(this.env),
       },
       platformLlm: platformLlmFromEnv(this.env),
+      backgroundRoute: this.backgroundRoute,
       subscriberEnv: this.env,
       tenantMonthlyAllowanceUsd: tenantMonthlyAllowanceFromEnv(this.env),
       tenantAllowanceEnforced: tenantAllowanceEnforcedFromEnv(this.env),

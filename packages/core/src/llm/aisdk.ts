@@ -15,6 +15,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { decodeSupportedAnswer } from "./answerSupportProtocol.js";
+import { DEEPSEEK_BASE_URL, deepseekCostUsd } from "./deepseek.js";
 import { classificationSourceUnits } from "./classificationSourceUnits.js";
 import { AnswerCursorAliases } from "./answerCursors.js";
 import { ANSWER_SUPPORT_INSTRUCTION } from "../engine/answerSupport.js";
@@ -58,7 +59,7 @@ import {
 } from "./turnPlan.js";
 import type { TurnPlanCompiler } from "./types.js";
 
-export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
+export type Provider = "anthropic" | "openai" | "openrouter" | "groq" | "deepseek";
 
 const noteReadSchema = z.object({
   path: z.string(),
@@ -79,6 +80,8 @@ const noteReadDescription = "Read a bounded section of a note or exact Log/path.
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<Provider, string>> = {
   openrouter: "https://openrouter.ai/api/v1",
   groq: "https://api.groq.com/openai/v1",
+  // DeepSeek's own API (EPIC-14 S10 round 4): hosted background work, prepaid balance.
+  deepseek: DEEPSEEK_BASE_URL,
 };
 
 /** LLM operations, tagged on every usage report for cost analytics. */
@@ -201,6 +204,8 @@ export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string
   // (docs/evidence/e12-s1b-2026-11-08.md); Haiku 5.5 was 59 of 60, p95 2.0 s.
   openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-3.1-flash-lite", chat: "google/gemini-3.1-flash-lite" },
   groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct", chat: "llama-3.3-70b-versatile" },
+  // DeepSeek V4.1 Flash on DeepSeek's own API; it only serves background work (filing, desk, personas).
+  deepseek: { ask: "deepseek-flash", classify: "deepseek-flash", vision: "deepseek-flash", chat: "deepseek-flash" },
 };
 
 /** Output budget for the fast chat answer: a few sentences plus the quotes. */
@@ -408,7 +413,7 @@ function providerUsageFrom(recordedModel: string, body: Record<string, unknown>)
 }
 
 /** Read the authoritative gateway usage from a streaming (SSE) response without disturbing the SDK's own read. */
-function captureStreamUsage(response: Response, recordedModel: string, sink: (u: ProviderCallUsage) => void): void {
+function captureStreamUsage(response: Response, recordedModel: string, sink: (u: ProviderCallUsage) => void, parse: (model: string, body: Record<string, unknown>) => ProviderCallUsage = providerUsageFrom): void {
   const reader = response.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -428,7 +433,7 @@ function captureStreamUsage(response: Response, recordedModel: string, sink: (u:
           if (!payload || payload === "[DONE]") continue;
           try {
             const parsed = JSON.parse(payload) as Record<string, unknown>;
-            if (parsed.usage) sink(providerUsageFrom(recordedModel, parsed));
+            if (parsed.usage) sink(parse(recordedModel, parsed));
           } catch { /* keep scanning */ }
         }
       }
@@ -449,6 +454,10 @@ function captureStreamUsage(response: Response, recordedModel: string, sink: (u:
  * The same seam also adds the optional organizer routing envelope.
  */
 function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[], onProviderUsage?: (u: ProviderCallUsage) => void, baseUrl?: string, headers?: Record<string, string>, apiFormat?: "chat" | "responses", user?: string): ModelFactory {
+  if (provider === "deepseek") {
+    const compatible = createOpenAI({ apiKey, baseURL: baseUrl ?? DEEPSEEK_BASE_URL, ...(headers ? { headers } : {}), fetch: deepseekSeam(baseUrl ?? DEEPSEEK_BASE_URL, onProviderUsage, user) });
+    return (id: string) => compatible.chat(id);
+  }
   const wantsSeam = provider === "openrouter" && (Boolean(providerOrder) || Boolean(onProviderUsage) || Boolean(user));
   const seam: typeof globalThis.fetch | undefined = wantsSeam ? async (input, init) => {
     const request = new Request(input, init);
@@ -487,6 +496,60 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
   const baseURL = baseUrl ?? OPENAI_COMPATIBLE_BASE_URLS[provider];
   const compatible = createOpenAI({... (baseURL ? { apiKey, baseURL } : { apiKey }), ...(headers ? { headers } : {}), ...(seam ? {fetch: seam} : {})});
   return apiFormat === "responses" ? (id: string) => compatible.responses(id) : (id: string) => compatible.chat(id);
+}
+
+/** DeepSeek usage for one call: its cache hit/miss split priced at the published rate for that hour. */
+function deepseekUsageFrom(recordedModel: string, body: Record<string, unknown>, at: number): ProviderCallUsage {
+  const usage = (body.usage ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const prompt = num(usage.prompt_tokens);
+  const hit = num(usage.prompt_cache_hit_tokens) ?? 0;
+  const miss = num(usage.prompt_cache_miss_tokens) ?? Math.max(0, (prompt ?? 0) - hit);
+  const completion = num(usage.completion_tokens);
+  const model = typeof body.model === "string" && body.model ? body.model : recordedModel;
+  return {
+    model: recordedModel || model,
+    generationId: typeof body.id === "string" ? body.id : null,
+    costUsd: deepseekCostUsd({ model, hitTokens: hit, missTokens: miss, outputTokens: completion ?? 0, at }),
+    promptTokens: prompt,
+    completionTokens: completion,
+    cachedTokens: hit,
+    cacheWriteTokens: null,
+  };
+}
+
+/**
+ * DeepSeek fetch seam: asks for usage on streams, sends the tenant as `user_id` (DeepSeek's
+ * per-user isolation of content safety and cache), turns reasoning effort "none" into DeepSeek's
+ * `thinking: disabled`, and records the priced usage of every successful call.
+ */
+function deepseekSeam(baseURL: string, onProviderUsage?: (u: ProviderCallUsage) => void, user?: string): typeof globalThis.fetch {
+  return async (input, init) => {
+    const request = new Request(input, init);
+    if (request.url !== baseURL.replace(/\/$/, "") + "/chat/completions" || request.method !== "POST") return globalThis.fetch(request, init);
+    const body = await request.clone().json() as Record<string, unknown>;
+    const patched: Record<string, unknown> = { ...body };
+    if (patched.stream === true) patched.stream_options = { include_usage: true, ...(body.stream_options as object | undefined) };
+    if (user) patched.user_id = user;
+    if (patched.reasoning_effort === "none") {
+      delete patched.reasoning_effort;
+      patched.thinking = { type: "disabled" };
+    }
+    let response = await globalThis.fetch(request.url, { method: request.method, headers: request.headers, signal: request.signal, body: JSON.stringify(patched) });
+    const recordedModel = typeof body.model === "string" ? body.model : "";
+    const at = Date.now();
+    if (onProviderUsage && response.ok) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
+        captureStreamUsage(response.clone(), recordedModel, (u) => onProviderUsage(u), (model, parsed) => deepseekUsageFrom(model, parsed, at));
+      } else {
+        const bytes = await response.arrayBuffer();
+        try { onProviderUsage(deepseekUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>, at)); } catch { /* capture is best-effort */ }
+        response = new Response(bytes, { status: response.status, statusText: response.statusText, headers: response.headers });
+      }
+    }
+    return response;
+  };
 }
 
 /** Tool callbacks may fail (bad path, immutable tier); surface the error to the model instead of aborting the loop. */
@@ -794,13 +857,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.chatModelId = options.chatModel || defaults.chat;
     this.classifyModelId = options.classifyModel || defaults.classify;
     if (options.organizerReasoningEffort !== undefined) {
-      if (!["openai", "openrouter"].includes(options.provider) || !["none", "low"].includes(options.organizerReasoningEffort)) {
+      if (!["openai", "openrouter", "deepseek"].includes(options.provider) || !["none", "low"].includes(options.organizerReasoningEffort)) {
         throw new Error("Organizer reasoning effort requires OpenAI/OpenRouter and a supported none/low value");
       }
       this.organizerProviderOptions = { openai: { reasoningEffort: options.organizerReasoningEffort } };
     }
     if (options.askReasoningEffort !== undefined) {
-      if (!["openai", "openrouter"].includes(options.provider) || !["none", "low"].includes(options.askReasoningEffort)) {
+      if (!["openai", "openrouter", "deepseek"].includes(options.provider) || !["none", "low"].includes(options.askReasoningEffort)) {
         throw new Error("Ask reasoning effort requires OpenAI/OpenRouter and a supported none/low value");
       }
       this.askProviderOptions = { openai: { reasoningEffort: options.askReasoningEffort } };
