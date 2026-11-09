@@ -30,14 +30,14 @@ Goal sentence: Every voice note you record anywhere lands in Zenod once, transcr
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: scaffolded with spine_new.py on 2026-11-08
-Result: created, not started
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Last attempted: 2026-11-09 V2 (with V3, run_22db4b08): read-only check of Jordi's question "are my voice notes actually landing in Zenod?" across his Zenod Log and agent_team's forward outbox
+Result: yes. All 7 EpicTeam Chat notes posted since his reconnect (2026-11-08 23:52Z) are in his memory once each, tagged EpicTeam Chat, transcript supplied; WhatsApp lands as before (25 from 6 to 9 Nov). Two agent_team-side gaps: voice answers spoken into cards are never forwarded (26) and notes from before forwarding were not replayed (30). No Zenod fault; no reconnect needed. E21-1 met by V1 (approved), E21-2 proven pending Jordi's verdict on V2, E21-3 met by the V1 contract.
+Evidence: [e21-v2-2026-11-09.md](evidence/e21-v2-2026-11-09.md), private page http://vps3.taild81fbb.ts.net:8921/e21-v2/
+Waiting on: V2's review card; agent_team on the desk note (card answers and back-fill, V4)
 Approved work: none
-Next action: V1 dispatched (with EPIC-14 S1 round 2: no double transcription)
-Source revision: uncommitted scaffold
-Verified at: 2026-11-08
+Next action: V2 in review; V4 verifies the back-fill once agent_team answers
+Source revision: main (docs only; no code changed)
+Verified at: 2026-11-09T23:25Z
 
 ## Non-Goals
 
@@ -51,8 +51,9 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | V1 | Ticket worker | run_7966dd8b-8633-4403-af3c-43ca19284c7e | One ingest door for forwarded voice notes (audio, optional transcript used as is, source tag) over MCP, plus the cloud chat button sending its transcript once (E21-1, E21-3; with EPIC-14 S1 round 2) | done (approved by Jordi 2026-11-08) | none | [#1534](https://github.com/zenod-ai/zenod/pull/1534) `5e0b7dd`, live on cloud.zenod.dev | main | [evidence](evidence/e21-v1-2026-11-08.md) · [card](cards/E21-V1.md) · [contract](voice-note-forwarding.md): 0 transcription calls with a transcript, 1 without, repeats kept once | 2026-11-08 | followups: started V3 |
-| V2 | Ticket worker | run_22db4b08-7edb-43ea-a9f8-4be865ee859c — claimed 2026-11-09T23:24Z, lease until 2026-11-10T01:24Z | EpicTeam Chat forwards voice notes to Zenod (agent_team side, proposed to agent_team), one real note proven (E21-2) | active | V1 done; agent_team builds EpicTeam Chat forwarding | - | main | - | 2026-11-08 | waits on agent_team: add voice_notes.write and call ingest_voice_note after each chat note; then prove one real note lands once (E21-2) |
-| V3 | Ticket worker | run_22db4b08-7edb-43ea-a9f8-4be865ee859c — claimed 2026-11-09T23:24Z, lease until 2026-11-10T01:24Z | EpicTeam Chat forwards its voice notes: follow-up of V1 | active | agent_team builds EpicTeam Chat forwarding; spec sent 2026-11-08 to thread 4882a2f3 | none | main | Jordi started it when closing V1 2026-11-08 | 2026-11-08 | same work as V2; closes when one real EpicTeam Chat note lands once in his Zenod |
+| V2 | Ticket worker | run_22db4b08-7edb-43ea-a9f8-4be865ee859c | EpicTeam Chat forwards voice notes to Zenod (agent_team side, built as agent_team E42-S39), one real note proven (E21-2) | review | V1 done; agent_team E42-S39 (live 1f11571, Jordi reconnected 2026-11-08 23:52Z) | agent_team E42-S39 | main | [evidence](evidence/e21-v2-2026-11-09.md) · [card](cards/E21-V2.md) · [private page](http://vps3.taild81fbb.ts.net:8921/e21-v2/): 7 of 7 Chat notes posted since the reconnect in his Log once each, `Source app: EpicTeam Chat`, transcript supplied; 26 card answers and 30 older notes not forwarded (desk note to agent_team 45c3b1f7) | 2026-11-09 | followups: started V4 (card answers and older Chat notes reach Zenod, verified once each); confirm: yes — only Jordi can judge whether his own notes are where he expects them |
+| V3 | Ticket worker | run_22db4b08-7edb-43ea-a9f8-4be865ee859c | EpicTeam Chat forwards its voice notes: follow-up of V1 | done (no confirm: same work as V2, folded into V2's card) | V2 | agent_team E42-S39 | main | see V2 | 2026-11-09 | none |
+| V4 | Ticket worker | agent_team (desk note 45c3b1f7, 2026-11-09) | Card voice answers and older Chat notes reach Zenod: agent_team forwards card answers (`fill`) and back-fills the 56 notes keyed on the vn id; Zenod verifies each landed once (E21-2, goal) | blocked | agent_team ships both (their side, root L-7) | - | main | 26 card answers and 30 notes posted 2026-11-02..08 not in Zenod ([evidence](evidence/e21-v2-2026-11-09.md)) | 2026-11-09 | waits on agent_team's reply to the desk note; then count each id once in his Log |
 
 ## Decisions
 
@@ -63,6 +64,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-08 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
 | 2026-11-08 | accepted | epic “One home for all your voice notes: other apps forward to Zenod” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (Chat), 2026-11-08 18:53Z · 9 min 31 s · $0.025 (gpt-4o-mini-transcribe) · vn_d4b0d617 Audio: https://team") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-08 | accepted | Planned by the Delivery Manager with EPIC-14 S1 round 2 (Jordi's relaunch vn_10331915: "Are we then transcribing twice? … can we send him the transcription if we already have it?"): one worker builds the ingest door that accepts a ready transcript, so neither the cloud chat button nor forwarding apps transcribe twice. | one seam, one worker | vn_d4b0d617, vn_10331915 | — |
+| 2026-11-09 | accepted | V2 answered Jordi's "are my voice notes landing?" (vn_bd75972d) read only: Chat forwarding works; the gaps are agent_team's (card answers, no replay) and go to them as a desk note, never edited here (root L-7) | V3 folded into V2's card; V4 tracks the back-fill | [evidence](evidence/e21-v2-2026-11-09.md) | agent_team replies |
 
 ## Operating Learnings
 
