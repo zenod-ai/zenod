@@ -37,6 +37,7 @@ import {
 import type { CustomerIdentityProvider } from "./googleDriveVaultContract.js";
 import { projectVaultCapabilities } from "./googleDriveVaultContract.js";
 import {
+  nextUtcMonthlyReset,
   projectLedgerUsage,
   projectCustomerUsage,
   type CustomerUsageProjection,
@@ -83,6 +84,7 @@ import { registerMemoryCallRoutes } from "./memoryCallRoutes.js";
 import { CALL_BASE_ENV, callKey, callMeterFor, callsFor, openAiMinter, OPENAI_BASE_URL, platformMeter } from "./memoryCall.js";
 import { inboxFor } from "./inboxStore.js";
 import { DeskLimitError, startDeskJob } from "./memoryDesk.js";
+import { usageView, withFeature } from "./limits.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1452,7 +1454,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
     const block = runtime.aiAllowanceBlock();
-    if (block) return { response: allowanceResponse(c, block) };
+    if (block) {
+      // Answers stopped at the allowance, capture did not (EPIC-14 S10): the words are kept as a note.
+      try {
+        runtime.taskJobQueue.enqueue("store", { content: question, source: "web" }, memoryKeepIdempotencyKey(account.tenant_id, question));
+      } catch (error) {
+        console.warn(`[memory-chat] words not kept for ${account.tenant_id} while answers are stopped: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return { response: allowanceResponse(c, block) };
+    }
     const tenantId = account.tenant_id;
     const inFlight = memoryChatsInFlight.get(tenantId) ?? 0;
     if (inFlight >= MEMORY_CHATS_PER_TENANT) return { response: c.json({ error: "busy", message: "Zenod is still answering your last question." }, 429) };
@@ -1531,6 +1541,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         // "unsure" asks first in the app ("keep it, or do it as a job?"); nothing runs on a guess.
         if (route.action === "job" && route.job) {
           try {
+            const deskBlock = runtime.featureBlock("desk");
+            if (deskBlock) throw new DeskLimitError(deskBlock.message);
             const item = startDeskJob(inboxFor(runtime), runtime.taskJobQueue, route.job);
             await send({ type: "desk", item: { id: item.id, title: item.title, status: item.status, step: item.step } });
           } catch (error) {
@@ -1588,8 +1600,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
-    const block = runtime.aiAllowanceBlock();
-    if (block) return allowanceResponse(c, block);
+    // Keeping is never stopped by the AI allowance (EPIC-14 S10): filing runs past it, and far past
+    // it the engine keeps the words with filing pending.
     const content = memoryKeepContent(input);
     try {
       const job = runtime.taskJobQueue.enqueue(
@@ -1633,8 +1645,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
-    const block = runtime.aiAllowanceBlock();
-    if (block) return allowanceResponse(c, block);
+    // Not stopped by the allowance either: far past it the queue archives the recording raw.
     const audio = Buffer.from(await c.req.arrayBuffer().catch(() => new ArrayBuffer(0)));
     if (audio.length === 0) return c.json({ error: "empty", message: "Nothing was recorded." }, 400);
     const seconds = Number(c.req.header("x-seconds"));
@@ -1728,13 +1739,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       platform: platformMeter(callMeterFor(host.dataDir), tenantId),
       tenantId,
       tenant: {
-        allowanceBlock: () => runtime.aiAllowanceBlock(),
+        allowanceBlock: () => runtime.featureBlock("calls"),
         answer: async (question) => {
-          const found = await answerFromMemory(await runtime.getEngine(), question);
+          // A call's lookups count as the call's spend, not as chat answers.
+          const found = await withFeature("calls", async () => answerFromMemory(await runtime.getEngine(), question));
           const sources = [...found.memories.filter((m) => m.cited).map((m) => m.title), ...found.alsoCited.map((m) => m.title)];
           return { answered: found.answered, answer: found.answer, sources };
         },
         deskJob: (job) => {
+          const deskBlock = runtime.featureBlock("desk");
+          if (deskBlock) throw new DeskLimitError(deskBlock.message);
           try {
             const item = startDeskJob(inboxFor(runtime), runtime.taskJobQueue, job);
             return { id: item.id, title: item.title };
@@ -1751,6 +1765,30 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   }, {
     key: () => callKey(env),
     minter: (key) => openAiMinter(key, env[CALL_BASE_ENV]?.trim() || OPENAI_BASE_URL),
+  });
+
+  // EPIC-14 S10: the Usage section. This month's AI spend by feature against the allowance, each
+  // feature's own share and state, and what each costs in plain words, for the signed-in customer's
+  // own tenant only.
+  app.get("/api/console/usage", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const now = Date.now();
+    try {
+      const status = runtime.aiAllowanceStatus(now);
+      return c.json(usageView({
+        byFeature: runtime.monthSpendByFeature(now),
+        allowanceUsd: status?.allowanceUsd ?? null,
+        resetsAt: nextUtcMonthlyReset(now),
+      }));
+    } catch (error) {
+      console.warn(`[usage] usage unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "usage unavailable" }, 503);
+    }
   });
 
   if (capabilities.managedAiApplication) {

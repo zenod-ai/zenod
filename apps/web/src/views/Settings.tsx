@@ -24,6 +24,7 @@ import { toast } from "sonner"
 import { api, errorMessage, type SettingsValues } from "@/lib/api"
 import { PeerAgents } from "@/components/peer-agents"
 import { HostedFreePlanBanner } from "@/components/free-plan-notice"
+import { UsageByFeaturePanel } from "@/components/usage-by-feature"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -443,7 +444,14 @@ export function Settings({
             </div>
           </TabsContent>
           <TabsContent value="usage" className="mt-4">
-            {edition === "hosted" ? <HostedUsagePanel /> : <CostsTab />}
+            {edition === "hosted" ? (
+              <div className="flex flex-col gap-6">
+                <HostedUsagePanel />
+                <UsageByFeaturePanel />
+              </div>
+            ) : (
+              <CostsTab />
+            )}
           </TabsContent>
           <TabsContent value="settings" className="mt-4">
             <SettingsPanel settings={settings} onSaved={setSettings} />

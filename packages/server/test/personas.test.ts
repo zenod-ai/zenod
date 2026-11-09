@@ -201,7 +201,8 @@ describe("persona runner (EPIC-14 S4)", () => {
   it("does not start when the tenant's AI allowance is used up", async () => {
     const stub = stubModel();
     const { deps: d } = deps({ model: () => stub.model, aiAllowanceBlock: () => ({ message: "used up" }) });
-    expect(await runPersona(WEEKLY_RECAP, d, "manual")).toMatchObject({ status: "skipped", summary: "The AI allowance for this month is used up" });
+    // The run log says why, in the limits model's words (limits.ts).
+    expect(await runPersona(WEEKLY_RECAP, d, "manual")).toMatchObject({ status: "skipped", summary: "used up" });
     expect(stub.calls).toHaveLength(0);
   });
 

@@ -1,6 +1,7 @@
 import type { BrainEngine, DeskChangeView, DeskEdit, DeskJobResult, DeskPlan } from "zenod";
 import type { InboxChange, InboxItem, InboxJobResult, InboxStore } from "./inboxStore.js";
 import type { TaskJob, TaskJobInput } from "./taskJobStore.js";
+import { zenodLimits } from "./limits.js";
 
 /**
  * The memory desk on the server (EPIC-14 S3). A job on the memory is a durable `desk_job` on the
@@ -13,8 +14,8 @@ import type { TaskJob, TaskJobInput } from "./taskJobStore.js";
  */
 
 export const DESK_FROM = "Memory desk";
-/** Jobs one account may start in a day: each is a few model calls, metered in the AI allowance. */
-export const DESK_JOBS_PER_DAY = 20;
+/** Jobs one account may start in a day: each is a few model calls, metered in the AI allowance (limits.ts). */
+export const DESK_JOBS_PER_DAY = zenodLimits().desk.jobsPerDay;
 export const DESK_REQUEST_MAX_CHARS = 600;
 
 /** What a finished desk job leaves as its task result: enough for the inbox and for Undo. */

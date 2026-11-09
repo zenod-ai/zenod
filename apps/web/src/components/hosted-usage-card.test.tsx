@@ -130,7 +130,9 @@ describe("HostedUsageCard breakdown (EPIC-7 T3)", () => {
       />
     )
 
-    expect(screen.getByText("Managed processing paused")).not.toBeNull()
+    // EPIC-14 S10: only answers stop at the allowance; notes are still kept and filed.
+    expect(screen.getByText("Answers paused, notes still kept")).not.toBeNull()
+    expect(screen.getByText(/still kept and filed/)).not.toBeNull()
     expect(screen.getByText("AI processing: this month's allowance is used up")).not.toBeNull()
     expect(screen.getByText(/used this month's AI allowance/i)).not.toBeNull()
     expect(screen.getByText(/tells you so in WhatsApp/i)).not.toBeNull()

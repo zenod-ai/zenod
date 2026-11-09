@@ -1,7 +1,48 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { LlmUsageReport } from "zenod";
+import { currentFeature, featureForOperation, USAGE_FEATURES, type UsageFeature } from "./limits.js";
 import { openZenodSqlite } from "./sqlite.js";
+
+/** A row's feature (EPIC-14 S10): its recorded tag, else derived from its operation like featureForOperation. */
+const FEATURE_SQL = `COALESCE(feature, CASE operation WHEN 'call' THEN 'calls' WHEN 'answer' THEN 'chat' WHEN 'turnPlan' THEN 'chat' WHEN 'work' THEN 'desk' ELSE 'filing' END)`;
+const SPEND_SQL = "COALESCE(provider_cost_usd, cost_usd)";
+
+/** Month spend by feature from rows grouped by FEATURE_SQL; unknown tags fold into filing. */
+function featureTotals(rows: Array<{ feature: string; spend: number }>): Record<UsageFeature, number> {
+  const totals = Object.fromEntries(USAGE_FEATURES.map((feature) => [feature, 0])) as Record<UsageFeature, number>;
+  for (const row of rows) {
+    const feature = (USAGE_FEATURES as readonly string[]).includes(row.feature) ? row.feature as UsageFeature : "filing";
+    totals[feature] += row.spend ?? 0;
+  }
+  return totals;
+}
+
+/**
+ * Spend by feature since `since` read straight from a tenant's usage file, read only, for the admin
+ * view across tenants (a tenant whose runtime is not loaded is never booted for it). Null when the
+ * file is missing or unreadable.
+ */
+export function readFeatureSpend(path: string, since: number): Record<UsageFeature, number> | null {
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(path, { readOnly: true });
+    const columns = db.prepare("PRAGMA table_info(llm_usage)").all() as unknown as Array<{ name: string }>;
+    if (columns.length === 0) return null;
+    const has = (name: string) => columns.some((column) => column.name === name);
+    const feature = has("feature") ? FEATURE_SQL : FEATURE_SQL.replace("COALESCE(feature, ", "COALESCE(NULL, ");
+    const spend = has("provider_cost_usd") ? SPEND_SQL : "cost_usd";
+    const status = has("status") ? "AND status = 'succeeded'" : "";
+    const rows = db
+      .prepare(`SELECT ${feature} AS feature, COALESCE(SUM(${spend}), 0) AS spend FROM llm_usage WHERE ts >= ? ${status} GROUP BY 1`)
+      .all(since) as unknown as Array<{ feature: string; spend: number }>;
+    return featureTotals(rows);
+  } catch {
+    return null;
+  } finally {
+    try { db?.close(); } catch { /* already closed */ }
+  }
+}
 
 /**
  * Durable, append-only log of real (provider-billed) LLM token usage — its own
@@ -176,6 +217,11 @@ export class UsageStore {
     if (!columns.some((column) => column.name === "generation_id")) {
       this.db.exec("ALTER TABLE llm_usage ADD COLUMN generation_id TEXT");
     }
+    if (!columns.some((column) => column.name === "feature")) {
+      // EPIC-14 S10: what the call was spent on (filing, chat, personas, desk, calls). Older rows stay
+      // NULL and are read by their operation (FEATURE_SQL).
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN feature TEXT");
+    }
     this.backfillCosts();
   }
 
@@ -228,12 +274,16 @@ export class UsageStore {
       .run(fingerprint);
   }
 
-  record(report: LlmUsageReport, now: number = Date.now()): void {
+  /**
+   * Log one call. Its feature is `feature` when given, else the feature context it runs in
+   * (limits.withFeature), else its operation's (featureForOperation).
+   */
+  record(report: LlmUsageReport, now: number = Date.now(), feature?: UsageFeature): void {
     this.db
       .prepare(
         `INSERT INTO llm_usage
-           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id, feature)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         now,
@@ -249,7 +299,19 @@ export class UsageStore {
         report.errorCode ?? null,
         report.providerCostUsd ?? null,
         report.generationId ?? null,
+        feature ?? currentFeature() ?? featureForOperation(report.operation),
       );
+  }
+
+  /** Spend by feature since `since` (succeeded calls; the gateway's charge when reported, else the estimate). */
+  spendByFeatureSince(since: number): Record<UsageFeature, number> {
+    const rows = this.db
+      .prepare(
+        `SELECT ${FEATURE_SQL} AS feature, COALESCE(SUM(${SPEND_SQL}), 0) AS spend
+         FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded' GROUP BY 1`,
+      )
+      .all(since) as unknown as Array<{ feature: string; spend: number }>;
+    return featureTotals(rows);
   }
 
   private aggregate(column: "operation" | "model", since: number): UsageBucket[] {

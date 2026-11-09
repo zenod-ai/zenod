@@ -41,6 +41,8 @@ function channelLine(
 }
 
 function usageHeading(usage: HostedCustomerUsage): string {
+  // EPIC-14 S10: at the AI allowance only answers stop; notes are still kept and filed.
+  if (usage.state === "paused" && usage.breakdown?.ai.paused) return "Answers paused, notes still kept"
   if (usage.state === "paused") return "Managed processing paused"
   if (usage.state === "warn") return "Nearly used"
   if (usage.state === "unavailable") return "Usage temporarily unavailable"
@@ -114,7 +116,7 @@ export function HostedUsageCard({
         {usage.state === "paused" && !compact ? (
           <p className="text-sm text-muted-foreground">
             {usage.breakdown?.ai.paused
-              ? "You have used this month's AI allowance, so Zenod is not reading or filing new messages and tells you so in WhatsApp. Original files you send are still archived. AI processing resumes after the reset."
+              ? "You have used this month's AI allowance, so Zenod stops answering questions until the reset and tells you so in WhatsApp. Everything you send is still kept and filed."
               : usage.resetsAt
                 ? "Your raw evidence remains safe. Paid AI processing resumes after the reset."
                 : "Your raw evidence remains safe. Processing resumes when managed access is restored."}

@@ -265,7 +265,7 @@ describe("memory desk routes (EPIC-14 S3)", { timeout: 30_000 }, () => {
     const t = await setup({ deskJob });
     try {
       const a = t.runtimes.get("tenant-a")!;
-      const block = vi.spyOn(a, "aiAllowanceBlock").mockReturnValue({ message: "You have used this month's AI allowance.", resetsAt: "2026-12-01T00:00:00.000Z" });
+      const block = vi.spyOn(a, "featureBlock").mockReturnValue({ message: "The memory desk is paused.", resetsAt: "2026-12-01T00:00:00.000Z", reason: "allowance" });
       expect((await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "split boat and cabin topics" })).status).toBe(429);
       block.mockRestore();
       const inbox = inboxFor(a);
