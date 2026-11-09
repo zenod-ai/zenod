@@ -11,7 +11,7 @@ import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { aiAllowanceExhaustedMessage } from "../src/customerMetering.js";
 import { issueCustomerSession } from "../src/customerSession.js";
-import { answerFromMemory, memoryKeepContent, parseMemoryKeep, streamAnswerFromMemory, VOICE_NOTE_MAX_BYTES } from "../src/memoryChat.js";
+import { ABOUT_ZENOD, answerFromMemory, isAboutZenod, isSensitiveMemory, memoryKeepContent, parseMemoryKeep, streamAnswerFromMemory, VOICE_NOTE_MAX_BYTES } from "../src/memoryChat.js";
 import { Runtime } from "../src/runtime.js";
 
 // EPIC-12 E12-S1: the web app's chat with your memory. Asking answers from your own vault and
@@ -211,6 +211,66 @@ describe("answerFromMemory (E12-S1)", () => {
     expect(memoryKeepContent(parseMemoryKeep({ content: " The plumber is Ana. " })!)).toBe("The plumber is Ana.");
     expect(memoryKeepContent(parseMemoryKeep({ kind: "answer", question: "Who fixes the boiler?", answer: "Ana." })!))
       .toBe("Who fixes the boiler?\n\nAna.\n\n(Answer kept from a chat in the Zenod app.)");
+  });
+});
+
+describe("the app chat: questions about Zenod, a relevance floor, sensitive notes (E15-S1)", () => {
+  const weak = (pairs: Array<[string, number, string?]>) =>
+    pairs.map(([path, percent, treePath], i) => hit(path, 10 - i, { matchPercent: percent, ...(treePath ? { treePath } : {}) }));
+
+  it("answers a question about Zenod itself with its own description, no memories and no model call", async () => {
+    const fast = vi.fn();
+    const engine = fakeEngine("alpha", { fast });
+    const search = vi.fn(engine.searchTimed!);
+    engine.searchTimed = search;
+    const shown: unknown[] = [];
+    const result = await streamAnswerFromMemory(engine, "Who are you?", { onMemories: (m) => shown.push(m), appChat: true });
+    expect(result).toMatchObject({ answered: true, answer: ABOUT_ZENOD, memories: [], alsoCited: [], about: "zenod" });
+    expect(shown).toEqual([[]]);
+    expect(fast).not.toHaveBeenCalled();
+    expect(search).not.toHaveBeenCalled();
+    // WhatsApp, Telegram and calls leave appChat off: their answers are unchanged.
+    expect((await answerFromMemory(engine, "Who are you?")).about).toBeUndefined();
+  });
+
+  it("knows a question about Zenod from a question that only mentions it", () => {
+    for (const q of ["who are you?", "Who are you", "what are you?", "What can you do?", "Zenod, what can you do for me?", "what is zenod?", "How do I add a memory?",
+      "how do I use you?", "how does this work?", "¿Quién eres?", "qué puedes hacer"]) expect(isAboutZenod(q), q).toBe(true);
+    for (const q of ["who are you meeting on Friday?", "what did I say about Zenod pricing?", "how do I make sourdough?", "what can you tell me about the Airbnb plan?",
+      "how do I hedge the VIX trade?", "what were my top five topics last week?"]) expect(isAboutZenod(q), q).toBe(false);
+  });
+
+  it("shows no memory under the floor, and points at none when nothing is left", async () => {
+    const engine = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "no_answer", text: "", cited: [] }) });
+    engine.searchTimed = async () => ({ hits: weak([["Notes/a.md", 40], ["Notes/b.md", 15], ["Notes/c.md", 14], ["Notes/d.md", 9]]), tier: "index" as const, ms: 1 });
+    const result = await answerFromMemory(engine, "the plumber", { appChat: true });
+    expect(result.memories.map((m) => m.path)).toEqual(["Notes/a.md", "Notes/b.md"]);
+    engine.searchTimed = async () => ({ hits: weak([["Notes/c.md", 14], ["Notes/d.md", 9]]), tier: "index" as const, ms: 1 });
+    const none = await answerFromMemory(engine, "the plumber", { appChat: true });
+    expect(none).toMatchObject({ answered: false, memories: [] });
+    expect(none.answer).not.toContain("below");
+    // Off the app chat, the list is as before.
+    expect((await answerFromMemory(engine, "the plumber")).memories).toHaveLength(2);
+  });
+
+  it("never shows a family, health or money note on a weak match, unless the checked answer cites it", async () => {
+    const hits = weak([["Notes/Product decks.md", 25, "Working memory › Zenod"], ["Areas/Family matters.md", 24, "Long-term memory › Family"],
+      ["Notes/Blood test.md", 23, "Long-term memory › Health"], ["Notes/Roadmap.md", 22]]);
+    const engine = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "no_answer", text: "", cited: [] }) });
+    engine.searchTimed = async () => ({ hits, tier: "index" as const, ms: 1 });
+    expect((await answerFromMemory(engine, "decks", { appChat: true })).memories.map((m) => m.path)).toEqual(["Notes/Product decks.md", "Notes/Roadmap.md"]);
+    const strong = weak([["Areas/Family matters.md", 80, "Long-term memory › Family"]]);
+    engine.searchTimed = async () => ({ hits: strong, tier: "index" as const, ms: 1 });
+    expect((await answerFromMemory(engine, "family", { appChat: true })).memories).toHaveLength(1);
+    const cites = fakeEngine("alpha", { fast: async () => ({ checked: true, reason: null, text: "Yes [2].", cited: [2] }) });
+    cites.searchTimed = async () => ({ hits, tier: "index" as const, ms: 1 });
+    expect((await answerFromMemory(cites, "decks", { appChat: true })).memories.find((m) => m.path === "Areas/Family matters.md")).toMatchObject({ cited: true });
+  });
+
+  it("tells sensitive notes by title, path and branch, not by their text", () => {
+    expect(isSensitiveMemory({ title: "Family Estrangement", path: "Areas/x.md", treePath: "" })).toBe(true);
+    expect(isSensitiveMemory({ title: "x", path: "Notes/x.md", treePath: "Working memory › Alpha9 Tax and AEAT" })).toBe(true);
+    expect(isSensitiveMemory({ title: "Product and campaign decks", path: "Notes/Product and campaign decks.md", treePath: "Working memory › Zenod" })).toBe(false);
   });
 });
 

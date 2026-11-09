@@ -42,6 +42,8 @@ export type MemoryChatAnswer = {
   checkedBy?: "quoted" | "ask"
   /** Recent-note questions (E12-S3c): how many voice notes are tied to a topic page. */
   noteLinks?: { voiceNotes: number; unlinked: number }
+  /** "zenod": a question about Zenod itself, answered with its own description and no memories (E15-S1). */
+  about?: "zenod"
 }
 
 export type MemoryChatStreamHandlers = {

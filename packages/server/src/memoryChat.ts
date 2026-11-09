@@ -27,6 +27,76 @@ const MEMORY_CHAT_POOL = 20;
  * of the misses; the engine also adds the person's own best-matching notes after these.
  */
 const MEMORY_CHAT_CONTEXT = 16;
+/**
+ * The app chat's relevance floor (E15-S1): a memory under this match is not shown. Picked on Jordi's
+ * 45 real questions: the lowest right source shown read 19 %, so 15 % keeps every one of them and
+ * drops 7 of the 223 memories shown. A memory the checked answer cites is always shown.
+ */
+export const MEMORY_CHAT_FLOOR = 15;
+/** A sensitive memory (family, people, health, money) shows only from this match up, or when cited (E15-S1). */
+export const MEMORY_CHAT_SENSITIVE_FLOOR = 50;
+const SENSITIVE_WORDS = /\b(famil(y|ies|ia|iar)|people|relatives?|estrange\w*|parents?|mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|partner|divorce\w*|madre|padre|herman[oa]s?|hij[oa]s?|health|salud|medical|m[eé]dic\w*|doctor|hospital|therap\w*|terapia|diagnos\w*|medication|illness|mental|money|finances?|financial|finanzas|bank|banco|salary|salario|debts?|deuda|tax(es)?|impuestos|aeat|loans?|mortgage|hipoteca|insurance|seguros?|inheritance|herencia|private|privado|personal)\b/i;
+
+/**
+ * A family, people, health or money note, from its title, path and tree branch (E15-S1). A cheap
+ * rule: the vault has no sensitivity tags. The note's text is not read, so a passing mention does
+ * not count.
+ */
+export function isSensitiveMemory(memory: Pick<RankedMemory, "path" | "title" | "treePath">): boolean {
+  return SENSITIVE_WORDS.test(`${memory.title} ${memory.path.replace(/[/_.#-]/g, " ")} ${memory.treePath}`);
+}
+
+/** Whether the app chat shows a memory: cited, or over the floor, and a sensitive one only on a strong match (E15-S1). */
+function shownInApp(memory: MemoryChatMemory): boolean {
+  if (memory.cited) return true;
+  if (memory.matchPercent < MEMORY_CHAT_FLOOR) return false;
+  return memory.matchPercent >= MEMORY_CHAT_SENSITIVE_FLOOR || !isSensitiveMemory(memory);
+}
+
+/**
+ * What Zenod is and does today, in its own words (E15-S1): the app chat's answer to a question about
+ * Zenod itself, with no memories. Keep it true: every line names something a user can do now.
+ */
+export const ABOUT_ZENOD = [
+  "I'm Zenod, your memory.",
+  "",
+  "- **Tell me things**: type or record a voice note here and press Send, or send it on WhatsApp. I keep every word in your Log and file it on the right page of your memory tree.",
+  "- **Ask me things**: ask a question here and I answer from your own notes, with the memories I used, each with how well it matched.",
+  "- **Browse**: the Memory tab shows your memory tree and every page in it.",
+  "- **Use me from other AI apps**: connect Claude, ChatGPT, Cursor and others to your memory at [zenod.dev/connect](https://zenod.dev/connect).",
+  "",
+  "I only answer from what you have told me, and nothing is saved by asking.",
+].join("\n");
+
+const ABOUT_ZENOD_QUESTIONS: readonly RegExp[] = [
+  /^(who|what) (are|r) (you|u)( really| exactly)?$/,
+  /^(who|what) is (zenod|this|this app)$/,
+  /^what (can|do|could) (you|zenod) do( for me)?$/,
+  /^what are you (for|able to do|good for)$/,
+  /^how (can|do|could) (you|zenod) help( me)?$/,
+  /^how do(es)? (you|zenod|this|this app) work$/,
+  /^how (do|can|should) i (use|start|talk to|connect|reach) (you|zenod|this|this app|my memory)\b.*$/,
+  /^how (do|can|should) i (add|save|keep|record|send|store|find|search|see|browse|delete|remove|edit|fix|move|share|export|ask)\b.*\b(memory|memories|zenod|voice notes?|the tree|memory tree|this app|the app|inbox)$/,
+  /^(qui[eé]n|qu[eé]) eres( t[uú])?$/,
+  /^qu[eé] es (zenod|esto|esta app)$/,
+  /^qu[eé] (puedes|sabes) hacer$/,
+  /^c[oó]mo (funcionas|te uso|funciona (zenod|esto|esta app))$/,
+];
+
+/**
+ * A question about Zenod itself ("who are you?", "what can you do?", "how do I add a memory?"):
+ * the whole question, not a mention, so "what did I say about Zenod's pricing" still searches.
+ */
+export function isAboutZenod(question: string): boolean {
+  const q = question
+    .toLowerCase()
+    .replace(/[¿¡?!.,;:"'`]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(hey |hi |hello |hola |ok |so )?(zenod )?/, "")
+    .trim();
+  return ABOUT_ZENOD_QUESTIONS.some((pattern) => pattern.test(q));
+}
 
 export interface MemoryChatMemory extends RankedMemory {
   /** The answer cites this memory. */
@@ -62,6 +132,8 @@ export interface MemoryChatAnswer {
    * the memory it names, "ask" when the read-only ask loop answered (no streaming chat model).
    */
   checkedBy?: "quoted" | "ask";
+  /** "zenod" when the question was about Zenod itself and `answer` is its own description (E15-S1). */
+  about?: "zenod";
 }
 
 export interface MemoryChatStreamHandlers {
@@ -69,6 +141,11 @@ export interface MemoryChatStreamHandlers {
   onMemories?(memories: MemoryChatMemory[]): void;
   /** Answer prose as the model writes it; replaced by the final answer once checked. */
   onText?(delta: string): void;
+  /**
+   * The web app's chat (E15-S1): questions about Zenod get its own description, memories under the
+   * relevance floor and sensitive ones on a weak match are not shown. WhatsApp, Telegram and calls leave it off.
+   */
+  appChat?: boolean;
 }
 
 const basePath = (path: string) => path.split("#")[0]!;
@@ -80,6 +157,10 @@ const NON_ANSWER_TEXT = {
   unverified: "No confident answer: Zenod found no note that answers this directly. The closest memories are below.",
   unchecked: "No confident answer: Zenod could not check its answer against your memories, so it is not shown. The closest memories are below.",
   none: "No memory matches this question yet.",
+  // The app chat, when no memory clears the relevance floor (E15-S1).
+  unverifiedNone: "No confident answer: Zenod found no note that answers this directly, and none matches it closely enough to show.",
+  uncheckedNone: "No confident answer: Zenod could not check its answer against your memories, so it is not shown.",
+  retryNone: "Zenod could not put a checked answer together this time. Ask again in a moment.",
 } as const;
 
 /** One read-only ask; a protocol slip by the model is asked once more before giving up. */
@@ -100,15 +181,21 @@ export async function streamAnswerFromMemory(
   handlers: MemoryChatStreamHandlers = {},
 ): Promise<MemoryChatAnswer> {
   const started = performance.now();
+  const appChat = handlers.appChat === true;
+  if (appChat && isAboutZenod(question)) {
+    handlers.onMemories?.([]);
+    return { question, answered: true, answer: ABOUT_ZENOD, memories: [], alsoCited: [], ms: Math.round(performance.now() - started), about: "zenod" };
+  }
   const ranked = await rankMemories(engine, question, MEMORY_CHAT_POOL);
   // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage (E12-S3c).
   const shownMemories = (cited: ReadonlySet<string>) =>
     ranked.results
       .map((memory) => ({ ...memory, cited: cited.has(memory.path) }))
-      .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited);
+      .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited)
+      .filter((memory) => !appChat || shownInApp(memory));
   handlers.onMemories?.(shownMemories(new Set()));
   const noteLinks = await noteLinksFor(engine, ranked.results);
-  if (!engine.answerFromMemories) return { ...(await askAnswer(engine, question, started, ranked.results)), ...noteLinks };
+  if (!engine.answerFromMemories) return { ...(await askAnswer(engine, question, started, ranked.results, appChat)), ...noteLinks };
   if (ranked.results.length === 0) {
     return { question, answered: false, answer: NON_ANSWER_TEXT.none, memories: [], alsoCited: [], ms: Math.round(performance.now() - started), checkedBy: "quoted" };
   }
@@ -117,7 +204,7 @@ export async function streamAnswerFromMemory(
     ranked.results.slice(0, MEMORY_CHAT_CONTEXT).map((memory) => ({ n: memory.rank, path: memory.path, title: memory.title, snippet: memory.snippet })),
     handlers.onText,
   );
-  if (!check) return { ...(await askAnswer(engine, question, started, ranked.results)), ...noteLinks };
+  if (!check) return { ...(await askAnswer(engine, question, started, ranked.results, appChat)), ...noteLinks };
   const citedPaths = new Set(ranked.results.filter((memory) => check.cited.includes(memory.rank)).map((memory) => memory.path));
   const memories: MemoryChatMemory[] = shownMemories(check.checked ? citedPaths : new Set());
   // A cited note the engine added beside the ranked list (E12-S1b round 2) shows too, with its own percentage.
@@ -135,7 +222,7 @@ export async function streamAnswerFromMemory(
   return {
     question,
     answered: check.checked,
-    answer: check.checked ? check.text : check.reason === "no_answer" ? NON_ANSWER_TEXT.unverified : NON_ANSWER_TEXT.unchecked,
+    answer: check.checked ? check.text : nonAnswerText(check.reason === "no_answer" ? "unverified" : "unchecked", memories.length > 0),
     memories,
     alsoCited: [],
     ms: Math.round(performance.now() - started),
@@ -151,17 +238,26 @@ async function noteLinksFor(engine: BrainEngine, ranked: readonly RankedMemory[]
   return links ? { noteLinks: { voiceNotes: links.voiceNotes, unlinked: links.unlinked } } : {};
 }
 
-export function answerFromMemory(engine: BrainEngine, question: string): Promise<MemoryChatAnswer> {
-  return streamAnswerFromMemory(engine, question);
+export function answerFromMemory(engine: BrainEngine, question: string, options: { appChat?: boolean } = {}): Promise<MemoryChatAnswer> {
+  return streamAnswerFromMemory(engine, question, options);
+}
+
+/** A non-answer's note; in the app chat, one that points at memories below only when some are shown (E15-S1). */
+function nonAnswerText(kind: "retry" | "unverified" | "unchecked" | "none", anyShown: boolean): string {
+  if (anyShown) return NON_ANSWER_TEXT[kind];
+  if (kind === "unverified") return NON_ANSWER_TEXT.unverifiedNone;
+  if (kind === "unchecked") return NON_ANSWER_TEXT.uncheckedNone;
+  if (kind === "retry") return NON_ANSWER_TEXT.retryNone;
+  return NON_ANSWER_TEXT.none;
 }
 
 /** S1's answer: the read-only ask loop next to the ranked memories (engines without a chat model). */
-async function askAnswer(engine: BrainEngine, question: string, started: number, ranked: RankedMemory[]): Promise<MemoryChatAnswer> {
+async function askAnswer(engine: BrainEngine, question: string, started: number, ranked: RankedMemory[], appChat = false): Promise<MemoryChatAnswer> {
   const answer = await askOnce(engine, question);
-  return { ...(await fromAsk(engine, question, answer, ranked, started)), checkedBy: "ask" };
+  return { ...(await fromAsk(engine, question, answer, ranked, started, appChat)), checkedBy: "ask" };
 }
 
-async function fromAsk(engine: BrainEngine, question: string, answer: Answer, ranked: RankedMemory[], started: number): Promise<MemoryChatAnswer> {
+async function fromAsk(engine: BrainEngine, question: string, answer: Answer, ranked: RankedMemory[], started: number, appChat = false): Promise<MemoryChatAnswer> {
   const nonAnswer = askNonAnswer(answer.text);
   const cited = new Set(answer.sources.map((source) => basePath(source.path)));
   // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage.
@@ -195,11 +291,12 @@ async function fromAsk(engine: BrainEngine, question: string, answer: Answer, ra
     });
   }
   memories.sort((a, b) => b.matchPercent - a.matchPercent || a.rank - b.rank);
+  const shownMemories = appChat ? memories.filter(shownInApp) : memories;
   return {
     question,
     answered: nonAnswer === null,
-    answer: nonAnswer ? NON_ANSWER_TEXT[nonAnswer] : answer.text,
-    memories,
+    answer: nonAnswer ? (appChat ? nonAnswerText(nonAnswer, shownMemories.length > 0 || alsoCited.length > 0) : NON_ANSWER_TEXT[nonAnswer]) : answer.text,
+    memories: shownMemories,
     alsoCited,
     ms: Math.round(performance.now() - started),
   };
