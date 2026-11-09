@@ -66,6 +66,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-09 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
 | 2026-11-09 | accepted | Planned from Jordi's brief (Team desk 2026-11-09): "Zenod is not your memory, it is the librarian of your memory"; four modes Keep, Look up, Talk it over, Job on the memory; one input, mode label per reply, tap to switch; mockup first as a coded approve ask; reuse Epic Team modules | L1 mockup ready, L2 build draft until he approves the mockup | his brief | when the mockup ask is answered |
 | 2026-11-09 | accepted | epic “Zenod is the librarian of your memory: four clear modes” ready on Jordi's ask (L-37, Team desk: "yes ok") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
+| 2026-11-09 | revised | E22-A1 was feedback (0db6fd54): Jordi likes the direction but wants the name to lead and the tagline quieter, fewer tabs without losing functionality, and Memory to keep the charts, graphs and settings; "let's do another iteration before I approve" | mockup round 2 (run_41ed542e) maps every feature of today's app to its new home; comes back as E22-A2; the live build waits | his voice note vn_723dd97e | when E22-A2 is answered |
 
 ## Operating Learnings
 
