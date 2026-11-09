@@ -37,6 +37,24 @@
      "draft": true
     }
    ]
+  },
+  {
+   "id": "your-memory-tree",
+   "title": "Your memory tree",
+   "intro": "How Zenod keeps your notes in order.",
+   "features": [
+    {
+     "id": "tree-tidies-itself",
+     "title": "Your tree tidies itself",
+     "text": "Each week, small pages on the same subject as a page beside them join it, word for word, and topics such as Markets get their own branch.",
+     "rows": [
+      "E12-S24",
+      "E12-S25"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    }
+   ]
   }
  ]
 }
