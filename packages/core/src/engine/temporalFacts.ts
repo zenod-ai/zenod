@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { MemoryEntry } from "../types.js";
 import { parseNote, serializeNote } from "../vault/frontmatter.js";
 import type { VaultSourceRef } from "../vault/repository.js";
+import { outsideOpsRollup } from "../vault/captureOrigin.js";
 
 export interface LegacyStatementHistory {
   path:string; statement:string; statementId:string; contentHash:string;
@@ -188,7 +189,7 @@ export function appendMemoryFacts(raw: string, original: string | null, proposal
     const citation = `[[${fact.evidenceRef.replace(/^Log\//, "").replace(".md#", "#")}]]`;
     return `- ${fact.key}: ${JSON.stringify(fact.statement)} — ${fact.origin}; effective ${fact.effectiveDate ?? "unknown"}; ${fact.supersedes.length ? "explicit correction of " + fact.supersedes.join(", ") : fact.unresolvedCorrection ? "correction target unresolved; conflict retained" : "reported evidence, not live verification"}. (${citation})`;
   });
-  return serializeNote(next.frontmatter, next.body + (annotations.length ? `\n\n## Evidence-qualified updates\n\n${annotations.join("\n")}\n` : ""));
+  return serializeNote(next.frontmatter, annotations.length ? outsideOpsRollup(next.body, head => `${head}\n\n## Evidence-qualified updates\n\n${annotations.join("\n")}\n`) : next.body);
 }
 
 /** Re-read immutable evidence at query time; persisted annotations alone cannot support a claim. */

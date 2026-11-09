@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { parseNote } from "../vault/frontmatter.js";
 import { basenameOf, listMarkdownFiles } from "../vault/files.js";
 import { CITATION_RE } from "../vault/pages.js";
-import { readLogCaptures, type LogCapture } from "../vault/captureOrigin.js";
+import { outsideOpsRollup, readLogCaptures, type LogCapture } from "../vault/captureOrigin.js";
 import { isTreePage, TREE_PARENT } from "../vault/tree.js";
 import { tokens, type TrackedWrites } from "./treePlacement.js";
 import { isFillerTerm, SUBJECT_GENERATOR } from "./treeDiscover.js";
@@ -258,7 +258,7 @@ export async function materializeNamedSubjects(vaultPath: string, today: string,
     const parts = nameParts(subject.display);
     const fresh = subject.captures.filter(hit => !cited.has(hit.capture.key));
     if (!fresh.length) continue;
-    const next = `${raw.replace(/\n*$/, "\n")}${fresh.map(hit => subjectLine(subject, parts, hit)).join("\n")}\n`
+    const next = outsideOpsRollup(raw, head => `${head.replace(/\n*$/, "\n")}${fresh.map(hit => subjectLine(subject, parts, hit)).join("\n")}\n`)
       .replace(/^updated: .*$/m, `updated: "${today}"`)
       .replace(/^summary: .*$/m, `summary: ${JSON.stringify(subjectSummary(subject))}`);
     await writes.write(subject.page, next);

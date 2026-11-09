@@ -5,7 +5,7 @@ import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, Classificati
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendRoute } from "../llm/sendRoute.js";
 import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_WHOLE_CONTEXT_CHARS, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
-import { captureOrigin, isPersonSource } from "../vault/captureOrigin.js";
+import { captureOrigin, isPersonSource, outsideOpsRollup } from "../vault/captureOrigin.js";
 import { recentIntent } from "../vault/recentIntent.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -2702,8 +2702,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           const question =
             classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
           const block = uncertaintyBlock(input.content, question, evidence, classification.confidence);
-          const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
-          await writeFile(absolute, `${currentContent}${separator}${block}`);
+          await writeFile(absolute, outsideOpsRollup(currentContent, head => `${head}${head.endsWith("\n") ? "\n" : "\n\n"}${block}`));
 
           const report = await lintVault(vaultPath, [page.path]);
           const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];

@@ -4,6 +4,7 @@ import { parseNote, serializeNote } from "../vault/frontmatter.js";
 import { pageRevision, SUMMARY_MAX_CHARS } from "../vault/pages.js";
 import type { BranchContextPacket } from "./meaningNotes.js";
 import { appendMemoryFacts, parseMemoryFacts, type FactProposal } from "./temporalFacts.js";
+import { outsideOpsRollup } from "../vault/captureOrigin.js";
 import { resolveRawSourceQuote, type SourceQuoteRun } from "./sourceQuote.js";
 
 export interface ReconciliationSource { id: string; start: number; end: number; text: string }
@@ -374,7 +375,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
   if (!result.appliedOperationIds.length || (!edits.size && !additions.length)) return result;
   let body = parsed?.body ?? "";
   for (const edit of [...edits.values()].sort((a,b) => b.start - a.start)) body = body.slice(0, edit.start) + edit.text + body.slice(edit.end);
-  body += additions.join("");
+  body = outsideOpsRollup(body, head => head + additions.join(""));
   // Ordinary legacy Markdown gets a host-authored envelope; every body byte survives.
   const metadata = parsed?.frontmatter ?? {title: input.title, type: input.type, tags: [], created: input.today, updated: input.today, summary: input.title.slice(0,480)};
   let next = parsed?.frontmatter ? input.raw!.slice(0,input.raw!.length-parsed.body.length)+body : serializeNote(metadata, "") + body;
@@ -382,7 +383,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     const withFacts = appendMemoryFacts(next, input.raw, proposals, input.evidence, [...validatedFactSupport].join("\n\n"));
     next = serializeNote(parseNote(withFacts).frontmatter!, "").slice(0,parsed?.frontmatter ? -1 : undefined) + body;
   }
-  if (input.links.length && !input.links.some(link => body.includes(link))) next += `\n\n${input.links.slice(0,3).join(" ")}\n`;
+  if (input.links.length && !input.links.some(link => body.includes(link))) next = outsideOpsRollup(next, head => `${head}\n\n${input.links.slice(0,3).join(" ")}\n`);
   result.content = next;
   return result;
 }
