@@ -2,7 +2,8 @@
 from: alpha9
 about: The Zenod tester sign-up path, walked end to end on zenod.dev and cloud.zenod.dev: eight things to fix before the tester wave
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-09-zenod-re-the-zenod-tester-sign-up-path-walked.md
 ---
 Jordi, voice note 2026-11-09 02:00Z: "for Epic Social and for Zenod, it's ready to go live, right, with testers. So let's get customers in." agent_team E85-S3 (the tester wave) walked every public way into Zenod as a stranger on 2026-11-09, headless Chromium at 1280 and 390, signed out, no account made (sign-up is Google or GitHub only). Every path reaches a working Google or GitHub sign-in: home Start with Google and Start with GitHub, nav Sign in, /signup and /login (the app's login card), cloud.zenod.dev and /app. What we ask you to look at, each as you judge (asking only, nothing was changed in your repo):
 
