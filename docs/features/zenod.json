@@ -28,6 +28,16 @@
      ],
      "since": "2026-11-09",
      "draft": true
+    },
+    {
+     "id": "ask-zenod-about-itself",
+     "title": "Ask Zenod who it is",
+     "text": "Ask the chat who it is or what it can do and it tells you directly. Weak matches and private notes on family, health or money stay out of the memories it shows.",
+     "rows": [
+      "E15-S1"
+     ],
+     "since": "2026-11-09",
+     "draft": true
     }
    ]
   },
