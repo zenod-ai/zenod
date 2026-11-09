@@ -1042,6 +1042,16 @@ function createTenantOrgan(
           input.fileName ?? "voice.ogg",
           phylaxTranscriptionOptions(transcription, env, input.signal),
         );
+        if (result.success && result.transcript?.trim()) {
+          // ZAL-A15: which provider transcribed each note (names only, never a key).
+          console.log(JSON.stringify({
+            event: "transcription.done",
+            tenant_id: input.tenantId,
+            configured: transcription.provider,
+            provider: result.provider ?? null,
+            local_fallback: transcription.provider !== "local" && String(result.provider ?? "").startsWith("whisper.cpp"),
+          }));
+        }
         if (!result.success || !result.transcript?.trim()) {
           const reason = input.signal.aborted
             ? "timeout"
@@ -1157,7 +1167,9 @@ export function phylaxTranscriptionOptions(
     ...(transcription.provider === "openrouter"
       ? { openrouterModel: transcription.model ?? undefined, longTranscriptionProvider: "openrouter" as const }
       : {}),
-    allowLocalFallback: transcription.provider === "local",
+    // ZAL-A15: a voice note is never lost to a paid provider's refusal (402 out of credit, a
+    // rejected key, an outage): every tenant falls back to the local whisper-cli in the image.
+    allowLocalFallback: true,
     signal,
     includeTiming: true,
   };
