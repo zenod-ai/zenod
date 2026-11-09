@@ -335,7 +335,7 @@ function AnswerTurn({ result }: { result: MemoryChatAnswer }) {
           noteLinks={result.noteLinks}
           question={result.question}
         />
-      ) : (
+      ) : result.about === "zenod" ? null : (
         <p className="zp-hint">No memory matched this question.</p>
       )}
     </>

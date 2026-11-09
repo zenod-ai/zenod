@@ -153,7 +153,7 @@ async function askOne(mods, engine, model, question) {
   let shown = [];
   let mode = "chat";
   if (mods.chat?.streamAnswerFromMemory && engine.answerFromMemories) {
-    await withLimit(mods.chat.streamAnswerFromMemory(engine, question, { onMemories: (m) => { shown = m; }, onText: () => {} }), QUESTION_LIMIT_MS, "question");
+    await withLimit(mods.chat.streamAnswerFromMemory(engine, question, { onMemories: (m) => { shown = m; }, onText: () => {}, appChat: true }), QUESTION_LIMIT_MS, "question");
   } else if (mods.ranked?.rankMemories) {
     mode = "ranked";
     shown = (await withLimit(mods.ranked.rankMemories(engine, question, 5), QUESTION_LIMIT_MS, "question")).results ?? [];

@@ -1583,6 +1583,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         const answer = await streamAnswerFromMemory(await runtime.getEngine(), question, {
           onMemories: (memories) => { void send({ type: "memories", memories }); },
           onText: (text) => { void send({ type: "text", text }); },
+          appChat: true,
         });
         await send({ type: "answer", answer });
       } catch (error) {
@@ -1640,6 +1641,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           const answer = await streamAnswerFromMemory(engine, route.question, {
             onMemories: (memories) => { void send({ type: "memories", memories }); },
             onText: (text) => { void send({ type: "text", text }); },
+            appChat: true,
           });
           await send({ type: "answer", answer });
         }
@@ -1658,7 +1660,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if ("response" in start) return start.response;
     const { question, runtime, tenantId, release } = start;
     try {
-      return c.json(await answerFromMemory(await runtime.getEngine(), question));
+      return c.json(await answerFromMemory(await runtime.getEngine(), question, { appChat: true }));
     } catch (error) {
       const failure = memoryChatFailure(tenantId, error);
       return c.json(failure.body, failure.status);
