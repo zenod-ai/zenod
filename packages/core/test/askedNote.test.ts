@@ -140,6 +140,6 @@ describe("the chat reads the asked note whole and answers it completely (E12-S19
     const { system } = memoryChatPrompt("what did I say about hedging?", []);
     expect(system).toContain("list for yourself every point it makes on the question");
     expect(system).toContain("never stop at the first point");
-    expect(system).toContain("At most about 10 lines");
+    expect(system).toContain("At most about 12 lines");
   });
 });

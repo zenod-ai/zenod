@@ -52,12 +52,13 @@ const SYSTEM = [
   "Many notes are their voice notes, transcribed: what they said, in their words.",
   "Rules:",
   "- Use only what the notes say. Never add facts from general knowledge, never guess.",
-  `- First decide which note is about exactly what is asked: the same subject, and the same request, decision, event, place or project when the question names one. Write it on the first line: ${ABOUT_HEADING} and its number, like ${ABOUT_HEADING} [3]. Add a second number only for a note about the very same thing (the same request said twice), never for a related one. For a question about a time or over many notes, list every note you answer from.`,
+  `- First decide which note is about exactly what is asked: the same subject, and the same request, decision, event, place or project when the question names one. Write it on the first line: ${ABOUT_HEADING} and its number, like ${ABOUT_HEADING} [3]. That is almost always ONE note. Add a second number only for a note about the very same thing (the same request said twice, or a second voice note on exactly the asked thing), never for a related one: a note on the same subject but another point, a topic page or an agent note is not about it. For a question about a time or over many notes, list every note you answer from.`,
   "- When the question asks what the person said, asked, wanted, felt or decided, the note it is about is one of their own notes (\"your voice note\", \"your note\") whenever one of them speaks of it. Topic pages are summaries Zenod wrote, and agent notes are reports: neither is what the person said.",
   `- Answer only from the notes on the ${ABOUT_HEADING} line. The other notes are nearby: a related subject, another project, place or time. Never mix their points in, even when they look related.`,
   "- Answer completely: give every main point the notes hold on the question, with its specifics (names, numbers, places, dates), not a vague summary.",
-  `- Before you write, go through the whole of each note on the ${ABOUT_HEADING} line and list for yourself every point it makes on the question: what was said, asked, wanted or decided, the reasons given, the examples and the next step named. Give each of them; never stop at the first point or fold several into one vague line.`,
-  "- Plain words, in the language of the question. Speak to the person as \"you\". Lead with the direct answer. When there are several points, use a short list, one point per line starting with \"- \". At most about 10 lines.",
+  `- Before you write, go through the whole of each note on the ${ABOUT_HEADING} line, to its end, and list for yourself every point it makes on the question: what was said, asked, wanted or decided, the reasons given, the examples, what it leads to and the next step named. Give each of them as its own line; never stop at the first point or fold several into one vague line.`,
+  `- A note that speaks of the question at length usually makes four to eight points on it: an answer of one or two points is too thin. Even when the question asks one part ("how did I feel", "why"), also give what that note says follows from it: the reason, the example, the change or the next step.`,
+  "- Plain words, in the language of the question. Speak to the person as \"you\". Lead with the direct answer. When there are several points, use a short list, one point per line starting with \"- \". At most about 12 lines.",
   "- Questions about a time (\"today\", \"yesterday\", \"last week\", a date, \"my last voice note\") are about the notes captured then: use each note's capture date and TODAY below, and name the dates you answer from.",
   "- Questions over many notes (\"top topics\", \"what did I talk about\") are answered from all the notes given: group them by subject and lead with the subjects that come up most.",
   "- After each claim, cite the note it comes from by its number in square brackets, like [2] or [1][3].",
@@ -129,6 +130,9 @@ export function memoryChatExcerpt(body: string, focus = "", max = MEMORY_CHAT_CO
   return `${out.trim()}${order.at(-1) === scored.length - 1 ? "" : "…"}`;
 }
 
+/** The last line of the prompt: the parts of a reply, in order, so the quotes are never left out. */
+const CLOSING = `Reply with the ${ABOUT_HEADING} line, the answer, then the ${SOURCES_HEADING} line and one quote line for every note number you cited.`;
+
 const KIND_LABEL = { voice: "your voice note", own: "your note", note: "note", agent: "agent note", page: "topic page" } as const;
 /** The heading of a captured file ("Voice note "AC8C….ogg" ingeste…"): no words of the note, so the kind says it. */
 const CAPTURE_TITLE = /^(?:voice note|audio|screenshot\/image|image|document|pdf|file) "[^"]*"/i;
@@ -141,7 +145,8 @@ export function memoryChatPrompt(question: string, memories: readonly MemoryChat
     const filed = memory.filed?.length ? `\nFiled into: ${memory.filed.join(", ")}` : "";
     return `${head}${filed}\n${memory.text}`;
   }).join("\n\n");
-  return { system: SYSTEM, prompt: `${today ? `TODAY\n${today}\n\n` : ""}NOTES\n\n${notes}\n\nQUESTION\n${question}` };
+  // E12-S32: a long, full answer sometimes ended before its quotes, and an answer without them is not shown.
+  return { system: SYSTEM, prompt: `${today ? `TODAY\n${today}\n\n` : ""}NOTES\n\n${notes}\n\nQUESTION\n${question}\n\n${CLOSING}` };
 }
 
 /** One note the whole-read pick looks at: its full text (not the excerpt) and whether the person wrote or said it. */
@@ -306,12 +311,66 @@ function keepClaims(text: string, allowed: ReadonlySet<number>): { text: string;
   return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), claims, kept };
 }
 
+/** What the host knows when it narrows the ABOUT line (E12-S32). */
+export interface MemoryChatAboutScope {
+  question: string;
+  /** Notes the host read whole because one passage holds the question (E12-S16, S19). */
+  picks?: readonly number[];
+}
+
+/** A question about what the person said, asked, wanted, felt or decided: their own notes hold it. */
+const SAID = /\b(?:did|do|does|am|was|were|have|had|should|would|will)\s+(?:i|we)\b|\b(?:i|we)\s+(?:(?:\w+n't|not|never|also)\s+)?(?:say|said|ask|asked|want|wanted|feel|felt|decide|decided|think|thought|tell|told|mention|mentioned|consider|considering|like|liked|leave|left|plan|planned|propose|proposed)\b/i;
+
+/** Two notes that are the same note captured twice: most of the shorter one's words are in the other. */
+function sameNote(a: string, b: string): boolean {
+  const x = focusWords(a);
+  const y = focusWords(b);
+  const small = x.size <= y.size ? x : y;
+  const large = small === x ? y : x;
+  return small.size >= 5 && [...small].filter((word) => large.has(word)).length / small.size >= 0.6;
+}
+
+/**
+ * The notes an answer may rest on (E12-S32). On Jordi's 45 real questions the model's ABOUT line
+ * named a neighbouring note next to the asked one in 12 of the "mixed in another note" misses, so the
+ * S16 filter let those points through. For a question about one thing, the host keeps one note: the
+ * person's own note before a topic page or agent note when the question is about what they said, the
+ * note the host read whole when it is one of them, else the model's first. Another named note stays
+ * only when it is the same note captured twice or the host also read it whole. Questions about a time
+ * or over many notes keep every note named.
+ */
+export function memoryChatAboutNotes(about: readonly number[], memories: readonly MemoryChatContext[], scope: MemoryChatAboutScope): number[] {
+  const byNumber = new Map(memories.map((memory) => [memory.n, memory]));
+  const named = [...new Set(about)].filter((n) => byNumber.has(n));
+  if (named.length <= 1 || MANY_NOTES.test(scope.question)) return named;
+  const own = named.filter((n) => ["voice", "own"].includes(byNumber.get(n)!.kind ?? ""));
+  const pool = SAID.test(scope.question) && own.length ? own : named;
+  const picks = new Set(scope.picks ?? []);
+  const first = pool.find((n) => picks.has(n)) ?? pool[0]!;
+  return [first, ...pool.filter((n) => n !== first && (picks.has(n) || sameNote(byNumber.get(first)!.text, byNumber.get(n)!.text)))];
+}
+
+/** A lead-in line ("Regarding X, you also said:", "**Money**") whose points were all removed. */
+function dropOrphanLeads(text: string): string {
+  const lines = text.split("\n");
+  const heading = (line: string) => !/\[\d+\]/.test(line) && /^\s*(?:#+\s*)?\*\*[^*]+\*\*:?\s*$/.test(line);
+  const lead = (line: string) => heading(line) || (!/\[\d+\]/.test(line) && /:\s*$/.test(line.trim()));
+  // An intro line may stand before a section heading; a heading or intro before another intro, or at the end, has nothing left.
+  const kept = lines.filter((line, i) => {
+    if (!lead(line)) return true;
+    const next = lines.slice(i + 1).find((other) => other.trim());
+    return next !== undefined && !(lead(next) && (heading(line) || !heading(next)));
+  });
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Split the model output into prose and quotes, and check every citation against its memory. */
-export function checkMemoryChatAnswer(output: string, memories: readonly MemoryChatContext[]): MemoryChatCheck {
+export function checkMemoryChatAnswer(output: string, memories: readonly MemoryChatContext[], scope?: MemoryChatAboutScope): MemoryChatCheck {
   let raw = output.trim();
   // E12-S16: the ABOUT line names the notes the question is about; the answer may only rest on them.
   const about = new RegExp(`^[ \\t*#]*${ABOUT_HEADING}\\b([^\\n]*)(?:\\n|$)`).exec(raw);
-  const focus = new Set([...(about?.[1] ?? "").matchAll(/\[?(\d+)\]?/g)].map((match) => Number(match[1])));
+  const named = [...(about?.[1] ?? "").matchAll(/\[?(\d+)\]?/g)].map((match) => Number(match[1]));
+  const focus = new Set(scope ? memoryChatAboutNotes(named, memories, scope) : named);
   if (about) raw = raw.slice(about[0].length).trim();
   if (!raw) return { checked: false, reason: about ? "no_answer" : "empty", text: "", cited: [] };
   if (raw.startsWith(MEMORY_CHAT_NO_ANSWER)) return { checked: false, reason: "no_answer", text: "", cited: [] };
@@ -344,7 +403,7 @@ export function checkMemoryChatAnswer(output: string, memories: readonly MemoryC
   // E12-S16: a claim that rests only on a note outside the ABOUT line is a neighbouring note mixed in,
   // and goes. When nothing would be left, the model's ABOUT line is what was wrong: the answer stays.
   const onFocus = focus.size ? keepClaims(checkedText, new Set(verified.filter((n) => focus.has(n)))) : null;
-  if (onFocus && onFocus.kept > 0 && onFocus.text) checkedText = onFocus.text;
+  if (onFocus && onFocus.kept > 0 && onFocus.text) checkedText = onFocus.kept < onFocus.claims ? dropOrphanLeads(onFocus.text) : onFocus.text;
   const marked = new Set([...checkedText.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1])));
   return { checked: true, reason: null, text: checkedText, cited: verified.filter((n) => marked.size === 0 || marked.has(n)).sort((a, b) => a - b) };
 }

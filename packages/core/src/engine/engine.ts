@@ -105,6 +105,8 @@ import {
 /** E12-S1b round 2: own notes read beside the ranked memories, and the excerpt sizes past the top ten and in a period. */
 const ANSWER_OWN_NOTES = 4;
 const ANSWER_TAIL_CHARS = 1_000;
+/** E12-S32: the least of a person's own note the fast chat answer reads, wherever it ranks. */
+const ANSWER_OWN_CHARS = 3_000;
 const ANSWER_PERIOD_CHARS = 1_500;
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
@@ -3028,7 +3030,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const askedNumbers = all.filter((memory) => asked.includes(memory.path)).map((memory) => memory.n);
     const whole = new Set(timed ? [] : [...askedNumbers.slice(0, 1), ...memoryChatFocus(question, read.map(({ memory, body, kind }) => ({ n: memory.n, title: memory.title, text: memoryChatExcerpt(body, "", Number.MAX_SAFE_INTEGER), own: kind === "voice" || kind === "own" })))]);
     const context: MemoryChatContext[] = read.map(({ memory, i, body, when, filed, kind }) => {
-      const budget = whole.has(memory.n) ? MEMORY_CHAT_WHOLE_CONTEXT_CHARS : timed?.window.kind === "range" ? ANSWER_PERIOD_CHARS : i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : i < 10 ? MEMORY_CHAT_CONTEXT_CHARS : ANSWER_TAIL_CHARS;
+      const ranked = i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : i < 10 ? MEMORY_CHAT_CONTEXT_CHARS : ANSWER_TAIL_CHARS;
+      // E12-S32: the person's own notes are read to at least ANSWER_OWN_CHARS wherever they rank: the
+      // asked note often ranked 11th or later, or was added as their own note, and gave only 1,000 characters.
+      const own = kind === "voice" || kind === "own";
+      const budget = whole.has(memory.n) ? MEMORY_CHAT_WHOLE_CONTEXT_CHARS : timed?.window.kind === "range" ? ANSWER_PERIOD_CHARS : own && !timed ? Math.max(ranked, ANSWER_OWN_CHARS) : ranked;
       const title = memory.title === "Your note" && when ? `Your ${/voice/.test(when) ? "voice note" : "note"}` : memory.title;
       return { n: memory.n, path: memory.path, title, text: memoryChatExcerpt(body, `${question} ${memory.snippet ?? ""}`, budget), ...(when ? { when } : {}), ...(filed?.length ? { filed } : {}), ...(kind ? { kind } : {}) };
     });
@@ -3040,7 +3046,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const filter = memoryChatStreamFilter((text) => onText?.(text));
     const output = await llm.streamMemoryChat({ system, prompt }, (delta) => filter.push(delta));
     filter.end();
-    return { ...checkMemoryChatAnswer(output || "", context), context: shown };
+    // E12-S32: for a question about one thing the host narrows the ABOUT line to the asked note.
+    return { ...checkMemoryChatAnswer(output || "", context, timed ? undefined : { question, picks: [...whole] }), context: shown };
   }
 
   /**
