@@ -51,12 +51,12 @@ Phase: Zenod is ready for its first five real testers apart from a dress rehears
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): plan done, customer tool list and zenod.dev/connect kit live; publishing to free directories waits on E10-A1 (snoozed to 2026-11-05).
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; trial token waits on the same sign-in (E7-A15).
-Last attempted: 2026-11-06 repo cleanup (D35): only zenod and zenod-social stay active, the other three Zenod repos are archived and marked DEPRECATED. Before: 2026-11-03 roll-up from children (above); 2026-11-02 roll-up of EPIC-7 and EPIC-9 work
-Result: Zenod runs in production and a new tester could sign up, get a free pass and be capped, but nobody outside the team has used it yet. Live `cloud.zenod.dev/api/health` ok on `5aa4fe4` (2026-11-03); live billing never performed.
-Waiting on: Jordi, most urgent first: E7-A15 sign in operations@alpha9.io once in the agents' browser (~1 min; unblocks T7, EPIC-11 and EPIC-10 R1); E7-A14 follow the one key page (~15–20 min); EPIC-9 verdict on its Outcome
-Monitoring: E14-S10 round 3 run_2777f2ed (seat2), E12-S24/S25 run_34080622 (seat1) and E20-A1 until done, next check 2026-11-09T04:55:35Z · next check 2026-11-09T04:55:35.000Z
-Next action: once Jordi signs in (E7-A15), the agents run the T7 dress rehearsal, then T8 go/no-go and the five tester invites
-Verified at: 2026-11-03 (child Current States read from main; live health ok, sha 5aa4fe4)
+Last attempted: 2026-11-09 roll-up from children: ZAL active (A13 tester program and A14 alert key dispatched) ; EPIC-7 active (key page round 2 is E7-A16, rehearsal waits on E7-A15) ; EPIC-6 ready (waits on S1 review) ; EPIC-10 active (Registry listing done, R4 in flight, Glama waits on sign-in) ; EPIC-12 active (memory tree work, S25 round 2 and S27 reclassify in flight) ; EPIC-14 active (plans and pricing, DeepSeek route built and off until its key) ; EPIC-15 active (memory test suite live, cost hygiene Q4 in flight, live model checks wait on credit) ; EPIC-17, 18, 20, 21 active ; EPIC-9 in review ; EPIC-8 and 13 draft
+Result: Zenod runs in production (health ok on 551bb7d, 2026-11-09) and a new tester could sign up, get a free pass and be capped; nobody outside the team has used it yet; the tester program page is being built now
+Waiting on: Jordi, most urgent first: E7-A16 go through the key page (about 20 minutes; OpenRouter credit and the DeepSeek key unblock the live model checks) ; E7-A15 sign in operations@alpha9.io once (rehearsal, Glama, WebMCP token) ; EPIC-9 verdict on its Outcome
+Monitoring: child runs: E12-S25 round 2, ZAL-A13, E15-Q4, E20-A1, and ZAL-A14 and E12-S27 once a seat frees, next check 2026-11-09T06:30Z
+Next action: A13 opens the tester program on zenod.dev ; keys land from the page and unblock the model checks ; once Jordi signs in, the T7 rehearsal then the invites
+Verified at: 2026-11-09T05:10Z (child Current States and ledgers read from main; live health ok on 551bb7d)
 
 ## Spine Map
 

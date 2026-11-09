@@ -29,15 +29,15 @@ Five real people use production Zenod as ordinary users, capped and never charge
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-03 roll-up from the ledger: T0–T6 done (checkout open and self-renewing, $3 AI cap live, tester coupons live, free-forever code retired, wording and Recent saves live, tester-watch on VPS1); T3.1 vault key and T3.2 internal tokens rotated; T3.3 secrets can no longer reach agent output; T3.4 one key page live, Jev off, waits on Jordi to follow it (E7-A14); T7 rehearsal waits on one Google sign-in (E7-A15); T8–T10 not started
-Result: a new tester could sign up, get a free month with no card and be capped, but nobody new has walked the whole path yet; six third-party keys from the 2026-11-01 leak still need rolling from one page
+Last attempted: 2026-11-09 roll-up from the ledger: T0–T6 and T3.1–T3.3 done ; T3.4 key page round 2 ready (every link rechecked, six steps, production first, a DeepSeek key step added) and posted to Jordi as E7-A16 ; T7 rehearsal blocked on the team sign-in (E7-A15) ; T8–T11 draft
+Result: a new tester could sign up, get a free month with no card and be capped, but nobody new has walked the whole path yet; the leaked third-party keys, OpenRouter credit and the DeepSeek key all come from one checked page
 Evidence: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md); live readiness ready=true read 2026-10-31
-Waiting on: nobody
+Waiting on: Jordi: E7-A16 go through the key page now (about 20 minutes) ; E7-A15 sign in operations@alpha9.io once (unblocks T7)
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
-Next action: once signed in, an agent runs the T7 rehearsal; then T8 go/no-go and the five invites; keys are swapped in as Jordi pastes them on the key page
+Next action: agents swap each key in as Jordi pastes it on the page and redeploy ; once signed in, the T7 rehearsal, then T8 go or no-go and the invites
 Monitoring: Drive OAuth readiness proof since 2026-11-01 until 2026-11-28 · next check 2026-11-21 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
 Source revision: see git log
-Verified at: 2026-11-03 (ledger and evidence pages read; live health 5aa4fe4)
+Verified at: 2026-11-09T05:10Z (ledger read; key page http://100.104.206.10:8783/ 200; cloud.zenod.dev health ok on 551bb7d)
 
 ## Waiting on
 
