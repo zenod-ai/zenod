@@ -99,6 +99,24 @@ describe("the person's own notes beside the ranked list (E12-S1b round 2)", () =
     // A word the person does say is never respelled.
     expect(await index.ownNotes("what did I say about the fence gate")).toEqual(["Log/2026-11-07.md#^e-ccccc2"]);
   });
+
+  it("keeps the transcriber's spelling once some transcripts spell the name right too (E12-S33)", async () => {
+    const page = (title: string) => `---\ntitle: ${title}\n---\n\n# ${title}\n\nZenod is the memory app. Zenod files notes.\n`;
+    // The ingest line names no product here, so only the spoken words say "Zenod" or "Zenot".
+    const said = (time: string, anchor: string, words: string) => voice(time, anchor, words).replace("through Zenod media seam", "through the media seam");
+    const index = await indexOf({
+      "Projects/Zenod.md": page("Zenod"),
+      "Projects/Zenod/Landing.md": page("Landing"),
+      "Projects/Zenod/Testers.md": page("Testers"),
+      "Projects/Zenod/Pricing.md": page("Pricing"),
+      "Log/2026-11-05.md": ["# 2026-11-05", "", said("09:00", "e-aaaaa1", "Zenot needs testers now, five of them, from Reddit."),
+        said("09:30", "e-ddddd1", "Zenod pricing stays at nine dollars.")].join("\n"),
+      "Log/2026-11-07.md": ["# 2026-11-07", "", said("10:00", "e-bbbbb2", "When you land on Zenot you see a chat box first."),
+        said("11:00", "e-ccccc2", "Zenod landing copy needs a rewrite."), said("12:00", "e-eeeee2", "Zenot gets a call button.")].join("\n"),
+    });
+    // "Zenod" is said in two notes and "Zenot" in three, but only "Zenod" is written on the pages.
+    expect(await index.ownNotes("what did I say about Zenod?")).toEqual(expect.arrayContaining(["Log/2026-11-05.md#^e-aaaaa1", "Log/2026-11-07.md#^e-eeeee2"]));
+  });
 });
 
 describe("reading a long voice note (E12-S1b round 2)", () => {

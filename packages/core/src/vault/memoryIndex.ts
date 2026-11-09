@@ -1043,6 +1043,9 @@ export class MemoryIndex {
    * more that the vault knows (3+ rows) but that is (almost) never in what the person said, the
    * words of their voice notes that start with the same letter, are at most one letter longer or
    * shorter, two edits away or less, and recur in 2+ notes. At most four per word.
+   * A word the person does say keeps the transcriber's other spelling when that spelling is said in
+   * at least as many notes, is one edit away and is written on under half as many pages (E12-S33: once some of his
+   * transcripts spelt "Zenod" right, the 17 notes saying "Zenot" fell out of every Zenod question).
    */
   private spellingVariants(query: string): Map<string, string[]> {
     const out = new Map<string, string[]>();
@@ -1050,11 +1053,15 @@ export class MemoryIndex {
     if (words.length === 0) return out;
     const spoken = this.spokenVocabulary();
     const rows = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ?");
+    const pages = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ? AND kind IN ('page', 'root')");
+    const written = (term: string) => (pages.get(`{title aliases summary body} : ${quote(term)}`) as { n: number }).n;
     for (const word of words) {
-      if ((spoken.get(word) ?? 0) > 1) continue;
+      const said = spoken.get(word) ?? 0;
       if ((rows.get(`{title aliases summary body} : ${quote(word)}`) as { n: number }).n < 3) continue;
+      const writtenWord = said > 1 ? written(word) : 0;
       const found = [...spoken]
         .filter(([other, notes]) => notes >= 2 && other !== word && other[0] === word[0] && Math.abs(other.length - word.length) <= 1 && editDistance(word, other) <= 2)
+        .filter(([other, notes]) => said <= 1 || (notes >= said && editDistance(word, other) <= 1 && written(other) * 2 <= writtenWord))
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .slice(0, 4)
         .map(([other]) => other);
