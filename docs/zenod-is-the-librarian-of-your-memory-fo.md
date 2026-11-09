@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| L1 | Ticket worker | unassigned | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | ready | none | none | main | none | 2026-11-09 | dispatched 2026-11-09; closes done (fed ask) once the approve ask is posted |
+| L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 — claimed 2026-11-09T16:37Z, lease until 2026-11-09T18:37Z | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | active | none | none | main | none | 2026-11-09 | dispatched 2026-11-09; closes done (fed ask) once the approve ask is posted |
 | L2 | Ticket worker | unassigned | E22-2, E22-3: build it in the live app after the mockup is approved | draft | L1 | none | main | none | 2026-11-09 | waits on the mockup ask |
 
 ## Decisions
