@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zenod: helpers, one inbox, a quick index</title>
+<style>
+:root{--bg:#f6f2e9;--stage:#e9e3d5;--ink:#18211c;--muted:#4a554e;--faint:#8d948c;--line:#c9c1ae;--accent:#1f4d3a;--soft:#cfe0d4;--warn:#8a4b1c;--serif:"Newsreader Variable","Newsreader",Georgia,serif;--sans:"Instrument Sans",system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 var(--sans)}
+main{max-width:920px;margin:0 auto;padding:40px 20px 80px}
+h1,h2,h3{font-family:var(--serif);font-weight:500;line-height:1.2}
+h1{font-size:2.3rem;margin:.2em 0 .3em}
+h2{font-size:1.6rem;margin:2.2em 0 .5em;border-top:1px solid var(--line);padding-top:1.1em}
+h3{font-size:1.2rem;margin:1.4em 0 .3em}
+.kicker{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.bottom{font-family:var(--serif);font-size:1.3rem;line-height:1.45;background:#fbf8f1;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:18px 22px}
+.changes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0}
+.changes div{background:#fbf8f1;border:1px solid var(--line);border-radius:8px;padding:14px}
+.changes b{display:block;font-family:var(--serif);font-weight:500;font-size:1.1rem;margin-bottom:4px}
+.changes span{color:var(--muted);font-size:.95rem}
+table{border-collapse:collapse;width:100%;font-size:.93rem;margin:10px 0}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.85rem}
+.note{color:var(--muted);font-size:.92rem}
+a{color:var(--accent)}
+.holds td:first-child{white-space:nowrap}
+.yes{color:var(--accent);font-weight:600}.no{color:var(--warn);font-weight:600}.half{color:#7a6a2a;font-weight:600}
+svg{max-width:100%;height:auto;display:block;margin:10px auto}
+/* mockup */
+.frame{border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:0 8px 30px rgba(24,33,28,.08);overflow:hidden;margin:16px 0}
+.bar{display:flex;gap:6px;padding:8px 12px;background:var(--stage);border-bottom:1px solid var(--line)}
+.bar i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.bar em{font-style:normal;font-size:.75rem;color:var(--faint);margin-left:10px}
+.app-h{display:flex;align-items:center;gap:12px;padding:16px 22px 4px}
+.z{width:34px;height:34px;border-radius:7px;background:var(--accent);color:var(--bg);display:grid;place-items:center;font-family:var(--serif);font-size:20px}
+.app-h b{font-family:var(--serif);font-weight:500;font-size:1.5rem;display:block;line-height:1}
+.app-h small{color:var(--faint);font-size:.8rem}
+.pass{margin-left:auto;border:1px solid var(--line);border-radius:20px;padding:3px 12px;font-size:.8rem;color:var(--muted)}
+.tabs{display:flex;gap:4px;padding:0 14px;border-bottom:1px solid var(--line)}
+.tabs button{all:unset;cursor:pointer;padding:10px 12px;color:var(--muted);border-bottom:2px solid transparent;font-size:.98rem}
+.tabs button.on{color:var(--ink);border-color:var(--accent)}
+.tabs .gear{margin-left:auto}
+.badge{background:var(--accent);color:var(--bg);border-radius:10px;font-size:.7rem;padding:1px 6px;margin-left:4px}
+.new{background:#f3e3c8;color:var(--warn);border-radius:4px;font-size:.62rem;padding:1px 5px;margin-left:5px;letter-spacing:.05em;vertical-align:2px}
+.pane{padding:14px 22px 22px;min-height:420px}
+.pane[hidden]{display:none}
+.filters{display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.filters span{font-size:.8rem;border:1px solid var(--line);border-radius:14px;padding:2px 10px;color:var(--muted);cursor:pointer}
+.filters span.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.card{border-bottom:1px solid var(--line);padding:14px 0;transition:opacity .3s}
+.card .meta{font-size:.78rem;color:var(--faint);letter-spacing:.04em}
+.card .meta b{color:var(--accent);font-weight:600;letter-spacing:0}
+.kind{display:inline-block;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-right:6px;color:var(--muted)}
+.kind.sug{border-color:var(--accent);color:var(--accent)}
+.card h4{font-family:var(--serif);font-weight:500;font-size:1.15rem;margin:4px 0 2px}
+.card p{margin:2px 0 6px;color:var(--muted);font-size:.95rem}
+.card .from a{font-size:.85rem;margin-right:10px}
+.act{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.act button{font:inherit;font-size:.88rem;cursor:pointer;border-radius:18px;padding:5px 14px;border:1px solid var(--line);background:#fbf8f1;color:var(--ink)}
+.act button.pri{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.act button:hover{border-color:var(--accent)}
+.edit{display:none;margin-top:8px}
+.edit textarea{width:100%;font:inherit;font-size:.92rem;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fbf8f1;min-height:56px}
+.state{display:none;margin-top:6px;font-size:.9rem;background:var(--soft);border-radius:8px;padding:8px 12px}
+.state.warn{background:#f3e3c8}
+.card.done .act,.card.done .edit{display:none}
+.card.done .state{display:block}
+.card.gone{opacity:.45}
+.helper{display:flex;gap:14px;align-items:flex-start;border-bottom:1px solid var(--line);padding:12px 0}
+.helper .dot{width:38px;height:38px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-family:var(--serif);color:var(--accent);flex:none}
+.helper h4{margin:0;font-family:var(--serif);font-weight:500;font-size:1.1rem}
+.helper p{margin:2px 0;color:var(--muted);font-size:.9rem}
+.helper .can{font-size:.82rem;color:var(--accent)}
+.sw{margin-left:auto;flex:none;width:40px;height:22px;border-radius:11px;background:var(--line);position:relative;cursor:pointer}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.sw.on{background:var(--accent)}.sw.on::after{left:21px}
+.chat .you{margin-left:auto;width:fit-content;max-width:70%;background:var(--accent);color:var(--bg);border-radius:14px;padding:9px 14px;margin:10px 0 10px auto}
+.chat .lbl{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:14px;padding:1px 10px;font-size:.8rem;font-weight:600}
+.chat .idx{font-size:.82rem;color:var(--faint);margin:6px 0 2px}
+.chat .idx b{color:var(--accent);font-weight:600}
+.index-list{font-size:.92rem}
+.index-list div{border-bottom:1px solid var(--line);padding:7px 0}
+.index-list b{font-family:var(--serif);font-weight:500;font-size:1.02rem}
+.index-list i{color:var(--faint);font-style:normal;font-size:.82rem}
+.hint{font-size:.8rem;color:var(--faint);text-align:center;margin-top:8px}
+.rows td:last-child{white-space:nowrap}
+.ask{background:#fbf8f1;border:1px solid var(--line);border-radius:8px;padding:14px 18px}
+@media (max-width:700px){.pass,.gw,.new{display:none}.tabs{gap:0}.changes{grid-template-columns:1fr}.tabs button{padding:10px 7px;font-size:.9rem}h1{font-size:1.8rem}}
+</style>
+<main>
+<div class="kicker">Zenod · plan round · 9 November 2026 · from your voice note of 20:39</div>
+<h1>Helpers, one inbox, and a quick index</h1>
+
+<p class="bottom"><b>Bottom line.</b> Personas become <b>helpers</b>. Each one reads your memory on its own schedule and leaves you <b>suggestions you can act on with one tap</b> in the one inbox: Do it, Change, or Not now, like Epic Team's review cards. A small <b>quick index</b> of your topics, people and nicknames sits in front of the chat, so “the flat” or “Ana's thing” lands on the right memory. On DeepSeek it costs about a third of a cent a day for a typical user and 1 to 2 cents for you. About 9 days of build in 6 small steps. We recommend yes.</p>
+
+<div class="changes">
+  <div><b>Helpers, not personas</b><span>The same six, renamed everywhere you see them. Each says in one line what it does with your memory and what it may suggest.</span></div>
+  <div><b>Cards you can act on</b><span>Today a card mostly tells you something. Now a helper can propose a change, and you do it, edit it first, or say not now. Every change can be undone.</span></div>
+  <div><b>Zenod knows what you mean</b><span>A quick index of your places, people and nicknames, plus what is live this week, read before every chat answer.</span></div>
+</div>
+
+<h2>How it fits together</h2>
+<svg viewBox="0 0 860 300" role="img" aria-label="Memory at the centre, helpers read it, suggestions land in one inbox, you act, the desk makes the change">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#4a554e"/></marker></defs>
+  <g font-family="Instrument Sans,system-ui,sans-serif" font-size="14" fill="#18211c">
+    <rect x="320" y="105" width="220" height="90" rx="12" fill="#1f4d3a"/>
+    <text x="430" y="143" text-anchor="middle" fill="#f6f2e9" font-family="Newsreader,Georgia,serif" font-size="22">Your memory</text>
+    <text x="430" y="168" text-anchor="middle" fill="#cfe0d4" font-size="13">Log never changes · tree of places</text>
+    <rect x="20" y="20" width="200" height="66" rx="10" fill="#fbf8f1" stroke="#c9c1ae"/>
+    <text x="120" y="48" text-anchor="middle" font-weight="600">You talk or send</text>
+    <text x="120" y="68" text-anchor="middle" fill="#4a554e" font-size="12.5">WhatsApp, chat, voice, call</text>
+    <rect x="20" y="214" width="200" height="66" rx="10" fill="#fbf8f1" stroke="#1f4d3a" stroke-width="1.5"/>
+    <text x="120" y="242" text-anchor="middle" font-weight="600">Quick index</text>
+    <text x="120" y="262" text-anchor="middle" fill="#4a554e" font-size="12.5">places, people, nicknames, this week</text>
+    <rect x="640" y="20" width="200" height="66" rx="10" fill="#fbf8f1" stroke="#c9c1ae"/>
+    <text x="740" y="48" text-anchor="middle" font-weight="600">Helpers</text>
+    <text x="740" y="68" text-anchor="middle" fill="#4a554e" font-size="12.5">read on a schedule, change nothing</text>
+    <rect x="640" y="214" width="200" height="66" rx="10" fill="#fbf8f1" stroke="#1f4d3a" stroke-width="1.5"/>
+    <text x="740" y="242" text-anchor="middle" font-weight="600">One inbox</text>
+    <text x="740" y="262" text-anchor="middle" fill="#4a554e" font-size="12.5">Do it · Change · Not now</text>
+    <path d="M220,60 L318,125" stroke="#4a554e" fill="none" marker-end="url(#ar)"/>
+    <text x="236" y="112" fill="#4a554e" font-size="12">kept</text>
+    <path d="M318,170 L222,232" stroke="#1f4d3a" fill="none" marker-end="url(#ar)"/>
+    <text x="232" y="196" fill="#1f4d3a" font-size="12">kept fresh</text>
+    <path d="M120,214 L120,88" stroke="#1f4d3a" stroke-dasharray="4 4" fill="none" marker-end="url(#ar)"/>
+    <text x="128" y="156" fill="#1f4d3a" font-size="12">“the flat” = Areas/Home</text>
+    <path d="M542,125 L638,62" stroke="#4a554e" fill="none" marker-end="url(#ar)"/>
+    <text x="574" y="84" fill="#4a554e" font-size="12">read</text>
+    <path d="M740,88 L740,212" stroke="#4a554e" fill="none" marker-end="url(#ar)"/>
+    <text x="748" y="156" fill="#4a554e" font-size="12">suggest</text>
+    <path d="M638,250 L544,180" stroke="#1f4d3a" fill="none" marker-end="url(#ar)"/>
+    <text x="548" y="232" fill="#1f4d3a" font-size="12">you press Do it:</text>
+    <text x="548" y="247" fill="#1f4d3a" font-size="12">one change, Undo</text>
+  </g>
+</svg>
+<p class="note">Helpers never change your memory themselves. A change happens only when you press Do it, as one job on the memory desk that you can undo. Your words in the Log are never edited.</p>
+
+<h2>Try it</h2>
+<p class="note">The live app's look, with made-up memories. Click the tabs, the filters and the card buttons.</p>
+
+<div class="frame">
+  <div class="bar"><i></i><i></i><i></i><em>cloud.zenod.dev · mockup, made-up memories</em></div>
+  <div class="app-h"><div class="z">Z</div><div><b>Zenod</b><small>the librarian of your memory</small></div><span class="pass">Plus · helpers on</span></div>
+  <div class="tabs">
+    <button data-t="chat">Chat</button>
+    <button data-t="inbox" class="on">Inbox <span class="badge" id="count">4</span></button>
+    <button data-t="helpers">Helpers <span class="new">RENAMED</span></button>
+    <button data-t="memory">Memory</button>
+    <button class="gear" data-t="none">⚙<span class="gw"> Settings</span></button>
+  </div>
+
+  <section class="pane" id="p-inbox">
+    <div class="filters"><span class="on" data-f="all">All</span><span data-f="sug">Suggestions</span><span data-f="q">Questions</span><span data-f="find">Findings</span><span data-f="job">Jobs</span></div>
+
+    <div class="card" data-k="sug">
+      <div class="meta"><span class="kind sug">Suggestion</span>From <b>Topic gardener</b> · 06:10</div>
+      <h4>Join “Flat hunt” into “Moving to Valencia”: they are the same thing.</h4>
+      <p>14 notes in Flat hunt and 9 in Moving to Valencia talk about the same three flats and the same agent. One place would make “what did the agent say” find all of them.</p>
+      <div class="from"><a href="#">Flat hunt · 14 notes</a><a href="#">Moving to Valencia · 9 notes</a></div>
+      <div class="act"><button class="pri" data-a="do">Do it</button><button data-a="change">Change</button><button data-a="no">Not now</button><button data-a="talk">Talk it over</button></div>
+      <div class="edit"><textarea>Join “Flat hunt” into “Moving to Valencia”, but keep the two Ruzafa visits as their own page.</textarea><div class="act"><button class="pri" data-a="dochanged">Do it like this</button></div></div>
+      <div class="state">✓ Done on the memory desk: 14 notes moved, 1 page kept apart, links fixed. Your Log is unchanged. <a href="#" data-a="undo">Undo</a></div>
+    </div>
+
+    <div class="card" data-k="q">
+      <div class="meta"><span class="kind">Question</span>From <b>Open loops finder</b> · 06:04</div>
+      <h4>You said you would send the insurance form to Marta on 2 November. Still open?</h4>
+      <p>Nothing about it since. We recommend: Still open, and the finder asks again on Friday.</p>
+      <div class="from"><a href="#">Voice note 2 Nov</a></div>
+      <div class="act"><button class="pri" data-a="ans" data-v="Still open: it asks again on Friday.">Still open</button><button data-a="ans" data-v="Marked done and kept as a memory.">Done</button><button data-a="ans" data-v="Dropped. The finder will not ask again.">Drop it</button></div>
+      <div class="state"></div>
+    </div>
+
+    <div class="card" data-k="sug">
+      <div class="meta"><span class="kind sug">Suggestion</span>From <b>People and follow-ups</b> · 06:02</div>
+      <h4>Add to Ana's page: you promised her the blue notebook for 14 March.</h4>
+      <p>You said it in two notes, but her page does not have it, so “what do I owe Ana” misses it today.</p>
+      <div class="from"><a href="#">People › Ana</a><a href="#">Note 3 Nov</a></div>
+      <div class="act"><button class="pri" data-a="do">Do it</button><button data-a="change">Change</button><button data-a="no">Not now</button></div>
+      <div class="edit"><textarea>Add to Ana's page: blue notebook from the shop on Verdi street, before 14 March.</textarea><div class="act"><button class="pri" data-a="dochanged">Do it like this</button></div></div>
+      <div class="state">✓ Added one line to People › Ana, citing your two notes. <a href="#" data-a="undo">Undo</a></div>
+    </div>
+
+    <div class="card" data-k="find">
+      <div class="meta"><span class="kind">Finding</span>From <b>Weekly recap</b> · Sunday</div>
+      <h4>Your week: the move, the boat repair and two new product ideas.</h4>
+      <p>One thing worth noticing: you mentioned the boat insurance three times and never saved the renewal date.</p>
+      <div class="from"><a href="#">This week's recap</a></div>
+      <div class="act"><button class="pri" data-a="keep">Useful</button><button data-a="talk">Talk it over</button><button data-a="no">Not useful</button></div>
+      <div class="state"></div>
+    </div>
+
+    <div class="card" data-k="job">
+      <div class="meta"><span class="kind">Job</span>Memory desk · yesterday</div>
+      <h4>Split Idealista and Poly-Maker into their own places.</h4>
+      <p>Done: 31 notes moved, before and after search shown.</p>
+      <div class="act"><button data-a="seen">See the changes</button><button data-a="undojob">Undo</button></div>
+      <div class="state"></div>
+    </div>
+    <p class="hint">“Not now” asks for one optional line of why. The helper reads it on its next run and stops suggesting that kind of thing.</p>
+  </section>
+
+  <section class="pane" id="p-helpers" hidden>
+    <p class="note" style="margin-top:0">Helpers read your memory on a schedule and leave cards in your Inbox. They never change anything until you press Do it.</p>
+    <div class="helper"><div class="dot">W</div><div><h4>Weekly recap</h4><p>Every Sunday: a short recap of your week and one thing worth noticing.</p><div class="can">May suggest: nothing, it only tells you</div></div><div class="sw on"></div></div>
+    <div class="helper"><div class="dot">O</div><div><h4>Open loops finder</h4><p>Every night: things you said you would do and have not closed.</p><div class="can">May suggest: mark it done, still open, or drop it</div></div><div class="sw on"></div></div>
+    <div class="helper"><div class="dot">P</div><div><h4>People and follow-ups</h4><p>Every night: who you talked about and what you owe them.</p><div class="can">May suggest: add a line to that person's page</div></div><div class="sw on"></div></div>
+    <div class="helper"><div class="dot">T</div><div><h4>Topic gardener</h4><p>Twice a week: two places that are the same thing, or one that holds two.</p><div class="can">May suggest: join or split places, as one undoable job</div></div><div class="sw on"></div></div>
+    <div class="helper"><div class="dot">I</div><div><h4>Ideas digest</h4><p>Every week: the ideas you had, gathered in one place.</p><div class="can">May suggest: give an idea you keep coming back to its own page</div></div><div class="sw"></div></div>
+    <div class="helper"><div class="dot">H</div><div><h4>Health of your memory</h4><p>Every week, no AI and no cost: counts what you saved and spots gaps.</p><div class="can">May suggest: file the notes that are still loose</div></div><div class="sw on"></div></div>
+    <p class="hint">Each helper's notes stay in its own folder in your memory. Switch one off and its cards stop.</p>
+  </section>
+
+  <section class="pane chat" id="p-chat" hidden>
+    <div class="you">What did the agent say about the flat?</div>
+    <div class="idx">Read as: <b>“the flat”</b> → Moving to Valencia · <b>“the agent”</b> → Lucía, Valencia rentals</div>
+    <span class="lbl">Looked up ▾</span>
+    <p>Lucía said on 6 November that the Ruzafa flat is still free until the 20th and the owner accepts a one-year contract. <a href="#">Note 6 Nov</a></p>
+    <div class="you">and Ana's thing?</div>
+    <div class="idx">Read as: <b>“Ana's thing”</b> → People › Ana: blue notebook, 14 March</div>
+    <span class="lbl">Looked up ▾</span>
+    <p>The blue notebook from the shop on Verdi street, for her birthday on 14 March. <a href="#">People › Ana</a></p>
+    <p class="hint">The grey “Read as” line shows what Zenod took you to mean. Tap it to correct it, and the index learns the nickname.</p>
+  </section>
+
+  <section class="pane" id="p-memory" hidden>
+    <h3 style="margin-top:0">What Zenod knows you mean <span class="new">NEW</span></h3>
+    <p class="note">The quick index, in Memory › At a glance. Kept fresh after each note and once a night.</p>
+    <div class="index-list">
+      <div><b>This week</b> <i>· rebuilt nightly</i><br>Moving to Valencia, boat repair, Zenod launch, Ana's birthday</div>
+      <div><b>Moving to Valencia</b> <i>· also “the flat”, “the move”, “Ruzafa” · 23 notes · last 6 Nov</i><br>Looking for a one-year rental in Ruzafa with Lucía. Two visits done.</div>
+      <div><b>Ana</b> <i>· People · also “my sister” · 11 notes · last 3 Nov</i><br>Birthday 14 March, wants the blue notebook. You owe her the insurance contact.</div>
+      <div><b>Boat</b> <i>· also “the Laia” · 8 notes · last 5 Nov</i><br>Engine repair at the marina, insurance renews soon (date not saved).</div>
+    </div>
+  </section>
+  <section class="pane" id="p-none" hidden><p class="note">Settings stay as they are today.</p></section>
+</div>
+
+<h2>The helpers, and what each does with your memory</h2>
+<table>
+<tr><th>Helper</th><th>Reads</th><th>Leaves in your inbox</th><th>Cost a run on DeepSeek</th></tr>
+<tr><td>Weekly recap</td><td>last 7 days</td><td>a recap and one finding</td><td>about 0.1 cent</td></tr>
+<tr><td>Open loops finder</td><td>last 14 days</td><td>a question: still open, done, drop</td><td>about 0.1 cent</td></tr>
+<tr><td>People and follow-ups</td><td>last 14 days</td><td>a suggestion: add to a person's page</td><td>about 0.1 cent</td></tr>
+<tr><td>Topic gardener</td><td>last 30 days and the tree</td><td>a suggestion: join or split places</td><td>about 0.1 cent</td></tr>
+<tr><td>Ideas digest</td><td>last 14 days</td><td>a suggestion: give an idea its own page</td><td>about 0.1 cent</td></tr>
+<tr><td>Health of your memory</td><td>counts only</td><td>a suggestion: file loose notes</td><td>nothing, no AI</td></tr>
+</table>
+<p class="note"><b>Honest status.</b> All six exist today as personas. Your three Run now presses this afternoon produced nothing because of a fault (DeepSeek spent its whole answer thinking). That is fixed and live, and tonight's runs are the first real test. Weekly recap did find one real loose end on 8 November. So far helpers mostly <i>tell</i> you things. The change here is that they <i>offer</i> a change you can make with one tap.</p>
+
+<h3>What you can do with each card</h3>
+<table>
+<tr><th>Card</th><th>Buttons</th><th>What happens</th></tr>
+<tr><td>Suggestion <span class="new">NEW</span></td><td>Do it · Change · Not now · Talk it over</td><td>Do it runs it as one memory desk job with Undo. Change lets you edit the wording first. Not now takes an optional reason, and the helper reads it next time.</td></tr>
+<tr><td>Question</td><td>two or three answers, recommended first</td><td>your answer is saved as a memory, as today</td></tr>
+<tr><td>Finding</td><td>Useful · Not useful · Talk it over</td><td>the helper learns which findings you value</td></tr>
+<tr><td>Job</td><td>See the changes · Undo</td><td>as today</td></tr>
+</table>
+<p class="note">Same idea as Epic Team's review cards: something waits for you, you answer in one tap, nothing is lost. It is Zenod's own inbox. It does not talk to Epic Team.</p>
+
+<h2>The quick index</h2>
+<p><b>What it is.</b> One short page Zenod keeps about your memory: every place in your tree with a one-line summary, the names and nicknames you use for it (“the flat”, “my sister”, “the Laia”), how many notes and when you last mentioned it, plus a “this week” list of what is live. About 2,000 words for a memory like yours.</p>
+<p><b>How it is built cheaply.</b> Half of it exists already: the memory tree keeps a one-line summary for each place. New: after each note is filed, one small DeepSeek call updates only the places that note touched and picks up any new nickname. Once a night, one call rebuilds “this week”. The first build reads each place once.</p>
+<p><b>How chat uses it.</b> Before Look up or Talk it over answers, the index goes in front of the question, so the model can map “the flat” to Moving to Valencia and search there first. The reply shows a quiet “Read as” line, and you can tap it to correct it. Keep is unchanged: filing already places notes. WhatsApp and Telegram replies stay exactly as they are. This changes the web chat, calls and connected AI apps, because you asked for it in your own words.</p>
+<table>
+<tr><th>Cost on DeepSeek V4.1 Flash ($0.15 in, $0.60 out per million tokens, double at peak hours)</th><th>Typical user, 5 notes a day</th><th>You, about 30 a day</th></tr>
+<tr><td>Update after each note, about 1,500 tokens in, 150 out</td><td>0.16 cent</td><td>0.9 to 1.9 cents</td></tr>
+<tr><td>Nightly “this week”, about 8,000 tokens in, 500 out</td><td>0.15 cent</td><td>0.15 cent</td></tr>
+<tr><td><b>A day</b></td><td><b>about 0.3 cent</b></td><td><b>1 to 2 cents</b></td></tr>
+<tr><td>First build, once</td><td colspan="2">about 2 to 9 cents</td></tr>
+</table>
+<p class="note">Chat answers stay on today's chat model. The index adds about 2,000 words to each answer's input, about 0.03 cent a question. All of this sits inside the caps already live.</p>
+
+<h2>How far Zenod is “EpicSpine with a memory skin”</h2>
+<p>Conceptually it holds well. Literally it does not, and should not.</p>
+<table class="holds">
+<tr><th></th><th>EpicSpine</th><th>Zenod</th></tr>
+<tr><td><span class="yes">Holds</span></td><td>the spine: one written truth every agent reads first</td><td>the memory tree and its pages: one truth every helper and chat reads first</td></tr>
+<tr><td><span class="yes">Holds</span></td><td>workers do the work on a branch, one task each</td><td>helpers read and suggest, the desk does one job at a time, one undoable change each</td></tr>
+<tr><td><span class="yes">Holds</span></td><td>review cards: nothing lands without a person's yes</td><td>the inbox: nothing changes in the memory without your Do it</td></tr>
+<tr><td><span class="yes">Holds</span></td><td>git history and receipts that never change</td><td>the Log: your exact words, never edited, and every page cites it</td></tr>
+<tr><td><span class="half">Half</span></td><td>Current State and Next action at the top of each spine</td><td>the quick index is the same idea, a short “where things stand”, but about topics, not tasks</td></tr>
+<tr><td><span class="no">Breaks</span></td><td>has a goal, Done means and a finish line</td><td>a memory has no finish line. Zenod does not track goals or a backlog</td></tr>
+<tr><td><span class="no">Breaks</span></td><td>asks, approvals, owners and dispatch</td><td>one person, no team, no asks. A card is the most it ever does</td></tr>
+<tr><td><span class="no">Breaks</span></td><td>agents write code and ship it</td><td>helpers only touch your memory, never the outside world</td></tr>
+</table>
+<p><b>What we say.</b> Zenod runs the same discipline as EpicSpine: one written truth, small undoable changes, nothing changes without your yes, history that never changes. It is applied to your memory instead of to a project. We do not build EpicSpine inside Zenod, and Zenod does not depend on it. Each stays a product on its own, and they meet only through MCP, as you asked on 2 November.</p>
+
+<h2>Build steps</h2>
+<table class="rows">
+<tr><th>Step</th><th>What you can test</th><th>Size</th></tr>
+<tr><td>1. Rename to helpers</td><td>the tab, cards, settings, usage and zenod.dev say “helpers”, and old links still open</td><td>half a day</td></tr>
+<tr><td>2. Suggestion cards</td><td>Do it, Change and Not now on a card. Do it runs as a desk job with Undo</td><td>2 days</td></tr>
+<tr><td>3. Helpers suggest</td><td>the four helpers above post real suggestions on a test memory, one a run at most</td><td>2 days</td></tr>
+<tr><td>4. The quick index</td><td>“What Zenod knows you mean” in Memory, fresh after each note and nightly, cost logged</td><td>2 days</td></tr>
+<tr><td>5. Chat reads the index</td><td>“the flat” finds the right place, with a “Read as” line, measured on 20 vague questions</td><td>1.5 days</td></tr>
+<tr><td>6. A week on your memory</td><td>you see which helper earned its place, with examples</td><td>1 day, then a week</td></tr>
+</table>
+<p class="note">About 9 days of build. Each step ships alone and can be rolled back alone. Step 6 replaces the current helper trial, so nothing is judged twice.</p>
+
+<h2>Our recommendation</h2>
+<div class="ask">Yes to all six steps, in this order. Steps 1 and 4 can run side by side. If you only want one now, take the quick index (steps 4 and 5): it makes every answer better from day one, even with every helper switched off.</div>
+</main>
+
+<script>
+const tabs=document.querySelectorAll('.tabs button');
+tabs.forEach(b=>b.onclick=()=>{tabs.forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.pane').forEach(p=>p.hidden=p.id!=='p-'+b.dataset.t)});
+document.querySelectorAll('.filters span').forEach(f=>f.onclick=()=>{document.querySelectorAll('.filters span').forEach(x=>x.classList.toggle('on',x===f));document.querySelectorAll('#p-inbox .card').forEach(c=>c.style.display=(f.dataset.f==='all'||c.dataset.k===f.dataset.f)?'':'none')});
+document.querySelectorAll('.sw').forEach(s=>s.onclick=()=>s.classList.toggle('on'));
+function left(){const n=document.querySelectorAll('#p-inbox .card:not(.done)').length;document.getElementById('count').textContent=n}
+document.getElementById('p-inbox').addEventListener('click',e=>{
+  const a=e.target.dataset&&e.target.dataset.a;if(!a)return;e.preventDefault();
+  const c=e.target.closest('.card'),st=c.querySelector('.state');
+  if(a==='change'){c.querySelector('.edit').style.display='block';return}
+  if(a==='do'||a==='dochanged'){if(a==='dochanged'){st.firstChild.textContent='✓ Done your way on the memory desk. Your Log is unchanged. '}c.classList.add('done')}
+  if(a==='no'){const why=prompt('Not now. Why? (optional, the helper reads it next time)','');st.className='state warn';st.textContent='Put away'+(why?': “'+why+'”. The helper reads it on its next run.':'.');c.classList.add('done','gone')}
+  if(a==='ans'){st.textContent='✓ '+e.target.dataset.v;c.classList.add('done')}
+  if(a==='keep'){st.textContent='✓ Thanks. Weekly recap keeps doing this kind of finding.';c.classList.add('done')}
+  if(a==='talk'){document.querySelector('.tabs button[data-t=chat]').click();return}
+  if(a==='seen'){st.textContent='31 notes moved. Before: “Poly-Maker” found 4 Idealista notes. After: none.';st.style.display='block';return}
+  if(a==='undojob'){st.className='state warn';st.textContent='Undone. Both places are back as they were.';c.classList.add('done')}
+  if(a==='undo'){c.classList.remove('done','gone');st.className='state';c.querySelector('.edit')&&(c.querySelector('.edit').style.display='none')}
+  left();
+});
+</script>
+</html>
