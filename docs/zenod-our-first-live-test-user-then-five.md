@@ -40,6 +40,10 @@ Next action: post E23-A1; on a first name, agents issue that person's tester cod
 Source revision: main (see git log)
 Verified at: 2026-11-09T23:45Z (cloud health ok aa46d5e, Phylax connected, readiness ready=true, tester-watch no alerts)
 
+## Waiting on
+
+- [ask E23-A1: decide @Jordi since 2026-11-10 row U2] Invite your first tester now, someone you know, without waiting for the dress rehearsal? Reply with their first name and how you reach them, or "rehearse first" — context: the whole new-user path was walked on production and every blocker is on one page (http://vps3.taild81fbb.ts.net:8921/e23-u1/); three were fixed today; the rehearsal has waited on one sign-in since 3 Nov and cannot test WhatsApp anyway, because your number belongs to your own account — impact: a friend's sign-up proves the last four unproven steps (the free tester checkout, linking WhatsApp, Drive access for an outside account, the new app signed in) and starts the 7 days to your first stable tester — risk: low; nothing is charged (€0, no card); agents make the code, prepare the invite and watch the sign-up live; if something breaks we fix it while they wait — recommend: yes, one friend who sends voice notes and will say when something breaks — why Jordi: only you can pick and contact the person — options: name a person · rehearse first — unblocks: U2 — details: [blockers](evidence/e23-u1-2026-11-09.md)
+
 ## Non-Goals
 
 - EpicSocial and EpicTeam onboarding (agent_team plans those).
