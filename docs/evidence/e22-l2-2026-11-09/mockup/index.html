@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zenod · the librarian of your memory (mockup round 2)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="pg-top">
+  <div class="pg-eyebrow">Zenod · mockup round 2 · 9 Nov 2026</div>
+  <h1 class="pg-h1">Same direction. Nothing lost.</h1>
+  <ol class="pg-changed" aria-label="What changed since round 1">
+    <li><b>Zenod</b> leads the header now. “the librarian of your memory” sits under it, smaller and quieter.</li>
+    <li>There are five tabs where today's app has twelve, and every feature of today's app still has a home. <a href="#map">The map</a> shows where each one went.</li>
+    <li><b>Memory</b> holds the numbers and charts, the tree, the graph and the “check where it landed” list. <b>Settings</b> is the one place for everything else.</li>
+  </ol>
+  <p class="pg-try">Kept from round 1: one box, four modes with their labels, tap a label to switch, and “who are you?” answered directly. All memories here are made up.</p>
+</header>
+
+<div class="pg-frames" role="group" aria-label="Screen size">
+  <button data-frame="desktop" aria-pressed="true">Desktop</button>
+  <button data-frame="phone" aria-pressed="false">Phone</button>
+</div>
+
+<main id="z-stage" class="z-stage" data-frame="desktop">
+  <div id="z-app" class="z-app">
+    <div class="z-top">
+      <div class="z-brand">
+        <span class="z-logo" aria-hidden="true">Z</span>
+        <div class="z-names">
+          <div class="z-name">Zenod</div>
+          <div class="z-tagline">the librarian of your memory</div>
+        </div>
+        <button class="z-plan" data-go="settings:usage">Free pass · 18 days left</button>
+      </div>
+      <nav class="z-tabs" role="tablist">
+        <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+        <button role="tab" data-tab="inbox" aria-selected="false">Inbox <span class="z-count">2</span></button>
+        <button role="tab" data-tab="personas" aria-selected="false">Personas</button>
+        <button role="tab" data-tab="memory" aria-selected="false">Memory</button>
+        <button role="tab" data-tab="settings" aria-selected="false" class="z-tab-end" aria-label="Settings"><span aria-hidden="true">⚙</span><span class="z-tl"> Settings</span></button>
+      </nav>
+    </div>
+
+    <!-- CHAT -->
+    <section data-pane="chat" class="z-pane z-chatpane">
+      <div id="z-scroll" class="z-scroll"><div id="z-log" class="z-log"></div></div>
+      <div id="z-talkbar" class="z-talkbar" hidden>Talking with <b id="z-talkname"></b> · it reads your memory, nothing is changed <button id="z-endtalk" class="z-link">End the talk</button></div>
+      <form id="z-form" class="z-form">
+        <button type="button" class="z-ico" title="Record a voice note" aria-label="Record a voice note" data-toast="Recording a voice note. Zenod keeps it like a typed message.">🎙</button>
+        <input id="z-input" autocomplete="off" placeholder="Talk to your librarian" aria-label="Talk to your librarian">
+        <button type="button" class="z-ico" title="Call with your memory" aria-label="Call with your memory" data-toast="A voice call with your memory, as today. It moves here from the chat's corner.">☎</button>
+        <button class="z-send" type="submit">Send</button>
+      </form>
+      <p class="z-foot">Zenod picks the mode and says which. Tap the label to change it.</p>
+    </section>
+
+    <!-- INBOX -->
+    <section data-pane="inbox" class="z-pane z-pad" hidden>
+      <h2 class="z-h2">Inbox</h2>
+      <p class="z-quiet">What needs you, in one place.</p>
+      <div class="z-item">
+        <div class="z-card-k">Job · memory desk · done</div>
+        <div class="z-card-t">Untangle the two flats</div>
+        <p>14 notes split into two folders. 2 it could not place wait for you.</p>
+        <div class="z-ba"><div><span>Before</span>Home › Flat hunt · 14 notes</div><div><span>After</span>Flat hunt › Gràcia · 7 · Flat hunt › Sant Antoni · 5</div></div>
+        <div class="z-item-acts"><button class="z-btn" data-go="memory:check">Place the 2 notes</button> <button class="z-btn z-btn-q">Undo the job</button></div>
+      </div>
+      <div class="z-item">
+        <div class="z-card-k">From Weekly recap · Sunday</div>
+        <div class="z-card-t">You wrote about the flat hunt every day this week</div>
+        <p>9 notes, most about light and price. Two mention Pau.</p>
+        <div class="z-item-acts"><button class="z-btn" data-talk="Weekly recap">Talk it over</button></div>
+      </div>
+    </section>
+
+    <!-- PERSONAS -->
+    <section data-pane="personas" class="z-pane z-pad" hidden>
+      <h2 class="z-h2">Personas</h2>
+      <p class="z-quiet">Helpers that read your memory. They work on their own and leave notes in your Inbox, or you can talk something through with one now.</p>
+      <div id="z-personas"></div>
+    </section>
+
+    <!-- MEMORY -->
+    <section data-pane="memory" class="z-pane z-memory" hidden>
+      <div class="z-sub" role="tablist" aria-label="Memory views">
+        <button data-sub="glance" aria-selected="true">At a glance</button>
+        <button data-sub="tree" aria-selected="false">Tree</button>
+        <button data-sub="graph" aria-selected="false">Graph</button>
+        <button data-sub="check" aria-selected="false">Check filings <span class="z-count">3</span></button>
+        <label class="z-find"><span aria-hidden="true">⌕</span><input placeholder="Find a memory" aria-label="Find a memory" id="z-find"></label>
+      </div>
+
+      <div data-subpane="glance" class="z-pad">
+        <h2 class="z-h2">Your memory</h2>
+        <p class="z-quiet">The library is yours. Zenod keeps it in order.</p>
+        <div class="z-stats">
+          <div class="z-stat"><b>1,284</b><span>memories</span></div>
+          <div class="z-stat"><b>38</b><span>places in the tree</span></div>
+          <div class="z-stat"><b>+23</b><span>this week</span></div>
+          <div class="z-stat z-stat-a"><button data-go="memory:check"><b>3</b><span>to check →</span></button></div>
+        </div>
+        <div class="z-two">
+          <figure class="z-chart">
+            <figcaption>Memories kept each week</figcaption>
+            <svg id="z-growth" viewBox="0 0 360 150" role="img" aria-label="Memories kept each week, last 12 weeks"></svg>
+          </figure>
+          <figure class="z-chart">
+            <figcaption>Strongest places <span>most notes and links</span></figcaption>
+            <div id="z-strong" class="z-hbars"></div>
+          </figure>
+        </div>
+        <div class="z-two">
+          <figure class="z-chart">
+            <figcaption>Where they come from <span>last 30 days</span></figcaption>
+            <div id="z-sources" class="z-hbars"></div>
+          </figure>
+          <div class="z-chart">
+            <div class="z-figcap">Recent saves</div>
+            <ul class="z-saves">
+              <li><span>today</span>Ana's birthday is 14 March <a class="z-path" data-go="memory:tree">People › Ana</a></li>
+              <li><span>today</span>Plumber can start on the 20th <a class="z-path" data-go="memory:tree">Home › Bathroom</a></li>
+              <li><span>Sat</span>57:40, legs heavy, nice with Pau <a class="z-path" data-go="memory:tree">Health › Running</a></li>
+              <li><span>Fri</span>Sant Antoni flat: no lift <a class="z-path" data-go="memory:tree">Home › Flat hunt</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div data-subpane="tree" class="z-pad" hidden>
+        <div class="z-treewrap">
+          <div>
+            <h2 class="z-h2">The tree</h2>
+            <p class="z-quiet">Every place Zenod files into. Tap one to read its notes.</p>
+            <ul class="z-tree" id="z-tree"></ul>
+          </div>
+          <aside class="z-viewer" id="z-viewer">
+            <div class="z-card-k">Where it sits: Health › Running</div>
+            <div class="z-card-t">Running · 41 notes</div>
+            <ul class="z-notes">
+              <li><b>2 Nov</b> 57:40, legs heavy, nice with Pau though</li>
+              <li><b>19 Oct</b> Two short runs instead of the long Sunday one</li>
+              <li><b>9 Mar</b> 52:10 10 km, best this year</li>
+            </ul>
+            <button class="z-btn" data-go="memory:graph">See it in the graph</button>
+          </aside>
+        </div>
+      </div>
+
+      <div data-subpane="graph" class="z-pad z-graphpane" hidden>
+        <div class="z-graphhead">
+          <div>
+            <h2 class="z-h2">Your memory, as a graph</h2>
+            <p class="z-quiet" id="z-graphnote">Places are circles, lines are links between memories. Tap a circle to see where it sits.</p>
+          </div>
+          <label class="z-slider">Link strength <input type="range" id="z-strength" min="1" max="5" value="2"> <span id="z-strength-v">2+</span></label>
+        </div>
+        <svg id="z-graph" viewBox="0 0 640 360" role="img" aria-label="Your memory as a graph"></svg>
+        <div class="z-graphinfo" id="z-graphinfo">Health › Running · 41 notes · linked to Pau, Sleep, Half marathon</div>
+      </div>
+
+      <div data-subpane="check" class="z-pad" hidden>
+        <h2 class="z-h2">Check where Zenod filed these</h2>
+        <p class="z-quiet">Filings Zenod was least sure about. One tap says it is right, or moves it.</p>
+        <div id="z-check"></div>
+        <div class="z-figcap" style="margin-top:22px">Your latest moves</div>
+        <ul class="z-saves" id="z-moves"><li><span>Thu</span>“Call the gestor about the IRPF” moved to Money › Taxes <button class="z-link">Undo</button></li></ul>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section data-pane="settings" class="z-pane z-settings" hidden>
+      <nav class="z-snav" aria-label="Settings">
+        <button data-set="connect" aria-current="true">Connect AI apps</button>
+        <button data-set="channels">WhatsApp &amp; Telegram</button>
+        <button data-set="vault">Vault &amp; sources</button>
+        <button data-set="usage">Usage &amp; plan</button>
+        <button data-set="account">Account</button>
+      </nav>
+      <div class="z-sbody z-pad">
+        <div data-setpane="connect">
+          <h2 class="z-h2">Connect AI apps</h2>
+          <p class="z-quiet">Claude, ChatGPT, Cursor and other apps read and write your memory through this address.</p>
+          <div class="z-card"><div class="z-card-k">Your MCP address</div><div class="z-mono">https://cloud.zenod.dev/mcp <button class="z-link">Copy</button></div></div>
+          <div class="z-card"><div class="z-card-k">Add it in one line</div><div class="z-mono">claude mcp add --transport http zenod https://cloud.zenod.dev/mcp</div><div class="z-mono">codex mcp add zenod --url https://cloud.zenod.dev/mcp</div></div>
+          <div class="z-card"><div class="z-card-k">Tokens</div>
+            <div class="z-row"><span>Laptop · Claude Code</span><span class="z-quiet">used today</span><button class="z-link">Revoke</button></div>
+            <div class="z-row"><span>Cursor</span><span class="z-quiet">used 3 days ago</span><button class="z-link">Revoke</button></div>
+            <button class="z-btn" style="margin-top:8px">New token</button></div>
+        </div>
+        <div data-setpane="channels" hidden>
+          <h2 class="z-h2">WhatsApp &amp; Telegram</h2>
+          <p class="z-quiet">Send Zenod a message or a voice note from your phone. It lands in the same memory.</p>
+          <div class="z-card"><div class="z-row"><b>WhatsApp</b><span class="z-ok">Connected · +34 ••• •• 12</span></div><div class="z-row"><span class="z-quiet">Allowed senders: you</span><span><button class="z-link">Pause</button><button class="z-link">Disconnect</button></span></div></div>
+          <div class="z-card"><div class="z-row"><b>Telegram</b><span class="z-quiet">Not connected</span></div><button class="z-btn" style="margin-top:6px">Connect Telegram</button></div>
+          <div class="z-card"><div class="z-row"><b>Subscribers</b><span class="z-quiet">Shows here when it is switched on for you</span></div></div>
+        </div>
+        <div data-setpane="vault" hidden>
+          <h2 class="z-h2">Vault &amp; sources</h2>
+          <p class="z-quiet">Where your memory is kept as files you own.</p>
+          <div class="z-card"><div class="z-row"><b>Google Drive</b><span class="z-ok">Your vault lives here</span></div><div class="z-quiet">Markdown files and their history. GitHub is the other choice. <button class="z-link">Change</button></div></div>
+          <div class="z-card"><div class="z-row"><b>Memory readiness</b><span class="z-ok">Vault is clean</span></div><div class="z-quiet">No schema issues found.</div></div>
+          <div class="z-card"><div class="z-row"><b>Bring in or take out</b></div><button class="z-btn">Import notes</button> <button class="z-btn">Export everything</button></div>
+        </div>
+        <div data-setpane="usage" hidden>
+          <h2 class="z-h2">Usage &amp; plan</h2>
+          <div class="z-card"><div class="z-row"><b>Included usage this month</b><span>42%</span></div><div class="z-meter"><i style="width:42%"></i></div><div class="z-quiet">Free pass · 18 days left · resets 1 Dec</div></div>
+          <figure class="z-card z-chart"><figcaption>Where your AI allowance goes</figcaption><div id="z-allow" class="z-hbars"></div></figure>
+          <div class="z-card"><div class="z-row"><b>Plan and billing</b><span class="z-quiet">Free pass</span></div><button class="z-btn">Choose a plan</button> <button class="z-btn z-btn-q">Open billing</button></div>
+        </div>
+        <div data-setpane="account" hidden>
+          <h2 class="z-h2">Account</h2>
+          <div class="z-card"><div class="z-row"><b>Signed in</b><span class="z-quiet">you@example.com · Google</span></div></div>
+          <div class="z-card"><div class="z-row"><b>Look</b><span><button class="z-link" aria-current="true">Light</button><button class="z-link">Dark</button><button class="z-link">Like my device</button></span></div></div>
+          <div class="z-card"><div class="z-row"><a href="https://zenod.dev/">zenod.dev</a><button class="z-btn z-btn-q">Log out</button></div></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="z-menu" class="z-menu" role="menu" hidden></div>
+    <div id="z-toast" class="z-toast" hidden></div>
+  </div>
+</main>
+
+<section class="pg-build" id="map">
+  <h2>Where every feature went</h2>
+  <p>Today's app has twelve tabs. The new one has five. Every row below is a feature of today's cloud app and where it lives now. Tap a new home to jump there in the mockup.</p>
+  <table class="pg-map">
+    <tr><th>Today's tab</th><th>What is in it</th><th>New home</th></tr>
+    <tr><td>Chat</td><td>The box, answers with their sources, keep receipts, voice notes, call with your memory, “Ask the desk”</td><td><a data-go="chat">Chat</a>, with the four modes. “Ask the desk” becomes “Make it a job” in the label menu</td></tr>
+    <tr><td>Inbox</td><td>Desk jobs with before and after, persona notes, questions for you</td><td><a data-go="inbox">Inbox</a>, plus “Talk it over” on each note</td></tr>
+    <tr><td>Personas</td><td>Each helper, on or off, how often, its skills</td><td><a data-go="personas">Personas</a>, plus “Talk it over”</td></tr>
+    <tr><td>Graph</td><td>The graph, link strength, find a memory, an answer lit up, where a memory sits</td><td><a data-go="memory:graph">Memory › Graph</a>. A “Looked up” reply opens it with the answer lit up</td></tr>
+    <tr><td>Memory</td><td>The tree, a note viewer, and the “check where it landed” list with moves and undo</td><td><a data-go="memory:tree">Memory › Tree</a> and <a data-go="memory:check">Memory › Check filings</a></td></tr>
+    <tr><td>Overview</td><td>Included usage, recent saves, shortcuts to Connect, Vault and Channels</td><td>Usage and recent saves go to <a data-go="memory:glance">Memory › At a glance</a>. The shortcuts are not needed: Settings holds them</td></tr>
+    <tr><td>Connect / MCP</td><td>Your MCP address, one-line setup, tokens</td><td><a data-go="settings:connect">Settings › Connect AI apps</a></td></tr>
+    <tr><td>Channels</td><td>WhatsApp and Telegram: connect, allowed senders, pause, disconnect</td><td><a data-go="settings:channels">Settings › WhatsApp &amp; Telegram</a></td></tr>
+    <tr><td>Subscribers</td><td>Only when switched on for you</td><td><a data-go="settings:channels">Settings › WhatsApp &amp; Telegram</a>, same rule</td></tr>
+    <tr><td>Vault &amp; sources</td><td>Google Drive or GitHub, memory readiness, imports and export</td><td><a data-go="settings:vault">Settings › Vault &amp; sources</a></td></tr>
+    <tr><td>Usage</td><td>Included usage, where your AI allowance goes</td><td><a data-go="settings:usage">Settings › Usage &amp; plan</a></td></tr>
+    <tr><td>Account</td><td>Plan, subscription and billing</td><td><a data-go="settings:usage">Settings › Usage &amp; plan</a> and <a data-go="settings:account">Settings › Account</a></td></tr>
+    <tr><td>Header</td><td>Free plan banner, light or dark, landing link, log out</td><td>The plan line next to the name, and <a data-go="settings:account">Settings › Account</a></td></tr>
+  </table>
+  <p><b>New, not moved:</b> the four charts in <a data-go="memory:glance">Memory › At a glance</a> (memories each week, strongest places, where they come from, the totals). They are drawn from what Zenod already stores, so nothing new is collected.</p>
+
+  <h2 style="margin-top:40px">How we would build it</h2>
+  <p>Round 1's plan stands: three of the four modes already come out of today's Send decision, and Talk it over is new, about half of a week's work. Round 2 adds the regrouping and the charts. The regrouping moves panels that exist into Memory and Settings, and old links like <code>?tab=graph</code> keep working. The charts are new. Together that is about two more days.</p>
+  <p><b>Kept as it is:</b> WhatsApp replies do not change, and how memories are filed and found does not change.</p>
+  <p><b>Then we check it:</b> on a fixed set of your real messages, Zenod has to pick the right mode at least 9 times in 10, and “who are you?” has to get a direct answer.</p>
+  <h3>Screens</h3>
+  <div class="pg-shots">
+    <figure><img src="desktop-chat.png" alt="Desktop: the chat, Zenod leads the header"><figcaption>Chat: Zenod leads, the tagline is quieter</figcaption></figure>
+    <figure><img src="desktop-glance.png" alt="Desktop: Memory at a glance with charts"><figcaption>Memory › At a glance</figcaption></figure>
+    <figure><img src="desktop-graph.png" alt="Desktop: Memory graph"><figcaption>Memory › Graph</figcaption></figure>
+    <figure><img src="desktop-check.png" alt="Desktop: check filings"><figcaption>Memory › Check filings</figcaption></figure>
+    <figure><img src="desktop-settings.png" alt="Desktop: Settings"><figcaption>Settings, one home</figcaption></figure>
+    <figure><img src="phone-chat.png" alt="Phone: chat"><figcaption>Phone: chat</figcaption></figure>
+    <figure><img src="phone-memory.png" alt="Phone: Memory"><figcaption>Phone: Memory</figcaption></figure>
+    <figure><img src="phone-settings.png" alt="Phone: Settings"><figcaption>Phone: Settings</figcaption></figure>
+  </div>
+</section>
+<script src="app.js"></script>
+</body>
+</html>

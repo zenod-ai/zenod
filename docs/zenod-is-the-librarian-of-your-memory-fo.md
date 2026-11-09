@@ -30,12 +30,12 @@ Goal sentence: Zenod becomes the librarian of your memory, with four clear modes
 
 Owner: unassigned
 Status: ready
-Last attempted: 2026-11-09 L1 mockup live at http://vps3.taild81fbb.ts.net:8921/e22-l1/
+Last attempted: 2026-11-09 L2 mockup round 2 live at http://vps3.taild81fbb.ts.net:8921/e22-l2/ (after E22-A1 feedback)
 Result: created, not started
-Evidence: [E22-L1 mockup evidence](evidence/e22-l1-2026-11-09.md)
+Evidence: [E22-L2 mockup round 2](evidence/e22-l2-2026-11-09.md) · [round 1](evidence/e22-l1-2026-11-09.md)
 Waiting on: nobody
 Approved work: none
-Next action: Jordi answers E22-A1 on the mockup; on yes, L2 builds it in the live app
+Next action: Jordi answers E22-A2 on mockup round 2; on yes, L2 builds it in the live app
 Source revision: uncommitted scaffold
 Verified at: 2026-11-09
 
@@ -55,7 +55,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
-| L2 | Ticket worker | run_41ed542e-9a52-42d6-b9c0-aa366b10bdce — claimed 2026-11-09T17:00Z, lease until 2026-11-09T19:00Z | E22-2, E22-3: build it in the live app after the mockup is approved | active (feedback E22-A1 by Jordi 2026-11-09, round 2: I like this direction a lot, but also I think you're losing a lot of functionality, so I agree with, and I think the name and the headline should be slightly different sizes or colors or something so that the tagline, it has less protagonism than the name itself. I like that the bars and settings a…) | L1 | none | main | none | 2026-11-09 | waits on E22-A1; scope in the L1 evidence page (about a week) |
+| L2 | Ticket worker | run_41ed542e-9a52-42d6-b9c0-aa366b10bdce — claimed 2026-11-09T17:00Z, lease until 2026-11-09T19:00Z | E22-2, E22-3: build it in the live app after the mockup is approved | active (mockup round 2 after feedback E22-A1; build waits on E22-A2) | L1 | main-direct (docs only, mockup) | 0db6fd54 | http://vps3.taild81fbb.ts.net:8921/e22-l2/ ([evidence](evidence/e22-l2-2026-11-09.md)) | 2026-11-09 | mockup round 2 at http://vps3.taild81fbb.ts.net:8921/e22-l2/; waits on E22-A2 |
 
 ## Decisions
 
