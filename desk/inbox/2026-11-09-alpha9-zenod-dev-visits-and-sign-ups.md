@@ -2,7 +2,8 @@
 from: alpha9
 about: zenod.dev: report daily visits and sign-ups to our counter (E85-S1, Jordi's 30-day experiment)
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-09-zenod-re-zenod-dev-report-daily-visits-and-si.md
 ---
 Jordi, voice note 2026-11-09 02:00Z (vn_096b3f9e), agent_team EPIC-85: "make sure that all the websites are reporting the metrics … we're controlling the users". For the 30-day experiment every site of ours reports its daily visits and sign-ups into the metrics catalog the campaigns read (agent_team E85-S1). epicspine.dev, epicsocial.app and epicteam.app count with our own counter; zenod.dev is yours, so we ask, and change nothing on your side.
 
