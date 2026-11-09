@@ -1,0 +1,27 @@
+# after 2026-11-09T21:30:11Z, production sha ba6b56ea6e3ae9b245d2cbe45bd3d3bfdaa9e4c5
+http://zenod.dev/ -> GET 301 https://zenod.dev/ | HEAD 301 https://zenod.dev/
+http://zenod.dev/pricing?x=1 -> GET 301 https://zenod.dev/pricing?x=1 | HEAD 301 https://zenod.dev/pricing?x=1
+http://www.zenod.dev/ -> GET 301 https://zenod.dev/ | HEAD 308 https://zenod.dev/
+http://www.zenod.dev/connect?a=b -> GET 301 https://zenod.dev/connect?a=b | HEAD 308 https://zenod.dev/connect?a=b
+https://www.zenod.dev/ -> GET 301 https://zenod.dev/ | HEAD 308 https://zenod.dev/
+https://www.zenod.dev/connect?a=b -> GET 301 https://zenod.dev/connect?a=b | HEAD 308 https://zenod.dev/connect?a=b
+http://mind.zenod.dev/x -> GET 301 https://zenod.dev/x | HEAD 308 https://zenod.dev/x
+http://cloud.zenod.dev/ -> GET 301 https://cloud.zenod.dev/ | HEAD 301 https://cloud.zenod.dev/
+http://cloud.zenod.dev/app?tab=memory -> GET 301 https://cloud.zenod.dev/app?tab=memory | HEAD 301 https://cloud.zenod.dev/app?tab=memory
+https://zenod.dev/ -> GET 200  | HEAD 200 
+https://zenod.dev/pricing -> GET 200  | HEAD 200 
+https://zenod.dev/connect -> GET 200  | HEAD 200 
+https://zenod.dev/testers -> GET 200  | HEAD 200 
+https://zenod.dev/?tab=memory -> GET 200  | HEAD 200 
+https://zenod.dev/legal/terms.html -> GET 200  | HEAD 200 
+https://zenod.dev/favicon.ico -> GET 200  | HEAD 200 
+https://zenod.dev/no-such-page -> GET 404  | HEAD 404 
+https://zenod.dev/robots.txt -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/ -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/app -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/app?tab=graph -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/?tab=graph -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/account -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/no-such-page -> GET 404  | HEAD 404 
+https://cloud.zenod.dev/api/health -> GET 200  | HEAD 200 
+https://cloud.zenod.dev/.well-known/oauth-authorization-server -> GET 200  | HEAD 200 
