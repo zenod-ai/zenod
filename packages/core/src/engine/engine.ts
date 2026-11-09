@@ -70,7 +70,8 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
-import { lintTree } from "../vault/treeLint.js";
+import { lintTree, lintTreeIndex } from "../vault/treeLint.js";
+import { appendCorrection, CORRECTIONS_PATH, latestNoteFor, newCorrection, parentTitle, placementReview as readPlacementReview, placeOf, readCorrections, type PlacementCorrectionResult, type PlacementReview } from "./placementReview.js";
 import { applyDeskChanges, checkDeskChanges, checkDeskPlan, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
@@ -112,6 +113,16 @@ const GROUNDED_STANDING_ACTION_RETRY = [
   "Retry the original request once. If a discovered tool can create or hold the requested action safely, call that exact tool once.",
   "Otherwise state plainly that nothing was held. Never claim held, pending, drafted, sent, or changed without a same-turn tool result.",
 ].join(" ");
+
+/** E12-S27: each page a filing's topics chose, with the classifier's confidence in it (the best topic's, 0–1). */
+function pageConfidences(topics: ReadonlyArray<{ confidence: number; pages: readonly string[]; filedPages: readonly string[] }>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const topic of topics) {
+    if (!Number.isFinite(topic.confidence)) continue;
+    for (const page of new Set([...topic.pages, ...topic.filedPages])) out[page] = Math.max(out[page] ?? 0, topic.confidence);
+  }
+  return out;
+}
 
 function hasStandingActionEvidence(actions: readonly TaskingAction[]): boolean {
   return actions.some((action) =>
@@ -2033,7 +2044,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         expectedRevision: filingPlan.baseRevision, receiptPath,
         expectedFiles: Object.fromEntries([...Object.entries(receipt!.files).map(([path, file]) => [path, file.afterHash]), [receiptPath, publicationContentHash(renderFilingReceipt(receipt!))]]),
         ...(filingPlan.input.assertActive ? { assertActive: filingPlan.input.assertActive } : {}),
-      }) : await commitFiling(`memory: topic filing ${classification.summary}`, { evidenceRef, content })
+      }) : await commitFiling(`memory: topic filing ${classification.summary}`, { evidenceRef, content, confidence: pageConfidences(outcomes) })
       : await repo.currentRevision();
     return { evidenceRef, pagesTouched: touched, ...storePublication(revision, logPath, evidenceLine ? `L${evidenceLine}` : undefined, touched), topics: outcomes,
       filing: outcomes.some((outcome) => outcome.status === "pending") ? "pending" : unresolved.length ? "uncertain" : "filed" };
@@ -2185,11 +2196,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   /** One durable revision per filing: unguarded filing commits carry their tree placement and `filed:` line. */
-  async function commitFiling(message: string, placement: { evidenceRef: string; content: string }): Promise<VaultRevision> {
+  async function commitFiling(message: string, placement: { evidenceRef: string; content: string; confidence?: PlacementPlan["confidence"] }): Promise<VaultRevision> {
     assertVault(repo);
     if (/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]+$/.test(placement.evidenceRef)) {
       const plan = planFromChanges(await repo.pendingChanges(), rolledUp.delete(placement.evidenceRef));
-      if (plan) await placeFiling(placement.evidenceRef, placement.content, plan);
+      if (plan) await placeFiling(placement.evidenceRef, placement.content, { ...plan, ...(placement.confidence !== undefined ? { confidence: placement.confidence } : {}) });
     }
     return repo.commitAndPublish(message);
   }
@@ -2212,6 +2223,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       pages,
       reason: noPage ?? topics.find(topic => topic.reason)?.reason ?? (result.filing === "filed" ? "evidence only: nothing new for a page" : `filing ${result.filing}`),
       rollup: rolledUp.delete(result.evidenceRef),
+      confidence: pageConfidences(topics),
       leafAllowed: result.filing === "inbox" || noPage !== undefined
         || (result.filing === "uncertain" && topics.some(topic => topic.status === "uncertain" && topic.disposition !== "evidence_only")),
     };
@@ -2505,7 +2517,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const report = await lintVault(vaultPath, touched);
         const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
         if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
-        const revision = await commitFiling(`memory: enrich ${classification.summary}`, { evidenceRef: input.evidenceRef, content: input.content });
+        const revision = await commitFiling(`memory: enrich ${classification.summary}`, { evidenceRef: input.evidenceRef, content: input.content, confidence: classification.confidence });
         return {
           evidenceRef: input.evidenceRef,
           pagesTouched: touched,
@@ -2641,7 +2653,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             );
           }
 
-          const revision = await commitFiling(`memory: (uncertain) ${classification.summary}`, { evidenceRef, content: input.content });
+          const revision = await commitFiling(`memory: (uncertain) ${classification.summary}`, { evidenceRef, content: input.content, confidence: classification.confidence });
           return {
             evidenceRef,
             pagesTouched: [page.path],
@@ -2733,7 +2745,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
 
       // 7-8. One durable revision per store.
-      const revision = await commitFiling(`memory: ${classification.summary}`, { evidenceRef, content: input.content });
+      const revision = await commitFiling(`memory: ${classification.summary}`, { evidenceRef, content: input.content, confidence: classification.confidence });
       const result: StoreResult = {
         evidenceRef,
         pagesTouched: touched,
@@ -3078,6 +3090,112 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (problems.length > 0) throw new DeskChangeError(`Undo stopped before changing anything: ${problems.slice(0, 3).join("; ")}`);
         const revision = await repo.commitAndPublish(`memory desk: undo ${input.title}`);
         return { revision, undone, skipped };
+      } catch (error) {
+        await writes.revert();
+        await repo.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+  }
+
+  /** E12-S27: the filings to check, Zenod's least sure first (placementReview.ts). Read only. */
+  async function placementReview(request: { limit?: number } = {}): Promise<PlacementReview> {
+    assertVault(repo);
+    await syncForRead();
+    return readPlacementReview(vaultPath, request);
+  }
+
+  /**
+   * E12-S27: the person says where a page belongs, on the tree in the app. `to` moves it under that
+   * page (the memory desk's move, so the same guard: only `parent:`, `memory:` and `provisional:`
+   * change, Log/ untouched, tree lint no worse); no `to` confirms it where it is. Either way it is
+   * no longer provisional, and a correction record in the S6 landing feedback shape is written to
+   * `.brain/tree-corrections.jsonl`. ONE commit; no model call.
+   */
+  async function correctPlacement(input: { page: string; to?: string | null }): Promise<PlacementCorrectionResult> {
+    assertVault(repo);
+    return queue.run(async (): Promise<PlacementCorrectionResult> => {
+      await assertNoInterruptedFiling();
+      if ((await repo.pendingChanges()).length > 0) throw new Error("desk_dirty_worktree");
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      // A move creates no file: one scan serves the lint before and after.
+      const snapshot = await scanVault(vaultPath);
+      const index = await buildTreeIndex(vaultPath, snapshot);
+      const page = index.fields.has(input.page) ? input.page : index.resolveRef(input.page.replace(/\.md$/, ""));
+      if (!page || !index.fields.has(page)) throw new DeskChangeError("That memory is not a page in your tree.");
+      const title = index.rootsByPath.get(page.toLowerCase())?.name ?? index.fields.get(page)!.title;
+      const before = placeOf(index, page);
+      const from = parentTitle(index, page);
+      const writes = new TrackedWrites(vaultPath);
+      try {
+        const move = input.to ? { op: "move" as const, page, to: input.to, confirm: true } : { op: "confirm" as const, page };
+        const { edits } = await applyDeskChanges(vaultPath, [move], writes);
+        const after = await buildTreeIndex(vaultPath);
+        const to = input.to ? (after.fields.has(input.to) ? input.to : after.resolveRef(input.to.replace(/\.md$/, ""))) : null;
+        const toTitle = to ? after.rootsByPath.get(to.toLowerCase())?.name ?? after.fields.get(to)?.title ?? to : null;
+        const note = await latestNoteFor(vaultPath, page);
+        const record = newCorrection({
+          title, action: input.to ? "move" : "confirm", note_id: note.noteId, memory_id: page, zenod_page: title, zenod_parent: from,
+          verdict: input.to ? "no" : "yes", confidence: note.confidence,
+          correction: input.to ? `wrong parent: moved from ${from ?? "the root"} to ${toTitle}` : "right place",
+          ...(to ? { moved_to: toTitle!, moved_to_path: to } : {}), ...(edits.length ? { edits } : {}),
+        }, now());
+        await appendCorrection(vaultPath, record, writes);
+        const changes = await repo.pendingChanges();
+        const problems = [...checkDeskChanges(changes.filter((change) => change.path !== CORRECTIONS_PATH)),
+          ...checkEvidenceImmutability(changes).map((entry) => `${entry.path}: ${entry.message}`)];
+        // Only the moved page and the pages below it changed place: the tree lint must find nothing wrong with them.
+        const moved = new Set<string>();
+        const below = (path: string) => { if (moved.has(path)) return; moved.add(path); for (const child of after.children(path)) below(child); };
+        below(page);
+        const errorKeys = (tree: typeof index) => lintTreeIndex(tree, snapshot.files).issues
+          .filter((issue) => issue.severity === "error" && moved.has(issue.path)).map((issue) => ({ key: `${issue.path}\n${issue.rule}`, issue }));
+        // An old problem on a moved page (the person's vault may have some) is no reason to refuse; a new one is.
+        const had = new Set(errorKeys(index).map((entry) => entry.key));
+        const broken = errorKeys(after).filter((entry) => !had.has(entry.key)).map((entry) => entry.issue);
+        if (broken.length > 0) problems.push(`the tree would have ${broken.length} more problem${broken.length === 1 ? "" : "s"}: ${broken[0]!.message}`);
+        if (problems.length > 0) throw new DeskChangeError(`Nothing was changed: ${problems.slice(0, 3).join("; ")}`);
+        const revision = await repo.commitAndPublish(input.to ? `memory: you moved ${title} under ${toTitle}` : `memory: you confirmed ${title}`);
+        openMemoryIndex()?.markDirty();
+        return { id: record.id, action: record.action, page, title, before, after: placeOf(after, page), revision };
+      } catch (error) {
+        await writes.revert();
+        await repo.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+  }
+
+  /** E12-S27: put a move or confirm back (its edits, last first), with an undo record. ONE commit. */
+  async function undoPlacementCorrection(input: { id: string }): Promise<PlacementCorrectionResult> {
+    assertVault(repo);
+    return queue.run(async (): Promise<PlacementCorrectionResult> => {
+      await assertNoInterruptedFiling();
+      if ((await repo.pendingChanges()).length > 0) throw new Error("desk_dirty_worktree");
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      const records = await readCorrections(vaultPath);
+      const record = records.find((item) => item.id === input.id && item.action !== "undo");
+      if (!record) throw new DeskChangeError("That change is not in your memory's history.");
+      if (records.some((item) => item.undoes === record.id)) throw new DeskChangeError("That change was already undone.");
+      const writes = new TrackedWrites(vaultPath);
+      try {
+        const { skipped } = await undoDeskEdits(vaultPath, record.edits ?? [], writes);
+        if (skipped > 0) throw new DeskChangeError("The page changed since, so it was left as it is.");
+        const index = await buildTreeIndex(vaultPath);
+        const undo = newCorrection({
+          title: record.zenod_page, action: "undo", undoes: record.id, note_id: record.note_id, memory_id: record.memory_id, zenod_page: record.zenod_page,
+          zenod_parent: record.moved_to ?? record.zenod_parent, verdict: null, confidence: record.confidence, correction: "undone",
+        }, now());
+        await appendCorrection(vaultPath, undo, writes);
+        const changes = await repo.pendingChanges();
+        const problems = [...checkDeskChanges(changes.filter((change) => change.path !== CORRECTIONS_PATH)),
+          ...checkEvidenceImmutability(changes).map((entry) => `${entry.path}: ${entry.message}`)];
+        if (problems.length > 0) throw new DeskChangeError(`Undo stopped before changing anything: ${problems.slice(0, 3).join("; ")}`);
+        const revision = await repo.commitAndPublish(`memory: undo ${record.action === "move" ? "move of" : "confirm of"} ${record.zenod_page}`);
+        openMemoryIndex()?.markDirty();
+        return { id: undo.id, action: "undo", page: record.memory_id, title: record.zenod_page, before: record.moved_to ?? "", after: placeOf(index, record.memory_id), revision };
       } catch (error) {
         await writes.revert();
         await repo.discardChanges().catch(() => {});
@@ -3837,6 +3955,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     routeSend,
     deskJob,
     undoDeskJob,
+    placementReview,
+    correctPlacement,
+    undoPlacementCorrection,
     chat,
     handleTasking,
     work,

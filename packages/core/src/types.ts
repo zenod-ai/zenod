@@ -548,6 +548,12 @@ export interface BrainEngine {
   deskJob?(input: import("./engine/memoryDesk.js").DeskJobInput): Promise<import("./engine/memoryDesk.js").DeskJobResult>;
   /** Undo a desk job: its edits put back, as ONE commit. */
   undoDeskJob?(input: { title: string; edits: import("./engine/memoryDesk.js").DeskEdit[] }): Promise<import("./engine/memoryDesk.js").DeskUndoResult>;
+  /** E12-S27: filings to check, the least sure first, then older provisional pages. */
+  placementReview?(request?: { limit?: number }): Promise<import("./engine/placementReview.js").PlacementReview>;
+  /** E12-S27: the person moves a page (`to`) or confirms it where it is; ONE commit, no model call. */
+  correctPlacement?(input: { page: string; to?: string | null }): Promise<import("./engine/placementReview.js").PlacementCorrectionResult>;
+  /** E12-S27: put a move or confirm back, as ONE commit. */
+  undoPlacementCorrection?(input: { id: string }): Promise<import("./engine/placementReview.js").PlacementCorrectionResult>;
   /**
    * Full conversational turn: ask + optional store, with conversation memory.
    * Pass onDelta to stream the answer text, onToolEvent to surface tool

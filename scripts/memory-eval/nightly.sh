@@ -43,7 +43,7 @@ rev=$(git -C "$VAULT_CLONE" rev-parse --short=7 origin/main)
 label="production $(date -u +%m-%d) $sha"
 nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset demo --sha "$sha" --label "$label" --out "$EVAL/runs/demo-$sha.json" --append "$EVAL/history/demo.jsonl" 2>&1 | grep '^ingestion' || true
 nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset private --vault "$EVAL/vaults/$rev" --vault-rev "$rev" \
-  --questions "$EVAL/real-questions.jsonl" --judged "$HOME/zenod-feedback/landing-feedback.jsonl" \
+  --questions "$EVAL/real-questions.jsonl" --judged "$HOME/zenod-feedback/landing-feedback.jsonl,$EVAL/vaults/$rev/.brain/tree-corrections.jsonl" \
   --sha "$sha" --label "$label" --out "$EVAL/runs/private-$sha.json" --append "$EVAL/history/private.jsonl" 2>&1 | grep '^ingestion' || true
 node "$suite/dashboard.mjs" --demo "$EVAL/history/demo.jsonl" --private "$EVAL/history/private.jsonl" \
   --changes "$suite/changes.json" --recorded "$suite/recorded.json" --out "$PAGE"

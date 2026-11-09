@@ -410,13 +410,33 @@ export interface PlacedPage {
   provisional?: boolean;
   /** Set for rule-5 ops rollups. */
   rollup?: boolean;
+  /** E12-S27: how sure Zenod was of this place, 0–100 (see placementConfidence). */
+  confidence?: number;
+}
+
+/** `· 72% sure` at the end of a `filed:` line (E12-S27): how sure Zenod was of the place. */
+export const FILED_CONFIDENCE_RE = /· (\d{1,3})% sure\s*$/;
+
+/**
+ * E12-S27: how sure Zenod is of the place a filing chose, 0–100, from what the filing already
+ * knows (no extra model call): the classifier's own confidence in the page (0–1, from the call
+ * that filed it; 0.75 when the path had none) times how the page reached the tree: already in it
+ * (×1), hung on a branch that matched by name (×0.85), hung on a weak match and marked
+ * provisional (×0.5), or a provisional leaf because no page fitted (×0.3).
+ */
+export type PlacementHow = "in_tree" | "hung" | "hung_weak" | "leaf";
+const PLACEMENT_FACTOR: Record<PlacementHow, number> = { in_tree: 1, hung: 0.85, hung_weak: 0.5, leaf: 0.3 };
+export function placementConfidence(classifier: number | null | undefined, how: PlacementHow): number {
+  const base = typeof classifier === "number" && Number.isFinite(classifier) ? Math.max(0, Math.min(1, classifier)) : 0.75;
+  return Math.round(100 * base * PLACEMENT_FACTOR[how]);
 }
 
 /** The text after `- filed: ` for one destination (or `log only (reason)`). */
 export function filedTarget(page: PlacedPage | { logOnly: string }): string {
   if ("logOnly" in page) return `log only (${oneLine(page.logOnly, 160)})`;
   const link = parentRef(page.path);
-  const extras = [page.rollup ? "ops rollup" : "", page.provisional ? "provisional" : ""].filter(Boolean);
+  const extras = [page.rollup ? "ops rollup" : "", page.provisional ? "provisional" : "",
+    typeof page.confidence === "number" && !page.rollup ? `${page.confidence}% sure` : ""].filter(Boolean);
   return `${link}${page.lineage ? ` (${page.lineage})` : ""}${extras.length ? ` · ${extras.join(" · ")}` : ""}`;
 }
 
@@ -481,6 +501,8 @@ export interface PlacementPlan {
   leafAllowed: boolean;
   /** Pages that carry this capture as a rule-5 ops rollup line. */
   rollup?: boolean;
+  /** E12-S27: the classifier's confidence (0–1), for the whole filing or per page it chose. */
+  confidence?: number | Record<string, number>;
 }
 
 export interface PlacementResult {
@@ -513,6 +535,7 @@ export async function placeCapture(
   let index = await buildTreeIndex(vaultPath);
   const touched = new Set<string>();
   const provisional = new Set<string>();
+  const how = new Map<string, PlacementHow>();
   for (const path of pages) {
     if (!isTreePage(path) || !index.fields.has(path)) continue;
     if (index.lineage(path).ok) continue;
@@ -522,12 +545,13 @@ export async function placeCapture(
     const raw = await readFile(join(vaultPath, path), "utf8");
     await writes.write(path, withParent(raw, choice.path, choice.weak));
     if (choice.weak) provisional.add(path);
+    how.set(path, choice.weak ? "hung_weak" : "hung");
     touched.add(path);
   }
   let finalPages = pages;
   if (!pages.length && plan.leafAllowed) {
     const leaf = await writeProvisionalLeaf(vaultPath, index, { ...input, reason: plan.reason ?? "nothing fitted" }, writes);
-    if (leaf) { finalPages = [leaf.path]; touched.add(leaf.path); provisional.add(leaf.path); }
+    if (leaf) { finalPages = [leaf.path]; touched.add(leaf.path); provisional.add(leaf.path); how.set(leaf.path, "leaf"); }
   }
   if (touched.size) index = await buildTreeIndex(vaultPath);
   // E9-2f: a capture that reached only level-1 roots is also cited on the deepest page below them that fits (rule 2), so lineage reaches the leaf.
@@ -537,20 +561,25 @@ export async function placeCapture(
       const leaf = await citeOnLeaf(vaultPath, index, { rootPath, evidenceRef: input.evidenceRef, text: oneLine(input.content, 200), summary: input.content }, writes);
       if (leaf && !leaves.includes(leaf)) leaves.push(leaf);
     }
-    for (const leaf of leaves) touched.add(leaf);
+    for (const leaf of leaves) { touched.add(leaf); how.set(leaf, "hung"); }
     finalPages = [...finalPages, ...leaves];
   }
 
   const snapshot = await scanVault(vaultPath);
   const report = lintTreeIndex(index, snapshot.files);
   const treeIssues = report.issues.filter(issue => issue.severity === "error" && finalPages.includes(issue.path));
+  // A page the classifier did not name itself (a leaf, a deeper page citing it) takes the filing's best topic.
+  const perPage = typeof plan.confidence === "object" ? Object.values(plan.confidence) : [];
+  const classifier = (path: string) => typeof plan.confidence === "number" ? plan.confidence
+    : plan.confidence?.[path] ?? (perPage.length ? Math.max(...perPage) : undefined);
   const placed: PlacedPage[] = finalPages.map(path => {
     const lineage = index.lineage(path);
+    const placedHow = how.get(path) ?? (index.fields.get(path)?.provisional ? "hung_weak" : "in_tree");
     return {
       path,
       ...(lineage.ok ? { lineage: formatLineage(lineage) } : {}),
       ...(provisional.has(path) || index.fields.get(path)?.provisional ? { provisional: true } : {}),
-      ...(plan.rollup ? { rollup: true } : {}),
+      ...(plan.rollup ? { rollup: true } : { confidence: placementConfidence(classifier(path), placedHow) }),
     };
   });
   const targets = placed.length ? placed.map(filedTarget) : [filedTarget({ logOnly: plan.reason ?? "no page written" })];

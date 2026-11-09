@@ -267,7 +267,8 @@ async function filingSuite(mods, ctx, notes) {
  */
 async function judgedFilingSuite(ctx, judgedFile) {
   const { engine, vault } = ctx;
-  const judged = readSet(judgedFile).filter((r) => r.type === "answer" && r.note_id);
+  // Several files, comma separated: the trial page's answers and the app's own checks (E12-S27).
+  const judged = judgedFile.split(",").filter((file) => existsSync(file)).flatMap((file) => readSet(file)).filter((r) => r.type === "answer" && r.note_id);
   const titles = new Map();
   for (const file of execFileSync("find", [vault, "-name", "*.md", "-not", "-path", "*/.git/*", "-not", "-path", "*/Log/*"], { encoding: "utf8", maxBuffer: 1 << 26 }).split("\n").filter(Boolean)) {
     const t = frontmatter(readFileSync(file, "utf8")).title;
@@ -277,7 +278,8 @@ async function judgedFilingSuite(ctx, judgedFile) {
   for (const r of judged) {
     if (!notes.has(r.note_id)) notes.set(r.note_id, { rejected: new Set(), approved: new Set() });
     const page = titles.get(String(r.zenod_page ?? "").toLowerCase());
-    if (page && r.verdict === "no") notes.get(r.note_id).rejected.add(page);
+    // An app move says the page's parent was wrong, not the page: it rejects nothing to file on.
+    if (page && r.verdict === "no" && r.action !== "move") notes.get(r.note_id).rejected.add(page);
     if (page && r.verdict === "yes") notes.get(r.note_id).approved.add(page);
   }
   const rows = [];
@@ -423,7 +425,7 @@ async function main() {
     const wanted = (item) => { const w = new Set(); for (const r of item.refs ?? []) { w.add(noMd(r)); for (const p of citing.get(anchorOf(r)) ?? []) w.add(p); } return w; };
     suites.questions = await questionSuite(mods, ctx, model, readSet(setFile), wanted);
     const judged = opt("judged");
-    if (judged && existsSync(judged) && ctx.engine.captureEvidence) suites.filing = await judgedFilingSuite(ctx, judged);
+    if (judged && judged.split(",").some((file) => existsSync(file)) && ctx.engine.captureEvidence) suites.filing = await judgedFilingSuite(ctx, judged);
     suites.agent = await agentSuite(mods, ctx, readSet(join(HERE, "demo", "agent.jsonl")));
   } else throw new Error(`unknown dataset ${dataset}`);
 

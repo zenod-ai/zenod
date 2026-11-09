@@ -1,5 +1,11 @@
 import * as React from "react"
-import { ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ExternalLinkIcon,
+  MoveRightIcon,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +17,14 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { MovePicker, type PlaceTarget } from "@/components/memory-review"
+
+/** E12-S27: Right place (`to` null) or Wrong place, moved under `to`. */
+export type PlaceMemory = (
+  page: string,
+  title: string,
+  to: PlaceTarget | null
+) => void
 
 /** One node as projected by GET /api/console/memory-tree (EPIC-9 E9-2e). */
 export type MemoryTreeNode = {
@@ -102,6 +116,7 @@ function TreeRow({
   toggle,
   selected,
   select,
+  place,
 }: {
   node: MemoryTreeNode
   depth: number
@@ -110,7 +125,9 @@ function TreeRow({
   toggle: (id: string) => void
   selected: string | null
   select: (id: string | null) => void
+  place?: { groups: MemoryTreeNode[]; busy: boolean; onPlace: PlaceMemory }
 }) {
+  const [moving, setMoving] = React.useState(false)
   const hasKids = node.children.length > 0
   const expanded = hasKids && open.has(node.id)
   const lineage = [...trail, node.title]
@@ -221,6 +238,41 @@ function TreeRow({
               ) : (
                 <p className="text-muted-foreground">{node.path}</p>
               )}
+              {place && node.path && node.kind !== "group" && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {node.provisional && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={place.busy}
+                      onClick={() => place.onPlace(node.path!, node.title, null)}
+                    >
+                      <CheckIcon /> Right place
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={place.busy}
+                    onClick={() => setMoving((value) => !value)}
+                  >
+                    <MoveRightIcon /> Wrong place
+                  </Button>
+                </div>
+              )}
+              {place && moving && node.path && (
+                <MovePicker
+                  groups={place.groups}
+                  page={node.path}
+                  title={node.title}
+                  busy={place.busy}
+                  onCancel={() => setMoving(false)}
+                  onPick={(to) => {
+                    setMoving(false)
+                    place.onPlace(node.path!, node.title, to)
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -237,6 +289,7 @@ function TreeRow({
               toggle={toggle}
               selected={selected}
               select={select}
+              place={place}
             />
           ))}
         </ul>
@@ -245,7 +298,16 @@ function TreeRow({
   )
 }
 
-export function MemoryTreeCard({ state }: { state: MemoryTreeState }) {
+export function MemoryTreeCard({
+  state,
+  busy = false,
+  onPlace,
+}: {
+  state: MemoryTreeState
+  busy?: boolean
+  /** E12-S27: shows Right place and Wrong place on an opened page. */
+  onPlace?: PlaceMemory
+}) {
   const groups = state.status === "ready" ? state.tree.groups : []
   // Levels 0–1 open on load: each group shows its roots; deeper levels on demand.
   const [open, setOpen] = React.useState<Set<string>>(
@@ -268,7 +330,7 @@ export function MemoryTreeCard({ state }: { state: MemoryTreeState }) {
         <CardDescription>
           Working memory is what is ongoing now; long-term memory is what
           lasts. Zenod files every capture under a branch, so the tree grows
-          on its own.
+          on its own. Open any page to say it is in the wrong place.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -322,6 +384,7 @@ export function MemoryTreeCard({ state }: { state: MemoryTreeState }) {
                   toggle={toggle}
                   selected={selected}
                   select={setSelected}
+                  place={onPlace ? { groups, busy, onPlace } : undefined}
                 />
               ))}
             </ul>

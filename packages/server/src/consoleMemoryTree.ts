@@ -35,6 +35,11 @@ export class ConsoleMemoryTreeCache {
     });
     return value;
   }
+
+  /** E12-S27: after the person moves or confirms a page, their next view reads the tree again. */
+  invalidate(tenantId: string): void {
+    this.entries.delete(tenantId);
+  }
 }
 
 export async function loadConsoleMemoryTree(runtime: Pick<Runtime, "memoryTreeOutline">): Promise<ConsoleMemoryTree> {

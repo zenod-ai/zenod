@@ -1392,6 +1392,70 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
   });
 
+  // EPIC-12 E12-S27: the person checks where Zenod filed things, on their own tree: the filings to
+  // check (least sure first), "Right place", "Wrong place" with where it belongs, and Undo. Each
+  // change is one commit in their vault with a correction record (S6 landing feedback shape); no model call.
+  const memoryReviewEngine = async (c: Context) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return { response: c.json({ error: "no_account" }, 404) };
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
+    return { tenantId: account.tenant_id, engine: await runtime.getEngine() };
+  };
+  const memoryReviewFailure = (c: Context, tenantId: string, what: string, error: unknown) => {
+    const name = (error as Error | null)?.name;
+    if (name === "NotConfiguredError") return c.json({ error: "no_vault", message: "Connect your vault first." }, 409);
+    if (name === "DeskChangeError") return c.json({ error: "not_changed", message: (error as Error).message }, 422);
+    if ((error as Error | null)?.message === "desk_dirty_worktree") return c.json({ error: "busy", message: "Zenod is filing something right now. Try again in a moment." }, 409);
+    console.warn(`[memory-review] ${what} unavailable for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+    return c.json({ error: "memory review unavailable", message: "Zenod could not change your memory just now. Try again in a moment." }, 503);
+  };
+  const readPagePath = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  app.get("/api/console/memory-review", async (c) => {
+    const ctx = await memoryReviewEngine(c);
+    if ("response" in ctx) return ctx.response;
+    try {
+      if (!ctx.engine.placementReview) return c.json({ status: "empty" });
+      return c.json({ status: "ready", ...(await ctx.engine.placementReview({ limit: Number(c.req.query("limit") ?? 40) || 40 })) });
+    } catch (error) {
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ status: "empty" });
+      return memoryReviewFailure(c, ctx.tenantId, "review", error);
+    }
+  });
+  app.post("/api/console/memory-place", async (c) => {
+    const body = await c.req.json<{ page?: unknown; to?: unknown }>().catch(() => ({}) as { page?: unknown; to?: unknown });
+    const page = readPagePath(body.page);
+    const to = readPagePath(body.to);
+    if (!page || page.length > 512 || to.length > 512) return c.json({ error: "page is required" }, 400);
+    const ctx = await memoryReviewEngine(c);
+    if ("response" in ctx) return ctx.response;
+    if (!ctx.engine.correctPlacement) return c.json({ error: "memory review unavailable" }, 503);
+    try {
+      const result = await ctx.engine.correctPlacement({ page, to: to || null });
+      memoryTrees.invalidate(ctx.tenantId);
+      return c.json({ id: result.id, action: result.action, page: result.page, title: result.title, before: result.before, after: result.after, revision: result.revision.id });
+    } catch (error) {
+      return memoryReviewFailure(c, ctx.tenantId, "move", error);
+    }
+  });
+  app.post("/api/console/memory-place/undo", async (c) => {
+    const body = await c.req.json<{ id?: unknown }>().catch(() => ({}) as { id?: unknown });
+    const id = typeof body.id === "string" ? body.id.trim() : "";
+    if (!/^c-[0-9a-f-]{6,40}$/.test(id)) return c.json({ error: "id is required" }, 400);
+    const ctx = await memoryReviewEngine(c);
+    if ("response" in ctx) return ctx.response;
+    if (!ctx.engine.undoPlacementCorrection) return c.json({ error: "memory review unavailable" }, 503);
+    try {
+      const result = await ctx.engine.undoPlacementCorrection({ id });
+      memoryTrees.invalidate(ctx.tenantId);
+      return c.json({ id: result.id, action: result.action, page: result.page, title: result.title, before: result.before, after: result.after, revision: result.revision.id });
+    } catch (error) {
+      return memoryReviewFailure(c, ctx.tenantId, "undo", error);
+    }
+  });
+
   // EPIC-12 E12-S3a: ranked retrieval for the signed-in customer's own vault: the top
   // memories for a question with a match percentage and links (rankedMemory.ts).
   app.get("/api/console/memory-search", async (c) => {
