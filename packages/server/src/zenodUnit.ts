@@ -69,7 +69,7 @@ import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
 import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
 import { subscribersEnabled } from "./subscribers.js";
-import { backgroundRouteFromEnv, startBackgroundBalanceMonitor, type BackgroundRoute } from "./backgroundRoute.js";
+import { backgroundHealth, backgroundRouteFromEnv, startBackgroundBalanceMonitor, type BackgroundRoute } from "./backgroundRoute.js";
 import {
   ZENOD_PUBLISHED_SKILL,
   ZENOD_SKILL_BUNDLE_PATH,
@@ -123,6 +123,11 @@ export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
   private backgroundRouteCache: { route: BackgroundRoute | null } | null = null;
+
+  /** Resolve the background route now, starting its balance monitor when the key exists. */
+  startBackgroundRoute(): void {
+    void this.backgroundRoute;
+  }
 
   /** EPIC-14 S10 round 4: background jobs on DeepSeek once the host has its key; starts the balance monitor /api/health reads. */
   private get backgroundRoute(): BackgroundRoute | null {
@@ -725,6 +730,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     (tenantId) => vaultProviderBindingForTenant(tenantId),
     (tenantId, input) => onVaultBindingUpdateForTenant(tenantId, input),
   );
+  // EPIC-14 S10 round 4: start the DeepSeek balance monitor at boot (a no-op without DEEPSEEK_API_KEY) so health reports it before any tenant loads.
+  runtimes.startBackgroundRoute();
   const oauthStore = createSqliteOAuthStore({ dataDir: storage.dataDir });
   // Tenant tokens and OAuth grants resolve exactly as before. A hash that matches
   // neither falls through to the account's static `zmt_` MCP tokens, which resolve
@@ -1095,7 +1102,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     );
   }
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth() }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth() }),
   );
   if (
     agent.name === "zenod" &&

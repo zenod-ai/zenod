@@ -291,6 +291,8 @@ describe("Zenod chassis unit", () => {
         status: "ok",
         name: "zenod",
         sha: "unknown",
+        // EPIC-14 S10 round 4: the DeepSeek background route is reported, off without its key.
+        background: { provider: "off", state: "off" },
       });
 
       const protectedApi = await unit.app.request("/api/settings");
