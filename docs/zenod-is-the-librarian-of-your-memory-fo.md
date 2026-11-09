@@ -32,7 +32,7 @@ Owner: unassigned
 Status: ready
 Last attempted: 2026-11-09 L1 mockup live at http://vps3.taild81fbb.ts.net:8921/e22-l1/
 Result: created, not started
-Evidence: docs/evidence/e22-l1-2026-11-09.md
+Evidence: [E22-L1 mockup evidence](evidence/e22-l1-2026-11-09.md)
 Waiting on: none
 Approved work: none
 Next action: post the E22-A1 approve ask for the mockup; on yes, L2 builds it in the live app
@@ -50,8 +50,8 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ ; docs/evidence/e22-l1-2026-11-09.md | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
-| L2 | Ticket worker | unassigned | E22-2, E22-3: build it in the live app after the mockup is approved | draft | L1 | none | main | none | 2026-11-09 | waits on E22-A1 (mockup approve); scope from docs/evidence/e22-l1-2026-11-09.md: about a week, Talk it over is half |
+| L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
+| L2 | Ticket worker | unassigned | E22-2, E22-3: build it in the live app after the mockup is approved | draft | L1 | none | main | none | 2026-11-09 | waits on E22-A1; scope in the L1 evidence page (about a week) |
 
 ## Decisions
 
