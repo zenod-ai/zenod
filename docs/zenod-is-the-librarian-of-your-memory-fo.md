@@ -36,8 +36,8 @@ Evidence: [E22-L2 live](evidence/e22-l2-live-2026-11-09.md) · http://vps3.taild
 Waiting on: nobody; L3 waits for 15 switches in the app
 Approved work: E22-A2 (build it as in mockup round 2)
 Next action: L3 next check 2026-11-12T21:00Z: count switches; tune at 15 or more
-Source revision: fa68fce1
-Verified at: 2026-11-09T20:10Z
+Source revision: aa46d5ee (production, /api/health 2026-11-09T21:52Z)
+Verified at: 2026-11-09T21:52Z
 
 ## Waiting on
 
@@ -70,7 +70,7 @@ Steps: each is independently testable and closes only with evidence.
 |---|---|---|---|---|---|---|---|---|---|---|
 | L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
 | L2 | Ticket worker | run_4b7a90b7-6a50-4887-9c53-d60a47f093af | E22-2, E22-3: build it in the live app after the mockup is approved | done (approved by Jordi 2026-11-09) | E22-A2 approved 2026-11-09 | [#1565](https://github.com/zenod-ai/zenod/pull/1565) merged fa68fce1, live 19:46:55Z | 5b2109dd | http://vps3.taild81fbb.ts.net:8921/e22-l2-live/ ([evidence](evidence/e22-l2-live-2026-11-09.md), [card](cards/L2.md)) | 2026-11-09 | followups: started L3 |
-| L3 | Ticket worker | run_3f905070-9db4-49f5-8a2f-4d213b70c3f9 — claimed 2026-11-09T20:42Z | tune the mode pick from your switches: follow-up of L2 | active | L2 | [#1568](https://github.com/zenod-ai/zenod/pull/1568) merged aa46d5ee | e7764ec0 | [evidence](evidence/e22-l3-2026-11-09.md) | 2026-11-09 | monitoring: 0 switches, under the 15 needed; next check 2026-11-12T21:00Z: run `scripts/e22-mode-switches.mjs count` on the proxy log; at 15+ read the switches file (needs read access to that one file, an ask raised only then), run `tune`, ship with 71/72 and 128/141 held |
+| L3 | Ticket worker | run_3f905070-9db4-49f5-8a2f-4d213b70c3f9 — claimed 2026-11-09T20:42Z | tune the mode pick from your switches: follow-up of L2 | active | L2 | [#1568](https://github.com/zenod-ai/zenod/pull/1568) merged aa46d5ee, live 21:52Z | e7764ec0 | [evidence](evidence/e22-l3-2026-11-09.md) | 2026-11-09 | monitoring: 0 switches, under the 15 needed; next check 2026-11-12T21:00Z: run `scripts/e22-mode-switches.mjs count` on the proxy log; at 15+ read the switches file (needs read access to that one file, an ask raised only then), run `tune`, ship with 71/72 and 128/141 held |
 
 ## Decisions
 
