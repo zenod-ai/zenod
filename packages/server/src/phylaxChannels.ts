@@ -399,6 +399,17 @@ function safeDownstreamOrigin(route: PhylaxTenantRoute): string {
   }
 }
 
+/**
+ * The channel link is not up yet (ZAL-A16). Nothing reached the provider, so a
+ * terminal receipt keeps no claim and is sent again once the link opens.
+ */
+export class PhylaxChannelNotConnectedError extends Error {
+  constructor(readonly channel: PhylaxPortedChannel) {
+    super(`${channel} is not connected`);
+    this.name = "PhylaxChannelNotConnectedError";
+  }
+}
+
 export class PhylaxChannelError extends Error {
   constructor(
     readonly code: "unmatched_sender" | "invalid_input" | "downstream_error" | "delivery_error",
@@ -1224,23 +1235,48 @@ export class PhylaxChannelsOrgan {
     );
   }
 
-  async resumePendingCaptures(): Promise<void> {
+  /** Returns how many undelivered terminal receipts it started sending. */
+  async resumePendingCaptures(): Promise<number> {
     await this.reconcileTerminalReceiptDeliveries();
+    let receipts = 0;
     for (const job of this.captureJournal.unindexedTerminalReceipts()) {
-      if (job.deliveredAt === null && job.receiptText) this.startTerminalReceiptDelivery(job);
+      if (job.deliveredAt === null && job.receiptText && this.startTerminalReceiptDelivery(job)) receipts += 1;
     }
     for (const job of this.captureJournal.pending()) {
       this.startBackgroundPoll(job);
     }
+    return receipts;
   }
 
-  private startTerminalReceiptDelivery(job: PhylaxCaptureJob): void {
+  private startTerminalReceiptDelivery(job: PhylaxCaptureJob): boolean {
     const key = `${job.tenantId}\0${job.channel}\0${job.providerMessageId}`;
-    if (this.backgroundPolls.has(key)) return;
+    if (this.backgroundPolls.has(key)) return false;
     const delivery = this.deliverTerminalReceipt(job, job.receiptText ?? "")
-      .catch((error) => console.error(`[phylax] terminal receipt ${job.providerMessageId} failed:`, error))
+      .then((sent) => {
+        if (sent) {
+          console.log(JSON.stringify({
+            event: "terminal_receipt.sent",
+            channel: job.channel,
+            provider_message_id: job.providerMessageId,
+            via: "receipt_retry",
+          }));
+        }
+      })
+      .catch((error) => {
+        if (error instanceof PhylaxChannelNotConnectedError) {
+          console.log(JSON.stringify({
+            event: "terminal_receipt.deferred",
+            reason: "channel_not_connected",
+            channel: job.channel,
+            provider_message_id: job.providerMessageId,
+          }));
+          return;
+        }
+        console.error(`[phylax] terminal receipt ${job.providerMessageId} failed:`, error);
+      })
       .finally(() => this.backgroundPolls.delete(key));
     this.backgroundPolls.set(key, delivery);
+    return true;
   }
 
   private async reconcileTerminalReceiptDeliveries(): Promise<void> {
@@ -1440,19 +1476,30 @@ export class PhylaxChannelsOrgan {
         if (!completed || !completed.receipt) return;
         await this.deliverTerminalReceipt(job, completed.receipt.text);
       } catch (error) {
+        if (error instanceof PhylaxChannelNotConnectedError) {
+          // ZAL-A16: the receipt waits, unclaimed, for the link to reopen.
+          console.log(JSON.stringify({
+            event: "terminal_receipt.deferred",
+            reason: "channel_not_connected",
+            channel: job.channel,
+            provider_message_id: job.providerMessageId,
+          }));
+          return;
+        }
         console.error(`[phylax] capture poll ${job.jobId} failed:`, error);
       }
     })().finally(() => this.backgroundPolls.delete(key));
     this.backgroundPolls.set(key, polling);
   }
 
-  private async deliverTerminalReceipt(job: PhylaxCaptureJob, text: string): Promise<void> {
+  private async deliverTerminalReceipt(job: PhylaxCaptureJob, text: string): Promise<boolean> {
     const current = this.captureJournal.get(job.tenantId, job.channel, job.providerMessageId);
-    if (!current || current.deliveryCompletedAt !== null || current.deliveredAt !== null || !this.terminalReceiptDelivery) return;
-    // Claim before the provider boundary. A deterministic allowance pause is
-    // known to occur before any provider call and can therefore release the
-    // claim; every other error remains ambiguous and attempt-once.
-    if (!this.captureJournal.claimDelivery(job)) return;
+    if (!current || current.deliveryCompletedAt !== null || current.deliveredAt !== null || !this.terminalReceiptDelivery) return false;
+    // Claim before the provider boundary. A deterministic allowance pause or a
+    // link that is not up yet are known to occur before any provider call and
+    // can therefore release the claim; every other error remains ambiguous and
+    // attempt-once.
+    if (!this.captureJournal.claimDelivery(job)) return false;
     try {
       const delivery = await this.terminalReceiptDelivery(
         job.channel,
@@ -1468,9 +1515,12 @@ export class PhylaxChannelsOrgan {
         delivery.sentMessageId,
       );
     } catch (error) {
-      if (error instanceof PhylaxUsagePausedError) this.captureJournal.releaseDeliveryClaim(job);
+      if (error instanceof PhylaxUsagePausedError || error instanceof PhylaxChannelNotConnectedError) {
+        this.captureJournal.releaseDeliveryClaim(job);
+      }
       throw error;
     }
+    return true;
   }
 
   private async reportDownstreamCredentialStatus(

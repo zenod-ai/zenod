@@ -15,6 +15,7 @@ import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { TelegramGateway } from "./telegramGateway.js";
 import {
   PhylaxChannelError,
+  PhylaxChannelNotConnectedError,
   PhylaxChannelsOrgan,
   phylaxWhatsAppPaths,
   type PhylaxDeliveryReceipt,
@@ -387,6 +388,7 @@ export class PhylaxPortedRuntime {
       },
       beginPortedDeliveryUsage: adapters.beginDeliveryUsage,
       completePortedDeliveryUsage: adapters.completeDeliveryUsage,
+      onConnected: () => this.resumeReceiptsAfterReconnect(),
       portedInboundHandler: async ({ event, text, media, transcription, timing, progress }) => {
         const verificationReply = await adapters.verifyInbound?.({
           channel: "whatsapp",
@@ -686,6 +688,11 @@ export class PhylaxPortedRuntime {
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
     });
     this.organ.setTerminalReceiptDelivery(async (channel, recipient, text, captureProviderMessageId, tenantId) => {
+      // ZAL-A16: a receipt sent before the link opens would fail with
+      // "Connection Closed" and never be retried. Hold it until reconnect.
+      if (channel === "whatsapp" && !this.whatsapp.isConnected()) {
+        throw new PhylaxChannelNotConnectedError("whatsapp");
+      }
       const delivery = channel === "whatsapp"
         ? await this.whatsapp.sendText(recipient, text, captureProviderMessageId, tenantId)
         : await this.telegram.sendText(recipient, text, tenantId, captureProviderMessageId);
@@ -999,6 +1006,13 @@ export class PhylaxPortedRuntime {
       }
     }, this.captureRetryTickMs);
     this.captureRetryTimer.unref();
+  }
+
+  /** ZAL-A16: send the "Saved" receipts that were held while WhatsApp was down. */
+  private resumeReceiptsAfterReconnect(): void {
+    void this.organ.resumePendingCaptures().then((receipts) => {
+      console.log(JSON.stringify({ event: "terminal_receipt.retry_after_reconnect", channel: "whatsapp", receipts }));
+    }).catch((error) => console.error("[phylax] receipt retry after reconnect failed:", error));
   }
 
   wakeAllowanceWork(): void {

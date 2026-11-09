@@ -690,6 +690,8 @@ export class WhatsAppGateway {
       portedReplyIntentScope?: (
         inboundProviderMessageId: string,
       ) => { tenantId: string; receiptEligible: boolean } | null;
+      /** Called each time the WhatsApp link opens, after its own outbound recovery (ZAL-A16). */
+      onConnected?: () => void;
       beginPortedDeliveryUsage?: (input: {
         tenantId: string;
         providerMessageId: string;
@@ -1279,6 +1281,11 @@ export class WhatsAppGateway {
   }
 
   /** Ported provider send primitive used by Phylax's tenant-scoped MCP face. */
+  /** True only once the link has opened; a socket that is still connecting cannot send (ZAL-A16). */
+  isConnected(): boolean {
+    return this.socket !== null && this.state === "connected";
+  }
+
   async sendText(
     recipient: string,
     text: string,
@@ -1357,7 +1364,10 @@ export class WhatsAppGateway {
       return sentMessageId;
     }
     const socket = this.socket;
-    if (!socket) return null;
+    // ZAL-A16: before the link opens a send fails with "Connection Closed" and
+    // tears down the socket that is still connecting. Leave the intent pending;
+    // the open handler recovers it.
+    if (!socket || !this.isConnected()) return null;
     try {
       const delivery = await this.sendOutboundIntent(socket, intent);
       this.options.store.completeOutboundIntent(intent, delivery);
@@ -1383,6 +1393,10 @@ export class WhatsAppGateway {
   ): Promise<{ sentMessageId: string; raw?: unknown }> {
     const existing = this.outboundIntentSends.get(intent.intentId);
     if (existing) return existing;
+    // ZAL-A16: the open handler and the receipt retry after reconnect can
+    // both pick up one pending intent; the second must not send it again.
+    const alreadySent = this.options.store.sentOutboundIntentId(intent.intentId);
+    if (alreadySent) return Promise.resolve({ sentMessageId: alreadySent });
     const pending = (async () => {
       const usageClaim = intent.tenantId
         ? this.options.beginPortedDeliveryUsage?.({
@@ -1431,7 +1445,19 @@ export class WhatsAppGateway {
         }
         throw error;
       }
-    })().finally(() => this.outboundIntentSends.delete(intent.intentId));
+    })().then(
+      (delivery) => {
+        // ZAL-A16: callers mark the intent sent synchronously right after this
+        // promise settles; keep it shared until then so a concurrent recovery
+        // path reuses this send instead of sending the same receipt again.
+        setImmediate(() => this.outboundIntentSends.delete(intent.intentId));
+        return delivery;
+      },
+      (error: unknown) => {
+        this.outboundIntentSends.delete(intent.intentId);
+        throw error;
+      },
+    );
     this.outboundIntentSends.set(intent.intentId, pending);
     return pending;
   }
@@ -1522,6 +1548,9 @@ export class WhatsAppGateway {
         void this.trackSocketWork(this.recoverDurableOutbound(socket)).catch((error: unknown) => {
           this.lastError = `WhatsApp media recovery failed: ${error instanceof Error ? error.message : String(error)}`;
           console.error("[whatsapp] media recovery failed:", error);
+        }).finally(() => {
+          // ZAL-A16: receipts held back while the link was down go out now.
+          if (this.socket === socket && this.state === "connected") this.options.onConnected?.();
         });
       }
 
@@ -1610,6 +1639,12 @@ export class WhatsAppGateway {
           "recovery_sent",
         );
         this.options.recordPortedReplyDelivery?.(intent.sourceMessageId, delivery.sentMessageId);
+        console.log(JSON.stringify({
+          event: "terminal_receipt.sent",
+          channel: "whatsapp",
+          provider_message_id: intent.sourceMessageId,
+          via: "reconnect_recovery",
+        }));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.options.store.recordOutboundIntentFailure(intent, message);

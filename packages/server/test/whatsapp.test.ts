@@ -1116,6 +1116,7 @@ describe("WhatsAppGateway", () => {
     await expect(firstGateway.handleEvent(event)).rejects.toThrow();
 
     const restartedStore = new WhatsAppStore(storePath);
+    let openRestarted: ((update: Record<string, unknown>) => void) | undefined;
     const restartedGateway = new WhatsAppGateway({
       dataDir: join(dir, "session-restarted"),
       settings,
@@ -1123,7 +1124,11 @@ describe("WhatsAppGateway", () => {
       getEngine: async () => fakeEngine([]),
       portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
       socketFactory: async () => ({
-        ev: { on() {} },
+        ev: {
+          on(eventName, listener) {
+            if (eventName === "connection.update") openRestarted = listener as (update: Record<string, unknown>) => void;
+          },
+        },
         user: { id: "34999999999@s.whatsapp.net" },
         async sendMessage(_jid, _content, options) {
           const id = options?.messageId ?? "";
@@ -1135,6 +1140,11 @@ describe("WhatsAppGateway", () => {
     });
     try {
       await restartedGateway.pair();
+      // ZAL-A16: nothing is sent on a socket that has not opened yet.
+      await expect(restartedGateway.recoverPortedReceipt("alpha", event.messageId)).resolves.toBeNull();
+      expect(attempts).toHaveLength(1);
+      openRestarted?.({ connection: "open" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
       const recovered = await restartedGateway.recoverPortedReceipt(
         "alpha",
         event.messageId,
@@ -1218,6 +1228,7 @@ describe("WhatsAppGateway", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
       await gateway.handleEvent(event);
       expect(socket.sent.map((message) => message.text)).toEqual([
         expect.stringContaining("message and voice allowance on your plan"),
