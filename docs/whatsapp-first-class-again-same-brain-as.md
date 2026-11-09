@@ -14,7 +14,7 @@ Integration policy: main-direct
 
 Review the recent WhatsApp exchange: since the graph, chat and voice changes WhatsApp went unattended. WhatsApp behaves like the cloud chat: decides new memory vs question vs task, answers responsively and fitly; proven on real messages.
 
-Goal sentence: WhatsApp answers with the same brain as the cloud chat: it saves, answers or takes a job as the message needs.
+Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers or takes a job as each message needs.
 
 ## Serves
 
