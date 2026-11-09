@@ -14,11 +14,11 @@ Fill in per person: `{NAME}` (Reddit handle or first name), `{CODE}` (their own 
 >
 > The code gives you a month free, and I'll keep extending it month by month while you're using it and telling me how it goes. I'm never going to charge you for this.
 >
-> Once you're in, pick where your notes live (Google Drive or GitHub) and link your WhatsApp from the account page. Then just send it voice notes or texts like you would to yourself, and it files them. If you get stuck anywhere, tell me and I'll sort it.
+> Once you're in, pick where your notes live (Google Drive or GitHub). Then open Settings, then WhatsApp & Telegram, type your number, and send the short code it shows you to the Zenod number on WhatsApp. After that just send it voice notes or texts like you would to yourself, and it files them and replies Saved. If you get stuck anywhere, tell me and I'll sort it.
 >
 > For feedback, just reply here, anything goes: what broke, what felt weird, what you'd want it to do. Even one line helps. The code is only for you and works once, and if you don't use it in the next two weeks it expires, so tell me and I'll send a fresh one.
 
-About 190 words. Reddit chat has no length limit worth worrying about; keep it to one message.
+About 210 words. (E23-U1, 2026-11-09: the WhatsApp step now names where it lives in the app since the 9 Nov layout, Settings › WhatsApp & Telegram.) Reddit chat has no length limit worth worrying about; keep it to one message.
 
 ## Notes for T9 / T6
 

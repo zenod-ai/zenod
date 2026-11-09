@@ -375,10 +375,13 @@ def components(d: dict) -> list[dict]:
 
     # 10 tester watch
     tw = v.get("testers") or {}
-    col = "green" if tw and not tw.get("alerts") and not tw.get("problems") else ("amber" if tw else "red")
+    # A tester alert (renewal due, subscription past_due, cap near, failed captures) needs an agent today: red, so
+    # it reaches the HQ alert thread (E23-U1). Read problems alone stay amber.
+    col = "red" if not tw or tw.get("alerts") else ("amber" if tw.get("problems") else "green")
     row(id="tester_watch", n="10", name="Tester watch", where="VPS1 · /usr/local/bin/tester-watch, read-only",
         status=col,
-        problem=None if col == "green" else (f"{tw.get('alerts')} alerts, {tw.get('problems')} read problems" if tw
+        problem=None if col == "green" else (("; ".join(tw.get("alertLines") or [])
+                                              or f"{tw.get('alerts')} alerts, {tw.get('problems')} read problems") if tw
                                              else "tester-watch did not answer"),
         signal=(f"{tw.get('count')} tester codes issued, {tw.get('signedUp')} signed up; {tw.get('alerts')} alerts, "
                 f"{tw.get('problems')} read problems") if tw else "tester-watch did not answer",

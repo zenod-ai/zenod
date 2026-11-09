@@ -189,6 +189,15 @@ class StatusRules(unittest.TestCase):
         self.assertEqual(c["status"], "red")
         self.assertIn("saves failing since 2026-11-03 10:50:00 UTC", c["problem"])
 
+    def test_tester_alert_is_red_with_its_line_read_problem_amber(self):
+        d = raw()
+        d["vps1"]["testers"].update(alerts=1, alertLines=["t1…: renews in 3.0 d with next invoice 9.00 EUR: apply the month extension"])
+        c = next(x for x in A.components(d) if x["id"] == "tester_watch")
+        self.assertEqual(c["status"], "red")
+        self.assertIn("apply the month extension", c["problem"])
+        d["vps1"]["testers"].update(alerts=0, alertLines=[], problems=1)
+        self.assertEqual(status(d)["tester_watch"], "amber")
+
     def test_no_message_text_or_secrets_fields(self):
         doc, _ = A.aggregate(raw(), A.load_state("/nonexistent"))
         blob = json.dumps(doc["components"])

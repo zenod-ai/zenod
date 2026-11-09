@@ -530,10 +530,21 @@ def remote() -> dict:
             "noticeFailures24h": sum((a.get("errors") or {}).get("notice_failures_window") or 0 for a in accts),
             "bindings": bindings, "alerts": len(tw.get("alerts") or []), "problems": len(tw.get("problems") or []),
         }
-        tl = json.loads(sh(sudo + ["/usr/local/bin/tester-watch", "--json", "--redact", "--no-stripe"], timeout=120))
+        # The testers' own list reads Stripe at most once an hour (E23-U1): renewal due, past_due and a failed
+        # Stripe read only show with Stripe, so they are kept from the last Stripe read in between.
+        st_at = parse_ts(cache.get("testerStripeAt"))
+        with_stripe = st_at is None or st_at < t_now - dt.timedelta(minutes=55)
+        tl = json.loads(sh(sudo + ["/usr/local/bin/tester-watch", "--json", "--redact"]
+                           + ([] if with_stripe else ["--no-stripe"]), timeout=120))
+        t_alerts = list(tl.get("alerts") or [])
+        if with_stripe:
+            cache["testerStripeAt"], cache["testerStripeAlerts"] = iso(t_now), t_alerts
+        else:
+            t_alerts += [x for x in cache.get("testerStripeAlerts") or [] if x not in t_alerts]
         out["testers"] = {"count": len(tl.get("testers") or []),
                           "signedUp": sum(1 for x in tl.get("testers") or [] if x.get("signup") != "not signed up"),
-                          "alerts": len(tl.get("alerts") or []), "problems": len(tl.get("problems") or [])}
+                          "alerts": len(t_alerts), "alertLines": [x[:160] for x in t_alerts[:5]],
+                          "problems": len(tl.get("problems") or []), "stripeReadAt": cache.get("testerStripeAt")}
     except Exception as e:
         out["accounts"] = {"error": type(e).__name__}
         out["testers"] = None

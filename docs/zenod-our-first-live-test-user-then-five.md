@@ -29,16 +29,16 @@ Goal sentence: One real test user on Zenod and stable as soon as possible, then 
 
 ## Current State
 
-Owner: unassigned
-Status: ready
-Last attempted: 2026-11-10 planned from Jordi's voice note vn_bd75972d; U1 dispatched
-Result: created, not started
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Owner: Delivery manager (zenod)
+Status: active
+Last attempted: 2026-11-09 23:45Z U1 walked the new-user path on production and listed every blocker on one page; 3 fixed, ask E23-A1 proposed
+Result: 11 blockers, 3 fixed today (dead sign-in link restarted, tester renewal alerts reach HQ, invite text), 3 need Jordi, 1 needs infra-vps, 4 close at the first sign-up
+Evidence: [e23-u1](evidence/e23-u1-2026-11-09.md), page http://vps3.taild81fbb.ts.net:8921/e23-u1/
+Waiting on: Jordi, E23-A1 (proposed by U1, not yet posted): invite one person he knows now as the first tester, without waiting for the rehearsal
 Approved work: none
-Next action: U1 walks the new-user path and lists every onboarding blocker
-Source revision: uncommitted scaffold
-Verified at: 2026-11-10
+Next action: post E23-A1; on a first name, agents issue that person's tester code and hand Jordi the filled invite (U2), then watch the sign-up live; the rehearsal sign-in (E7-A15, fresh link) runs in parallel if Jordi signs in
+Source revision: main (see git log)
+Verified at: 2026-11-09T23:45Z (cloud health ok aa46d5e, Phylax connected, readiness ready=true, tester-watch no alerts)
 
 ## Non-Goals
 
@@ -51,9 +51,10 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| U1 | Ticket worker | run_b87fdf63-fc99-4576-88df-9f871a385785 — claimed 2026-11-09T23:23Z, lease until 2026-11-10T01:23Z | E23-1: walk the whole new-user path on production as a stranger would and list every onboarding blocker on one page, with owner and state; fix every blocker agents can fix | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
-| U2 | Ticket worker | unassigned | E23-2: pick and onboard the first test user from the applications, then watch the first 7 days | draft | U1 | none | main | none | 2026-11-10 | after U1; picking and inviting a person is Jordi's call (ask) |
+| U1 | Ticket worker | run_b87fdf63-fc99-4576-88df-9f871a385785 | E23-1: walk the whole new-user path on production as a stranger would and list every onboarding blocker on one page, with owner and state; fix every blocker agents can fix | done (fed E23-A1) | none | main-direct (docs/health, docs/epic7, evidence) | main | [e23-u1](evidence/e23-u1-2026-11-09.md), [page](http://vps3.taild81fbb.ts.net:8921/e23-u1/): 11 blockers, 3 fixed today, 3 need Jordi, 1 infra-vps, 4 at first sign-up; first run of a brand-new account checked locally on main (plan, vault choice, empty chat, no errors) | 2026-11-09T23:45Z | followups: started U4 (tester renewal alerts); park in-app nudge to link WhatsApp after the vault — the invite covers it; park /buy before sign-in shows raw JSON — no public link goes there; confirm: no — the page feeds the ask E23-A1 |
+| U2 | Ticket worker | unassigned | E23-2: pick and onboard the first test user from the applications, then watch the first 7 days | draft | U1 | none | main | none | 2026-11-10 | after U1: on E23-A1 (Jordi names one person), issue their code and hand him the filled invite, then watch 7 days |
 | U3 | Ticket worker | unassigned | E23-3, E23-4: five, then ten testers | draft | U2 | none | main | none | 2026-11-10 | after U2 |
+| U4 | Ticket worker | run_b87fdf63-fc99-4576-88df-9f871a385785 | Tester renewal due, past_due and Stripe read alerts reach the HQ alert thread (health row 10 read testers without Stripe) | done (no confirm: plumbing on our own monitoring, nothing new to open) | U1 | main-direct (docs/health/s1-live) | main | probe reads Stripe at most hourly, keeps those alerts between reads; a tester alert turns row 10 red with its line; installed on VPS3, first Stripe read 2026-11-09T23:36:59Z, row green; test_aggregate 37 OK | 2026-11-09T23:37Z | followups: none |
 
 ## Decisions
 
