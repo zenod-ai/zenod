@@ -6,7 +6,8 @@ import { parseNote } from "../vault/frontmatter.js";
 import { CITATION_RE } from "../vault/pages.js";
 import { isVoiceCapture } from "../vault/recentIntent.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
-import { anchorNode, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf } from "./treePlacement.js";
+import { anchorNode, chooseTreeNode, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type NodeChoice } from "./treePlacement.js";
+import type { TreeIndex } from "../vault/tree.js";
 
 /**
  * E12-S20: every voice note linked to the topics it talks about. S3c round 2 found 21 of the
@@ -53,6 +54,8 @@ export interface NoteLinksReport {
 }
 
 const EXCERPT_CHARS = 700;
+/** The organiser's placeholder names for words it did not split ("Unassigned source content", "Unclassified segment 3"): no title. */
+const GENERIC_TOPIC_RE = /^(?:unassigned source content|unclassified segment \d+)$/i;
 /** Ingest lines of a voice note (file name, artifact, transcriber), not the person's words. */
 const INGEST_LINE_RE = /^(?:voice note "|raw artifact|original:|media type:|source:|source timestamp:|transcribed by\b|extraction artifact:|user context:)/i;
 
@@ -187,12 +190,15 @@ export function unwrittenPoints(content: string, receipt: ParsedReceipt, cited: 
   for (const point of receipt.points) {
     if (point.disposition === "evidence_only" || point.status === "filed") continue;
     if (point.filed.some((page) => cited.has(page))) continue;
-    const text = point.quotes.length ? point.quotes.join("\n\n")
+    const raw = point.quotes.length ? point.quotes.join("\n\n")
       : point.spans.map((span) => content.slice(span.start, span.end)).filter((part) => part.trim()).join("\n\n");
+    // A span over the note's head carries its ingest lines (file name, artifact URL): only the person's words are a point.
+    const text = spokenText(raw).replace(/\n{3,}/g, "\n\n");
     if (!text.trim()) continue;
     const reason = point.reason ?? point.status ?? "not written";
     // A page the reconciler rejected as another subject is no anchor (the same rule as live filing).
-    out.push({ topic: point.topic || null, text: text.trim(), anchors: REJECTED_FOR_PAGE_RE.test(reason) ? [] : point.pages, reason });
+    const topic = point.topic && !GENERIC_TOPIC_RE.test(point.topic) ? point.topic : null;
+    out.push({ topic, text: text.trim(), anchors: REJECTED_FOR_PAGE_RE.test(reason) ? [] : point.pages, reason });
   }
   return out;
 }
@@ -216,6 +222,10 @@ export async function applyNoteLinks(vaultPath: string, report: NoteLinksReport,
     for (const point of note.points) {
       const index = await buildTreeIndex(vaultPath);
       const anchored = anchorNode(index, point.anchors) !== null;
+      // Points of one note whose chosen page never made it into the tree (a new subject) stay together: matched on all their words.
+      const group = point.anchors[0] ? note.points.filter((other) => other.anchors[0] === point.anchors[0]) : [point];
+      const fallback = anchored ? null
+        : await noteBranch(vaultPath, index, group.map((other) => `${other.topic ?? ""}\n${other.text}`).join("\n"), note.citedBy);
       let title = point.topic;
       if (!title) {
         const words = wordSet(point.text);
@@ -225,10 +235,30 @@ export async function applyNoteLinks(vaultPath: string, report: NoteLinksReport,
       const leaf = await writeProvisionalLeaf(vaultPath, index, {
         title, content: point.text, evidenceRef: note.evidenceRef,
         reason: `linked when its filing was repaired (${point.reason})`, today,
-      }, writes, { anchors: point.anchors, rootsOnly: true });
+      }, writes, { anchors: point.anchors, rootsOnly: true, fallback });
       if (!leaf) continue;
       out.push({ evidenceRef: note.evidenceRef, topic: point.topic, leaf: leaf.path, parent: leaf.parent, anchored });
     }
   }
   return out;
+}
+
+/**
+ * E12-S23: the branch a point with no subject page belongs on. A half-filed note already sits on
+ * some branches (its other points were written there), and its dropped points are mostly about the
+ * same things: the best word match among those branches, unless a branch elsewhere matches clearly
+ * better (at least twice the score and four shared words' weight: one or two common words decide nothing). Null (word overlap over every root) when the note sits on no branch or none matches.
+ */
+async function noteBranch(vaultPath: string, index: TreeIndex, text: string, citedBy: readonly string[]): Promise<NodeChoice | null> {
+  const roots = new Set<string>();
+  for (const page of citedBy) {
+    const lineage = index.fields.has(page) ? index.lineage(page) : null;
+    if (lineage?.ok) roots.add(lineage.steps[0]!.path);
+  }
+  if (!roots.size) return null;
+  const others = new Set([...index.fields.keys()].filter((path) => index.rootsByPath.has(path.toLowerCase()) && !roots.has(path)));
+  const own = await chooseTreeNode(vaultPath, index, text, { rootsOnly: true, exclude: others });
+  if (!own || own.score <= 0) return null;
+  const any = await chooseTreeNode(vaultPath, index, text, { rootsOnly: true });
+  return any && any.score >= 2 * own.score && any.score >= 4 ? any : own;
 }

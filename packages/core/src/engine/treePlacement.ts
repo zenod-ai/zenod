@@ -225,12 +225,41 @@ export const REJECTED_FOR_PAGE_RE = /reconciliation_(?:needs_clarification|incom
 export function anchorNode(index: TreeIndex, anchors: readonly string[]): NodeChoice | null {
   for (const raw of anchors) {
     const path = raw.endsWith(".md") ? raw : `${raw}.md`;
-    if (!index.fields.has(path)) continue;
-    const lineage = index.lineage(path);
-    if (!lineage.ok) continue;
-    const above = lineage.steps.length > 1 ? lineage.steps.slice(0, -1) : lineage.steps;
+    const found = movedPage(index, path);
+    if (!found) continue;
+    const lineage = index.lineage(found.path);
+    // The page itself is gone and `found` is the folder page that held it: the leaf hangs there.
+    const above = found.folder ? lineage.steps : lineage.steps.length > 1 ? lineage.steps.slice(0, -1) : lineage.steps;
     const branch = [...above].reverse().find(step => index.fields.has(step.path) && !index.fields.get(step.path)?.provisional);
     if (branch) return { path: branch.path, score: CONFIDENT_SCORE, weak: false };
+  }
+  return null;
+}
+
+/** Top-level vault folders: a page's folder names a subject only below these. */
+const VAULT_ROOT_FOLDERS = new Set(["Projects", "Areas", "Notes", "Resources", "Archive", "Inbox", "Log"]);
+
+/**
+ * E12-S23: where a page an old filing chose sits in today's tree. Filings from before the tree
+ * migration name pages that were moved since (`Projects/X/Page.md` now `Projects/Y/Page.md`) or
+ * folded away: the page by its own name first, as Obsidian resolves a link, then the page of the
+ * nearest folder that held it (`Projects/Idealista Data Relationship/Notas.md` → that project's page).
+ * A page now only in the Archive anchors nothing: the point is placed as if no page had been chosen.
+ */
+function movedPage(index: TreeIndex, path: string): { path: string; folder: boolean } | null {
+  const inTree = (candidate: string | null) => !!candidate && index.fields.has(candidate) && index.lineage(candidate).ok;
+  if (inTree(path)) return { path, folder: false };
+  const parts = path.replace(/\.md$/, "").split("/");
+  const byName = index.resolveRef(parts[parts.length - 1]!);
+  if (inTree(byName)) return { path: byName!, folder: false };
+  // A page the person retired to the Archive says nothing about where its subject lives now.
+  if (byName?.startsWith("Archive/")) return null;
+  for (let end = parts.length - 1; end > 0; end--) {
+    const folder = parts[end - 1]!;
+    if (end === 1 && VAULT_ROOT_FOLDERS.has(folder)) break;
+    for (const candidate of [`${parts.slice(0, end).join("/")}.md`, `${parts.slice(0, end).join("/")}/${folder}.md`, index.resolveRef(folder)]) {
+      if (inTree(candidate)) return { path: candidate!, folder: true };
+    }
   }
   return null;
 }
@@ -239,17 +268,17 @@ export function anchorNode(index: TreeIndex, anchors: readonly string[]): NodeCh
  * Rule 4: a capture that reached no page becomes a provisional leaf under the
  * closest node, quoting the capture and citing its Log entry. Returns the page path.
  * With `anchors` (E12-S20), the leaf hangs on the branch of the point's own subject page when one
- * is in the tree; word overlap picks the node only when none is.
+ * is in the tree; else on `fallback`, a node the caller chose (E12-S23); word overlap picks it only when neither is.
  */
 export async function writeProvisionalLeaf(
   vaultPath: string,
   index: TreeIndex,
   input: { content: string; evidenceRef: string; reason: string; today: string; title?: string },
   writes: TrackedWrites = new TrackedWrites(vaultPath),
-  options: { rootsOnly?: boolean; anchors?: readonly string[] } = {},
+  options: { rootsOnly?: boolean; anchors?: readonly string[]; fallback?: NodeChoice | null } = {},
 ): Promise<{ path: string; parent: string } | null> {
   const anchored = anchorNode(index, options.anchors ?? []);
-  const choice = anchored ?? await chooseTreeNode(vaultPath, index, input.title ? `${input.title}\n\n${input.content}` : input.content, options.rootsOnly ? { rootsOnly: true } : {});
+  const choice = anchored ?? options.fallback ?? await chooseTreeNode(vaultPath, index, input.title ? `${input.title}\n\n${input.content}` : input.content, options.rootsOnly ? { rootsOnly: true } : {});
   if (!choice) return null;
   const { date, anchor } = splitEvidenceRef(input.evidenceRef);
   const citation = `[[${date}#^${anchor}]]`;
@@ -279,7 +308,8 @@ export async function writeProvisionalLeaf(
       await writes.write(path, `${frontmatter}\n\n${body}`);
       return { path, parent: choice.path };
     }
-    if (existing.includes(citation)) return { path, parent: choice.path };
+    // The same note can hold two points under one name (E12-S23): the second is added, not dropped.
+    if (existing.includes(citation) && existing.includes(quoted.split("\n")[0]!)) return { path, parent: choice.path };
     const fields = index.fields.get(path);
     if (fields?.provisional) {
       await writes.write(path, `${existing}${existing.endsWith("\n") ? "\n" : "\n\n"}${block}`);
