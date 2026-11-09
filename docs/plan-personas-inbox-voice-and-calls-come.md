@@ -65,8 +65,8 @@ Steps: each is independently testable and closes only with evidence.
 | S6 | Ticket worker | unassigned | Call button: library hotline over OpenAI Realtime that asks Zenod's answer engine and passes jobs to the desk, cost capped (4–5 d; needs an OpenAI account for Zenod, asked when it starts) | done (no confirm: the same call button was built and is reviewed under S8) | S3 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | covered by S8 (built and live as S8) |
 | S7 | Ticket worker | unassigned | Price and limits for personas, calls and desk jobs (1 d) | draft | S4, S6 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S4, S6 |
 | S8 | Ticket worker | run_e6d8ab9e-2ebe-4e9d-9539-57a8a5207612 | the call button, which also passes spoken jobs and questions to the desk: follow-up of S3 | done (approved by Jordi 2026-11-09) | S3 | [#1542](https://github.com/zenod-ai/zenod/pull/1542) 806d1f6 (live) | main | [evidence](evidence/e14-s8-2026-11-08.md) · [page](http://vps3.taild81fbb.ts.net:8921/e14-s8/) · [card](cards/E14-S8.md) | 2026-11-08 | live; key and caps on the evidence page —; followups: started S10 |
-| S9 | Ticket worker | unassigned | Three starter personas tried on real notes: follow-up of S4 | ready | S4 | none | main | Jordi started it when closing S4 2026-11-09 | 2026-11-09 | worker |
-| S10 | Ticket worker | unassigned | price and limits for personas, calls and desk jobs: follow-up of S8 | ready | S8 | none | main | Jordi started it when closing S8 2026-11-09 | 2026-11-09 | worker |
+| S9 | Ticket worker | unassigned | Three starter personas tried on real notes: follow-up of S4 | blocked | E15-A6 (trying personas on real notes spends model calls on the near-empty account production uses) | none | main | Jordi started it when closing S4 2026-11-09 | 2026-11-09 | same as S5; dispatch as soon as E15-A6 adds credit or the OpenCode Go key |
+| S10 | Ticket worker | run_cb69a26b | price and limits for personas, calls and desk jobs: follow-up of S8 | active | S8 | none | main | Jordi started it when closing S8 2026-11-09 | 2026-11-09 | worker |
 
 ## Decisions
 
