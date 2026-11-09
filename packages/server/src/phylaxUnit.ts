@@ -86,6 +86,13 @@ import { mountStaticSurfaces } from "./staticSurfaces.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
+/**
+ * Notify-only credential profile: the holder can message the tenant's own
+ * verified channels (`notify`) and read their health, nothing else. Used by
+ * the agent_team console to send Jordi his alerts from the Zenod number.
+ */
+export const PHYLAX_NOTIFY_PROFILE = "phylax-notify-v1";
+export const PHYLAX_NOTIFY_TOOL_NAMES = ["notify", "channel_status"] as const;
 export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
 export const ZENOD_WHATSAPP_VERIFICATION_REPLY =
@@ -300,6 +307,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     toolProfiles: {
       [PHYLAX_MANAGEMENT_PROFILES[instance.commercialOwner]]:
         PHYLAX_MANAGEMENT_TOOL_NAMES,
+      [PHYLAX_NOTIFY_PROFILE]: PHYLAX_NOTIFY_TOOL_NAMES,
     },
     tenantAuth: { store: tenantStore },
     controlPlane: {
