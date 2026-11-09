@@ -229,6 +229,7 @@ export type {
   PeerTools,
   VaultReadTools,
 } from "./llm/types.js";
+export { AnswerCancelledError, answerCancelReason } from "./llm/types.js";
 export {
   JevClient,
   JevUnavailableError,

@@ -2,6 +2,7 @@ import { mergeMemoryEntries, searchMemoryEntryPage } from "./memoryEntryCatalog.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
+  AnswerCancelledError,
   ContextRefError,
   memoryEntrySummaries,
   type MemoryTreeIndex,
@@ -135,6 +136,16 @@ export interface BacklogIssueReader {
   commentIssue(input: { number: number; body: string }): Promise<ToolResponse>;
   listBacklog(input: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }): Promise<ToolResponse>;
 }
+/**
+ * E15-Q4: how long ask_brain may run before it stops and says so. Under the 60 s many MCP clients wait,
+ * so the honest stop arrives before the client gives up; ZENOD_ASK_BRAIN_TIMEOUT_MS overrides it.
+ */
+export const ASK_BRAIN_TIMEOUT_MS = 55_000;
+export function askBrainTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const value = Number(env.ZENOD_ASK_BRAIN_TIMEOUT_MS);
+  return Number.isFinite(value) && value >= 1_000 && value <= 600_000 ? value : ASK_BRAIN_TIMEOUT_MS;
+}
+
 /** Human-facing text for a finished task_brain job — mirrors the old reply. */
 function formatTaskingReply(result: TaskingReply): string {
   const actions =
@@ -1265,12 +1276,25 @@ export function buildMcpServer(
       inputSchema: ASK_BRAIN_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ question, contextRefs }) => {
+    async ({ question, contextRefs }, extra) => {
       const engine = await getEngine();
+      // E15-Q4: the answer stops when the caller hangs up (its own timeout) or at the host's time limit,
+      // so no model call keeps running, and billing, for an answer nobody will read.
+      const limitMs = askBrainTimeoutMs();
+      const cancel = new AbortController();
+      const timer = setTimeout(() => cancel.abort(new AnswerCancelledError("timeout")), limitMs);
+      const hangUp = () => cancel.abort(new AnswerCancelledError("caller"));
+      if (extra?.signal?.aborted) hangUp(); else extra?.signal?.addEventListener("abort", hangUp, { once: true });
       let answer;
       try {
-        answer = await engine.ask(question, { ...(contextRefs ? { contextRefs } : {}), entrySearch: input => searchEntryPage(engine, input) });
+        answer = await engine.ask(question, { ...(contextRefs ? { contextRefs } : {}), entrySearch: input => searchEntryPage(engine, input), signal: cancel.signal });
       } catch (error) {
+        if (error instanceof AnswerCancelledError) {
+          const text = error.reason === "timeout"
+            ? `No answer this time: I stopped after ${Math.round(limitMs / 1000)} seconds so the search would not keep running unseen. Try a narrower question, or search_memory to find the pages directly.`
+            : "No answer: the request was cancelled before the answer was ready, so I stopped looking.";
+          return { content: [{ type: "text", text }], structuredContent: { code: error.reason === "timeout" ? "ask_timeout" : "ask_cancelled", message: text }, isError: true };
+        }
         if (!(error instanceof ContextRefError)) throw error;
         return {
           content: [{ type: "text", text: error.message }],
@@ -1280,6 +1304,9 @@ export function buildMcpServer(
           },
           isError: true,
         };
+      } finally {
+        clearTimeout(timer);
+        extra?.signal?.removeEventListener("abort", hangUp);
       }
       const answerContent = {
         type: "answer_content" as const,

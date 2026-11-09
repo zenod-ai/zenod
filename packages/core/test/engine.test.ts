@@ -1563,6 +1563,31 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
   });
 
+  it("E15-Q4: starts the reconcile calls of a many-page note together, at most four at once, and files every page as before",async()=>{
+    const paths=["Projects/Alpha.md","Projects/Beta.md","Projects/Gamma.md","Projects/Delta.md","Projects/Epsilon.md","Projects/Zeta.md"];
+    for(const path of paths)await writeFile(join(repo.path,path),`# ${path.slice(9,-3)}\nEarlier notes.\n[[Index]]\n`);
+    await repo.commitAndPublish("seed six destinations");
+    const sentences=paths.map(path=>`The ${path.slice(9,-3)} plan moves to Friday.`);
+    const content=sentences.join(" ");
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Six plans",tags:[],pages:[],passageReviews:[{passageId:input.sourcePassages![0]!.id,status:"assigned" as const}],
+      topics:paths.map((path,i)=>({topic:path,summary:sentences[i]!,evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:sentences[i]!,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:path.slice(9,-3),action:"update" as const}]}))}));
+    let open=0,most=0;
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      open++;most=Math.max(most,open);
+      await new Promise(resolve=>setTimeout(resolve,150));
+      open--;
+      const candidate=request.addCandidates![0]!;
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[candidate.id],sourceQuote:"-",targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    });Object.assign(llm,{reconcile});
+    const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
+    expect(reconcile).toHaveBeenCalledTimes(6);
+    expect(most).toBeGreaterThan(1);expect(most).toBeLessThanOrEqual(4);
+    expect(result.filing).toBe("filed");
+    expect(result.topics!.map(topic=>topic.status)).toEqual(Array(6).fill("filed"));
+    for(const [i,path] of paths.entries())expect(await readFile(join(repo.path,path),"utf8")).toContain(sentences[i]);
+  });
+
   it("files a brand-new page without asking the reconciler to relate ideas to statements that do not exist",async()=>{
     const path="Notes/Observatory.md",sentence="The observatory opens on 8 September.";
     llm.classify=vi.fn(async()=>({confidence:.99,summary:"Observatory",tags:[],pages:[],topics:[{topic:"Observatory opening",summary:sentence,evidenceQuotes:[sentence],confidence:.99,disposition:"integrate_page" as const,pages:[{path,title:"Observatory",action:"create" as const}]}]}));

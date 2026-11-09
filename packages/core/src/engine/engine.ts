@@ -66,6 +66,7 @@ import { ASKED_NOTE_LIFT, MemoryIndex, MemoryIndexTenantError, type MemoryCloudR
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
+import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
@@ -406,6 +407,21 @@ const COMPOSE_RETRIES = 1;
 /** The `filed:` reason of an agent report kept off the person's pages (E12-S15). */
 const AGENT_REPORT_LOG_ONLY = "agent report, kept in the Log";
 const CLASSIFY_RETRIES = 1;
+/** E15-Q4: reconcile calls of one filing that may run at once (one per destination page). */
+const RECONCILE_CONCURRENCY = 4;
+
+/** Run at most `limit` of the given tasks at once. */
+function boundedConcurrency(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let running = 0;
+  const waiting: Array<() => void> = [];
+  return <T>(task: () => Promise<T>) => new Promise<T>((resolve, reject) => {
+    const start = () => {
+      running += 1;
+      task().then(resolve, reject).finally(() => { running -= 1; waiting.shift()?.(); });
+    };
+    if (running < limit) start(); else waiting.push(start);
+  });
+}
 export { LONG_MEMORY_SEGMENT_CHARS, segmentLongMemoryContent } from "./sourcePassages.js";
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
@@ -1809,6 +1825,72 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
     const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
     type PageGroup = { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] };
+    type GroupPlan = { currentContent: string | null; linkHints: string[]; sources?: Array<{id:string;start:number;end:number;text:string}>;
+      prepared?: ReturnType<typeof prepareReconciliation>; operations?: Promise<import("./reconciliation.js").ReconciliationOperation[]> };
+    /** Everything a page's filing reads before it writes: link hints and, with a reconciler, its bounded request. */
+    const planGroup = async (path: string, group: PageGroup, currentContent: string | null, sourceSpans: Array<{start:number;end:number}>, assignedEvidence: string): Promise<GroupPlan> => {
+      const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
+      if (!llm.reconcile) return { currentContent, linkHints };
+      const requiredType = MEANING_FOLDERS[path.split("/")[0] ?? ""]!;
+      // Each existing per-page reconciliation gets its own bounded packet;
+      // unrelated destinations must not consume this target's context budget.
+      const atomicContext = await branchContext(vaultPath, snapshot, group.outcomes.map(outcome => ({
+        topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
+      })));
+      if (currentContent !== null && !atomicContext.branches.some(branch => branch.path === path)) throw new Error("branch_context_unavailable");
+      // Adjacent ASR ideas can have overlapping complete context envelopes.
+      // Union host ranges before chunking so the source table stays coherent;
+      // immutable idea identity remains based on the original assignments.
+      const sourceRanges: Array<{start:number;end:number}> = [];
+      for (const span of sourceSpans) {
+        const previous=sourceRanges.at(-1);
+        if(previous && span.start<=previous.end) previous.end=Math.max(previous.end,span.end);
+        else sourceRanges.push({start:span.start,end:span.end});
+      }
+      const sources = sourceRanges.flatMap(span => {
+        const chunks: Array<{id:string;start:number;end:number;text:string}> = [];
+        for (let start = span.start; start < span.end;) {
+          let end = Math.min(span.end, start + 1600);
+          if (/^[\uDC00-\uDFFF]$/.test(content[end] ?? "")) end--;
+          chunks.push({id:`source:${start}:${end}`,start,end,text:content.slice(start,end)}); start=end;
+        }
+        return chunks;
+      });
+      const prepared = prepareReconciliation({path,raw:currentContent,sourceContent:content,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
+        addCandidates:[...addCandidates.values()].map(candidate=>({...candidate,ideaIds:candidate.ideaIds.filter(id=>group.outcomes.some(outcome=>outcome.ideaId===id))})).filter(candidate=>candidate.ideaIds.length>0),
+        completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
+        ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
+      return { currentContent, linkHints, sources, prepared };
+    };
+    /**
+     * E15-Q4: on a long note one reconcile call per page, one after another, took most of a 14-minute
+     * filing. Before any page is written, plan every page and start its reconcile call, at most
+     * RECONCILE_CONCURRENCY at a time; the pages are then filed one by one in the same order as before,
+     * each with its own call's answer. The calls and writes are the same; each page is planned on the
+     * memory as it was before this note, not after the note's earlier pages were written.
+     */
+    const plannedGroups = new Map<string, GroupPlan>();
+    const planAhead = async () => {
+      if (!llm.reconcile || groups.size < 2) return;
+      const limit = boundedConcurrency(RECONCILE_CONCURRENCY);
+      for (const [path, group] of groups) {
+        if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) continue;
+        const currentContent = await readFile(join(vaultPath, path), "utf8").catch(() => null);
+        if (currentContent === null) continue;
+        const sourceSpans = [...new Map(group.outcomes.flatMap((outcome) => outcome.sourceSpans).map((span) => [`${span.start}:${span.end}`, span])).values()].sort((a, b) => a.start - b.start);
+        try {
+          const plan = await planGroup(path, group, currentContent, sourceSpans, sourceSpans.map((span) => content.slice(span.start, span.end)).join("\n\n"));
+          if (plan.prepared?.request.ideas.length) {
+            const request = plan.prepared.request;
+            plan.operations = limit(() => llm.reconcile!(request));
+            plan.operations.catch(() => undefined); // its failure is reported when the page is filed
+          }
+          plannedGroups.set(path, plan);
+        } catch {
+          // The page plans again when it is filed and reports its own failure there.
+        }
+      }
+    };
     const fileGroup = async (path: string, group: PageGroup): Promise<void> => {
       if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) {
         for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "invalid_meaning_path"; }
@@ -1830,42 +1912,20 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const pageClassification: Classification = { tags: classification.tags,
           summary: group.outcomes.map((outcome) => outcome.topic).join("; "), pages: [group.page],
           confidence: Math.min(...group.outcomes.map((outcome) => outcome.confidence)) };
-        const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
+        // E15-Q4: a page planned before the loop (its reconcile call already running) is used as planned.
+        const planned = plannedGroups.get(path);
+        const plan = planned && planned.currentContent === currentContent ? planned
+          : await planGroup(path, group, currentContent, sourceSpans, assignedEvidence);
+        const linkHints = plan.linkHints;
         if (llm.reconcile) {
-          // Each existing per-page reconciliation gets its own bounded packet;
-          // unrelated destinations must not consume this target's context budget.
-          const atomicContext = await branchContext(vaultPath, snapshot, group.outcomes.map(outcome => ({
-            topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
-          })));
-          if (currentContent !== null && !atomicContext.branches.some(branch => branch.path === path)) throw new Error("branch_context_unavailable");
-          // Adjacent ASR ideas can have overlapping complete context envelopes.
-          // Union host ranges before chunking so the source table stays coherent;
-          // immutable idea identity remains based on the original assignments.
-          const sourceRanges: Array<{start:number;end:number}> = [];
-          for (const span of sourceSpans) {
-            const previous=sourceRanges.at(-1);
-            if(previous && span.start<=previous.end) previous.end=Math.max(previous.end,span.end);
-            else sourceRanges.push({start:span.start,end:span.end});
-          }
-          const sources = sourceRanges.flatMap(span => {
-            const chunks: Array<{id:string;start:number;end:number;text:string}> = [];
-            for (let start = span.start; start < span.end;) {
-              let end = Math.min(span.end, start + 1600);
-              if (/^[\uDC00-\uDFFF]$/.test(content[end] ?? "")) end--;
-              chunks.push({id:`source:${start}:${end}`,start,end,text:content.slice(start,end)}); start=end;
-            }
-            return chunks;
-          });
-          const prepared = prepareReconciliation({path,raw:currentContent,sourceContent:content,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
-            addCandidates:[...addCandidates.values()].map(candidate=>({...candidate,ideaIds:candidate.ideaIds.filter(id=>group.outcomes.some(outcome=>outcome.ideaId===id))})).filter(candidate=>candidate.ideaIds.length>0),
-            completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
-            ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
+          if (!plan.prepared || !plan.sources) throw new Error("reconciliation_unavailable");
+          const { sources, prepared } = plan;
           if(prepared.request.ideas.length)reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
           // A page that does not exist yet has nothing to reconcile against.
           // Asking the reconciler to relate ideas to an absent branch subject only
           // ever returns CLARIFY, which left every new-page filing pending forever.
           const operations = prepared.request.ideas.length
-            ? currentContent === null ? newPageAdditions(prepared) : await llm.reconcile(prepared.request)
+            ? currentContent === null ? newPageAdditions(prepared) : await (plan.operations ?? llm.reconcile(prepared.request))
             : [];
           const reconciled = await applyReconciliation(prepared,operations);
           for (const outcome of group.outcomes) {
@@ -1936,7 +1996,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         for (const outcome of group.outcomes) { outcome.filedPages = outcome.filedPages.filter(page => page !== path); outcome.status = "pending"; outcome.reason = error instanceof Error && /^(reconciliation_|branch_context_)/.test(error.message) ? error.message : "page_filing_failed"; }
       }
     };
+    await planAhead();
     for (const [path, group] of groups) await fileGroup(path, group);
+    plannedGroups.clear();
     // E12-S8 (S6 round 5, cause "rejected, then dropped"): a memory never ends only in
     // the filing receipt. A topic the reconciler rejected for its page is classified
     // again without that page and filed where it fits. Failing that, a topic the
@@ -2839,6 +2901,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         answerSupportScope: "memory_only",
         vaultBriefing: scopedBriefing.text + (pinnedSupports.length ? `\nPinned source support IDs: ${JSON.stringify(pinnedSupports)}` : ""),
         conversation: [],
+        ...(askOptions.signal ? { abortSignal: askOptions.signal } : {}),
         ...(pinnedBriefing
           ? {
               hostInstruction:
@@ -2846,16 +2909,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
             }
           : {}),
     };
+    // E15-Q4: a cancelled ask (caller hang-up or time limit) starts no further model call.
+    const stillWanted = () => { if (askOptions.signal?.aborted) throw new AnswerCancelledError(answerCancelReason(askOptions.signal)); };
+    stillWanted();
     let result = await llm.answer(answerInput, askTools);
     // Some providers ignore the forced first tool round and answer from the briefing
     // map alone; the host then refuses that unread prose. Retry once, search first.
     if (!pinnedBriefing && !session.toolAttempted()) {
+      stillWanted();
       result = await llm.answer({ ...answerInput, hostInstruction: ASK_NO_TOOL_RETRY_INSTRUCTION }, askTools);
     }
     // E9-3c: still nothing read. Zenod searches the question itself, reads the top
     // page and answers from that read, the way pinned evidence is answered.
     const hostRead = !pinnedBriefing && !session.sourceRead() ? await hostFallbackRead(question, askTools, tree) : null;
     if (hostRead) {
+      stillWanted();
       result = await llm.answer({
         ...answerInput,
         answerSupportRead: true,

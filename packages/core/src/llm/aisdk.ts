@@ -58,6 +58,7 @@ import {
   type TurnPlanOperation,
 } from "./turnPlan.js";
 import type { TurnPlanCompiler } from "./types.js";
+import { AnswerCancelledError, answerCancelReason } from "./types.js";
 
 export type Provider = "anthropic" | "openai" | "openrouter" | "groq" | "deepseek";
 
@@ -1331,6 +1332,14 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     driveTools?: DriveSourceTools,
     peerTools?: PeerTools,
   ): Promise<AnswerResult> {
+    if (input.abortSignal?.aborted) throw new AnswerCancelledError(answerCancelReason(input.abortSignal));
+    // E15-Q4: what finished steps used, so a cancelled loop still logs what it was billed.
+    const finished = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, steps: 0 };
+    const cancelled = (): AnswerCancelledError => {
+      if (finished.steps > 0) this.reportUsage("answer", this.askModelId, finished, undefined, { errorCode: "answer_cancelled" });
+      else this.reportUsage("answer", this.askModelId, undefined, undefined, { status: "failed", errorCode: "answer_cancelled" });
+      return new AnswerCancelledError(answerCancelReason(input.abortSignal));
+    };
     const cursors=new AnswerCursorAliases();
     const readPaths = new Set<string>();
     let supportRead = input.answerSupportRead === true;
@@ -1983,6 +1992,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         ...messages,
       ] as ModelMessage[],
       stopWhen: [stepCountIs(this.maxSteps), () => submittedAnswer !== undefined],
+      ...(input.abortSignal ? {
+        abortSignal: input.abortSignal,
+        onStepFinish: ({ usage }: { usage: { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined } }) => {
+          finished.steps += 1;
+          finished.inputTokens += usage.inputTokens ?? 0;
+          finished.outputTokens += usage.outputTokens ?? 0;
+          finished.cachedInputTokens += usage.cachedInputTokens ?? 0;
+        },
+      } : {}),
       // Some models omit the collision suffix from a long discovered MCP name.
       // Repair only that one exact, unique omission before any tool event or
       // execution. The selected tool's schema and host authorization still run.
@@ -2183,14 +2201,17 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // This is the authorization boundary; live token streaming is subordinate to
     // proving the complete connected-tool batch before any upstream side effect.
     const connectedBatchRequiresGenerate = connectedPeerToolNames.length > 0;
-    if ((input.onTextDelta || input.onToolEvent) && !connectedBatchRequiresGenerate) {
+    // E15-Q4: a cancellable answer streams, so a cancel closes the model's stream mid-answer.
+    if ((input.onTextDelta || input.onToolEvent || input.abortSignal) && !connectedBatchRequiresGenerate) {
       // Stream the full event chain so tool calls surface as live activity —
       // not just text. The loop still runs every tool to completion before the
       // stream ends, so the turn finishes only once the work is done.
       const result = streamText(config);
       let text = "";
       let reasoning = "";
+      try {
       for await (const part of result.fullStream) {
+        if (part.type === "abort") throw cancelled();
         if (part.type === "text-delta") {
           text += part.text;
           if (!input.answerSupportContract) input.onTextDelta?.(part.text);
@@ -2214,6 +2235,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           throw err instanceof Error ? err : new Error(extractErrorMessage(err));
         }
       }
+      } catch (error) {
+        if (error instanceof AnswerCancelledError) throw error;
+        if (input.abortSignal?.aborted) throw cancelled();
+        throw error;
+      }
+      if (input.abortSignal?.aborted) throw cancelled();
       this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata);
       if (!text.trim() && !submittedAnswer && !(input.answerSupportContract && supportRead)) {
         const response = await result.response;
@@ -2230,7 +2257,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       return answer;
     }
 
-    const result = await generateText({
+    let result;
+    try {
+    result = await generateText({
       ...config,
       ...(connectedBatchRequiresGenerate && input.onToolEvent ? {
         experimental_onToolCallStart: ({
@@ -2261,6 +2290,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         },
       } : {}),
     });
+    } catch (error) {
+      if (input.abortSignal?.aborted) throw cancelled();
+      throw error;
+    }
     this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
     let text = result.text;
     if (!text.trim() && !submittedAnswer && !(input.answerSupportContract && supportRead)) {

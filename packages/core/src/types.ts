@@ -167,6 +167,8 @@ export interface AskOptions {
   contextRefs?: string[];
   /** Host-only adapter: the same tenant-scoped, enriched catalog used by public search_memory. */
   entrySearch?: (input: import("./engine/entryPagination.js").EntrySearchInput) => Promise<import("./engine/entryPagination.js").EntrySearchResult>;
+  /** E15-Q4: cancels the ask (caller hang-up or time limit): no further model call starts, the one running stops. */
+  signal?: AbortSignal;
 }
 
 export class ContextRefError extends Error {

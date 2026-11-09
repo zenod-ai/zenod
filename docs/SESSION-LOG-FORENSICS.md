@@ -89,6 +89,14 @@ the whole multi-step loop and logs at the end), `classify` / `compose` /
 Output tokens are usually the cost driver on slow tiers: a `compose` of a few
 thousand output tokens on a free OpenRouter tier can take ~50 s.
 
+Labels (E15-Q4): every row also carries `app` (the process's `ZENOD_APP_LABEL`,
+default `zenod`; NULL on older rows) and `feature` (filing, chat, personas, desk,
+calls). `read_llm_timeline` prints each call as `app/feature operation`, and
+`GET /api/usage` adds `byLabel`, the spend per app/feature. An `answer` row with
+`error_code = answer_cancelled` is a memory question stopped by its caller or by
+`ask_brain`'s time limit (`ZENOD_ASK_BRAIN_TIMEOUT_MS`, default 55 s): `failed`
+when no step had finished, else `succeeded` with the tokens of the steps that did.
+
 ## Step 3 — confirm against stdout (best-effort)
 
 ```sh

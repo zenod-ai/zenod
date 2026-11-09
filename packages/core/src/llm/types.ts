@@ -207,6 +207,11 @@ export interface AnswerInput {
    */
   onToolEvent?: (event: ChatToolEvent) => void;
   /**
+   * E15-Q4: cancels the loop. The answer streams so a cancel stops the model mid-answer and no
+   * further step starts; the loop then throws AnswerCancelledError. Steps already finished stay billed.
+   */
+  abortSignal?: AbortSignal;
+  /**
    * If set, every peer-tool invocation (and its raw result string) is delivered
    * here. Engine uses this to capture peer tool results into the actions array
    * so the UUID returned by z2's async tools can be extracted for job polling.
@@ -388,4 +393,18 @@ export interface AnswerResult {
   text: string;
   /** Vault-relative paths the loop actually opened — provenance for citations. */
   readPaths: string[];
+}
+
+/** E15-Q4: an answer loop stopped by its caller (hang-up or the host's time limit) before it answered. */
+export class AnswerCancelledError extends Error {
+  readonly code = "answer_cancelled";
+  constructor(readonly reason: "timeout" | "caller" = "caller") {
+    super(reason === "timeout" ? "answer_cancelled: the answer ran past its time limit" : "answer_cancelled: the caller stopped waiting");
+    this.name = "AnswerCancelledError";
+  }
+}
+
+/** The cancel reason a caller put on an AbortSignal, else "caller". */
+export function answerCancelReason(signal: AbortSignal | undefined): "timeout" | "caller" {
+  return signal?.reason instanceof AnswerCancelledError ? signal.reason.reason : "caller";
 }

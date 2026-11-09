@@ -139,11 +139,15 @@ export interface UsageSummary {
   byModel: UsageBucket[];
   /** Spend per provider (real charge when reported, else estimate). */
   byProvider: UsageBucket[];
+  /** E15-Q4: spend per label, app and feature (real charge when reported, else estimate). */
+  byLabel: UsageLabelSpend[];
 }
 
 /** One recorded LLM call, as returned by `UsageStore.timeline`. */
 export interface UsageCall {
   ts: number;
+  /** E15-Q4: app/feature the call is billed to, e.g. zenod/filing. */
+  label: string;
   operation: string;
   provider: string;
   model: string;
@@ -191,10 +195,31 @@ function rowToBucket(row: AggRow): UsageBucket {
   };
 }
 
+/** E15-Q4: the label of the app whose calls this process logs, when ZENOD_APP_LABEL is unset. */
+export const DEFAULT_USAGE_APP = "zenod";
+/** The app label: ZENOD_APP_LABEL (lowercase letters, digits and dashes), else "zenod". */
+export function usageApp(env: NodeJS.ProcessEnv = process.env): string {
+  const value = env.ZENOD_APP_LABEL?.trim().toLowerCase() ?? "";
+  return /^[a-z0-9][a-z0-9-]{0,47}$/.test(value) ? value : DEFAULT_USAGE_APP;
+}
+
+/** Spend of one label (app/feature) in a window. */
+export interface UsageLabelSpend {
+  label: string;
+  app: string;
+  feature: string;
+  calls: number;
+  failedCalls: number;
+  spendUsd: number;
+}
+
 export class UsageStore {
   private readonly db: DatabaseSync;
+  /** E15-Q4: every call this store logs carries this app label. */
+  private readonly app: string;
 
-  constructor(path: string) {
+  constructor(path: string, options: { app?: string } = {}) {
+    this.app = options.app ?? usageApp();
     this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS llm_usage (
@@ -224,6 +249,10 @@ export class UsageStore {
     }
     if (!columns.some((column) => column.name === "generation_id")) {
       this.db.exec("ALTER TABLE llm_usage ADD COLUMN generation_id TEXT");
+    }
+    if (!columns.some((column) => column.name === "app")) {
+      // E15-Q4: which app made the call (one labelled key per app). Older rows stay NULL and read as "zenod".
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN app TEXT");
     }
     if (!columns.some((column) => column.name === "feature")) {
       // EPIC-14 S10: what the call was spent on (filing, chat, personas, desk, calls). Older rows stay
@@ -290,8 +319,8 @@ export class UsageStore {
     this.db
       .prepare(
         `INSERT INTO llm_usage
-           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id, feature)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id, feature, app)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         now,
@@ -308,7 +337,24 @@ export class UsageStore {
         report.providerCostUsd ?? null,
         report.generationId ?? null,
         feature ?? currentFeature() ?? featureForOperation(report.operation),
+        this.app,
       );
+  }
+
+  /**
+   * E15-Q4: spend per label, app and feature, since `since`: the gateway's charge when reported, else the
+   * estimate. Succeeded calls are the spend; failed calls are counted apart (a failed call can still bill).
+   */
+  spendByLabelSince(since: number): UsageLabelSpend[] {
+    const rows = this.db
+      .prepare(
+        `SELECT COALESCE(app, '${DEFAULT_USAGE_APP}') AS app, ${FEATURE_SQL} AS feature, COUNT(*) AS calls,
+                SUM(CASE WHEN status = 'succeeded' THEN 0 ELSE 1 END) AS failed,
+                COALESCE(SUM(CASE WHEN status = 'succeeded' THEN ${SPEND_SQL} ELSE 0 END), 0) AS spend
+         FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? GROUP BY 1, 2 ORDER BY spend DESC, app, feature`,
+      )
+      .all(since) as unknown as Array<{ app: string; feature: string; calls: number; failed: number; spend: number }>;
+    return rows.map((row) => ({ label: `${row.app}/${row.feature}`, app: row.app, feature: row.feature, calls: row.calls, failedCalls: row.failed, spendUsd: row.spend }));
   }
 
   /** Spend by feature since `since` (succeeded calls; the gateway's charge when reported, else the estimate). */
@@ -363,7 +409,7 @@ export class UsageStore {
     params.push(limit);
     const rows = this.db
       .prepare(
-        `SELECT ts, operation, provider, model, input_tokens, output_tokens,
+        `SELECT ts, COALESCE(app, '${DEFAULT_USAGE_APP}') || '/' || ${FEATURE_SQL} AS label, operation, provider, model, input_tokens, output_tokens,
                 cached_input_tokens, cache_creation_input_tokens, cost_usd, provider_cost_usd, status, error_code
          FROM llm_usage WHERE ${clauses.join(" AND ")}
          ORDER BY ts DESC, id DESC
@@ -371,6 +417,7 @@ export class UsageStore {
       )
       .all(...params) as unknown as Array<{
       ts: number;
+      label: string;
       operation: string;
       provider: string;
       model: string;
@@ -385,6 +432,7 @@ export class UsageStore {
     }>;
     return rows.map((row) => ({
       ts: row.ts,
+      label: row.label,
       operation: row.operation,
       provider: row.provider,
       model: row.model,
@@ -449,6 +497,8 @@ export class UsageStore {
       byModel: this.aggregate("model", since),
       // EPIC-14 S10 round 4: what each provider (openrouter, deepseek) cost, at its real charge when reported.
       byProvider: this.aggregate("provider", since, SPEND_SQL),
+      // E15-Q4: spend per label (app/feature).
+      byLabel: this.spendByLabelSince(since),
     };
   }
 
