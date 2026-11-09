@@ -195,3 +195,23 @@ it("fills only keys whose schema allows null, and picks the union branch by its 
   ] } } } };
   expect(fillMissingNulls({ items: [{ kind: "a" }, { kind: "b" }, { kind: "c" }] }, schema)).toEqual({ items: [{ kind: "a", x: null }, { kind: "b", z: null }, { kind: "c" }] });
 });
+
+it("turns DeepSeek's thinking off for streamed chat calls, so a persona's short answer is not spent on thinking (S5)", async () => {
+  const requests: any[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    requests.push(body);
+    const common = { id: "offline", created: 0, model: body.model, object: "chat.completion.chunk" };
+    const chunk = { ...common, choices: [{ index: 0, delta: { role: "assistant", content: "{\"loops\": []}" }, finish_reason: null }] };
+    const end = { ...common, choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
+    return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(end)}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
+  }));
+  const deepseek = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", user: "tenant-1" });
+  expect(await deepseek.streamMemoryChat!({ system: "s", prompt: "p" }, () => {})).toBe("{\"loops\": []}");
+  expect(requests[0].thinking).toEqual({ type: "disabled" });
+  expect(requests[0]).not.toHaveProperty("reasoning_effort");
+  const openrouter = createBrainLlm({ provider: "openrouter", apiKey: "offline-unused" });
+  await openrouter.streamMemoryChat!({ system: "s", prompt: "p" }, () => {});
+  expect(requests[1]).not.toHaveProperty("thinking");
+  expect(requests[1]).not.toHaveProperty("reasoning_effort");
+});
