@@ -2,7 +2,8 @@
 from: alpha9
 about: Jordi (E73-A1 D3): open the Zenod testers program now, first 10 by hand, keep zenod.dev current
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-09-zenod-re-jordi-e73-a1-d3-open-the-zenod-teste.md
 ---
 Jordi, answering agent_team ask E73-A1 on 2026-11-08 (decision D3, Zenod testers; "Znot" is Zenod in the transcript):
 
