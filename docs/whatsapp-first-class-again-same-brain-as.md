@@ -31,7 +31,7 @@ Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers o
 Owner: Delivery Manager (Zenod launch)
 Status: active
 Last attempted: 2026-11-09 A1 (run_b72ff779): WhatsApp brain live, card to review; ZAL-A15 incident found and recorded
-Result: WhatsApp text gets the cloud chat's decision and checked answers (#1532, live in `468ee50`); his 6 WhatsApp questions on 9 Nov were all answered; decision 40/40 and 39/40 blind; answers graded the same as the cloud chat (8/10 each); live reply 6.6 s warm, 17.5 s first after a restart. Voice notes are not transcribed since 03:19Z (OpenRouter out of credit, ZAL-A15)
+Result: WhatsApp text gets the cloud chat's decision and checked answers (#1532, live in `468ee50`); his 6 WhatsApp questions on 9 Nov were all answered; decision 40/40 and 39/40 blind; answers graded the same as the cloud chat (8/10 each); live reply 6.6 s warm, 17.5 s first after a restart. voice notes, refused by OpenRouter from 03:19Z, fall back to local whisper since 07:27Z (ZAL-A15, #1555)
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
 Waiting on: nobody (A1 card in review; E20-3 still open: the first reply after a restart took 17.5 s)
 Approved work: L-6 mandate (vn_14cb0d46)
