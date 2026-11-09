@@ -29,7 +29,7 @@ Goal sentence: Zenod becomes the librarian of your memory, with four clear modes
 ## Current State
 
 Owner: L2 run_4b7a90b7-6a50-4887-9c53-d60a47f093af
-Status: review
+Status: done (closed by Jordi 2026-11-09)
 Last attempted: 2026-11-09 L2 built the librarian app (#1565) and rolled it: production fa68fce since 19:46:55Z
 Result: the live app is the librarian of your memory: five tabs, one box, Keep, Look up, Talk it over, Job on the memory, labelled and switchable; the mode is right on 71 of 72 of his real messages; memory numbers held
 Evidence: [E22-L2 live](evidence/e22-l2-live-2026-11-09.md) · http://vps3.taild81fbb.ts.net:8921/e22-l2-live/ · [mockup round 2](evidence/e22-l2-2026-11-09.md)
@@ -46,6 +46,8 @@ Verified at: 2026-11-09T20:10Z
 
 ## Outcome
 
+Verdict: accomplished
+Closed: 2026-11-09 by Jordi (closed on the console's review list)
 Outcome: The live app is Zenod, the librarian of your memory: one box where Zenod picks Keep, Look up, Talk it over or Job on the memory, labels each reply and lets you switch with a tap, inside five tabs that keep every earlier feature.
 Risk: the mode pick was measured on Zenod's plain rules, tuned after seeing the 72 messages, so the held-out 69 voice notes are the fairer number; Talk it over replies are not checked against the memories like answers are; WhatsApp and Telegram are unchanged.
 
@@ -67,7 +69,8 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
-| L2 | Ticket worker | run_4b7a90b7-6a50-4887-9c53-d60a47f093af | E22-2, E22-3: build it in the live app after the mockup is approved | review | E22-A2 approved 2026-11-09 | [#1565](https://github.com/zenod-ai/zenod/pull/1565) merged fa68fce1, live 19:46:55Z | 5b2109dd | http://vps3.taild81fbb.ts.net:8921/e22-l2-live/ ([evidence](evidence/e22-l2-live-2026-11-09.md), [card](cards/L2.md)) | 2026-11-09 | followups: start Tune the mode pick from your switches — which label he changes most shows where the pick is wrong; confirm: yes — only Jordi can say the live app reads as his librarian and the modes feel right |
+| L2 | Ticket worker | run_4b7a90b7-6a50-4887-9c53-d60a47f093af | E22-2, E22-3: build it in the live app after the mockup is approved | done (approved by Jordi 2026-11-09) | E22-A2 approved 2026-11-09 | [#1565](https://github.com/zenod-ai/zenod/pull/1565) merged fa68fce1, live 19:46:55Z | 5b2109dd | http://vps3.taild81fbb.ts.net:8921/e22-l2-live/ ([evidence](evidence/e22-l2-live-2026-11-09.md), [card](cards/L2.md)) | 2026-11-09 | followups: started L3 |
+| L3 | Ticket worker | unassigned | tune the mode pick from your switches: follow-up of L2 | ready | L2 | none | main | Jordi started it when closing L2 2026-11-09 | 2026-11-09 | worker |
 
 ## Decisions
 
