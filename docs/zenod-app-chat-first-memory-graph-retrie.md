@@ -100,7 +100,7 @@ Steps: each is independently testable and closes only with evidence.
 | S28 | Ticket worker | unassigned | keep the count beside an edge page inside a phone screen: follow-up of S13 | draft | S13 | none | main | parked by Jordi when closing S13 2026-11-09 | 2026-11-09 | Jordi starts it from the goal when wanted |
 | S29 | Ticket worker | run_90f2b821-d543-4d1a-abb0-592012b13776 — claimed 2026-11-09T17:38Z, lease until 2026-11-09T19:38Z | move your own lines out from under the rollup headings: follow-up of S15 | active | S15 | none | main | Jordi started it when closing S15 2026-11-09 | 2026-11-09 | worker |
 | S30 | Ticket worker | run_6696aac3-4c98-4f37-b805-e51f2f66250c — claimed 2026-11-09T17:40Z, lease until 2026-11-09T19:40Z | confidence calibration (once his Right place / Wrong place answers land, measure how well the number predicts a wrong place and tune its factors): follow-up of S27 | active | S27 | none | main | Jordi started it when closing S27 2026-11-09 | 2026-11-09 | worker |
-| S31 | Ticket worker | unassigned | switch to the best OpenAI model once the other fixes land and a recheck shows a clear gain: follow-up of S17 | ready | S17 | none | main | Jordi started it when closing S17 2026-11-09 | 2026-11-09 | worker |
+| S31 | Ticket worker | run_ed847a07-14bd-4e1c-ae49-461485d496ea — claimed 2026-11-09T17:40Z, lease until 2026-11-09T19:40Z | switch to the best OpenAI model once the other fixes land and a recheck shows a clear gain: follow-up of S17 | active | S17 | none | main | Jordi started it when closing S17 2026-11-09 | 2026-11-09 | worker |
 
 ## Decisions
 
