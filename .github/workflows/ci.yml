@@ -27,3 +27,5 @@ jobs:
       - run: npm test
       # E15-Q2: the memory test suite on the demo vault; numbers in the job summary, fails under the floor.
       - run: node scripts/memory-eval/run.mjs --checkout . --dataset demo --out memory-eval.json --floor scripts/memory-eval/floor.json
+      # E15-Q3: the live tier's cache and spend caps, on a stub client (no key, no network).
+      - run: node --test scripts/memory-eval/live.test.mjs
