@@ -23,21 +23,21 @@ Goal sentence: WhatsApp answers with the same brain as the cloud chat: it saves,
 ## Done means
 
 - [x] E20-1 The recent WhatsApp exchanges are reviewed message by message (what was sent, what Zenod did and replied, what it should have done), with the causes ranked.
-- [ ] E20-2 A WhatsApp message gets the same decision as the cloud chat (save a memory, answer from memory, or a job for the memory desk shown in the inbox as "run it?"), and answers use the same checked answer path, short enough for WhatsApp.
+- [x] E20-2 A WhatsApp message gets the same decision as the cloud chat (save a memory, answer from memory, or a job for the memory desk shown in the inbox as "run it?"), and answers use the same checked answer path, short enough for WhatsApp.
 - [ ] E20-3 Proven on real-style messages through the live WhatsApp path: the decision is right at least 9 times in 10, answers are correct on his real questions at least as often as the cloud chat, and replies arrive within a few seconds.
 
 ## Current State
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-08 A1 (run_b72ff779): review done, two fixes built
-Result: the review (E20-1, [private page](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)) found his 18:50Z WhatsApp question answered "Memory filing is in progress": since 16:14Z his memory refused every save, because agent jobs wrote straight into the vault while a voice note was mid-filing. Fix #1530 merged (05c9815). WhatsApp brain #1532 (decide, checked answer, desk jobs to the inbox) stacked on E14-S3, waits for S3 to merge
-Evidence: replay on a copy of his memory: decision 40/40 and 39/40 (blind), answers graded the same as the cloud chat on 10 real questions, reply p50 2.1 s
-Waiting on: E14-S3 merge (A1's PR is stacked on it)
+Last attempted: 2026-11-09 A1 (run_b72ff779): WhatsApp brain live, card to review; ZAL-A15 incident found and recorded
+Result: WhatsApp text gets the cloud chat's decision and checked answers (#1532, live in `468ee50`); his 6 WhatsApp questions on 9 Nov were all answered; decision 40/40 and 39/40 blind; answers graded the same as the cloud chat (8/10 each); live reply 6.6 s warm, 17.5 s first after a restart. Voice notes are not transcribed since 03:19Z (OpenRouter out of credit, ZAL-A15)
+Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
+Waiting on: Jordi's judgement of the card; E20-3 open (first reply after a restart is 17.5 s)
 Approved work: L-6 mandate (vn_14cb0d46)
-Next action: A1 verifies #1530 live and his memory saving again; after S3 merges, merges #1532, verifies live, card to review
-Source revision: main 05c9815
-Verified at: 2026-11-08
+Next action: Jordi judges A1; then a speed step for the first answer after each restart (E20-3)
+Source revision: main `468ee50` live
+Verified at: 2026-11-09T06:30Z live health `468ee50`
 
 ## Non-Goals
 
@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| A1 | Ticket worker | run_b72ff779-04e1-4467-8292-655206a85cac — claimed 2026-11-09T06:07Z, lease until 2026-11-09T08:07Z | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | active | E14-S3 (for #1532) | [#1530](https://github.com/zenod-ai/zenod/pull/1530) merged 05c9815 · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `wt/e20-a1` | main | [review](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/) | 2026-11-08 | verify #1530 live, merge #1532 after S3, prove live, card |
+| A1 | Ticket worker | run_b72ff779 | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | review | none | [#1530](https://github.com/zenod-ai/zenod/pull/1530) · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `a8f529c` · [#1553](https://github.com/zenod-ai/zenod/pull/1553) | main | [evidence](evidence/e20-a1-2026-11-08.md) · [card](cards/E20-A1.md) | 2026-11-09 | live on 468ee50; followups: start faster first answer after a restart — E20-3 needs replies within a few seconds, cold was 17.5 s; start voice notes wait behind slow filings — three notes waited 13 min; park keep and Run it? live check — would write into his memory and inbox; confirm: yes — Jordi sends a few WhatsApp messages and judges the replies |
 
 ## Decisions
 
