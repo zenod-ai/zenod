@@ -297,6 +297,14 @@ function mcpSignInCookieOptions(env: NodeJS.ProcessEnv) {
   return { httpOnly: true, secure: env.NODE_ENV === "production", sameSite: "Lax" as const, path: "/auth", ...(domain ? { domain } : {}) };
 }
 
+export const SIGNUP_MARKER_PARAM = "signed_up";
+
+export function withSignupMarker(destination: string): string {
+  const url = new URL(destination);
+  url.searchParams.set(SIGNUP_MARKER_PARAM, "1");
+  return url.toString();
+}
+
 function signedReturnDestination(
   returnHost: string | undefined,
   env: NodeJS.ProcessEnv,
@@ -664,11 +672,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         identities.linkIdentity(currentSession!.user_id, identityInput);
         return c.redirect(`${customerDestination(env, product.defaultDomain)}/app/account?identity=${provider}-linked`, 302);
       }
+      const isNewCustomer = !identities.resolve(provider, providerSubject);
       const principal = identities.resolveOrCreate(identityInput);
       issueCustomerSession(c, principal, env);
       const destination = signedReturnDestination(state.rh, env, product);
       const returnTo = mcpConsentReturnPath(state.rt);
-      return c.redirect(returnTo ? new URL(returnTo, destination).toString() : destination, 302);
+      if (returnTo) return c.redirect(new URL(returnTo, destination).toString(), 302);
+      // ZAL-A13: a first sign-in is a completed sign-up. The page it lands on
+      // tells the alpha9 counter once (no cookie, nothing about the person).
+      return c.redirect(isNewCustomer && product.product === "zenod" ? withSignupMarker(destination) : destination, 302);
     } catch (error) {
       console.error(`${provider} callback failed:`, error);
       const errorMessage = error instanceof Error ? error.message : "";

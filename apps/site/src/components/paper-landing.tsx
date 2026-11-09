@@ -77,7 +77,9 @@ const CONSTELLATION_KEPT = [
   { name: "Cedar boards", sum: "1 × 0.9 × 0.95 = 0.855", at: 7600 },
 ];
 
-function Nav({ customer }: { customer: PaperCustomer }) {
+// `base` is "" on the home page and "/" on other Paper pages, so the section
+// links always land on the home page's sections.
+export function Nav({ customer, base = "" }: { customer: Pick<PaperCustomer, "signedIn">; base?: "" | "/" }) {
   return (
     <header className="pp-nav">
       <div className="pp-nav-in">
@@ -85,11 +87,11 @@ function Nav({ customer }: { customer: PaperCustomer }) {
           Zenod
         </a>
         <nav aria-label="Primary">
-          <a href="#how">How it works</a>
-          <a href="#mcp">Your AI tools</a>
-          <a href="#yours">Your library</a>
-          <a href="#start">Pricing</a>
+          <a href={`${base}#how`}>How it works</a>
+          <a href={`${base}#mcp`}>Your AI tools</a>
+          <a href={`${base}#start`}>Pricing</a>
           <a href="/connect">Connect</a>
+          <a href="/testers">Testers</a>
         </nav>
         {customer.signedIn ? (
           <a className="pp-nav-link" href={DASHBOARD_URL}>
@@ -100,11 +102,34 @@ function Nav({ customer }: { customer: PaperCustomer }) {
             Sign in
           </a>
         )}
-        <a className="pp-btn pp-btn-small" href="#start">
+        <a className="pp-btn pp-btn-small" href={`${base}#start`}>
           Get started
         </a>
       </div>
     </header>
+  );
+}
+
+export function Footer() {
+  return (
+    <footer className="pp-foot">
+      <p className="pp-foot-name">
+        Zenod is named after Zenodotus, the first librarian of Alexandria.
+      </p>
+      <p className="pp-foot-links">
+        <a href="/connect">Docs</a>
+        <a href="/testers">Testers</a>
+        <a href={GITHUB_URL}>GitHub</a>
+        <a href="/legal/privacy.html">Privacy</a>
+        <a href="/legal/terms.html">Terms</a>
+        <a href="/legal/legal-notice.html">Legal notice</a>
+        <a href="/legal/cookies.html">Cookies</a>
+        <a href="/legal/data-handling.html">Data</a>
+      </p>
+      <p className="pp-fine pp-foot-note">
+        Screens show the real product with demo people and notes.
+      </p>
+    </footer>
   );
 }
 
@@ -341,6 +366,16 @@ function Showcase({ id, title, shot, layout, children }: ShowcaseProps) {
   );
 }
 
+// Testers get a personal code (EPIC-7 T4); it goes in Stripe Checkout, which
+// accepts promotion codes and asks for no card when the total is €0.
+function TesterCodeNote() {
+  return (
+    <p className="pp-fine pp-plan-note">
+      Have a tester code? Enter it at checkout. <a href="/testers">Become a tester</a>
+    </p>
+  );
+}
+
 function HostedAction({ customer }: { customer: PaperCustomer }) {
   if (customer.busyTier === "monthly")
     return (
@@ -403,6 +438,7 @@ function Plans({ customer }: { customer: PaperCustomer }) {
             your library in GitHub or in a Google Drive folder the app creates.
           </p>
           <HostedAction customer={customer} />
+          <TesterCodeNote />
         </div>
       </div>
       {customer.error ? (
@@ -620,23 +656,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
 
         <Plans customer={customer} />
       </main>
-      <footer className="pp-foot">
-        <p className="pp-foot-name">
-          Zenod is named after Zenodotus, the first librarian of Alexandria.
-        </p>
-        <p className="pp-foot-links">
-          <a href="/connect">Docs</a>
-          <a href={GITHUB_URL}>GitHub</a>
-          <a href="/legal/privacy.html">Privacy</a>
-          <a href="/legal/terms.html">Terms</a>
-          <a href="/legal/legal-notice.html">Legal notice</a>
-          <a href="/legal/cookies.html">Cookies</a>
-          <a href="/legal/data-handling.html">Data</a>
-        </p>
-        <p className="pp-fine pp-foot-note">
-          Screens show the real product with demo people and notes.
-        </p>
-      </footer>
+      <Footer />
     </div>
   );
 }

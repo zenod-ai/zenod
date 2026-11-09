@@ -10,10 +10,12 @@ export default defineConfig({
   build: {
     rollupOptions: {
       // connect.html carries the /connect guide's own title and description
-      // for crawlers and directory reviewers; both pages share src/main.tsx.
+      // for crawlers and directory reviewers; testers.html (ZAL-A13) carries the
+      // testers program's. All pages share src/main.tsx.
       input: {
         main: path.resolve(__dirname, "index.html"),
         connect: path.resolve(__dirname, "connect.html"),
+        testers: path.resolve(__dirname, "testers.html"),
       },
     },
   },

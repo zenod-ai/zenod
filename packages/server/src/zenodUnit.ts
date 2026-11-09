@@ -64,6 +64,7 @@ import {
   isAccountEntitled,
 } from "./zenodPhylax.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
+import { mountTesterApplications } from "./testerApplications.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
@@ -267,6 +268,13 @@ export class ZenodRuntimePool {
  * peer is the proxy, so prefer the right-most X-Forwarded-For entry (the hop the
  * trusted proxy itself appended; earlier entries are client-controlled).
  */
+/**
+ * The alpha9 visits and sign-ups counter (ZAL-A13, agent_team E85-S1): zenod.dev
+ * pages ask it for a 1x1 image; no cookie, nothing about the visitor is kept.
+ * The CSP is widened for this one origin only.
+ */
+const SITE_COUNTER_ORIGIN = "https://signup.alpha9.io";
+
 export function clientAddress(c: { req: { header(name: string): string | undefined }; env?: unknown }): string {
   const forwarded = c.req.header("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean).pop();
   if (forwarded) return forwarded;
@@ -1055,7 +1063,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     );
     c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
     const contentSecurityPolicy =
-      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'";
+      `default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com ${SITE_COUNTER_ORIGIN}; connect-src 'self' ${SITE_COUNTER_ORIGIN}`;
     // Native MCP OAuth clients use RFC 8252 loopback redirects such as
     // http://127.0.0.1:<ephemeral-port>. Applying upgrade-insecure-requests to
     // the consent page or its decision response rewrites that browser-only
@@ -1285,6 +1293,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
   });
   app.route("/", customer.app);
+  if (agent.name === "zenod") mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress });
   // Consent needs the original browser session; the API bridge below deliberately
   // strips cookies. Mount discovery and OAuth before any SPA catch-all as well.
   app.all("/oauth/*", (c) => unit.app.fetch(c.req.raw, c.env));

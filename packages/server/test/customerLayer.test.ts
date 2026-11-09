@@ -185,7 +185,10 @@ describe("hosted customer layer", () => {
     expect(state).toBeTruthy();
     const callback = await app.request(`/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`);
     expect(callback.status).toBe(302);
-    expect(callback.headers.get("location")).toBe(expectedDestination);
+    // A first sign-in carries the sign-up marker for the visits counter (ZAL-A13).
+    const location = new URL(callback.headers.get("location")!);
+    location.searchParams.delete("signed_up");
+    expect(location.toString()).toBe(new URL(expectedDestination).toString());
     const cookie = callback.headers.get("set-cookie");
     expect(cookie).toContain("zenod_customer_session=");
     expect(cookie).toContain("Domain=.zenod.dev");
@@ -738,6 +741,18 @@ describe("hosted customer layer", () => {
     const app = customerApp();
     await signInCookie(app, "zenod.dev", "https://zenod.dev/");
     await signInCookie(app, "cloud.zenod.dev", "https://cloud.zenod.dev/app");
+  });
+
+  it("marks only a first sign-in as a completed sign-up for the visits counter (ZAL-A13)", async () => {
+    const app = customerApp();
+    const signIn = async () => {
+      const start = await app.request("/auth/signin", { headers: { "x-forwarded-host": "zenod.dev" } });
+      const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+      const callback = await app.request(`/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`);
+      return callback.headers.get("location");
+    };
+    expect(await signIn()).toBe("https://zenod.dev/?signed_up=1");
+    expect(await signIn()).toBe("https://zenod.dev/");
   });
 
   it("binds checkout to the stable account id", async () => {

@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { PaperLanding } from "@/components/paper-landing";
+import { Footer, Nav, PaperLanding } from "@/components/paper-landing";
+import { TestersPage } from "@/components/testers-page";
 import { ConnectPage } from "@/components/connect-page";
 import {
   consumePendingHostedTier,
@@ -128,7 +129,25 @@ function useCustomerJourney(): CustomerJourney {
   return { session, loading, busyTier, error, paidSignupReady, subscribe };
 }
 
-function SiteHeader({ customer }: { customer: CustomerJourney }) {
+// The /pricing and /connect header (old style, kept until the restyle Jordi
+// parked). Its section links land on the home page's real sections, and below
+// 960 wide a Menu keeps them, with Sign in always visible.
+const SITE_LINKS = [
+  { href: "/#how", label: "How it works" },
+  { href: "/#mcp", label: "Your AI tools" },
+  { href: "/#yours", label: "Your library" },
+  { href: "/#start", label: "Run it your way" },
+  { href: "/connect", label: "Connect" },
+  { href: "/testers", label: "Testers" },
+];
+
+function SiteHeader({
+  customer,
+  getStartedHref = "/pricing",
+}: {
+  customer: CustomerJourney;
+  getStartedHref?: string;
+}) {
   return (
     <header className="v5-nav">
       <div className="v5-wrap v5-nav-inner">
@@ -137,11 +156,11 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
           <span aria-hidden="true" />
         </a>
         <nav className="v5-nav-links" aria-label="Primary">
-          <a href="/#ways-in">How it works</a>
-          <a href="/#voice">Voice</a>
-          <a href="/#yours">Your library</a>
-          <a href="/#start">Run it your way</a>
-          <a href="/connect">Connect</a>
+          {SITE_LINKS.map((link) => (
+            <a key={link.href} href={link.href}>
+              {link.label}
+            </a>
+          ))}
         </nav>
         <div className="v5-nav-actions">
           {customer.session ? (
@@ -164,10 +183,20 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
           )}
           <a
             className="v5-button v5-button-small v5-button-primary"
-            href="/pricing"
+            href={getStartedHref}
           >
             Get started
           </a>
+          <details className="v5-menu">
+            <summary>Menu</summary>
+            <nav aria-label="Menu">
+              {SITE_LINKS.map((link) => (
+                <a key={link.href} href={link.href}>
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+          </details>
         </div>
       </div>
     </header>
@@ -195,6 +224,54 @@ function SectionTitle({
   );
 }
 
+// Choose Hosted offers both sign-ins, like the home page, and says where a
+// tester code goes: Stripe Checkout, after sign-in.
+function HostedPlanAction({ customer }: { customer: CustomerJourney }) {
+  if (customer.busyTier === "monthly")
+    return (
+      <button className="v5-button v5-button-primary" disabled>
+        Opening checkout… <ArrowUpRightIcon />
+      </button>
+    );
+  if (!customer.paidSignupReady)
+    return (
+      <button className="v5-button v5-button-primary" disabled>
+        Hosted beta opening soon <ArrowUpRightIcon />
+      </button>
+    );
+  return (
+    <>
+      {customer.session ? (
+        <button
+          className="v5-button v5-button-primary"
+          onClick={() => customer.subscribe("monthly")}
+        >
+          Choose Hosted <ArrowUpRightIcon />
+        </button>
+      ) : (
+        <div className="v5-plan-actions">
+          <button
+            className="v5-button v5-button-primary"
+            onClick={() => customer.subscribe("monthly", GOOGLE_SIGN_IN_PATH)}
+          >
+            Start with Google <ArrowUpRightIcon />
+          </button>
+          <button
+            className="v5-button"
+            onClick={() => customer.subscribe("monthly", SIGN_IN_PATH)}
+          >
+            <GithubIcon /> Start with GitHub
+          </button>
+        </div>
+      )}
+      <p className="v5-tester-note">
+        Have a tester code? Enter it at Stripe checkout after you sign in.{" "}
+        <a href="/testers">Become a tester</a>
+      </p>
+    </>
+  );
+}
+
 function PricingSection({ customer }: { customer: CustomerJourney }) {
   return (
     <section className="v5-section" id="start">
@@ -218,20 +295,7 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
             </div>
             <p>{plan.description}</p>
             {plan.tier ? (
-              <button
-                className="v5-button v5-button-primary"
-                disabled={
-                  customer.busyTier !== null || !customer.paidSignupReady
-                }
-                onClick={() => plan.tier && customer.subscribe(plan.tier)}
-              >
-                {customer.busyTier === plan.tier
-                  ? "Opening checkout…"
-                  : customer.paidSignupReady
-                    ? "Choose Hosted"
-                    : "Hosted beta opening soon"}
-                <ArrowUpRightIcon />
-              </button>
+              <HostedPlanAction customer={customer} />
             ) : (
               <a
                 className="v5-button"
@@ -298,7 +362,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
 function PricingPage({ customer }: { customer: CustomerJourney }) {
   return (
     <div className="v5-site v5-pricing-page">
-      <SiteHeader customer={customer} />
+      <SiteHeader customer={customer} getStartedHref="#start" />
       <main className="v5-wrap">
         <section className="v5-pricing-intro">
           <p className="v5-kicker">Zenod plans</p>
@@ -322,6 +386,13 @@ export default function App() {
   const customer = useCustomerJourney();
   const path = window.location.pathname;
   if (path === "/pricing") return <PricingPage customer={customer} />;
+  if (path === "/testers")
+    return (
+      <TestersPage
+        nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" />}
+        footer={<Footer />}
+      />
+    );
   if (path === "/connect")
     return (
       <ConnectPage

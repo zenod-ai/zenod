@@ -176,7 +176,42 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(app).toContain("window.location.assign(signInPath)");
     expect(app).toContain("window.location.assign(await createHostedCheckout(tier))");
     const hrefs = [...ready.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
+    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/testers$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
+  });
+
+  it("opens the testers program on /testers with the apply form, and links it from home (ZAL-A13)", () => {
+    const home = render("/");
+    expect(home).toContain('href="/testers"');
+    expect(home).toContain("Have a tester code? Enter it at checkout.");
+    const testers = render("/testers").replace(/\s+/g, " ");
+    expect(testers.match(/<h1\b/g)).toHaveLength(1);
+    expect(testers).toContain("How are you going to be using Zenod Memory?");
+    const field = (name: string) => testers.match(new RegExp(`<(?:input|textarea)[^>]*name="${name}"[^>]*>`))?.[0] ?? "";
+    expect(field("use")).toContain('required=""');
+    expect(field("contact")).toContain('required=""');
+    expect(field("website")).toMatch(/tabindex="-1"/i);
+    for (const line of ["A free month of Zenod Hosted", "No card needed.", "month by month", "Usage is capped", "first ten", "a few weeks", "send us a line"])
+      expect(testers).toContain(line);
+    // Section links from a sub-page land on the home page's sections.
+    expect(testers).toContain('href="/#how"');
+    expect(testers).not.toMatch(/href="#(how|mcp|start)"/);
+  });
+
+  it("fixes the walk's sign-up path defects on /pricing and /connect (ZAL-A13)", () => {
+    const homeIds = [...render("/").matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]);
+    for (const path of ["/pricing", "/connect"]) {
+      const html = render(path);
+      const anchors = [...html.matchAll(/href="\/#([^"]+)"/g)].map((match) => match[1]);
+      expect(anchors.length).toBeGreaterThan(0);
+      for (const anchor of anchors) expect(homeIds).toContain(anchor);
+      expect(html).toContain('class="v5-menu"');
+      expect(html).toContain("Sign in");
+    }
+    const pricing = render("/pricing");
+    expect(pricing).not.toMatch(/href="\/pricing"[^>]*>Get started/);
+    expect(pricing).toMatch(/href="#start"[^>]*>Get started/);
+    const css = readFileSync(new URL("./src/index.css", import.meta.url), "utf8");
+    expect(css).not.toMatch(/\.v5-signin \{ display: none; \}/);
   });
 
   it("names the demo data in the footer", () => {
