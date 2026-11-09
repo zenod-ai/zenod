@@ -11,6 +11,7 @@ import { getEvidenceEntry } from "./evidence.js";
 import { applyTreeDiscovery, discoverTree, type DiscoveredRoot } from "./treeDiscover.js";
 import { materializeNamedSubjects, type MaterializedSubject } from "./treeSubjects.js";
 import { receiptPoints, unwrittenPoints } from "./noteLinker.js";
+import { mergeSmallLeaves, type MergedLeaf } from "./treeMergeLeaves.js";
 import { readLogCaptures } from "../vault/captureOrigin.js";
 import {
   appendOpsRollup,
@@ -35,6 +36,9 @@ import {
  * - a provisional leaf made only of agent reports (a test-campaign or wake report the
  *   librarian's filter missed before E9-2h) becomes ops-rollup lines on its root, and
  *   the leaf itself moves to `Archive/Agent reports/` byte for byte;
+ * - a small provisional leaf on the same subject as a confirmed sibling or (non-root) parent
+ *   is merged into it, every capture block byte for byte, and stays as a pointer page (E12-S24,
+ *   treeMergeLeaves.ts);
  * - a Log entry cited only by a level-1 root (outside its ops rollup) is also cited
  *   on the deepest page under that root that matches it (E9-2f), so lineage reaches
  *   the leaf; the root keeps its citation;
@@ -63,6 +67,8 @@ export interface TreeSweepOptions {
   skipEvidenceRefs?: ReadonlySet<string>;
   /** Re-derive the roots (E9-2g). Default true. */
   discover?: boolean;
+  /** Merge small provisional leaves into their page (E12-S24). Default true. */
+  mergeLeaves?: boolean;
 }
 
 /** A Log entry only a root cited, now also cited on a deeper page (E9-2f). */
@@ -105,6 +111,8 @@ export interface TreeSweepCounts {
   pagesReparented?: number;
   /** Provisional leaves made only of agent reports, now ops-rollup lines (E9-2h). */
   agentLeavesRefiled?: number;
+  /** Small provisional leaves merged into a sibling or parent page (E12-S24). */
+  leavesMerged?: number;
   /** Pages made for names the person keeps saying (E9-2i), and pages of theirs given new captures. */
   subjectPagesCreated?: number;
   subjectPagesUpdated?: number;
@@ -116,6 +124,8 @@ export interface TreeSweepReport {
   counts: TreeSweepCounts;
   receipts: ReceiptResult[];
   deepened: DeepenedCitation[];
+  /** Small provisional leaves merged into their page (E12-S24). */
+  merged: MergedLeaf[];
   /** E9-2g roots after this sweep; private to the user's vault/console. */
   roots: DiscoveredRoot[];
   /** Vault paths written or removed by this sweep (uncommitted). */
@@ -394,7 +404,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
     rootOnlyCitations: 0, citationsDeepened: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0,
   };
   if (!(await readTree(vaultPath))) {
-    return { hasTree: false, today: options.today, counts: empty, receipts: [], deepened: [], roots: [], changedPaths: [], lintErrorsBefore: [] };
+    return { hasTree: false, today: options.today, counts: empty, receipts: [], deepened: [], merged: [], roots: [], changedPaths: [], lintErrorsBefore: [] };
   }
   const lintErrorsBefore = (await lintVault(vaultPath)).errors.map(lintErrorKey);
 
@@ -408,6 +418,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
   }
 
   const agentLeaves = await refileAgentLeaves(vaultPath, writes);
+  const merged = options.mergeLeaves === false ? [] : await mergeSmallLeaves(vaultPath, writes, { today: options.today });
   const { rootOnly, deepened } = await deepenRootCitations(vaultPath, writes);
   const discovery = options.discover === false ? null : await rediscoverTree(vaultPath, options.today, writes);
 
@@ -447,9 +458,11 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
         subjectPagesUpdated: discovery.subjects.filter(s => !s.created).length,
       } : {}),
       agentLeavesRefiled: agentLeaves.length,
+      leavesMerged: merged.length,
     },
     receipts,
     deepened,
+    merged,
     roots: discovery?.roots ?? [],
     changedPaths,
     lintErrorsBefore,

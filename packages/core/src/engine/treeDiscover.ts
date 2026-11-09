@@ -249,7 +249,8 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex): P
   collectSurfaces(surfaces, text, 1);
   const titleTerms = seededRoot ? new Set<string>() : new Set(tokenList(cleanTopicName(title)));
   const subject = frontmatter?.generated === SUBJECT_GENERATOR;
-  return { path, title, provisional: fields?.provisional === true, seededRoot, subject, vector, titleTerms, surfaces, links, citations, parent };
+  // A merged leaf's pointer page (E12-S24) speaks for nothing, like a provisional one.
+  return { path, title, provisional: fields?.provisional === true || fields?.merged === true, seededRoot, subject, vector, titleTerms, surfaces, links, citations, parent };
 }
 
 /** Ingest headers ("Voice note "x.ogg" ingested…", "Raw artifact: drive://…", "Transcribed by …") say how a capture arrived, not what it is about. */
@@ -443,8 +444,25 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
 
   const snapshot = await scanVault(vaultPath);
   const index = await buildTreeIndex(vaultPath, snapshot);
+  const all: PageDoc[] = [];
+  for (const path of [...index.fields.keys()].sort()) all.push(await readPageDoc(vaultPath, path, index));
+  // E12-S24: a provisional leaf (or a merged leaf's pointer) stays on the branch it was filed under and
+  // never forms or names a root: it leaves the clustering, and its captures count on its nearest confirmed
+  // ancestor. Rescues leave many small leaves; clustered alone they became roots of their own.
+  const byPath = new Map(all.map(d => [d.path, d]));
+  const anchorOf = (d: PageDoc): PageDoc | null => {
+    if (!d.provisional) return null;
+    const lineage = index.lineage(d.path);
+    if (!lineage.ok) return null;
+    const anchor = [...lineage.steps].reverse().map(step => byPath.get(step.path)).find(a => a && !a.provisional);
+    return anchor ?? null;
+  };
   const docs: PageDoc[] = [];
-  for (const path of [...index.fields.keys()].sort()) docs.push(await readPageDoc(vaultPath, path, index));
+  for (const d of all) {
+    const anchor = anchorOf(d);
+    if (!anchor) { docs.push(d); continue; }
+    for (const citation of d.citations) anchor.citations.add(citation);
+  }
   const at = new Map(docs.map((d, i) => [d.path, i]));
   const captures = await readLogCaptures(vaultPath, snapshot.files);
   const own = new Map([...captures].filter(([, c]) => c.origin === "user"));
@@ -461,6 +479,8 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     for (const path of index.fields.keys()) {
       const lineage = index.lineage(path);
       if (!lineage.ok) continue;
+      // Members are the pages discovery clusters: a leaf it holds on its branch is not one (E12-S24).
+      if (!at.has(path)) continue;
       const rootPath = index.resolveRef(lineage.root.path) ?? lineage.root.path;
       membersOf.set(rootPath, [...(membersOf.get(rootPath) ?? []), path]);
     }

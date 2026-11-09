@@ -2263,8 +2263,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const roots = c.discoveredWorking !== undefined ? `, roots ${c.discoveredWorking} working / ${c.discoveredLongTerm} long-term` : "";
         const agentLeaves = c.agentLeavesRefiled ? `, agent-report leaves to ops ${c.agentLeavesRefiled}` : "";
         const subjects = c.subjectPagesCreated ? `, subject pages ${c.subjectPagesCreated}` : "";
+        const merged = c.leavesMerged ? `, small leaves merged ${c.leavesMerged}` : "";
         const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${subjects}${roots})`,
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${merged}${subjects}${roots})`,
         );
         return { report, committed: true, revision };
       } catch (error) {

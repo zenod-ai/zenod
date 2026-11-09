@@ -139,7 +139,7 @@ export async function chooseTreeNode(
   for (const [path, fields] of index.fields) {
     order++;
     // A provisional node is itself unplaced; it never adopts other pages until the sweep confirms it.
-    if (options.exclude?.has(path) || fields.provisional) continue;
+    if (options.exclude?.has(path) || fields.provisional || fields.merged) continue;
     const root = index.rootsByPath.get(path.toLowerCase());
     if (options.rootsOnly && !root) continue;
     const lineage = index.lineage(path);

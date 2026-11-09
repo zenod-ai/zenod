@@ -106,6 +106,8 @@ export async function scanVault(vaultPath: string): Promise<VaultSnapshot> {
       }
       const { frontmatter, body } = parseNote(raw);
       const metadata = frontmatter ?? {};
+      // A merged leaf's pointer page (E12-S24) is no place to file to: its page is the one it names.
+      if (typeof metadata["merged-into"] === "string") continue;
       const sections = catalogSections(file, body);
       const page: PageIndexEntry = {
         path: file, id: `p-${pageRevision(file).slice(0, 20)}`, revision,
