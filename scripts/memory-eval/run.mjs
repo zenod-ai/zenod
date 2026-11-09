@@ -17,6 +17,8 @@
 //        [--label <change name>] [--sha <sha>] [--floor scripts/memory-eval/floor.json]
 //   node scripts/memory-eval/run.mjs --checkout <dir> --dataset private --vault <vault dir> --questions <jsonl> [...]
 //        a person's own set: a throwaway copy of their vault, never pushed; only counts leave the machine.
+//        [--vault-git <clone>] questions that ask by time ("my last voice note", "today") are asked on the vault
+//        revision and at the moment their `asOf` names, read from this clone (E12-S33).
 //   live tier: add --model live [--slice <question id prefix>] [--skip agent] [--live-dir <cache and ledger dir>]
 //        [--live-run-cap 0.25] [--live-month-cap 3] [--live-model deepseek-flash] [--live-reasoning none]
 //        with DEEPSEEK_API_KEY in the environment (never on the command line).
@@ -109,6 +111,7 @@ async function loadCheckout(checkout) {
   const chat = await tryImport("packages/server/dist/memoryChat.js");
   const ranked = await tryImport("packages/server/dist/rankedMemory.js");
   const mcp = await tryImport("packages/server/dist/mcp.js");
+  const recent = await tryImport("packages/core/dist/vault/recentIntent.js");
   const req = createRequire(join(checkout, "packages/server/package.json"));
   let sdk = null;
   try {
@@ -116,7 +119,7 @@ async function loadCheckout(checkout) {
     const mem = await import(pathToFileURL(req.resolve("@modelcontextprotocol/sdk/inMemory.js")).href);
     sdk = { Client: client.Client, InMemoryTransport: mem.InMemoryTransport };
   } catch { sdk = null; }
-  return { core, chat, ranked, mcp, sdk };
+  return { core, chat, ranked, mcp, sdk, recentIntent: recent?.recentIntent ?? null };
 }
 
 async function openVault(mods, vaultSrc, model) {
@@ -135,6 +138,21 @@ async function openVault(mods, vaultSrc, model) {
   const engine = core.createEngine({ repo, llm: model, state: new core.SqliteStateStore(":memory:"), memoryIndex: { path: join(dir, "index.sqlite"), tenantId: "eval" } });
   if (engine.rebuildMemoryIndex) await engine.rebuildMemoryIndex();
   return { dir, engine, vault: join(dir, "vault"), model };
+}
+
+/**
+ * Run `fn` with the clock stopped at `atMs` (E12-S33): a question that asks by time ("my last voice note",
+ * "today") has the right answer only at the moment it was written, so it is asked then, on the vault as it
+ * was. The engine and its index are opened inside, so every clock they read is this one.
+ */
+async function atMoment(atMs, fn) {
+  const Real = globalThis.Date;
+  class Pinned extends Real {
+    constructor(...a) { if (a.length) super(...a); else super(atMs); }
+    static now() { return atMs; }
+  }
+  globalThis.Date = Pinned;
+  try { return await fn(); } finally { globalThis.Date = Real; }
 }
 
 /** True when the live caps refused a model call since `before`: the item was not really run. */
@@ -472,8 +490,29 @@ async function main() {
     vaultLabel = `private@${opt("vault-rev") ?? (existsSync(join(vaultSrc, ".git")) ? git(vaultSrc, "rev-parse", "--short", "HEAD") : "copy")}`;
     ctx = await openVault(mods, vaultSrc, model);
     const citing = citingIndex(ctx.vault);
-    const wanted = (item) => { const w = new Set(); for (const r of item.refs ?? []) { w.add(noMd(r)); for (const p of citing.get(anchorOf(r)) ?? []) w.add(p); } return w; };
-    suites.questions = await questionSuite(mods, ctx, model, pick(readSet(setFile)), wanted);
+    const wantedIn = (index) => (item) => { const w = new Set(); for (const r of item.refs ?? []) { w.add(noMd(r)); for (const p of index.get(anchorOf(r)) ?? []) w.add(p); } return w; };
+    const set = pick(readSet(setFile));
+    // A question that asks by time is asked on the vault and at the moment its `asOf` names: later notes
+    // change its right answer honestly ("my last voice note" is the newest one), so the live vault cannot score it.
+    const vaultGit = opt("vault-git");
+    const byTime = (item) => Boolean(vaultGit && mods.recentIntent && item.asOf?.vaultRevision && item.asOf?.at && mods.recentIntent(item.question, Date.parse(item.asOf.at)));
+    const timeRows = new Map();
+    for (const [key, items] of Map.groupBy(set.filter(byTime), (item) => `${item.asOf.vaultRevision} ${item.asOf.at}`)) {
+      const [rev, at] = key.split(" ");
+      const snap = mkdtempSync(join(tmpdir(), "zenod-memory-asof-"));
+      try {
+        execFileSync("bash", ["-c", 'git -C "$1" archive "$2" | tar -x -C "$3"', "_", vaultGit, rev, snap], { stdio: "ignore" });
+        const rows = await atMoment(Date.parse(at), async () => {
+          const then = await openVault(mods, snap, model);
+          try { return await questionSuite(mods, then, model, items, wantedIn(citingIndex(then.vault))); } finally { rmSync(then.dir, { recursive: true, force: true }); }
+        });
+        for (const row of rows) timeRows.set(row.id, { ...row, asOf: rev });
+      } catch (e) { console.error(`as-of ${rev}: ${e instanceof Error ? e.message : e}; those questions run on today's vault`); }
+      finally { rmSync(snap, { recursive: true, force: true }); }
+    }
+    const now = await questionSuite(mods, ctx, model, set.filter((item) => !timeRows.has(item.id)), wantedIn(citing));
+    const nowById = new Map(now.map((row) => [row.id, row]));
+    suites.questions = set.map((item) => timeRows.get(item.id) ?? nowById.get(item.id));
     const judged = opt("judged");
     if (judged && judged.split(",").some((file) => existsSync(file)) && ctx.engine.captureEvidence) suites.filing = await judgedFilingSuite(ctx, judged);
     if (!skip.has("agent")) suites.agent = await agentSuite(mods, ctx, readSet(join(HERE, "demo", "agent.jsonl")));
