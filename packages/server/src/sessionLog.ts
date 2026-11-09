@@ -91,7 +91,7 @@ export function formatSessionLog(calls: UsageCall[], windowMinutes: number): str
     const cached = c.cachedInputTokens ? ` cached=${c.cachedInputTokens}` : "";
     const created = c.cacheCreationInputTokens ? ` cacheWrite=${c.cacheCreationInputTokens}` : "";
     const outcome = c.status === "failed" ? ` — failed:${c.errorCode ?? "unknown"}` : "";
-    return `[${at}] ${c.operation} — ${c.provider}/${c.model} — in=${c.inputTokens}${cached}${created} out=${c.outputTokens} — ${usd(c.costUsd)}${outcome}`;
+    return `[${at}] ${c.label ? `${c.label} ` : ""}${c.operation} — ${c.provider}/${c.model} — in=${c.inputTokens}${cached}${created} out=${c.outputTokens} — ${usd(c.costUsd)}${outcome}`;
   });
   return [header, ...lines].join("\n");
 }

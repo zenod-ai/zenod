@@ -17,13 +17,35 @@ interface SearchScore {
   exactPhrase: boolean;
 }
 
+const ASCII = /^[\x00-\x7f]*$/;
+
 function normalizePhrase(value: string): string {
+  // E15-Q4: ASCII text (most matched lines) needs no NFKC, and its letters and digits are [a-z0-9]
+  // once lowercased: the same result, without the Unicode passes, on tens of thousands of lines.
+  if (ASCII.test(value)) return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return value
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+/**
+ * E15-Q4: normalized text, remembered across searches. One filing runs about 17 searches whose body
+ * pass matches most lines of the vault; the lines are the same each time. Bounded: the memory is
+ * dropped whole once it holds MAX_NORMALIZED texts.
+ */
+const MAX_NORMALIZED = 200_000;
+const normalizedTexts = new Map<string, string>();
+function normalizedText(text: string): string {
+  let value = normalizedTexts.get(text);
+  if (value === undefined) {
+    if (normalizedTexts.size >= MAX_NORMALIZED) normalizedTexts.clear();
+    value = normalizePhrase(text);
+    normalizedTexts.set(text, value);
+  }
+  return value;
 }
 
 function queryTerms(query: string): string[] {
@@ -42,17 +64,22 @@ export async function searchVault(vaultPath: string, query: string, location: Va
   const normalizedQuery = normalizePhrase(query);
 
   const scores = new Map<string, SearchScore>();
+  // E15-Q4: a long filing query has up to 128 terms; normalize each text once, not once per term or search.
+  const norm = normalizedText;
   const bump = (path: string, score: number, snippet: string, matchedText: string) => {
     if (isFilingReceiptPath(path)) return;
-    const normalizedText = normalizePhrase(matchedText);
+    const normalizedText = norm(matchedText);
     const cur = scores.get(path);
     if (cur) {
       cur.score += score;
       if (!cur.snippet && snippet) cur.snippet = snippet;
-      for (const term of terms) {
-        if (normalizedText.includes(term)) cur.matchedTerms.add(term);
+      // Terms this path already matched need no second look (a busy page matches on many lines).
+      if (cur.matchedTerms.size < terms.length) {
+        for (const term of terms) {
+          if (!cur.matchedTerms.has(term) && normalizedText.includes(term)) cur.matchedTerms.add(term);
+        }
       }
-      if (normalizedText.includes(normalizedQuery)) cur.exactPhrase = true;
+      if (!cur.exactPhrase && normalizedText.includes(normalizedQuery)) cur.exactPhrase = true;
     } else {
       scores.set(path, {
         score,
@@ -69,13 +96,14 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     const title = page.title.toLowerCase();
     const summary = page.summary.toLowerCase();
     const base = page.path.toLowerCase();
+    const [normalTitle, normalSummary, normalBase] = [norm(title), norm(summary), norm(base)];
     for (const term of terms) {
-      if (normalizePhrase(title) === term) bump(page.path, 10, page.summary, title);
-      else if (normalizePhrase(title).includes(term)) bump(page.path, 5, page.summary, title);
-      const matchingTag = page.tags.find((tag) => normalizePhrase(tag) === term);
+      if (normalTitle === term) bump(page.path, 10, page.summary, title);
+      else if (normalTitle.includes(term)) bump(page.path, 5, page.summary, title);
+      const matchingTag = page.tags.find((tag) => norm(tag) === term);
       if (matchingTag) bump(page.path, 4, page.summary, matchingTag);
-      if (normalizePhrase(summary).includes(term)) bump(page.path, 2, page.summary, summary);
-      if (normalizePhrase(base).includes(term)) bump(page.path, 3, page.summary, base);
+      if (normalSummary.includes(term)) bump(page.path, 2, page.summary, summary);
+      if (normalBase.includes(term)) bump(page.path, 3, page.summary, base);
     }
   }
 
@@ -86,13 +114,13 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     if (tierOf(file) !== "evidence") continue;
     const lower = file.toLowerCase();
     for (const term of terms) {
-      if (normalizePhrase(lower).includes(term)) bump(file, 3, "(evidence log)", lower);
+      if (norm(lower).includes(term)) bump(file, 3, "(evidence log)", lower);
     }
   }
   for (const file of await listAttachmentFiles(vaultPath)) {
     const lower = file.toLowerCase();
     for (const term of terms) {
-      if (normalizePhrase(lower).includes(term)) bump(file, 3, "(attachment artifact)", lower);
+      if (norm(lower).includes(term)) bump(file, 3, "(attachment artifact)", lower);
     }
   }
 
@@ -101,7 +129,7 @@ export async function searchVault(vaultPath: string, query: string, location: Va
   const bodyHits = await grepBodies(vaultPath, grepTerms).catch(() => scanBodies(vaultPath, grepTerms));
   for (const hit of bodyHits) bump(hit.path, 1, hit.line.trim().slice(0, 200), hit.line);
 
-  for (const hint of await pendingTopicDiscovery(vaultPath, snapshot.files, label => terms.some(term => normalizePhrase(label).includes(term)))) {
+  for (const hint of await pendingTopicDiscovery(vaultPath, snapshot.files, label => terms.some(term => norm(label).includes(term)))) {
     bump(hint.ref, 3, `Pending topic discovery (read original evidence): ${hint.label}`, hint.label);
   }
 
@@ -135,15 +163,24 @@ interface BodyHit {
   line: string;
 }
 
-/** ripgrep pass: case-insensitive fixed-string match over markdown bodies, any term matches (OR — same semantics as scanBodies). */
+/**
+ * ripgrep pass: case-insensitive fixed-string match over markdown bodies, any term matches (OR — same
+ * semantics as scanBodies). Plain `path NUL line` output: a long filing query matches tens of thousands
+ * of lines, and parsing one JSON event per line cost seconds per search (E15-Q4).
+ */
 function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
   return new Promise((resolve, reject) => {
     const rg = spawn(
       "rg",
       [
-        "--json",
         "-i",
         "--fixed-strings",
+        "--no-heading",
+        "--with-filename",
+        "--null",
+        "--no-line-number",
+        "--color",
+        "never",
         "--glob",
         "*.md",
         "--glob",
@@ -154,28 +191,19 @@ function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
       { cwd: vaultPath },
     );
     const hits: BodyHit[] = [];
-    let buffer = "";
-    rg.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf8");
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line) continue;
-        try {
-          const event = JSON.parse(line) as { type: string; data?: { path?: { text?: string }; lines?: { text?: string } } };
-          if (event.type === "match" && event.data?.path?.text && event.data.lines?.text) {
-            const path = event.data.path.text.replace(/^\.\//, "");
-            if (!isFilingReceiptPath(path)) hits.push({ path, line: event.data.lines.text });
-          }
-        } catch {
-          // ignore malformed event lines
-        }
-      }
-    });
+    const chunks: Buffer[] = [];
+    rg.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     rg.on("error", reject); // rg not installed
     rg.on("close", (code) => {
-      if (code === 0 || code === 1) resolve(hits); // 1 = no matches
-      else reject(new Error(`rg exited with ${code}`));
+      if (code !== 0 && code !== 1) return reject(new Error(`rg exited with ${code}`)); // 1 = no matches
+      for (const line of Buffer.concat(chunks).toString("utf8").split("\n")) {
+        const split = line.indexOf("\0");
+        if (split < 0) continue;
+        const path = line.slice(0, split).replace(/^\.\//, "");
+        const text = line.slice(split + 1).replace(/\r$/, "");
+        if (text && !isFilingReceiptPath(path)) hits.push({ path, line: text });
+      }
+      resolve(hits);
     });
   });
 }

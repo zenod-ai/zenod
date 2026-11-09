@@ -2427,7 +2427,11 @@ export const TOOL_OUTPUT_SCHEMAS = (
         ]
       },
       "code": {
-        "const": "context_ref_unavailable"
+        "enum": [
+          "context_ref_unavailable",
+          "ask_timeout",
+          "ask_cancelled"
+        ]
       },
       "message": {
         "type": "string"

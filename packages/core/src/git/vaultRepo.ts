@@ -135,9 +135,37 @@ export class VaultRepo implements VaultRepository {
     return (await this.git.revparse(["HEAD"])).trim();
   }
 
+  /**
+   * E15-Q4: what a commit holds never changes, so a filing asks git once per commit for its date and
+   * once per commit and file for a file's content (it used to ask again after every page it wrote).
+   */
+  private readonly committedAt = new Map<string, string>();
+  private readonly committedFiles = new Map<string, string | null>();
+
   private async revisionForSha(commitSha: string, githubUrls: string[]): Promise<VaultRevision> {
-    const committedAt = (await this.git.show(["-s", "--format=%cI", commitSha])).trim();
+    let committedAt = this.committedAt.get(commitSha);
+    if (committedAt === undefined) {
+      committedAt = (await this.git.show(["-s", "--format=%cI", commitSha])).trim();
+      if (this.committedAt.size >= 1_000) this.committedAt.clear();
+      this.committedAt.set(commitSha, committedAt);
+    }
     return githubVaultRevision({ commitSha, committedAt, githubUrls });
+  }
+
+  /** A file's content at one commit, or null when the commit has no such file. */
+  private async contentAt(commitSha: string, relPath: string): Promise<string | null> {
+    const key = `${commitSha}:${relPath}`;
+    if (this.committedFiles.has(key)) return this.committedFiles.get(key)!;
+    let content: string | null;
+    try {
+      content = await this.git.show([key]);
+    } catch {
+      content = null;
+    }
+    // Only the files of the current commit are kept: a new commit starts the memory afresh.
+    if (![...this.committedFiles.keys()].at(0)?.startsWith(`${commitSha}:`)) this.committedFiles.clear();
+    if (this.committedFiles.size < 2_000) this.committedFiles.set(key, content);
+    return content;
   }
 
   async currentRevision(): Promise<VaultRevision> {
@@ -170,9 +198,10 @@ export class VaultRepo implements VaultRepository {
   /** Working-tree changes vs HEAD as FileChange records for the immutability check. */
   async pendingChanges(): Promise<FileChange[]> {
     const status = await this.git.status();
+    const head = await this.headSha().catch(() => null);
     const changes: FileChange[] = [];
     const record = async (path: string, deleted: boolean) => {
-      const before = await this.contentAtHead(path);
+      const before = head ? await this.contentAt(head, path) : null;
       const after = deleted ? null : await readFile(join(this.path, path), "utf8").catch(() => null);
       changes.push({ path, before, after });
     };
