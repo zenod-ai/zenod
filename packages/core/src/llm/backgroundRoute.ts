@@ -26,9 +26,15 @@ const DESK_METHODS = new Set(["work"]);
 /** 401 bad key, 402 no balance, 403 refused: the account cannot serve any call until a human acts. */
 const ACCOUNT_STATUSES = new Set([401, 402, 403]);
 
+/** The provider's HTTP status, also when a filing step wrapped the provider error as its cause. */
 function statusOf(error: unknown): number | null {
-  const status = (error as { statusCode?: unknown; status?: unknown } | null)?.statusCode ?? (error as { status?: unknown } | null)?.status;
-  return typeof status === "number" ? status : null;
+  let current = error as { statusCode?: unknown; status?: unknown; cause?: unknown } | null | undefined;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const status = current.statusCode ?? current.status;
+    if (typeof status === "number") return status;
+    current = current.cause as typeof current;
+  }
+  return null;
 }
 
 export function withBackgroundRoute(primary: BrainLlm, background: BrainLlm, options: BackgroundRouteOptions): BrainLlm {
