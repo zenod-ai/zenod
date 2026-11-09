@@ -78,6 +78,8 @@ import {
   routeSendMessage,
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
+import { parseTalkRequest, streamTalk, talkPersona } from "./memoryTalk.js";
+import { memoryGlance, MemoryGlanceCache } from "./memoryGlance.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
 import { registerPersonaRoutes } from "./personaRoutes.js";
 import { registerMemoryCallRoutes } from "./memoryCallRoutes.js";
@@ -1392,6 +1394,28 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
   });
 
+  // EPIC-22 E22-2: Memory › At a glance, from the person's own Log entries and tree. No model call.
+  const memoryGlances = new MemoryGlanceCache();
+  app.get("/api/console/memory-glance", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      return c.json({ status: "ready", ...(await memoryGlances.get(account.tenant_id, async () => {
+        const engine = await runtime.getEngine();
+        const [entries, outline] = await Promise.all([engine.searchEntries({ limit: null }), runtime.memoryTreeOutline().catch(() => null)]);
+        return memoryGlance(entries, outline);
+      })) });
+    } catch (error) {
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ status: "empty" });
+      console.warn(`[memory-glance] unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "memory glance unavailable" }, 503);
+    }
+  });
+
   // EPIC-12 E12-S27: the person checks where Zenod filed things, on their own tree: the filings to
   // check (least sure first), "Right place", "Wrong place" with where it belongs, and Undo. Each
   // change is one commit in their vault with a correction record (S6 landing feedback shape); no model call.
@@ -1516,13 +1540,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
   // Everything a chat needs before any model call: the session's tenant, its engine runtime, the
   // AI allowance and a free chat slot. Returns a Response to send instead when one is missing.
-  const memoryChatStart = async (c: Context) => {
+  const memoryChatStart = async (c: Context, options: { talk?: boolean } = {}) => {
     const session = readCustomerSession(c, env);
     if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
     // E16-B1: the one Send button posts `message`; the older ask route posts `question`.
     const body = await c.req.json<{ question?: unknown; message?: unknown }>().catch(() => ({}) as { question?: unknown; message?: unknown });
+    // EPIC-22 E22-2: a talk also carries its persona and earlier turns; a talk opened from a card has no message.
+    const talk = options.talk ? parseTalkRequest(body) : null;
+    if (options.talk && !talk) return { response: c.json({ error: "message is required" }, 400) };
     const raw = typeof body.message === "string" ? body.message : body.question;
-    const question = typeof raw === "string" ? raw.trim() : "";
+    const question = talk ? talk.message || talk.persona.name : typeof raw === "string" ? raw.trim() : "";
     if (!question) return { response: c.json({ error: "question is required" }, 400) };
     if (question.length > MEMORY_CHAT_MAX_QUESTION_CHARS) return { response: c.json({ error: "question is too long" }, 400) };
     const account = accounts.resolveActiveTenantForUser(session.user_id);
@@ -1532,6 +1559,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const block = runtime.aiAllowanceBlock();
     if (block) {
       // Answers stopped at the allowance, capture did not (EPIC-14 S10): the words are kept as a note.
+      // A talk keeps nothing (EPIC-22 E22-2): it only stops.
+      if (talk) return { response: allowanceResponse(c, block) };
       try {
         runtime.taskJobQueue.enqueue("store", { content: question, source: "web" }, memoryKeepIdempotencyKey(account.tenant_id, question));
       } catch (error) {
@@ -1551,7 +1580,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (left > 0) memoryChatsInFlight.set(tenantId, left);
       else memoryChatsInFlight.delete(tenantId);
     };
-    return { question, runtime, tenantId, release };
+    return { question, talk, runtime, tenantId, release };
   };
   // A chat failure as { status, body }: the allowance and vault states keep their own codes.
   const memoryChatFailure = (tenantId: string, error: unknown) => {
@@ -1628,6 +1657,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
             await send({ type: "desk", error: "desk unavailable", message });
           }
         }
+        // EPIC-22 E22-2: Talk it over, with the librarian; nothing is kept or changed.
+        if (route.action === "talk") {
+          const talk = await streamTalk(engine, { message: route.talk || message, persona: talkPersona(null), history: [], opener: false }, {
+            onMemories: (memories) => { void send({ type: "memories", memories }); },
+            onText: (text) => { void send({ type: "text", text }); },
+          });
+          await send({ type: "talk", talk });
+        }
         if (route.keep) {
           try {
             const job = runtime.taskJobQueue.enqueue("store", { content: route.keep, source: "web" }, memoryKeepIdempotencyKey(tenantId, route.keep));
@@ -1646,6 +1683,34 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           await send({ type: "answer", answer });
         }
         await send({ type: "done" });
+      } catch (error) {
+        const failure = memoryChatFailure(tenantId, error);
+        await send({ type: "error", status: failure.status, ...failure.body });
+      } finally {
+        release();
+      }
+    });
+  });
+
+  // EPIC-22 E22-2: one turn of Talk it over, streamed as NDJSON: {"type":"memories"}, {"type":"text"}
+  // deltas, then {"type":"talk"} with the whole reply, or {"type":"error"}. Read-only, metered, capped
+  // by the AI allowance like every chat; the app sends the persona and the earlier turns.
+  app.post("/api/console/memory-talk/stream", async (c) => {
+    const start = await memoryChatStart(c, { talk: true });
+    if ("response" in start) return start.response;
+    const { talk, runtime, tenantId, release } = start;
+    c.header("content-type", "application/x-ndjson; charset=utf-8");
+    c.header("cache-control", "no-store");
+    c.header("x-accel-buffering", "no");
+    return stream(c, async (out) => {
+      out.onAbort(release);
+      const send = (event: Record<string, unknown>) => out.aborted ? Promise.resolve(out) : out.write(`${JSON.stringify(event)}\n`);
+      try {
+        const reply = await streamTalk(await runtime.getEngine(), talk!, {
+          onMemories: (memories) => { void send({ type: "memories", memories }); },
+          onText: (text) => { void send({ type: "text", text }); },
+        });
+        await send({ type: "talk", talk: reply });
       } catch (error) {
         const failure = memoryChatFailure(tenantId, error);
         await send({ type: "error", status: failure.status, ...failure.body });

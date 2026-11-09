@@ -66,12 +66,14 @@ afterEach(() => {
 })
 
 describe("MemoryChat one Send (E16-B1)", () => {
-  it("has one Send button and no Ask or Keep", () => {
+  it("has one box to talk to the librarian, one Send button and no Ask, Keep or Ask the desk (EPIC-22)", () => {
     render(<MemoryChat />)
+    expect(screen.getByRole("textbox", { name: "Talk to your librarian" }).getAttribute("placeholder")).toBe("Talk to your librarian")
     expect(screen.getByRole("button", { name: "Send" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Keep" })).toBeNull()
-    expect(screen.getByText(/A question is never saved/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Ask the desk" })).toBeNull()
+    expect(screen.getByText("Zenod picks the mode and says which. Tap the label to change it.")).toBeTruthy()
   })
 
   it("answers a question from memory, says nothing was saved, and offers no Keep", async () => {
@@ -243,19 +245,129 @@ describe("MemoryChat and the memory desk (EPIC-14 S3)", () => {
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/console/memory-desk/jobs")).toBe(false)
   })
 
-  it("Ask the desk starts a job from what is written, and says what to write when it is empty", async () => {
-    const calls: string[] = []
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-      calls.push(`${url} ${String(init?.body ?? "")}`)
-      return new Response(JSON.stringify({ item: { ...STARTED, title: "Move boiler notes under House" }, needsYou: 1 }), { status: 202 })
-    }))
+  it("Make it a job in the label menu starts the desk from the same message (it replaces Ask the desk)", async () => {
+    const live = streamFetch()
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const inner = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/console/memory-desk/jobs") return new Response(JSON.stringify({ item: { ...STARTED, title: "Move boiler notes under House" }, needsYou: 1 }), { status: 202 })
+      return inner(url, init)
+    })
     render(<MemoryChat />)
-    fireEvent.click(screen.getByRole("button", { name: "Ask the desk" }))
-    expect(screen.getByTestId("memory-desk-hint").textContent).toContain("Write what the desk should do")
-    expect(calls).toEqual([])
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Move boiler notes under House" } })
-    fireEvent.click(screen.getByRole("button", { name: "Ask the desk" }))
+    sendText("Move boiler notes under House")
+    live.push({ type: "route", route: { action: "keep", keep: "Move boiler notes under House", question: null, by: "model" } })
+    live.push({ type: "kept", receipt: SAVED })
+    live.push({ type: "done" })
+    live.close()
+    fireEvent.click(await screen.findByRole("button", { name: /Kept/ }))
+    expect(screen.getByRole("menu", { name: "Do it another way" }).textContent).toContain("What was kept stays kept.")
+    fireEvent.click(screen.getByRole("menuitem", { name: /Make it a job/ }))
     await waitFor(() => expect(screen.getByTestId("memory-desk").textContent).toContain("Move boiler notes under House"))
-    expect(calls).toEqual(['/api/console/memory-desk/jobs {"request":"Move boiler notes under House"}'])
+    expect(screen.getByTestId("memory-mode").textContent).toContain("Job sent")
+    expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/console/memory-desk/jobs" && JSON.parse(String((init as RequestInit).body)).request === "Move boiler notes under House")).toBe(true)
+  })
+})
+
+describe("MemoryChat as the librarian: four modes (EPIC-22 E22-2)", () => {
+  const TALK = {
+    persona: { id: "zenod", name: "Zenod" },
+    message: "Let's talk about my running this year",
+    talked: true,
+    text: "You wrote about running four times this autumn [1]. What changed after the move?",
+    memories: [{ ...ANSWER.memories[1], cited: true }],
+    ms: 900,
+  }
+
+  it("labels each reply Kept, Looked up, Talking or Job sent", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    sendText("Who fixes the boiler?")
+    live.push({ type: "route", route: ASK_ROUTE })
+    live.push({ type: "answer", answer: ANSWER })
+    live.push({ type: "done" })
+    live.close()
+    expect((await screen.findByTestId("memory-mode")).textContent).toContain("Looked up")
+  })
+
+  it("answers who are you directly, with no mode label to switch", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    sendText("who are you?")
+    live.push({ type: "route", route: { ...ASK_ROUTE, question: "who are you?" } })
+    live.push({ type: "answer", answer: { ...ANSWER, question: "who are you?", memories: [], about: "zenod", answer: "I'm Zenod, the librarian of your memory." } })
+    live.push({ type: "done" })
+    live.close()
+    expect((await screen.findByTestId("memory-mode")).textContent).toBe("Answered directly")
+    expect(screen.getByTestId("memory-answer").textContent).toContain("the librarian of your memory")
+    expect(screen.queryByRole("button", { name: /Looked up/ })).toBeNull()
+  })
+
+  it("Zenod picks Talk it over: the reply is labelled Talking, and the next message continues the talk", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    sendText(TALK.message)
+    live.push({ type: "route", route: { action: "talk", keep: null, question: null, talk: TALK.message, by: "model" } })
+    live.push({ type: "memories", memories: TALK.memories })
+    live.push({ type: "text", text: "You wrote about running" })
+    expect((await screen.findByTestId("memory-talk-draft")).textContent).toContain("You wrote about running")
+    live.push({ type: "talk", talk: TALK })
+    live.push({ type: "done" })
+    live.close()
+    expect((await screen.findByTestId("memory-talk")).textContent).toContain("What changed after the move?")
+    expect(screen.getByTestId("memory-mode").textContent).toContain("Talking")
+    expect(screen.getByText("with Zenod")).toBeTruthy()
+    expect(screen.getByTestId("memory-did").textContent).toBe("Read your memory · nothing saved or changed")
+    expect(screen.getByTestId("memory-talkbar").textContent).toContain("Talking with Zenod")
+    expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe("Reply to Zenod…")
+
+    // The next message goes to the talk, with the talk so far.
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation(async () => new Response(`${JSON.stringify({ type: "talk", talk: { ...TALK, message: "The move", text: "That fits [1]." } })}\n`, { status: 200 }))
+    sendText("The move")
+    await waitFor(() => expect(screen.getAllByTestId("memory-talk")).toHaveLength(2))
+    const [url, init] = fetchMock.mock.calls.at(-1)!
+    expect(url).toBe("/api/console/memory-talk/stream")
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      message: "The move",
+      persona: null,
+      history: [
+        { role: "person", text: TALK.message },
+        { role: "persona", text: TALK.text },
+      ],
+      opener: false,
+    })
+    fireEvent.click(screen.getByRole("button", { name: "End the talk" }))
+    expect(screen.queryByTestId("memory-talkbar")).toBeNull()
+  })
+
+  it("tap the label to redo the message another way: Look it up answers the same words", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    sendText("Ana's birthday is 14 March")
+    live.push({ type: "route", route: { action: "keep", keep: "Ana's birthday is 14 March", question: null, by: "model" } })
+    live.push({ type: "kept", receipt: SAVED })
+    live.push({ type: "done" })
+    live.close()
+    fireEvent.click(await screen.findByRole("button", { name: /Kept/ }))
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation(async () => new Response(`${JSON.stringify({ type: "answer", answer: { ...ANSWER, question: "Ana's birthday is 14 March" } })}\n`, { status: 200 }))
+    fireEvent.click(screen.getByRole("menuitem", { name: /Look it up/ }))
+    await waitFor(() => expect(screen.getByTestId("memory-mode").textContent).toContain("Looked up"))
+    const [url, init] = fetchMock.mock.calls.at(-1)!
+    expect(url).toBe("/api/console/memory-chat/stream")
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ question: "Ana's birthday is 14 March" })
+  })
+
+  it("a talk started from a persona card opens in the chat, and the persona speaks first", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(`${JSON.stringify({ type: "talk", talk: { ...TALK, persona: { id: "weekly-recap", name: "Weekly recap" }, message: "", text: "This week you wrote mostly about the flat. Start there?" } })}\n`, { status: 200 })))
+    window.history.replaceState(null, "", "/#chat?talk=weekly-recap")
+    render(<MemoryChat />)
+    expect((await screen.findByTestId("memory-talk")).textContent).toContain("Start there?")
+    expect(screen.getByText("You started a talk from Personas")).toBeTruthy()
+    expect(screen.getByTestId("memory-talkbar").textContent).toContain("Talking with Weekly recap")
+    expect(window.location.hash).toBe("#chat")
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toEqual({ message: "", persona: "weekly-recap", history: [], opener: true })
+    window.history.replaceState(null, "", "/")
   })
 })

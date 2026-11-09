@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { talkHash } from "@/lib/memory-chat"
+
 import { errorMessage } from "@/lib/api"
 import {
   answerInbox,
@@ -523,6 +525,20 @@ function InboxCard({
         <p className="zi-warn" role="alert">
           {error}
         </p>
+      ) : null}
+      {item.kind !== "job" && !item.example ? (
+        <div className="zi-row">
+          {/* EPIC-22 E22-2: talk this note over with the persona that wrote it. */}
+          <button
+            type="button"
+            className="zp-deskbtn"
+            onClick={() => {
+              window.location.hash = talkHash(item.from, item.title)
+            }}
+          >
+            Talk it over
+          </button>
+        </div>
       ) : null}
       <Replies item={item} />
       <ReplyBox item={item} onChange={onChange} />

@@ -74,8 +74,10 @@ describe("Hosted vault onboarding boot", () => {
 
     render(<App />)
 
-    const vaultTab = await screen.findByRole("tab", { name: "Vault & sources" })
-    expect(vaultTab.getAttribute("data-state")).toBe("active")
+    // EPIC-22: Vault & sources lives under Settings.
+    const vaultTab = await screen.findByRole("button", { name: "Vault & sources" })
+    expect(vaultTab.getAttribute("aria-current")).toBe("true")
+    expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
     expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
   })
 
@@ -124,8 +126,10 @@ describe("Hosted vault onboarding boot", () => {
 
     render(<App />)
 
-    const vaultTab = await screen.findByRole("tab", { name: "Vault & sources" }, { timeout: 7000 })
-    expect(vaultTab.getAttribute("data-state")).toBe("active")
+    // EPIC-22: Vault & sources lives under Settings.
+    const vaultTab = await screen.findByRole("button", { name: "Vault & sources" }, { timeout: 7000 })
+    expect(vaultTab.getAttribute("aria-current")).toBe("true")
+    expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
     expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
   }, 10000)
 
@@ -300,10 +304,10 @@ describe("Hosted vault onboarding boot", () => {
 
       render(<App />)
 
-      const vaultTab = await screen.findByRole("tab", {
-        name: "Vault & sources",
-      })
-      expect(vaultTab.getAttribute("data-state")).toBe("active")
+      // EPIC-22: Vault & sources lives under Settings.
+      const vaultTab = await screen.findByRole("button", { name: "Vault & sources" })
+      expect(vaultTab.getAttribute("aria-current")).toBe("true")
+      expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
       expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
     }
   )
@@ -364,8 +368,11 @@ describe("Hosted vault onboarding boot", () => {
     const chatTab = await screen.findByRole("tab", { name: "Chat" })
     expect(chatTab.getAttribute("data-state")).toBe("active")
     expect(
-      screen.getByRole("tab", { name: "Vault & sources" }).getAttribute("data-state")
+      screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")
     ).toBe("inactive")
-    expect(screen.getByRole("heading", { name: "Talk to your memory." })).toBeTruthy()
+    // EPIC-22: the librarian of your memory, one box.
+    expect(screen.getByRole("heading", { name: "Zenod" })).toBeTruthy()
+    expect(screen.getByText("the librarian of your memory")).toBeTruthy()
+    expect(screen.getByRole("textbox", { name: "Talk to your librarian" })).toBeTruthy()
   })
 })

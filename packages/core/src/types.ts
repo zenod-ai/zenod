@@ -540,6 +540,17 @@ export interface BrainEngine {
     onText?: (delta: string) => void,
   ): Promise<(MemoryChatCheck & { context?: Array<{ n: number; path: string; title: string; url: string; provider: Note["provider"] }> }) | null>;
   /**
+   * EPIC-22 E22-2, Talk it over: one turn of a read-only talk with a persona over memories ranked
+   * retrieval already found (numbered by rank). One streamed call on the chat model, metered like
+   * every call; null when the model has no streaming chat call. Never stores.
+   */
+  talkOverMemories?(input: {
+    persona: import("./llm/memoryTalk.js").TalkPersona;
+    message: string;
+    history: readonly import("./llm/memoryTalk.js").TalkTurn[];
+    memories: ReadonlyArray<{ n: number; path: string; title: string; snippet?: string }>;
+  }, onText?: (delta: string) => void): Promise<{ text: string; cited: number[] } | null>;
+  /**
    * The web app's one Send button (E16-B1): decide from a message whether it carries new
    * information to keep, a question to answer, or both. One small call on the chat model, metered
    * like every call; the plain rules decide when there is no chat model or it slips. Never stores.

@@ -64,15 +64,30 @@ export type MemoryKeepReceipt = {
 /** What Zenod decided to do with a sent message (E16-B1). */
 export type MemorySendRoute = {
   /** job: passed to the memory desk (EPIC-14 S3). unsure: Zenod asks "keep it, or do it as a job?". */
-  action: "keep" | "answer" | "both" | "job" | "unsure"
+  action: "keep" | "answer" | "both" | "job" | "unsure" | "talk"
   /** The part kept as a new memory, in the person's words. */
   keep: string | null
   /** The part answered from memory. */
   question: string | null
   /** The job on the memory, in the person's words (job and unsure). */
   job?: string | null
+  /** Talk it over (EPIC-22 E22-2): the message to talk through, in the person's words. */
+  talk?: string | null
   by: "model" | "rules"
 }
+
+/** One turn of Talk it over (EPIC-22 E22-2): a persona reading your memory, nothing changed. */
+export type MemoryTalkReply = {
+  persona: { id: string; name: string }
+  message: string
+  /** False when there was no chat model to talk with; `text` says so. */
+  talked: boolean
+  text: string
+  memories: MemoryChatMemory[]
+  ms: number
+}
+
+export type MemoryTalkTurn = { role: "person" | "persona"; text: string }
 
 /** A memory desk job that was started: it shows in the inbox at once as Working. */
 export type MemoryDeskJob = { id: string; title: string; status: string; step: string | null }
@@ -91,6 +106,7 @@ export type MemorySendResult = {
   kept: MemoryKeepReceipt | { error: string } | null
   answer: MemoryChatAnswer | null
   desk?: MemoryDeskJob | { error: string } | null
+  talk?: MemoryTalkReply | null
 }
 
 export type MemoryNote = {
@@ -151,6 +167,7 @@ type StreamEvent =
   | { type: "memories"; memories: MemoryChatMemory[] }
   | { type: "text"; text: string }
   | { type: "answer"; answer: MemoryChatAnswer }
+  | { type: "talk"; talk: MemoryTalkReply }
   | { type: "done" }
   | { type: "error"; status: number; error?: string; code?: string; message?: string }
 
@@ -163,28 +180,47 @@ function failure(status: number, data: { error?: string; code?: string; message?
   )
 }
 
-/**
- * Send one message (E16-B1): Zenod decides, then the keep's receipt arrives, then (when something
- * was asked) the memories at once, the answer as it is written and the checked answer (E12-S1b).
- */
-export async function sendToMemory(
-  message: string,
-  handlers: MemorySendHandlers = {}
-): Promise<MemorySendResult> {
-  const response = await fetch("/api/console/memory-send/stream", json({ message }))
+/** Read an NDJSON stream line by line; a handler that throws stops the read. */
+async function readLines(path: string, body: unknown, handle: (event: StreamEvent) => void): Promise<void> {
+  const response = await fetch(path, json(body))
   if (!response.ok || !response.body) {
     throw failure(response.status, (await response.json().catch(() => null)) as { error?: string } | null)
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
+  const line = (text: string) => {
+    if (text.trim()) handle(JSON.parse(text) as StreamEvent)
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: !done })
+    let newline = buffer.indexOf("\n")
+    while (newline >= 0) {
+      line(buffer.slice(0, newline))
+      buffer = buffer.slice(newline + 1)
+      newline = buffer.indexOf("\n")
+    }
+    if (done) break
+  }
+  line(buffer)
+}
+
+/**
+ * Send one message (E16-B1): Zenod decides, then the keep's receipt arrives, then (when something
+ * was asked) the memories at once, the answer as it is written and the checked answer (E12-S1b).
+ * EPIC-22: when Zenod picks Talk it over, the talk's reply arrives instead.
+ */
+export async function sendToMemory(
+  message: string,
+  handlers: MemorySendHandlers = {}
+): Promise<MemorySendResult> {
   let route: MemorySendRoute | null = null
   let kept: MemorySendResult["kept"] = null
   let answer: MemoryChatAnswer | null = null
   let desk: MemorySendResult["desk"] = null
-  const handle = (line: string) => {
-    if (!line.trim()) return
-    const event = JSON.parse(line) as StreamEvent
+  let talk: MemoryTalkReply | null = null
+  await readLines("/api/console/memory-send/stream", { message }, (event) => {
     if (event.type === "route") {
       route = event.route
       handlers.onRoute?.(event.route)
@@ -197,22 +233,61 @@ export async function sendToMemory(
     } else if (event.type === "memories") handlers.onMemories?.(event.memories)
     else if (event.type === "text") handlers.onText?.(event.text)
     else if (event.type === "answer") answer = event.answer
+    else if (event.type === "talk") talk = event.talk
     else if (event.type === "error") throw failure(event.status, event)
-  }
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (value) buffer += decoder.decode(value, { stream: !done })
-    let newline = buffer.indexOf("\n")
-    while (newline >= 0) {
-      handle(buffer.slice(0, newline))
-      buffer = buffer.slice(newline + 1)
-      newline = buffer.indexOf("\n")
-    }
-    if (done) break
-  }
-  handle(buffer)
+  })
   if (!route) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
-  return { route, kept, answer, desk }
+  return { route, kept, answer, desk, talk }
+}
+
+/** "Look it up" from the label menu (EPIC-22): answer the message from memory, keeping nothing. */
+export async function lookUpInMemory(
+  question: string,
+  handlers: MemoryChatStreamHandlers = {}
+): Promise<MemoryChatAnswer> {
+  let answer: MemoryChatAnswer | null = null
+  await readLines("/api/console/memory-chat/stream", { question }, (event) => {
+    if (event.type === "memories") handlers.onMemories?.(event.memories)
+    else if (event.type === "text") handlers.onText?.(event.text)
+    else if (event.type === "answer") answer = event.answer
+    else if (event.type === "error") throw failure(event.status, event)
+  })
+  if (!answer) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
+  return answer
+}
+
+/**
+ * Talk it over (EPIC-22 E22-2): one turn with a persona (by id; none is the librarian itself). A talk
+ * started from a card sends `opener` and the persona speaks first. The app keeps the conversation
+ * and sends its earlier turns each time. Nothing is kept or changed.
+ */
+export async function talkWithMemory(
+  input: { message: string; persona?: string | null; history?: MemoryTalkTurn[]; opener?: boolean },
+  handlers: MemoryChatStreamHandlers = {}
+): Promise<MemoryTalkReply> {
+  let talk: MemoryTalkReply | null = null
+  await readLines("/api/console/memory-talk/stream", input, (event) => {
+    if (event.type === "memories") handlers.onMemories?.(event.memories)
+    else if (event.type === "text") handlers.onText?.(event.text)
+    else if (event.type === "talk") talk = event.talk
+    else if (event.type === "error") throw failure(event.status, event)
+  })
+  if (!talk) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
+  return talk
+}
+
+/** A talk to start, from a persona or inbox card: `#chat?talk=<persona>&about=<text>`. */
+export function talkFromHash(hash: string): { persona: string; about: string } | null {
+  if (!hash.startsWith("#chat?")) return null
+  const params = new URLSearchParams(hash.slice("#chat?".length))
+  const persona = params.get("talk")?.trim()
+  return persona ? { persona, about: params.get("about")?.trim() ?? "" } : null
+}
+
+export function talkHash(persona: string, about = ""): string {
+  const params = new URLSearchParams({ talk: persona })
+  if (about) params.set("about", about.slice(0, 300))
+  return `#chat?${params.toString()}`
 }
 
 /**

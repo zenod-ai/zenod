@@ -1,7 +1,9 @@
 import {
   editionProfile,
   type ZenodEdition,
+  type ZenodMemoryView,
   type ZenodPortalSection,
+  type ZenodSettingsView,
 } from "@/views/zenod-edition"
 
 // Kept as the self-hosted alias for callers that have not yet adopted an
@@ -13,10 +15,63 @@ export type DashboardSection = ZenodPortalSection
 export const PUBLIC_LANDING_URL = "https://zenod.dev/"
 export const CANONICAL_MCP_ORIGIN = "https://cloud.zenod.dev"
 
+/** Where a panel lives: a tab, and for Memory and Settings (hosted, EPIC-22) the view inside it. */
+export type DashboardPlace = {
+  section: DashboardSection
+  memory?: ZenodMemoryView
+  settings?: ZenodSettingsView
+}
+
+// EPIC-22 E22-2: every old hosted tab, and the new view names, to their home in the five tabs.
+const HOSTED_PLACES: Record<string, Omit<DashboardPlace, "section"> & { section: DashboardSection }> = {
+  chat: { section: "chat" },
+  inbox: { section: "inbox" },
+  personas: { section: "personas" },
+  memory: { section: "memory", memory: "tree" },
+  tree: { section: "memory", memory: "tree" },
+  glance: { section: "memory", memory: "glance" },
+  overview: { section: "memory", memory: "glance" },
+  graph: { section: "memory", memory: "graph" },
+  check: { section: "memory", memory: "check" },
+  settings: { section: "settings", settings: "connect" },
+  connect: { section: "settings", settings: "connect" },
+  connections: { section: "settings", settings: "connect" },
+  channels: { section: "settings", settings: "channels" },
+  subscribers: { section: "settings", settings: "channels" },
+  vault: { section: "settings", settings: "vault" },
+  usage: { section: "settings", settings: "usage" },
+  costs: { section: "settings", settings: "usage" },
+  account: { section: "settings", settings: "account" },
+}
+
+/** The hosted app's place for a `?tab=` value or #anchor name; the chat when it names nothing known. */
+export function dashboardPlaceForTab(
+  tab: string | undefined,
+  edition: ZenodEdition = "self-hosted"
+): DashboardPlace {
+  if (edition === "hosted") return HOSTED_PLACES[tab ?? ""] ?? { section: "chat" }
+  return { section: dashboardSectionForTab(tab, edition) }
+}
+
+/** The place an in-app #anchor opens (hosted): `#graph?…`, `#memory?path=…`, `#chat?talk=…`, `#settings/usage`. */
+export function dashboardPlaceForHash(hash: string): DashboardPlace | null {
+  const name = hash.replace(/^#/, "").split(/[?]/)[0]!.split("/")
+  const [first = "", second] = name
+  if (!first) return null
+  if (first === "memory" && hash.startsWith("#memory?")) return { section: "memory", memory: "tree" }
+  if ((first === "memory" || first === "settings") && second) {
+    const place = HOSTED_PLACES[second]
+    if (place?.section === first) return place
+  }
+  if (first === "ring-router-products" || first === "phylax-channels") return HOSTED_PLACES.channels!
+  return HOSTED_PLACES[first] ?? null
+}
+
 export function dashboardSectionForTab(
   tab: string | undefined,
   edition: ZenodEdition = "self-hosted"
 ): DashboardSection {
+  if (edition === "hosted") return dashboardPlaceForTab(tab, edition).section
   const available = new Set(
     editionProfile(edition).sections.map(({ id }) => id)
   )

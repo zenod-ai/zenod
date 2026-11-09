@@ -32,24 +32,35 @@ export type ZenodEditionProfile = {
   sections: readonly { id: ZenodPortalSection; label: string }[]
 }
 
-// E12-S1: hosted users land on the chat with their memory; the rest sits behind its tabs.
+// EPIC-22 E22-2: the librarian of your memory has five tabs. Chat (E12-S1) is where you land; Inbox
+// (EPIC-14 S2) and Personas (S4) stay; everything else moved, not rewritten, under Memory (At a
+// glance, Tree, Graph, Check filings) and Settings (the gear). Old `?tab=` links and #anchors still
+// open their panel in its new home (dashboardPlaceForTab).
 const HOSTED_SECTIONS = Object.freeze([
   { id: "chat", label: "Chat" },
-  // E12-S2: your memory as a graph, next to the chat.
-  { id: "graph", label: "Graph" },
-  // EPIC-14 S2: questions, findings and memory desk jobs addressed to you.
   { id: "inbox", label: "Inbox" },
-  // EPIC-14 S4: the helpers that read your memory and leave findings in the inbox.
   { id: "personas", label: "Personas" },
-  { id: "overview", label: "Overview" },
   { id: "memory", label: "Memory" },
-  { id: "connect", label: "Connect / MCP" },
-  { id: "subscribers", label: "Subscribers" },
-  { id: "channels", label: "Channels" },
-  { id: "vault", label: "Vault & sources" },
-  { id: "usage", label: "Usage" },
-  { id: "account", label: "Account" },
+  { id: "settings", label: "Settings" },
 ] as const)
+
+export type ZenodMemoryView = "glance" | "tree" | "graph" | "check"
+export type ZenodSettingsView = "connect" | "channels" | "vault" | "usage" | "account"
+
+export const MEMORY_VIEWS: readonly { id: ZenodMemoryView; label: string }[] = Object.freeze([
+  { id: "glance", label: "At a glance" },
+  { id: "tree", label: "Tree" },
+  { id: "graph", label: "Graph" },
+  { id: "check", label: "Check filings" },
+])
+
+export const SETTINGS_VIEWS: readonly { id: ZenodSettingsView; label: string }[] = Object.freeze([
+  { id: "connect", label: "Connect AI apps" },
+  { id: "channels", label: "WhatsApp & Telegram" },
+  { id: "vault", label: "Vault & sources" },
+  { id: "usage", label: "Usage & plan" },
+  { id: "account", label: "Account" },
+])
 
 const SELF_HOSTED_SECTIONS = Object.freeze([
   { id: "overview", label: "Overview" },

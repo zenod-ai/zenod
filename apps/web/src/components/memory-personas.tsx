@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { talkHash } from "@/lib/memory-chat"
+
 import { errorMessage } from "@/lib/api"
 import { readInboxCount, setInboxCount } from "@/lib/inbox"
 import {
@@ -213,6 +215,18 @@ function PersonaCard({
             <li key={skill.id}>{skill.label}</li>
           ))}
         </ul>
+      </div>
+      {/* EPIC-22 E22-2: talk something over with this persona in the chat, on or off. */}
+      <div className="zi-row">
+        <button
+          type="button"
+          className="zp-deskbtn"
+          onClick={() => {
+            window.location.hash = talkHash(persona.id)
+          }}
+        >
+          Talk it over
+        </button>
       </div>
       {persona.enabled ? (
         <>
