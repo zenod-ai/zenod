@@ -105,6 +105,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | A14 opened ready: notify-only Phylax key for agent_team alerts | Jordi said "Go ahead" to agent_team ask E42-A14 (WhatsApp alerts to him from the Zenod number) on 2026-11-08; the key can only message his own verified phone; rollback revoke the tenant token | desk/inbox 2026-11-08-alpha9-notify-key-for-agent-team-whatsapp-alerts |
 | 2026-11-09 | commits named under their rows | they reached main with a ZAL- prefix the console does not read | A6: 2f6a7a3, 7dba7dc, 253daa0, 2f6244e, 6185acb, c4303d4 ; A8: 1dfd014 (#1496 self-heal), 4036690 (test temp dirs), 0395211 ; A9: b950757, 7eb9fdf ; A10: bccc4af ; A12: e080bc7 ; A13: desk notes 0a15859, 79271ba ; A14: desk note 72e5c5e |
 | 2026-11-09 | three informational desk notes closed | paper-deck skill live, paper deck adopted, EpicTeam Chat voice-note forwarding taken by agent_team (EPIC-21 V2 stays blocked on their E42-S39); nothing for Zenod to build | 76b3c20, 7eee459, e90564f |
+| 2026-11-09 | A13 and steward commits named | the ZAL- prefix is not read as a row code | A13: 3abe85e (#1550 testers page, apply form, sign-up path fixes, counter) ; steward: cbefb61 |
 
 
 ## Spine Map
