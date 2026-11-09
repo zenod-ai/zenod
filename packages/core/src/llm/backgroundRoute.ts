@@ -52,9 +52,26 @@ export function withBackgroundRoute(primary: BrainLlm, background: BrainLlm, opt
     }
   };
 
+  // The desk agent's streamed calls (EPIC-14 S11): background when desk is routed, else the chat model.
+  const backgroundChat = async (input: { system: string; prompt: string }, onText: (delta: string) => void): Promise<string> => {
+    const onPrimary = () => primary.streamMemoryChat!(input, onText);
+    if (!options.desk || !background.streamMemoryChat || now() < parkedUntil) return onPrimary();
+    try {
+      return await background.streamMemoryChat(input, onText);
+    } catch (error) {
+      if (isLlmAllowanceExceededError(error)) throw error;
+      const status = statusOf(error);
+      const parked = status !== null && ACCOUNT_STATUSES.has(status);
+      if (parked) parkedUntil = now() + cooldownMs;
+      try { options.onFallback?.({ method: "streamBackgroundChat", status, parked }); } catch { /* telemetry never breaks a job */ }
+      return onPrimary();
+    }
+  };
+
   // Proxy preserves every other BrainLlm method (answers, chat, turn plans) on the primary route.
   return new Proxy(primary, {
     get(target, property, receiver) {
+      if (property === "streamBackgroundChat") return primary.streamMemoryChat ? backgroundChat : undefined;
       if (typeof property === "string" && routed(property) && typeof (background as unknown as Record<string, unknown>)[property] === "function") {
         return call(property);
       }

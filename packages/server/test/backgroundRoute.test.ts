@@ -72,3 +72,27 @@ it("logs cost per provider: DeepSeek at its real charge next to OpenRouter's", (
     store.close();
   }
 });
+
+it("at the default $5 the health warning turns low when the balance reaches $5 (S11)", async () => {
+  const route = backgroundRouteFromEnv({ DEEPSEEK_API_KEY: "offline-key" })!;
+  const { fetch } = balanceFetch([usd("10.00"), usd("5.01"), usd("5.00")]);
+  const lines: string[] = [];
+  const monitor = new BackgroundBalanceMonitor(route, { fetch, log: (line) => lines.push(line), now: () => Date.UTC(2026, 10, 9) });
+  expect((await monitor.check())).toMatchObject({ provider: "deepseek", state: "ok", balanceUsd: 10 });
+  expect((await monitor.check()).state).toBe("ok");
+  expect((await monitor.check())).toMatchObject({ state: "low", balanceUsd: 5 });
+  expect(lines).toEqual([expect.stringMatching(/^\[background\] ALERT deepseek balance low: \$5 left \(alert at \$5\)/)]);
+});
+
+it("keeps each call's feature and provider wall time on the ledger (S11)", () => {
+  const store = new UsageStore(":memory:");
+  try {
+    store.record({ operation: "classify", provider: "deepseek", model: "deepseek-flash", inputTokens: 10, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, latencyMs: 1234 });
+    store.record({ operation: "answer", provider: "deepseek", model: "deepseek-flash", inputTokens: 10, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0 }, Date.now(), "desk");
+    const [desk, filing] = store.timeline({ limit: 10 });
+    expect(filing).toMatchObject({ provider: "deepseek", feature: "filing", latencyMs: 1234 });
+    expect(desk).toMatchObject({ feature: "desk", latencyMs: null });
+  } finally {
+    store.close();
+  }
+});
