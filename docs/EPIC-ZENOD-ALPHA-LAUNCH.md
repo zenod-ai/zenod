@@ -117,6 +117,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | decided by ticket worker A16: staged media links last 7 days, not 24 h ([#1558](https://github.com/zenod-ai/zenod/pull/1558)) | why: a media save replayed after a filing outage fetched an expired link and was lost; risk: a leaked link stays valid longer, it only opens that one file; rollback: revert the PR | [zal-a16-2026-11-09](evidence/zal-a16-2026-11-09.md) |
 | 2026-11-09 | A17 opened ready: header and logo only on /connect and /pricing | Jordi's own words 2026-11-08 (E73-A1 D3): "for znot.dev, let's keep the landing page as up to date as possible"; zenod-social had to drop /connect from the testers deck because it still shows the old Bodoni Z and dark header; the full restyle (A7, A11) stays parked as he left it | desk/inbox/2026-11-09-zenod-social-zenod-dev-connect-still-shows-the-old-bo.md |
 | 2026-11-09 | commits named under their rows | worker and desk-note commits | A15: c6de50d ; A17: 4be2453 (desk note) ; Q4 follow-up, agent_team ask_brain 60 s: 5ca87fe, e58233e (desk notes) |
+| 2026-11-09 | commits named under their rows | desk closes and worker commits | A16: d59c0ad ; A17: f2712e0, ec19bba ; Q4 follow-up desk closes: c39e072, 0669217 |
 
 
 ## Spine Map
