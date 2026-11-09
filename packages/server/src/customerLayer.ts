@@ -82,6 +82,7 @@ import { parseTalkRequest, streamTalk, talkPersona } from "./memoryTalk.js";
 import { parseModeSwitch, recordModeSwitch } from "./modeSwitches.js";
 import { memoryGlance, MemoryGlanceCache } from "./memoryGlance.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
+import { transcribeAudio } from "./transcribe.js";
 import { registerPersonaRoutes } from "./personaRoutes.js";
 import { registerMemoryCallRoutes } from "./memoryCallRoutes.js";
 import { CALL_BASE_ENV, callKey, callMeterFor, callsFor, openAiMinter, OPENAI_BASE_URL, platformMeter } from "./memoryCall.js";
@@ -1864,7 +1865,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
 
   // EPIC-14 S2: the inbox of persona questions, findings and memory desk jobs, for the signed-in
   // customer's own tenant only (inboxRoutes.ts).
-  registerInboxRoutes(app, async (c) => {
+  registerInboxRoutes<Runtime>(app, async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
     const account = accounts.resolveActiveTenantForUser(session.user_id);
@@ -1872,6 +1873,23 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
     return { runtime, tenantId: account.tenant_id };
+  }, {
+    // EPIC-14 S26: a voice note left as feedback on a card is transcribed as every voice note is,
+    // on the tenant's own settings and usage ledger, the local fallback included (taskJobQueue's transcribeMedia).
+    transcribe: (runtime, audio, filename) => {
+      const settings = runtime.settings;
+      return transcribeAudio(audio, filename, {
+        model: settings.whisperModel(),
+        groqApiKey: settings.get("groq_api_key"),
+        openaiApiKey: settings.get("openai_api_key"),
+        openrouterApiKey: settings.openrouterApiKey(),
+        openrouterUser: settings.openrouterUser(),
+        openrouterModel: settings.openrouterTranscriptionModel(),
+        longTranscriptionProvider: settings.longTranscriptionProvider(),
+        useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
+        onUsage: settings.transcriptionUsageSink(),
+      });
+    },
   });
 
   // EPIC-14 S4: the personas' settings (on or off, last runs, spend, Run now) for the signed-in

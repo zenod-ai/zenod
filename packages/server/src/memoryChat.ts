@@ -61,7 +61,7 @@ export const ABOUT_ZENOD = [
   "",
   "- **Keep**: tell me something here, record a voice note, or send it on WhatsApp. I keep every word and file it on the right page of your memory tree, and say where it went.",
   "- **Look up**: ask me something and I answer from your own notes, with the memories I used, each with how well it matched.",
-  "- **Talk it over**: want to think out loud? We talk it through, with me or one of your personas, using what your memory holds.",
+  "- **Talk it over**: want to think out loud? We talk it through, with me or one of your helpers, using what your memory holds.",
   "- **Job on the memory**: something filed in the wrong place or tangled? I make it a job for the memory desk, and it reports in your Inbox.",
   "- **Browse**: the Memory tab shows your memory at a glance, its tree and its graph. Connect Claude, ChatGPT, Cursor and others at [zenod.dev/connect](https://zenod.dev/connect).",
   "",

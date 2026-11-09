@@ -179,7 +179,7 @@ describe("the runtime applies the limits model", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       runtime.usageStore.record(report("classify", 2.6), NOW);
-      expect(runtime.featureBlock("personas", NOW)).toMatchObject({ reason: "allowance", message: expect.stringContaining("Personas are paused") });
+      expect(runtime.featureBlock("personas", NOW)).toMatchObject({ reason: "allowance", message: expect.stringContaining("Helpers are paused") });
       expect(runtime.featureBlock("calls", NOW)).not.toBeNull();
       expect(runtime.featureBlock("desk", NOW)).not.toBeNull();
       expect(runtime.featureBlock("chat", NOW)).toBeNull();

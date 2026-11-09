@@ -4,7 +4,7 @@ import { api } from "@/lib/api"
 
 // EPIC-14 S2: the inbox's client. Shapes mirror packages/server/src/inboxStore.ts.
 
-export type InboxKind = "question" | "finding" | "job"
+export type InboxKind = "question" | "finding" | "job" | "suggestion"
 export type InboxStatus =
   | "open"
   | "answered"
@@ -13,15 +13,21 @@ export type InboxStatus =
   | "done"
   | "failed"
   | "undone"
+  /** S26: a suggestion you pressed Do it on. */
+  | "accepted"
+  /** S26: a suggestion put away with Not now. */
+  | "declined"
 
-/** What you wrote back on a card (EPIC-14 S2 round 3). */
+/** What you wrote back on a card (EPIC-14 S2 round 3; S26 adds Not now's reason and voice notes). */
 export type InboxReply = {
-  kind: "answer" | "feedback" | "followup"
+  kind: "answer" | "feedback" | "followup" | "notnow"
   text: string
   at: string
   savedJobId?: string | null
   followUpItemId?: string | null
   readAt?: string | null
+  /** Feedback left as a voice note: its length. The text is its transcript. */
+  voice?: { seconds: number | null } | null
 }
 
 export type InboxItem = {
@@ -51,6 +57,15 @@ export type InboxItem = {
   } | null
   replies: InboxReply[]
   followUpOf: { id: string; title: string } | null
+  /** S26 suggestion: the change in words, as the memory desk would run it. */
+  action?: string | null
+  /** S26 suggestion: what Do it started. */
+  done?: {
+    jobItemId: string | null
+    action: string
+    changed: boolean
+    at: string
+  } | null
   example: boolean
   createdAt: string
   updatedAt: string
@@ -87,6 +102,47 @@ export const undoInbox = (id: string) =>
 /** The reply box on a card: an answer in words, feedback to a persona, or a follow-up for the desk. */
 export const replyInbox = (id: string, text: string) =>
   api<InboxChange>(itemPath(id, "reply"), { method: "POST", body: { text } })
+/** S26: Do it on a suggestion; `action` is your own words after Change. */
+export const doSuggestion = (id: string, action?: string) =>
+  api<InboxChange>(itemPath(id, "do"), {
+    method: "POST",
+    body: action ? { action } : {},
+  })
+/** S26: Not now on a suggestion, with an optional reason the helper reads next run. */
+export const notNowSuggestion = (id: string, reason?: string) =>
+  api<InboxChange>(itemPath(id, "not-now"), {
+    method: "POST",
+    body: reason ? { reason } : {},
+  })
+
+/** S26: a voice note as feedback on a card; what is typed in the box goes before the spoken words. */
+export async function sendVoiceFeedback(
+  id: string,
+  audio: Blob,
+  seconds: number,
+  typed: string
+): Promise<InboxChange> {
+  const query = typed.trim() ? `?typed=${encodeURIComponent(typed.trim())}` : ""
+  const response = await fetch(`${itemPath(id, "voice-feedback")}${query}`, {
+    method: "POST",
+    headers: {
+      "content-type": audio.type || "audio/webm",
+      "x-seconds": seconds.toFixed(2),
+    },
+    body: audio,
+  })
+  const data = (await response.json().catch(() => null)) as
+    | (InboxChange & { message?: string })
+    | null
+  if (!response.ok || !data?.item)
+    throw new Error(
+      data?.message ??
+        (response.status === 401
+          ? "Your session ended. Sign in again."
+          : "That voice note could not be sent.")
+    )
+  return data
+}
 export const showInboxExamples = () =>
   api<InboxList>(`${BASE}/examples`, { method: "POST" })
 export const clearInboxExamples = () =>

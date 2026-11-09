@@ -139,6 +139,55 @@ describe("memory desk routes (EPIC-14 S3)", { timeout: 30_000 }, () => {
     }
   });
 
+  it("S26: Do it on a suggestion runs one desk job linked to it with Undo; Change runs the edited words; Not now keeps its reason for the helper", async () => {
+    const deskJob = vi.fn(async (input: DeskJobInput) => {
+      input.onStep?.("Reading your topics");
+      return DONE;
+    });
+    const undoDeskJob = vi.fn(async () => ({ revision: null, undone: 1, skipped: 0 }));
+    const t = await setup({ deskJob, undoDeskJob });
+    try {
+      const inbox = inboxFor(t.runtimes.get("tenant-a")!);
+      const post = (title: string) => inbox.post({ kind: "suggestion", from: "Topic gardener", title, action: "Make Cabin decision its own topic.", links: [{ label: "Boat and cabin", path: "Areas/Boat and cabin.md" }] });
+      const one = post("Boat and cabin hold two things");
+      expect((await t.list(t.ada))[0]).toMatchObject({ id: one.id, kind: "suggestion", status: "open", needsYou: true, action: "Make Cabin decision its own topic." });
+      // Bob cannot press Ada's buttons.
+      expect((await t.call("POST", `/api/console/inbox/${one.id}/do`, t.bob, {})).status).toBe(404);
+      expect((await t.call("POST", `/api/console/inbox/${one.id}/dismiss`, t.ada)).status).toBe(400);
+
+      const pressed = await (await t.call("POST", `/api/console/inbox/${one.id}/do`, t.ada, {})).json();
+      expect(pressed.item).toMatchObject({ status: "accepted", needsYou: false, done: { action: "Make Cabin decision its own topic.", changed: false, jobItemId: pressed.followUp.id } });
+      expect(pressed.followUp).toMatchObject({ kind: "job", from: "Memory desk", status: "working", title: "Make Cabin decision its own topic.", followUpOf: { id: one.id } });
+      expect((await t.call("POST", `/api/console/inbox/${one.id}/do`, t.ada, {})).status).toBe(409);
+      const done = await t.settled(t.ada, pressed.followUp.id);
+      expect(done.status).toBe("done");
+      expect(deskJob).toHaveBeenCalledTimes(1);
+      expect(deskJob.mock.calls[0]![0].request).toBe('Make Cabin decision its own topic.\n\nSuggested by Topic gardener: "Boat and cabin hold two things"');
+      expect((await (await t.call("POST", `/api/console/inbox/${done.id}/undo`, t.ada)).json()).item.status).toBe("undone");
+      expect(undoDeskJob).toHaveBeenCalledTimes(1);
+
+      // Change: the user's words run instead.
+      const two = post("Boat and cabin, again");
+      expect((await t.call("POST", `/api/console/inbox/${two.id}/do`, t.ada, { action: "x".repeat(601) })).status).toBe(400);
+      const changed = await (await t.call("POST", `/api/console/inbox/${two.id}/do`, t.ada, { action: "Make Cabin decision its own topic, keep Boat repair where it is." })).json();
+      expect(changed.item.done).toMatchObject({ changed: true, action: "Make Cabin decision its own topic, keep Boat repair where it is." });
+      await t.settled(t.ada, changed.followUp.id);
+      expect(deskJob.mock.calls[1]![0].request.startsWith("Make Cabin decision its own topic, keep Boat repair where it is.")).toBe(true);
+
+      // Not now, with a reason the helper reads on its next run; without one, nothing to read.
+      const three = post("Join Flat and Apartment");
+      const declined = await (await t.call("POST", `/api/console/inbox/${three.id}/not-now`, t.ada, { reason: "They are two different flats" })).json();
+      expect(declined.item).toMatchObject({ status: "declined", needsYou: false, replies: [{ kind: "notnow", text: "They are two different flats", readAt: null }] });
+      expect((await t.call("POST", `/api/console/inbox/${three.id}/do`, t.ada, {})).status).toBe(409);
+      const four = post("Join Boat and Yard");
+      expect((await (await t.call("POST", `/api/console/inbox/${four.id}/not-now`, t.ada, {})).json()).item.replies).toEqual([]);
+      expect(inbox.unreadFeedback("Topic gardener").map((entry) => [entry.reply.kind, entry.reply.text])).toEqual([["notnow", "They are two different flats"]]);
+      expect(deskJob).toHaveBeenCalledTimes(2);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("a big job posts a plan card; Run it carries on the same item with the plan, and is not filed as a note", async () => {
     const deskJob = vi.fn(async (input: DeskJobInput): Promise<DeskJobResult> => input.plan
       ? DONE

@@ -288,6 +288,10 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
     <section className="zp zi" aria-labelledby="memory-personas-heading">
       <div className="zp-head">
         <h2 id="memory-personas-heading">Helpers that read your memory.</h2>
+        <p className="zp-lede zr-what" data-testid="helpers-what">
+          A helper is a harness that wakes up bound to a persona, reads your
+          memory and puts cards in your inbox.
+        </p>
         <p className="zp-lede">
           Switch on the ones you want. Each wakes on its own schedule inside
           your Zenod account, uses only the skills listed, writes only into
@@ -298,14 +302,14 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
       <div className="zp-stage">
         <div className="zp-screen zi-screen">
           {state.kind === "loading" ? (
-            <p className="zp-empty">Opening your personas…</p>
+            <p className="zp-empty">Opening your helpers…</p>
           ) : state.kind === "error" ? (
             <p className="zp-empty zp-warn" role="alert">
-              Your personas could not be opened: {state.message}
+              Your helpers could not be opened: {state.message}
             </p>
           ) : (
             <>
-              <ul className="zi-list" aria-label="Personas">
+              <ul className="zi-list" aria-label="Helpers">
                 {state.list.personas.map((persona) => (
                   <PersonaCard
                     key={persona.id}
@@ -316,7 +320,7 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
               </ul>
               <p className="zp-hint zi-foot">
                 {state.list.personas.filter((p) => p.enabled).length} of{" "}
-                {state.list.personas.length} on. All personas together spend
+                {state.list.personas.length} on. All helpers together spend
                 at most {usd(state.list.budget.capUsd)} a month of your AI
                 allowance. This month: {usd(state.list.budget.spentUsd)}.
               </p>

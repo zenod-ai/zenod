@@ -135,6 +135,31 @@ describe("persona runner (EPIC-14 S4)", () => {
     expect(stub.calls.at(-1)!.system).not.toContain("wrote back");
   });
 
+  it("posts a suggestion only with its skill, and reads a Not now reason on its next run (EPIC-14 S26)", async () => {
+    let clock = new Date("2026-11-08T03:00:00Z");
+    const stub = stubModel();
+    const { deps: d, inbox } = deps({ model: () => stub.model, now: () => clock });
+    const gardener: PersonaDefinition = {
+      ...WEEKLY_RECAP, id: "gardener-test", name: "Gardener test", skills: ["read", "propose-desk-job"], schedule: { every: "night" },
+      async run(ctx) {
+        await ctx.think({ system: "Look for tangled topics.", prompt: "notes" });
+        ctx.postSuggestion({ title: "Flat and Apartment are the same place", action: "Join Apartment into Flat." });
+        return { summary: "one suggestion" };
+      },
+    };
+    expect(await runPersona(gardener, d, "manual")).toMatchObject({ status: "done" });
+    const card = inbox.list().find((item) => item.kind === "suggestion")!;
+    expect(card).toMatchObject({ from: "Gardener test", status: "open", action: "Join Apartment into Flat." });
+    inbox.declineSuggestion(card.id, "They are two different flats");
+    clock = new Date("2026-11-09T03:00:00Z");
+    await runPersona(gardener, d, "manual");
+    expect(stub.calls.at(-1)!.system).toContain("Not now: They are two different flats");
+    expect(inbox.get(card.id)!.replies[0]!.readAt).toBeTruthy();
+    // Without the skill it may not suggest.
+    const noSkill: PersonaDefinition = { ...gardener, id: "no-skill", name: "No skill", skills: ["read"] };
+    expect(await runPersona(noSkill, d, "manual")).toMatchObject({ status: "failed" });
+  });
+
   it("skips with no model call when there is nothing to read, or nothing new since the last real run", async () => {
     const empty = stubModel();
     const a = deps({ entries: [], model: () => empty.model });
@@ -194,7 +219,7 @@ describe("persona runner (EPIC-14 S4)", () => {
     c.deps.store = new PersonaStore(join(dir, "personas-c.sqlite"), () => new Date("2026-11-03T03:00:00Z"));
     const other = c.deps.store.start("someone-else", "manual")!;
     c.deps.store.finish(other.id, { status: "done", steps: 1, modelCalls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0.05, summary: "", inboxItemIds: [], revision: null, fingerprint: "x" });
-    expect(await runPersona(WEEKLY_RECAP, c.deps, "manual")).toMatchObject({ status: "capped", summary: "The personas' monthly budget is used up" });
+    expect(await runPersona(WEEKLY_RECAP, c.deps, "manual")).toMatchObject({ status: "capped", summary: "The helpers' monthly budget is used up" });
     expect(stub.calls).toHaveLength(0);
   });
 

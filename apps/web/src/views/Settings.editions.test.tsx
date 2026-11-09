@@ -95,7 +95,7 @@ describe("Zenod edition portal", () => {
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
       "Chat",
       "Inbox",
-      "Personas",
+      "Helpers",
       "Memory",
       "Settings",
     ])

@@ -65,3 +65,12 @@
   .zi-reply textarea { min-height: 3.8rem; }
   .zi-replyrow .zp-keep { margin-left: auto; }
 }
+/* EPIC-14 S26: the suggestion card. Its kind wears the accent while it waits for you, the change it
+   proposes reads as one line, and what Do it started stays on the card. */
+.zi-suggestion.zi-s-open .zi-kind { border-color: var(--zp-accent); color: var(--zp-accent); }
+.zi-action { margin: 0; font-size: 0.95rem; line-height: 1.45; max-width: 64ch; }
+.zi-action b { font-weight: 600; margin-right: 0.35rem; }
+.zi-did { display: flex; flex-direction: column; gap: 0.4rem; }
+.zi-replyacts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-left: auto; }
+.zi-reply .zp-recording { flex-basis: 100%; }
+

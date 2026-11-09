@@ -135,6 +135,11 @@ export interface PersonaContext extends PersonaReadContext {
    * nothing is spent unless the user says Run it; then the desk runs it, with Undo. One step.
    */
   proposeDeskJob(input: { request: string; why: string }): InboxItem;
+  /**
+   * S26: a suggestion card: one change in words (`action`, as the desk would run it) with Do it,
+   * Change, Not now and Your feedback. Nothing changes unless the user presses Do it. One step.
+   */
+  postSuggestion(input: { title: string; body?: string; action: string; links?: InboxLink[] }): InboxItem;
 }
 
 /** The memory a persona reads (the tenant's engine). */
@@ -282,7 +287,7 @@ export async function runPersona(
   // Paused at the allowance or its reserve (limits.ts): quietly, the run log says why.
   if (blocked) return end("skipped", blocked.message || "The AI allowance for this month is used up");
   const budget = personaBudget(deps.store, persona, started, deps.totalMonthUsd);
-  if (budget.totalUsd >= budget.totalCapUsd) return end("capped", "The personas' monthly budget is used up");
+  if (budget.totalUsd >= budget.totalCapUsd) return end("capped", "The helpers' monthly budget is used up");
   if (budget.personaUsd >= budget.personaCapUsd) return end("capped", `${persona.name}'s monthly budget is used up`);
 
   const skilled = (skill: PersonaSkill) => {
@@ -293,7 +298,8 @@ export async function runPersona(
     tally.steps += 1;
   };
   const unread = deps.inbox.unreadFeedback(persona.name);
-  const feedback = unread.map((entry) => ({ about: entry.title, text: entry.reply.text, at: entry.reply.at }));
+  // A Not now reason (S26) reads as one: the helper stops suggesting that kind of thing.
+  const feedback = unread.map((entry) => ({ about: entry.title, text: entry.reply.kind === "notnow" ? `Not now: ${entry.reply.text}` : entry.reply.text, at: entry.reply.at }));
   const feedbackWords = feedback.length
     ? `\n\nThe user wrote back on your earlier inbox cards. Take it into account in this run:\n${feedback
         .map((entry) => `- On "${entry.about.slice(0, 200)}": ${entry.text}`)
@@ -351,7 +357,7 @@ export async function runPersona(
       const spent = personaBudget(deps.store, persona, started, deps.totalMonthUsd);
       if (tally.costUsd >= persona.limits.maxRunUsd) throw new PersonaCapError("spend", "Stopped at its spend cap for one run");
       if (spent.personaUsd + tally.costUsd >= spent.personaCapUsd) throw new PersonaCapError("spend", `Stopped at ${persona.name}'s monthly budget`);
-      if (spent.totalUsd + tally.costUsd >= spent.totalCapUsd) throw new PersonaCapError("spend", "Stopped at the personas' monthly budget");
+      if (spent.totalUsd + tally.costUsd >= spent.totalCapUsd) throw new PersonaCapError("spend", "Stopped at the helpers' monthly budget");
       model ??= deps.model();
       const result = await model.complete(feedbackWords ? { ...input, system: `${input.system}${feedbackWords}` } : input);
       tally.modelCalls += 1;
@@ -377,6 +383,12 @@ export async function runPersona(
       skilled("ask");
       beforePost();
       return posted(deps.inbox.post({ kind: "question", from: persona.name, sourceKey: sourceKey(), ...input }));
+    },
+    postSuggestion(input) {
+      // S26: one change the helper proposes; the user does it (one undoable desk job), changes it first or says not now.
+      skilled("propose-desk-job");
+      beforePost();
+      return posted(deps.inbox.post({ kind: "suggestion", from: persona.name, sourceKey: sourceKey(), ...input }));
     },
     proposeDeskJob({ request, why }) {
       skilled("propose-desk-job");

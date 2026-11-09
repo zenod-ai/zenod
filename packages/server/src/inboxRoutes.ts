@@ -1,7 +1,10 @@
 import type { Context, Hono } from "hono";
 import {
   INBOX_REPLY_MAX_CHARS,
+  INBOX_VOICE_REPLY_MAX_CHARS,
   InboxError,
+  SUGGESTION_ACTION_MAX_CHARS,
+  exampleSuggestionJob,
   inboxAnswerContent,
   inboxFor,
   inboxNeedsYou,
@@ -27,7 +30,28 @@ export interface InboxRuntime {
   readonly taskJobQueue: { enqueue(kind: "store", input: { content: string; source: "web" }, idempotencyKey?: string): { id: string } } & Partial<DeskQueue>;
 }
 
-export type InboxResolve = (c: Context) => Promise<{ runtime: InboxRuntime; tenantId: string } | { response: Response }>;
+export type InboxResolve<R extends InboxRuntime = InboxRuntime> = (c: Context) => Promise<{ runtime: R; tenantId: string } | { response: Response }>;
+
+/**
+ * S26: a voice note left as feedback on a card becomes words the way Zenod transcribes any voice
+ * note (the tenant's own transcription settings, the local fallback included). The caller supplies
+ * it so this file stays free of the transcription stack.
+ */
+export type InboxTranscribe<R extends InboxRuntime = InboxRuntime> = (
+  runtime: R,
+  audio: Buffer,
+  filename: string,
+) => Promise<{ success: boolean; transcript?: string; error?: string; noSpeech?: boolean }>;
+
+/** The longest voice feedback (5 minutes at the recorder's 32 kbit/s is about 1.2 MB). */
+export const VOICE_FEEDBACK_MAX_SECONDS = 5 * 60;
+export const VOICE_FEEDBACK_MAX_BYTES = 4 * 1024 * 1024;
+const VOICE_FEEDBACK_EXTENSIONS: Record<string, string> = {
+  "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/aac": "aac", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav",
+};
+
+/** Cards that take feedback for the helper that wrote them: a finding or a suggestion, not the desk's. */
+const takesFeedback = (item: InboxItem) => (item.kind === "finding" || item.kind === "suggestion") && item.from !== DESK_FROM;
 
 const view = (item: InboxItem) => ({ ...item, needsYou: inboxNeedsYou(item) });
 
@@ -40,7 +64,7 @@ function failure(c: Context, error: unknown) {
   return c.json({ error: "inbox unavailable" }, 503);
 }
 
-export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void {
+export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, resolve: InboxResolve<R>, options: { transcribe?: InboxTranscribe<R> } = {}): void {
   app.get("/api/console/inbox", async (c) => {
     const found = await resolve(c);
     if ("response" in found) return found.response;
@@ -119,7 +143,7 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
     try {
       const item = inbox.get(c.req.param("id"));
       if (!item) throw new InboxError("not_found", "no such inbox item");
-      if (item.kind === "finding") {
+      if (takesFeedback(item)) {
         inbox.addReply(item.id, { kind: "feedback", text: words, readAt: null });
         return done(item.id);
       }
@@ -156,6 +180,97 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
       return c.json({ item: view(inbox.get(item.id)!), followUp: view(inbox.get(next.id)!), needsYou: inbox.needsYouCount() });
     } catch (error) {
       if (error instanceof DeskLimitError) return c.json({ error: "desk_limit", message: error.message }, 429);
+      return failure(c, error);
+    }
+  });
+
+  // EPIC-14 S26: Do it on a suggestion, or Change then "Do it like this" (the body's `action` is the
+  // user's edited words). It runs as one memory desk job with Undo, linked to the suggestion; an
+  // example starts nothing and shows a made-up finished job instead.
+  app.post("/api/console/inbox/:id/do", async (c) => {
+    const found = await resolve(c);
+    if ("response" in found) return found.response;
+    const body = await c.req.json<{ action?: unknown }>().catch(() => ({}) as { action?: unknown });
+    const inbox = inboxFor(found.runtime);
+    try {
+      const item = inbox.get(c.req.param("id"));
+      if (!item || item.kind !== "suggestion") throw new InboxError("not_found", "no such suggestion in the inbox");
+      if (item.status !== "open") throw new InboxError("conflict", "this suggestion is already settled");
+      const edited = typeof body.action === "string" ? body.action.trim() : "";
+      if (edited.length > SUGGESTION_ACTION_MAX_CHARS) return c.json({ error: "invalid", message: `Keep it under ${SUGGESTION_ACTION_MAX_CHARS} characters.` }, 400);
+      const action = edited || item.action || item.title;
+      if (item.example) {
+        const job = exampleSuggestionJob(inbox, item, action);
+        return c.json({ item: view(inbox.acceptSuggestion(item.id, action, job.id)), followUp: view(job), needsYou: inbox.needsYouCount() });
+      }
+      const block = found.runtime.featureBlock("desk");
+      if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
+      const queue = found.runtime.taskJobQueue;
+      if (!queue.get || !queue.recent) return c.json({ error: "desk_unavailable", message: "The memory desk is not available here." }, 409);
+      const job = startDeskJob(inbox, queue as DeskQueue, `${action}\n\nSuggested by ${item.from}: "${item.title}"`.slice(0, DESK_REQUEST_MAX_CHARS));
+      const linked = inbox.linkFollowUp(job.id, item);
+      return c.json({ item: view(inbox.acceptSuggestion(item.id, action, job.id)), followUp: view(linked), needsYou: inbox.needsYouCount() });
+    } catch (error) {
+      if (error instanceof DeskLimitError) return c.json({ error: "desk_limit", message: error.message }, 429);
+      return failure(c, error);
+    }
+  });
+
+  // EPIC-14 S26: Not now on a suggestion, with an optional reason the helper reads on its next run.
+  app.post("/api/console/inbox/:id/not-now", async (c) => {
+    const found = await resolve(c);
+    if ("response" in found) return found.response;
+    const body = await c.req.json<{ reason?: unknown }>().catch(() => ({}) as { reason?: unknown });
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (reason.length > INBOX_REPLY_MAX_CHARS) return c.json({ error: "invalid", message: `Keep it under ${INBOX_REPLY_MAX_CHARS} characters.` }, 400);
+    const inbox = inboxFor(found.runtime);
+    try {
+      const item = inbox.get(c.req.param("id"));
+      if (!item || item.kind !== "suggestion") throw new InboxError("not_found", "no such suggestion in the inbox");
+      return c.json({ item: view(inbox.declineSuggestion(item.id, reason)), needsYou: inbox.needsYouCount() });
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // EPIC-14 S26: Your feedback as a voice note. The body is the audio; `?typed=` carries what was
+  // already typed in the box, which goes before the spoken words. The note is transcribed as Zenod
+  // transcribes any voice note and kept as feedback on the card, which the helper reads on its next
+  // run (like Epic Team's card feedback). Only the words are kept; the audio is not stored.
+  app.post("/api/console/inbox/:id/voice-feedback", async (c) => {
+    const found = await resolve(c);
+    if ("response" in found) return found.response;
+    const type = (c.req.header("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+    const extension = VOICE_FEEDBACK_EXTENSIONS[type];
+    if (!extension) return c.json({ error: "unsupported_audio", message: "That recording format is not supported." }, 415);
+    const inbox = inboxFor(found.runtime);
+    const item = inbox.get(c.req.param("id"));
+    if (!item || !takesFeedback(item)) return c.json({ error: "not_found", message: "This card does not take feedback." }, 404);
+    if (!options.transcribe) return c.json({ error: "unavailable", message: "Voice notes are not available here." }, 409);
+    const length = Number(c.req.header("content-length") ?? 0);
+    if (length > VOICE_FEEDBACK_MAX_BYTES) return c.json({ error: "too_large", message: "That voice note is too long. Keep it under 5 minutes." }, 413);
+    const audio = Buffer.from(await c.req.arrayBuffer().catch(() => new ArrayBuffer(0)));
+    if (audio.length === 0) return c.json({ error: "empty", message: "Nothing was recorded." }, 400);
+    if (audio.length > VOICE_FEEDBACK_MAX_BYTES) return c.json({ error: "too_large", message: "That voice note is too long. Keep it under 5 minutes." }, 413);
+    const seconds = Number(c.req.header("x-seconds"));
+    const duration = Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.round(seconds), VOICE_FEEDBACK_MAX_SECONDS) : null;
+    const typed = (c.req.query("typed") ?? "").trim().slice(0, INBOX_REPLY_MAX_CHARS);
+    let heard: string;
+    try {
+      const result = await options.transcribe(found.runtime, audio, `zenod-app-feedback-${item.id}.${extension}`);
+      if (!result.success || !result.transcript?.trim()) {
+        return c.json({ error: "no_words", message: result.noSpeech ? "No words were heard in that voice note." : "The voice note could not be turned into words. Try again, or type it." }, 422);
+      }
+      heard = result.transcript.trim();
+    } catch (error) {
+      console.warn(`[inbox] voice feedback transcription failed: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "no_words", message: "The voice note could not be turned into words. Try again, or type it." }, 422);
+    }
+    try {
+      const words = (typed ? `${typed}\n\n${heard}` : heard).slice(0, INBOX_VOICE_REPLY_MAX_CHARS);
+      inbox.addReply(item.id, { kind: "feedback", text: words, readAt: null, voice: { seconds: duration } });
+      return c.json({ item: view(inbox.get(item.id)!), needsYou: inbox.needsYouCount() });
+    } catch (error) {
       return failure(c, error);
     }
   });

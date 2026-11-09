@@ -167,4 +167,82 @@ describe("one chat, and a reply box on every card (EPIC-14 S2 round 3)", () => {
     expect(screen.getByText("Also move Yard quotes")).toBeTruthy()
     expect(screen.getByText(/Follows up/)).toBeTruthy()
   })
+
+  // EPIC-14 S26: the suggestion card.
+  const SUGGESTION: InboxItem = {
+    ...base, id: "s1", kind: "suggestion", status: "open", from: "Topic gardener",
+    title: "Join Flat hunt into Moving to Valencia: they are the same thing.",
+    action: "Join the topic Flat hunt into Moving to Valencia.", done: null,
+    links: [{ label: "Flat hunt", path: "Areas/Flat hunt.md" }],
+  }
+
+  it("a suggestion: Do it runs one desk job shown on the card, and Undo puts it back", async () => {
+    const job: InboxItem = { ...WORKING, id: "j9", title: "Join the topic Flat hunt into Moving to Valencia.", step: "Waiting for its turn", followUpOf: { id: "s1", title: SUGGESTION.title } }
+    const accepted = { ...SUGGESTION, status: "accepted" as const, needsYou: false, done: { jobItemId: "j9", action: SUGGESTION.action!, changed: false, at: "x" } }
+    const finished: InboxItem = { ...job, status: "done", step: null, result: { summary: "14 memories moved.", changes: [{ what: "Flat hunt moved", before: "Root", after: "Moving to Valencia" }] } }
+    const calls = mockFetch((url) => {
+      if (url === "/api/console/inbox") return { items: [SUGGESTION], needsYou: 1 }
+      if (url === "/api/console/inbox/s1/do") return { item: accepted, followUp: finished, needsYou: 1 }
+      if (url === "/api/console/inbox/j9/undo") return { item: { ...finished, status: "undone", needsYou: false }, needsYou: 0 }
+      return { needsYou: 1 }
+    })
+    render(<MemoryInbox />)
+    expect(await screen.findByText(SUGGESTION.title)).toBeTruthy()
+    expect(screen.getByText("Suggestion")).toBeTruthy()
+    expect(screen.getByText("Join the topic Flat hunt into Moving to Valencia.")).toBeTruthy()
+    for (const name of ["Do it", "Change", "Not now", "Talk it over", "Your feedback"]) expect(screen.getByRole("button", { name })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Do it" }))
+    expect(await screen.findByText("Done on the memory desk. 14 memories moved.")).toBeTruthy()
+    expect(calls.find((call) => call.url === "/api/console/inbox/s1/do")).toMatchObject({ method: "POST", body: {} })
+    // The job is on the suggestion's card, not a second card.
+    expect(screen.getAllByTestId("inbox-item")).toHaveLength(1)
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }))
+    fireEvent.click(screen.getByRole("button", { name: "Yes, put it back" }))
+    expect(await screen.findByText(/Undone\. Your memory is as it was before\./)).toBeTruthy()
+  })
+
+  it("a suggestion: Change runs your words, Not now keeps an optional reason", async () => {
+    const calls = mockFetch((url) => {
+      if (url === "/api/console/inbox") return { items: [SUGGESTION, { ...SUGGESTION, id: "s2", title: "Split Boat" }], needsYou: 2 }
+      if (url === "/api/console/inbox/s1/do") return { item: { ...SUGGESTION, status: "accepted", needsYou: false, done: { jobItemId: null, action: "Join them, keep Ruzafa apart.", changed: true, at: "x" } }, needsYou: 1 }
+      if (url === "/api/console/inbox/s2/not-now") return { item: { ...SUGGESTION, id: "s2", title: "Split Boat", status: "declined", needsYou: false, replies: [{ kind: "notnow", text: "Not this month", at: "2026-11-08T18:00:00Z", readAt: null }] }, needsYou: 0 }
+      return { needsYou: 1 }
+    })
+    render(<MemoryInbox />)
+    await screen.findByText(SUGGESTION.title)
+    fireEvent.click(screen.getAllByRole("button", { name: "Change" })[0]!)
+    const box = screen.getByRole("textbox", { name: "The change, in your words" }) as HTMLTextAreaElement
+    expect(box.value).toBe(SUGGESTION.action)
+    fireEvent.change(box, { target: { value: "Join them, keep Ruzafa apart." } })
+    fireEvent.click(screen.getByRole("button", { name: "Do it like this" }))
+    expect(await screen.findByText("You changed it first: “Join them, keep Ruzafa apart.”")).toBeTruthy()
+    expect(calls.find((call) => call.url === "/api/console/inbox/s1/do")!.body).toEqual({ action: "Join them, keep Ruzafa apart." })
+
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }))
+    fireEvent.change(screen.getByRole("textbox", { name: "Why not now" }), { target: { value: "Not this month" } })
+    fireEvent.click(screen.getByRole("button", { name: "Put it away" }))
+    expect(await screen.findByText("“Not this month”")).toBeTruthy()
+    expect(screen.getByText("Sent. Topic gardener reads it on its next run.")).toBeTruthy()
+    expect(calls.find((call) => call.url === "/api/console/inbox/s2/not-now")!.body).toEqual({ reason: "Not this month" })
+  })
+
+  it("a suggestion: Your feedback opens a text box with a microphone, and the note is kept for the helper", async () => {
+    const calls = mockFetch((url) => {
+      if (url === "/api/console/inbox") return { items: [SUGGESTION], needsYou: 1 }
+      if (url === "/api/console/inbox/s1/reply") return { item: { ...SUGGESTION, replies: [{ kind: "feedback", text: "Good idea, but later", at: "2026-11-08T18:00:00Z", readAt: null }] }, needsYou: 1 }
+      return { needsYou: 1 }
+    })
+    render(<MemoryInbox />)
+    await screen.findByText(SUGGESTION.title)
+    expect(screen.queryByRole("textbox")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Your feedback" }))
+    expect(screen.getByRole("button", { name: "Leave a voice note" })).toBeTruthy()
+    fireEvent.change(screen.getByRole("textbox", { name: /Your feedback for Topic gardener/ }), { target: { value: "Good idea, but later" } })
+    fireEvent.click(screen.getByRole("button", { name: "Send feedback" }))
+    expect(await screen.findByText("“Good idea, but later”")).toBeTruthy()
+    expect(screen.getByText("Sent. Topic gardener reads it on its next run.")).toBeTruthy()
+    expect(calls.find((call) => call.url === "/api/console/inbox/s1/reply")!.body).toEqual({ text: "Good idea, but later" })
+    // The suggestion still waits for Do it, Change or Not now.
+    expect(screen.getByRole("button", { name: "Do it" })).toBeTruthy()
+  })
 })

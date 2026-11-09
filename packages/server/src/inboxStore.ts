@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
- * The inbox (EPIC-14 S2): one place in the web app for what is addressed to the user. Three kinds:
- * a persona's question (decide), a persona's finding (read) and a memory desk job (Working with its
- * current step, then Done with what changed, a before and after search, See the changes and Undo).
+ * The inbox (EPIC-14 S2): one place in the web app for what is addressed to the user. Four kinds:
+ * a helper's question (decide), a helper's finding (read), a helper's suggestion (S26: one change it
+ * proposes, with Do it, Change, Not now and Your feedback; Do it runs it as one memory desk job) and
+ * a memory desk job (Working with its current step, then Done with what changed, a before and after
+ * search, See the changes and Undo). Helpers were called personas until S25; their code keeps that name.
  * One SQLite file per tenant on the /data volume, beside the tenant's other stores, so an item can
  * never be read across tenants. Answers are not kept here only: the routes file each answer into the
  * user's memory repo through the durable store job (the repo is the truth, this is a copy).
@@ -16,10 +18,14 @@ import { openZenodSqlite } from "./sqlite.js";
  * sends anything to WhatsApp or any chat (root L-6).
  */
 
-export type InboxKind = "question" | "finding" | "job";
+export type InboxKind = "question" | "finding" | "job" | "suggestion";
 
-/** open: needs the user; answered: a question with an answer; dismissed: a finding or a finished job read and put away. */
-export type InboxStatus = "open" | "answered" | "dismissed" | "working" | "done" | "failed" | "undone";
+/**
+ * open: needs the user; answered: a question with an answer; dismissed: a finding or a finished job
+ * read and put away; accepted: a suggestion the user pressed Do it on (its desk job carries on);
+ * declined: a suggestion put away with Not now.
+ */
+export type InboxStatus = "open" | "answered" | "dismissed" | "working" | "done" | "failed" | "undone" | "accepted" | "declined";
 
 export interface InboxOption {
   id: string;
@@ -53,19 +59,33 @@ export interface InboxJobResult {
 
 /**
  * What the user wrote back on a card (EPIC-14 S2 round 3), like Epic Team's feedback box: an answer
- * in their own words (a question), feedback to the persona (a finding; it reads it on its next run)
- * or a follow-up for the desk (a job; it starts a new job linked to this one).
+ * in their own words (a question), feedback to the helper (a finding or a suggestion; it reads it on
+ * its next run), a follow-up for the desk (a job; it starts a new job linked to this one), or the
+ * reason given with Not now on a suggestion (S26; the helper reads it on its next run too).
  */
 export interface InboxReply {
-  kind: "answer" | "feedback" | "followup";
+  kind: "answer" | "feedback" | "followup" | "notnow";
   text: string;
   at: string;
   /** answer: the store job that filed it into the memory. */
   savedJobId?: string | null;
   /** followup: the new desk job's inbox item. */
   followUpItemId?: string | null;
-  /** feedback: when the persona's run read it. */
+  /** feedback and notnow: when the helper's run read it. */
   readAt?: string | null;
+  /** feedback given as a voice note (S26): its length; the words are its transcript, the audio is not kept. */
+  voice?: { seconds: number | null } | null;
+}
+
+/** S26: what Do it did on a suggestion: the desk job it started, and the words it ran with. */
+export interface InboxSuggestionDone {
+  /** The desk job's inbox item; null for an example, which starts nothing. */
+  jobItemId: string | null;
+  /** The change as it ran: the helper's words, or the user's after Change. */
+  action: string;
+  /** True when the user changed the words first. */
+  changed: boolean;
+  at: string;
 }
 
 export interface InboxItem {
@@ -91,6 +111,10 @@ export interface InboxItem {
   replies: InboxReply[];
   /** job: the earlier job this one follows up. */
   followUpOf: { id: string; title: string } | null;
+  /** suggestion (S26): the change in words, as the memory desk would run it. */
+  action: string | null;
+  /** suggestion: what Do it started, once pressed. */
+  done: InboxSuggestionDone | null;
   /** True for the example items the empty inbox can show; they never write to the memory. */
   example: boolean;
   /** The poster's own key, so posting the same thing twice keeps one item. */
@@ -104,7 +128,8 @@ export interface InboxItem {
 export type InboxPost =
   | { kind: "question"; from: string; title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[]; sourceKey?: string; example?: boolean }
   | { kind: "finding"; from: string; title: string; body?: string; links?: InboxLink[]; sourceKey?: string; example?: boolean }
-  | { kind: "job"; from?: string; title: string; body?: string; step?: string; sourceKey?: string; example?: boolean };
+  | { kind: "job"; from?: string; title: string; body?: string; step?: string; sourceKey?: string; example?: boolean }
+  | { kind: "suggestion"; from: string; title: string; body?: string; action: string; links?: InboxLink[]; sourceKey?: string; example?: boolean };
 
 /** What a desk job reports as it goes: a new step, then done (with its result) or failed. */
 export type InboxJobUpdate =
@@ -153,9 +178,13 @@ interface Row {
 }
 
 type ItemData = Pick<InboxItem, "from" | "title" | "body" | "options" | "recommended" | "answer" | "links" | "step" | "result"> &
-  Partial<Pick<InboxItem, "replies" | "followUpOf">>;
+  Partial<Pick<InboxItem, "replies" | "followUpOf" | "action" | "done">>;
 
 export const INBOX_REPLY_MAX_CHARS = 1_000;
+/** A voice note's words can run longer than a typed reply: about five minutes of speech. */
+export const INBOX_VOICE_REPLY_MAX_CHARS = 5_000;
+/** A suggestion's change, in words the desk runs: the desk's own request limit. */
+export const SUGGESTION_ACTION_MAX_CHARS = 600;
 const MAX_REPLIES = 20;
 
 const text = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
@@ -177,6 +206,8 @@ function rowToItem(row: Row): InboxItem {
     result: data.result ?? null,
     replies: data.replies ?? [],
     followUpOf: data.followUpOf ?? null,
+    action: data.action ?? null,
+    done: data.done ?? null,
     example: row.example === 1,
     sourceKey: row.source_key,
     createdAt: row.created_at,
@@ -211,7 +242,7 @@ function cleanResult(result: InboxJobResult): InboxJobResult {
 
 /** True when the item needs the user: an open question, or anything new they have not seen yet. */
 export function inboxNeedsYou(item: InboxItem): boolean {
-  if (item.kind === "question") return item.status === "open";
+  if (item.kind === "question" || item.kind === "suggestion") return item.status === "open";
   return item.seenAt === null && item.status !== "dismissed";
 }
 
@@ -268,6 +299,10 @@ export class InboxStore {
       if (data.recommended) data.options.sort((a, b) => Number(b.id === data.recommended) - Number(a.id === data.recommended));
       data.links = cleanLinks(input.links);
     } else if (input.kind === "finding") {
+      data.links = cleanLinks(input.links);
+    } else if (input.kind === "suggestion") {
+      data.action = text(input.action, SUGGESTION_ACTION_MAX_CHARS);
+      if (!data.action) throw new InboxError("invalid", "a suggestion needs the change it proposes");
       data.links = cleanLinks(input.links);
     } else {
       status = "working";
@@ -332,7 +367,7 @@ export class InboxStore {
   addReply(id: string, reply: Omit<InboxReply, "at">): InboxItem {
     const item = this.get(id);
     if (!item) throw new InboxError("not_found", "no such inbox item");
-    const words = text(reply.text, INBOX_REPLY_MAX_CHARS);
+    const words = text(reply.text, reply.voice ? INBOX_VOICE_REPLY_MAX_CHARS : INBOX_REPLY_MAX_CHARS);
     if (!words) throw new InboxError("invalid", "write a few words first");
     const replies = [...item.replies, { ...reply, text: words, at: this.now().toISOString() }].slice(-MAX_REPLIES);
     // Writing back is reading: the card is seen, and keeps its place.
@@ -346,6 +381,28 @@ export class InboxStore {
   }
 
   /**
+   * S26: Do it on a suggestion. The caller starts the desk job (none for an example) and passes its
+   * inbox item; `action` is what ran, the helper's words or the user's after Change.
+   */
+  acceptSuggestion(id: string, action: string, jobItemId: string | null): InboxItem {
+    const item = this.require(id, "suggestion");
+    if (item.status !== "open") throw new InboxError("conflict", "this suggestion is already settled");
+    const words = text(action, SUGGESTION_ACTION_MAX_CHARS);
+    if (!words) throw new InboxError("invalid", "say what the desk should do");
+    return this.write(item, "accepted", { done: { jobItemId, action: words, changed: words !== item.action, at: this.now().toISOString() } }, true);
+  }
+
+  /** S26: Not now on a suggestion, with an optional reason the helper reads on its next run. */
+  declineSuggestion(id: string, reason?: string): InboxItem {
+    const item = this.require(id, "suggestion");
+    if (item.status !== "open") throw new InboxError("conflict", "this suggestion is already settled");
+    const why = text(reason, INBOX_REPLY_MAX_CHARS);
+    const at = this.now().toISOString();
+    const replies = why ? [...item.replies, { kind: "notnow" as const, text: why, at, readAt: null }].slice(-MAX_REPLIES) : item.replies;
+    return this.write(item, "declined", { replies }, true);
+  }
+
+  /**
    * The feedback a persona has not read yet, from the cards it posted, oldest first. Example cards
    * never reach a persona.
    */
@@ -354,7 +411,7 @@ export class InboxStore {
     for (const item of this.list(500)) {
       if (item.from !== from || item.example || item.kind === "job") continue;
       item.replies.forEach((reply, index) => {
-        if (reply.kind === "feedback" && !reply.readAt) out.push({ itemId: item.id, title: item.title, reply, index });
+        if ((reply.kind === "feedback" || reply.kind === "notnow") && !reply.readAt) out.push({ itemId: item.id, title: item.title, reply, index });
       });
     }
     return out.sort((a, b) => a.reply.at.localeCompare(b.reply.at));
@@ -365,7 +422,7 @@ export class InboxStore {
     let last: string | null = null;
     for (const item of this.list(500)) {
       if (item.from !== from || item.example) continue;
-      for (const reply of item.replies) if (reply.kind === "feedback" && (!last || reply.at > last)) last = reply.at;
+      for (const reply of item.replies) if ((reply.kind === "feedback" || reply.kind === "notnow") && (!last || reply.at > last)) last = reply.at;
     }
     return last;
   }
@@ -388,6 +445,7 @@ export class InboxStore {
     const item = this.get(id);
     if (!item) throw new InboxError("not_found", "no such inbox item");
     if (item.kind === "question") throw new InboxError("invalid", "a question is answered, not dismissed");
+    if (item.kind === "suggestion") throw new InboxError("invalid", "a suggestion is done or put away with Not now");
     if (item.kind === "job" && item.status === "working") throw new InboxError("conflict", "the job is still working");
     return this.write(item, item.kind === "finding" || item.status === "done" ? "dismissed" : item.status, {}, true);
   }
@@ -463,6 +521,8 @@ export class InboxStore {
       answer: item.answer, links: item.links, step: item.step, result: item.result,
       ...(item.replies.length ? { replies: item.replies } : {}),
       ...(item.followUpOf ? { followUpOf: item.followUpOf } : {}),
+      ...(item.action ? { action: item.action } : {}),
+      ...(item.done ? { done: item.done } : {}),
     };
   }
 
@@ -504,6 +564,20 @@ export function inboxAnswerContent(item: InboxItem, label: string): string {
 }
 
 /**
+ * Do it on an example suggestion: a made-up desk job, already done, so Undo can be tried. It never
+ * touches the memory.
+ */
+export function exampleSuggestionJob(store: InboxStore, suggestion: InboxItem, action: string): InboxItem {
+  const job = store.post({ kind: "job", example: true, sourceKey: `example:suggestion-job:${suggestion.id}`, title: action, step: "Starting" });
+  if (job.status !== "working") return job;
+  const done = store.updateJob(job.id, {
+    status: "done",
+    result: { summary: "An example: a real job makes this change on your memory, lists what moved and can be undone. Nothing in your memory changed.", changes: [] },
+  });
+  return store.linkFollowUp(done.id, suggestion);
+}
+
+/**
  * The example items the empty inbox can show, one of each kind (demo data, made up). They are
  * marked as examples, never write to the memory, and "Clear examples" removes them.
  */
@@ -529,6 +603,13 @@ export function postInboxExamples(store: InboxStore): InboxItem[] {
     });
   }
   return [
+    store.post({
+      kind: "suggestion", example: true, sourceKey: "example:suggestion",
+      from: "Topic gardener", title: "Join \"Flat hunt\" into \"Moving to Valencia\": they are the same thing.",
+      body: "14 notes in Flat hunt and 9 in Moving to Valencia talk about the same three flats. One place would make \"what did the agent say\" find all of them.",
+      action: "Join the topic \"Flat hunt\" into \"Moving to Valencia\".",
+      links: [{ label: "Flat hunt", path: "Areas/Flat hunt.md" }, { label: "Moving to Valencia", path: "Areas/Moving to Valencia.md" }],
+    }),
     store.post({
       kind: "question", example: true, sourceKey: "example:question",
       from: "Librarian", title: "\"Flat\" and \"Apartment\" look like the same place. Join them under Flat?",

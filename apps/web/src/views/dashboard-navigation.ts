@@ -27,6 +27,8 @@ const HOSTED_PLACES: Record<string, Omit<DashboardPlace, "section"> & { section:
   chat: { section: "chat" },
   inbox: { section: "inbox" },
   personas: { section: "personas" },
+  // EPIC-14 S25: personas are called helpers now; old #personas links still open the tab.
+  helpers: { section: "personas" },
   memory: { section: "memory", memory: "tree" },
   tree: { section: "memory", memory: "tree" },
   glance: { section: "memory", memory: "glance" },
@@ -78,7 +80,7 @@ export function dashboardSectionForTab(
   if (tab === "chat" && available.has("chat")) return "chat"
   if (tab === "graph" && available.has("graph")) return "graph"
   if (tab === "inbox" && available.has("inbox")) return "inbox"
-  if (tab === "personas" && available.has("personas")) return "personas"
+  if ((tab === "personas" || tab === "helpers") && available.has("personas")) return "personas"
   if (tab === "overview" && available.has("overview")) return "overview"
   if (tab === "memory" && available.has("memory")) return "memory"
   if (tab === "connect" && available.has("connect")) return "connect"
