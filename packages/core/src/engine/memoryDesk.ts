@@ -41,7 +41,10 @@ const TOOL_RESULT_CHARS = 2_500;
 const RELATED_HEADING = "## Related";
 
 export type DeskChange =
-  | { op: "move"; page: string; to: string }
+  /** `confirm` (E12-S27): the person moved it in the app, so its place is no longer provisional. */
+  | { op: "move"; page: string; to: string; confirm?: boolean }
+  /** E12-S27: the person says the page is in the right place: it stops being provisional. */
+  | { op: "confirm"; page: string }
   | { op: "root"; page: string; name: string; kind: MemoryKind; summary?: string }
   | { op: "rename"; page: string; name: string; summary?: string }
   | { op: "link"; from: string; to: string }
@@ -59,7 +62,7 @@ export interface DeskPlan {
 
 /** One exact text edit; Undo applies the inverse. */
 export type DeskEdit =
-  | { kind: "field"; file: string; key: "parent" | "memory"; before: string | null; after: string | null }
+  | { kind: "field"; file: string; key: "parent" | "memory" | "provisional"; before: string | null; after: string | null }
   | { kind: "tree_add"; line: string; group: MemoryKind }
   | { kind: "tree_remove"; line: string; group: MemoryKind }
   | { kind: "tree_replace"; before: string; after: string }
@@ -368,6 +371,8 @@ export async function applyDeskChanges(vaultPath: string, changes: readonly Desk
       const memory = fieldValue(raw, "memory");
       const target = vault.index.lineage(to);
       if (memory !== null && target.ok && memory !== target.group) await edit({ kind: "field", file: page, key: "memory", before: memory, after: target.group });
+      const provisional = change.confirm ? fieldValue(raw, "provisional") : null;
+      if (provisional !== null) await edit({ kind: "field", file: page, key: "provisional", before: provisional, after: null });
       // Already there: nothing to report.
       if (edits.length === count) continue;
       const after = await loadDeskVault(vaultPath);
@@ -403,6 +408,12 @@ export async function applyDeskChanges(vaultPath: string, changes: readonly Desk
       const next = formatTreeNode({ name, kind: root.kind, path: root.path, summary, ...(root.id ? { id: root.id } : {}) });
       if (next !== line) await edit({ kind: "tree_replace", before: line, after: next });
       views.push(name !== root.name ? { what: "Topic renamed", before: root.name, after: name } : { what: `${root.name} described again`, before: root.summary, after: summary });
+    } else if (change.op === "confirm") {
+      const page = requirePage(vault, change.page, "page");
+      const provisional = fieldValue(await readText(vaultPath, page), "provisional");
+      if (provisional === null) continue;
+      await edit({ kind: "field", file: page, key: "provisional", before: provisional, after: null });
+      views.push({ what: `${vault.title(page)} confirmed where it is`, after: vault.place(page) });
     } else if (change.op === "link") {
       const from = requirePage(vault, change.from, "page");
       const to = requirePage(vault, change.to, "linked page");
@@ -459,6 +470,8 @@ export async function checkDeskPlan(vaultPath: string, plan: DeskPlan): Promise<
         const page = requirePage(vault, change.page, "page");
         const to = requirePage(vault, change.to, "new place");
         if (page === to || isUnder(vault, to, page)) problems.push(`"${vault.title(page)}" cannot go under itself or under a page below it`);
+      } else if (change.op === "confirm") {
+        requirePage(vault, change.page, "page");
       } else if (change.op === "root" || change.op === "rename") {
         const page = requirePage(vault, change.page, change.op === "root" ? "page" : "topic");
         const title = vault.index.fields.get(page)?.title ?? basenameOf(page);
@@ -519,8 +532,8 @@ export function checkDeskChanges(changes: readonly FileChange[], restoring: Read
     if (!isTreePage(path)) { problems.push(`${path}: the desk changes only the tree and its pages`); continue; }
     const before = parseNote(change.before);
     const after = parseNote(change.after);
-    const strip = (fm: Record<string, unknown> | null) => JSON.stringify(Object.entries(fm ?? {}).filter(([key]) => key !== "parent" && key !== "memory").sort(([a], [b]) => a.localeCompare(b)));
-    if (strip(before.frontmatter) !== strip(after.frontmatter)) problems.push(`${path}: front matter changed beyond parent and memory`);
+    const strip = (fm: Record<string, unknown> | null) => JSON.stringify(Object.entries(fm ?? {}).filter(([key]) => key !== "parent" && key !== "memory" && key !== "provisional").sort(([a], [b]) => a.localeCompare(b)));
+    if (strip(before.frontmatter) !== strip(after.frontmatter)) problems.push(`${path}: front matter changed beyond parent, memory and provisional`);
     const was = lineBag(before.body);
     const now = lineBag(after.body);
     for (const [line, count] of now) {

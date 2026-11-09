@@ -26,6 +26,17 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
+import {
+  MemoryReviewCard,
+  type PlaceTarget,
+} from "@/components/memory-review"
+import {
+  placeMemory,
+  readPlacementReview,
+  undoPlacement,
+  type PlacementReview,
+} from "@/lib/memory-review"
 import {
   HostedUsageCard,
   type HostedCustomerUsage,
@@ -103,25 +114,80 @@ export function RecentSavesPanel() {
 
 export function MemoryTreePanel() {
   const [state, setState] = React.useState<MemoryTreeState | null>(null)
+  const [review, setReview] = React.useState<PlacementReview | null>(null)
+  const [busy, setBusy] = React.useState(false)
 
-  React.useEffect(() => {
-    let cancelled = false
-    api<{ status: "ready"; tree: MemoryTree } | { status: "empty" }>(
-      "/api/console/memory-tree"
-    )
-      .then((result) => {
-        if (!cancelled) setState(result)
-      })
-      .catch(() => {
-        if (!cancelled) setState({ status: "unavailable" })
-      })
-    return () => {
-      cancelled = true
-    }
+  const load = React.useCallback(async () => {
+    const [tree, checks] = await Promise.all([
+      api<{ status: "ready"; tree: MemoryTree } | { status: "empty" }>(
+        "/api/console/memory-tree"
+      ).catch(() => ({ status: "unavailable" }) as const),
+      // E12-S27: the filings to check, least sure first.
+      readPlacementReview().catch(() => null),
+    ])
+    setState(tree)
+    setReview(checks?.status === "ready" ? checks : null)
   }, [])
 
+  React.useEffect(() => {
+    void load()
+  }, [load])
+
+  const undo = React.useCallback(
+    async (id: string) => {
+      setBusy(true)
+      try {
+        const result = await undoPlacement(id)
+        toast.success(`${result.title} is back where it was`)
+        await load()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Undo failed")
+      } finally {
+        setBusy(false)
+      }
+    },
+    [load]
+  )
+
+  const place = React.useCallback(
+    async (page: string, title: string, to: PlaceTarget | null) => {
+      setBusy(true)
+      try {
+        const result = await placeMemory(page, to?.path ?? null)
+        if (to) {
+          toast.success(`${title} moved under ${to.title}`, {
+            description: result.after,
+            action: { label: "Undo", onClick: () => void undo(result.id) },
+          })
+        } else {
+          toast.success(`${title} confirmed where it is`)
+        }
+        await load()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Nothing changed")
+      } finally {
+        setBusy(false)
+      }
+    },
+    [load, undo]
+  )
+
   if (!state) return <Skeleton className="h-64 w-full" />
-  return <MemoryTreeCard state={state} />
+  const groups = state.status === "ready" ? state.tree.groups : []
+  return (
+    <>
+      {review && groups.length > 0 && (
+        <MemoryReviewCard
+          review={review}
+          groups={groups}
+          busy={busy}
+          onPlace={place}
+          onUndo={undo}
+        />
+      )}
+      <MemoryTreeCard state={state} busy={busy} onPlace={place} />
+    </>
+  )
 }
 
 export function HostedChannelsPanel() {

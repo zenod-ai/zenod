@@ -218,7 +218,7 @@ describe("E9-2b tree placement replay", { timeout: 120_000 }, () => {
 
     // Rule 4: the low-confidence capture became a provisional leaf, the orphan page got a parent.
     const unsure = runs.find(run => run.capture.key === "unsure")!;
-    expect(unsure.filed[0]).toMatch(/· provisional$/);
+    expect(unsure.filed[0]).toMatch(/· provisional · \d{1,3}% sure$/);
     const leafPath = /^\[\[([^\]]+)\]\]/.exec(unsure.filed[0]!)![1]! + ".md";
     expect(parseNote(await readFile(join(repo.path, leafPath), "utf8")).frontmatter).toMatchObject({ provisional: true });
     expect(parseNote(await readFile(join(repo.path, "Notes/Travel insurance.md"), "utf8")).frontmatter!.parent).toBe("[[Areas/Life admin]]");
@@ -281,7 +281,7 @@ describe("E9-2b capture-first enrichment (WhatsApp path)", { timeout: 120_000 },
       expect(filed, key).toHaveLength(1);
       expect(filed[0], key).toMatch(/\((?:Working|Long-term) › /);
       if (capture.ops) expect(filed[0], key).toMatch(/· ops rollup$/);
-      if (key === "unsure") expect(filed[0], key).toMatch(/· provisional$/);
+      if (key === "unsure") expect(filed[0], key).toMatch(/· provisional · \d{1,3}% sure$/);
       // The result reports the revision that holds the whole filing, including the filed: line.
       expect(result.commitSha, key).toBe(await simpleGit(repo.path).revparse(["HEAD"]));
       // A replay records nothing twice.

@@ -11,7 +11,9 @@ Record shape (one JSON object per line):
    "verdict": "yes"|"no"|"unsure"|null, "correction": str}
 Records of any other "type" (e.g. "submit") are ignored.
 
-Usage: analyse-landing-feedback.py DATASET.jsonl [--json] [--round N ...]
+Usage: analyse-landing-feedback.py DATASET.jsonl [MORE.jsonl ...] [--json] [--round N ...]
+The app's own checks (E12-S27: Right place / Wrong place on the tree, `.brain/tree-corrections.jsonl`
+in the person's vault) use the same shape and can be passed as a second dataset; a missing file is skipped.
 No private data lives in the repo; the dataset path is given at run time.
 """
 import argparse, json, re, sys
@@ -44,25 +46,33 @@ ORDER = {m[0]: i for i, m in enumerate(MODES + [UNSPECIFIED])}
 INFO = {m[0]: m for m in MODES + [UNSPECIFIED]}
 
 
-def load(path, rounds=None):
+def load(paths, rounds=None):
     latest = {}
-    with open(path, encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except ValueError:
-                continue
-            if r.get('type', 'answer') != 'answer' or not r.get('memory_id'):
-                continue
-            if rounds and r.get('round') not in rounds:
-                continue
-            k = r['memory_id']
-            if k not in latest or str(r.get('ts', '')) >= str(latest[k].get('ts', '')):
-                latest[k] = r
+    for line in _lines([paths] if isinstance(paths, str) else paths):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get('type', 'answer') != 'answer' or not r.get('memory_id'):
+            continue
+        if rounds and r.get('round') not in rounds:
+            continue
+        k = r['memory_id']
+        if k not in latest or str(r.get('ts', '')) >= str(latest[k].get('ts', '')):
+            latest[k] = r
     return [r for r in latest.values() if r.get('verdict') in ('yes', 'no', 'unsure')]
+
+
+def _lines(paths):
+    for path in paths:
+        try:
+            with open(path, encoding='utf-8') as f:
+                yield from f
+        except FileNotFoundError:
+            continue
 
 
 def modes_of(r):
@@ -118,7 +128,7 @@ def text_report(a):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument('dataset')
+    p.add_argument('dataset', nargs='+')
     p.add_argument('--json', action='store_true')
     p.add_argument('--round', type=int, action='append', dest='rounds')
     a = p.parse_args(argv)

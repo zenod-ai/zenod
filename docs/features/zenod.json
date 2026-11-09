@@ -53,6 +53,16 @@
      ],
      "since": "2026-11-09",
      "draft": true
+    },
+    {
+     "id": "check-where-it-landed",
+     "title": "Check where Zenod filed things",
+     "text": "Each new memory says how sure Zenod was of its place, and the least sure come first in the Memory tab. Say it is in the right place, or open any page on your tree, press Wrong place and pick where it belongs. Undo puts it back.",
+     "rows": [
+      "E12-S27"
+     ],
+     "since": "2026-11-09",
+     "draft": true
     }
    ]
   }

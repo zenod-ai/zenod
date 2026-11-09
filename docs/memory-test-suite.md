@@ -28,7 +28,7 @@ Higher is better for the first two and lower for the third. A move under one poi
 ## Two datasets
 
 - **Demo vault**, in the repo, deterministic, no private data: the tree-vault fixture plus about 680 made-up pages ([`demo/gen_vault.py`](../scripts/memory-eval/demo/gen_vault.py)). Every page is made lint-clean the way Zenod writes pages.
-- **Jordi's real notes**, private, on VPS3 only: his 45 real questions (`~/zenod-eval/real-questions.jsonl`, built by E15-Q1 and E12-S1b) run on a throwaway copy of his vault. The 8 notes behind the placements he judged on the trial page (`~/zenod-feedback`) are filed again, and a note fails if it lands on a page he said was wrong. The agent save and find runs on his vault copy too. Only counts leave the machine.
+- **Jordi's real notes**, private, on VPS3 only: his 45 real questions (`~/zenod-eval/real-questions.jsonl`, built by E15-Q1 and E12-S1b) run on a throwaway copy of his vault. The 8 notes behind the placements he judged on the trial page (`~/zenod-feedback`) are filed again, and a note fails if it lands on a page he said was wrong. Since E12-S27 his own checks in the app (Right place or Wrong place in the Memory tab, kept in his vault at `.brain/tree-corrections.jsonl` in the same record shape) are read too; a Wrong place there says the parent was wrong, so it rejects no page to file on. The agent save and find runs on his vault copy too. Only counts leave the machine.
 
 ## The stand-in model, and what it does not measure
 

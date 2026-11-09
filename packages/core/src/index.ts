@@ -260,5 +260,10 @@ export {
   applyDeskChanges, checkDeskChanges, checkDeskPlan, deskReadTools, isDeskQuestion, nameFitsPage, DESK_MAX_STEPS, DESK_MAX_TOUCHED, DeskChangeError, invertDeskEdit, parseDeskPlan, runDeskAgent, undoDeskEdits,
   type DeskAgentOutcome, type DeskChange, type DeskChangeView, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskPlan, type DeskReadTools, type DeskUndoResult,
 } from "./engine/memoryDesk.js";
+export {
+  CORRECTIONS_PATH, LOW_CONFIDENCE, placementReview, readCorrections, readFilingConfidences, standingCorrections,
+  type FilingConfidence, type PlacementCorrection, type PlacementCorrectionResult, type PlacementReview, type PlacementReviewItem,
+} from "./engine/placementReview.js";
+export { FILED_CONFIDENCE_RE, placementConfidence } from "./engine/treePlacement.js";
 export { guardSendRoute, isQuestionClause, looksLikeDeskJob, parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendAction, type SendRoute } from "./llm/sendRoute.js";
 export { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, quoteFound, MEMORY_CHAT_NO_ANSWER, type MemoryChatCheck, type MemoryChatContext, type MemoryChatUnchecked } from "./llm/memoryChatAnswer.js";
