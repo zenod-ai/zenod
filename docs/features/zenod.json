@@ -18,6 +18,16 @@
      ],
      "since": "2026-11-08",
      "draft": true
+    },
+    {
+     "id": "answer-lights-up",
+     "title": "See where an answer came from",
+     "text": "Press Show in graph under any chat answer. The memories it used light up in your memory graph with how well each matched, then the links between them turn green. Open any of them.",
+     "rows": [
+      "E12-S13"
+     ],
+     "since": "2026-11-09",
+     "draft": true
     }
    ]
   },
