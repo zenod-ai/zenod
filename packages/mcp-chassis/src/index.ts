@@ -293,6 +293,14 @@ export interface UnitUiOptions {
   sessionSecret?: string;
   /** Session cookie name. Defaults to zenod_session for console compatibility. */
   sessionCookieName?: string;
+  /**
+   * The console's own client routes. When set, only these GET paths fall back to
+   * webDist/index.html; any other unmatched GET gets `notFound` (default: a plain
+   * 404), so unknown paths are a real 404 instead of the app shell with 200.
+   */
+  spaPath?: (path: string) => boolean;
+  /** The 404 response for unmatched GETs when `spaPath` is set. */
+  notFound?: (c: Context) => Response | Promise<Response>;
 }
 
 export const ATOMIC_UNIT_SKILL_MANIFEST_PATH =
@@ -1998,7 +2006,18 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       },
     };
     app.use("/*", serveStatic({ root, ...noCache }));
-    app.get("*", serveStatic({ root, path: "index.html", ...noCache }));
+    const spaFallback = serveStatic({ root, path: "index.html", ...noCache });
+    const spaPath = ui.spaPath;
+    if (spaPath) {
+      const notFound = ui.notFound ?? ((c: Context) => c.text("Not found", 404));
+      app.get("*", async (c, next) => {
+        const context = c as unknown as Context;
+        if (!spaPath(c.req.path)) return notFound(context);
+        return (await spaFallback(context, next)) ?? notFound(context);
+      });
+    } else {
+      app.get("*", spaFallback);
+    }
   }
 
   return { app, name, version };

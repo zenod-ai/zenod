@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { HttpBindings } from "@hono/node-server";
 import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-static";
-import type { Hono, MiddlewareHandler } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 
 export interface StaticSurfaceOptions {
   webDist?: string;
@@ -18,6 +20,33 @@ export function isPublicSiteHost(value: string | undefined, configuredHost?: str
   const host = requestHost(value);
   const configured = (configuredHost ?? process.env.ZENOD_PUBLIC_SITE_HOST ?? "zenod.dev").toLowerCase();
   return host === configured || host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+// ZAL-A19: the console's client routes. Its tabs live in `#hash` and `?tab=`, so
+// only these paths serve the app shell; any other unknown path is a real 404.
+export function isWebAppPath(path: string): boolean {
+  return path === "/" || path === "/index.html" || path === "/account" || path === "/admin" ||
+    path === "/app" || path.startsWith("/app/");
+}
+
+const API_PATH = /^\/(?:api|auth|oauth|mcp|internal|\.well-known)(?:\/|$)/;
+
+// ZAL-A19: the 404 for unknown paths, on zenod.dev and cloud.zenod.dev alike:
+// the site's own not-found page (apps/site/404.html), JSON for API-like paths.
+export function siteNotFound(siteDist: string | undefined): (c: Context) => Response {
+  let page: string | null | undefined;
+  return (c) => {
+    if (API_PATH.test(c.req.path)) return c.json({ error: "not found" }, 404);
+    if (page === undefined) {
+      try {
+        page = siteDist ? readFileSync(join(siteDist, "404.html"), "utf8") : null;
+      } catch {
+        page = null;
+      }
+    }
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    return page ? c.html(page, 404) : c.text("Not found", 404);
+  };
 }
 
 export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurfaceOptions): void {

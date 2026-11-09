@@ -2336,6 +2336,53 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("answers unknown paths with a real 404 and keeps every real route at 200 (ZAL-A19)", async () => {
+    const dataDir = await tempDir();
+    const siteDist = join(dataDir, "site");
+    const webDist = join(dataDir, "web");
+    await mkdir(siteDist, { recursive: true });
+    await mkdir(webDist, { recursive: true });
+    await writeFile(join(siteDist, "index.html"), "PUBLIC SITE", "utf8");
+    await writeFile(join(siteDist, "connect.html"), "CONNECT", "utf8");
+    await writeFile(join(siteDist, "testers.html"), "TESTERS", "utf8");
+    await writeFile(join(siteDist, "404.html"), "NOT FOUND PAGE", "utf8");
+    await writeFile(join(webDist, "index.html"), "CUSTOMER APP", "utf8");
+    await writeFile(join(webDist, "favicon.ico"), "ICO", "utf8");
+    const unit = createZenodUnit({
+      dataDir: join(dataDir, "data"),
+      siteDist,
+      webDist,
+      tenantStore: createMemoryTenantStore(),
+      env: { ACCOUNT_STATE_SECRET: "static-test-secret", CHASSIS_VAULT_MASTER_KEY },
+    });
+    const get = (host: string, path: string) => unit.app.request(path, { headers: { host } });
+    try {
+      for (const [path, body] of [
+        ["/", "PUBLIC SITE"], ["/pricing", "PUBLIC SITE"], ["/connect", "CONNECT"], ["/testers", "TESTERS"],
+        ["/favicon.ico", "ICO"], ["/?tab=memory", "PUBLIC SITE"],
+      ] as const) {
+        const response = await get("zenod.dev", path);
+        expect(response.status, path).toBe(200);
+        expect(await response.text()).toContain(body);
+      }
+      for (const path of ["/", "/?tab=graph", "/account", "/app", "/app/account?identity=google-linked", "/app?tab=memory"]) {
+        const response = await get("cloud.zenod.dev", path);
+        expect(response.status, path).toBe(200);
+        expect(await response.text()).toContain("CUSTOMER APP");
+      }
+      for (const host of ["zenod.dev", "cloud.zenod.dev"]) {
+        for (const path of ["/no-such-page", "/robots.txt", "/pricing/extra", "/appx"]) {
+          const response = await get(host, path);
+          expect(response.status, `${host}${path}`).toBe(404);
+          expect(await response.text()).toContain("NOT FOUND PAGE");
+        }
+      }
+      expect((await unit.app.request("/no-such-page", { method: "HEAD", headers: { host: "zenod.dev" } })).status).toBe(404);
+    } finally {
+      unit.close();
+    }
+  });
+
   it("keeps the deployed token-path MCP route on the integrated app", async () => {
     const dataDir = await tempDir();
     const tenants = createMemoryTenantStore([{ token: "path-token", tenant: { id: "tenant-path" } }]);

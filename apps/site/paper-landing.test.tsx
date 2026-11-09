@@ -232,6 +232,17 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(icon).toBe(readFileSync(new URL("./public/favicon.svg", import.meta.url), "utf8"));
   });
 
+  it("renders the not-found page that 404.html marks, with links that work from both hosts (ZAL-A19)", () => {
+    vi.stubGlobal("document", { body: { dataset: { page: "not-found" } } });
+    const html = render("/no-such-page");
+    expect(html).toContain("This page does not exist.");
+    expect(html).toContain('href="https://zenod.dev/"');
+    expect(html).toContain('href="https://cloud.zenod.dev/app"');
+    const page = readFileSync(new URL("./404.html", import.meta.url), "utf8");
+    expect(page).toContain('data-page="not-found"');
+    expect(page).toContain('content="noindex"');
+  });
+
   it("names the demo data in the footer", () => {
     expect(render("/")).toContain("Screens show the real product with demo people and notes.");
   });
