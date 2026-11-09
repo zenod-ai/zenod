@@ -140,9 +140,11 @@ export function HostedApp({
   onLogout: () => void
 }) {
   const [place, setPlace] = React.useState<Required<DashboardPlace>>(() => {
+    // Old links: #anchors first, then `?tab=` (e.g. ?tab=graph), then the place the app was asked to open.
+    const tab = new URLSearchParams(window.location.search).get("tab") ?? undefined
     const first =
       dashboardPlaceForHash(window.location.hash) ??
-      dashboardPlaceForTab(initialTab, "hosted")
+      (tab ? dashboardPlaceForTab(tab, "hosted") : dashboardPlaceForTab(initialTab, "hosted"))
     return { section: first.section, memory: first.memory ?? "glance", settings: first.settings ?? "connect" }
   })
   const go = React.useCallback((next: DashboardPlace) => {

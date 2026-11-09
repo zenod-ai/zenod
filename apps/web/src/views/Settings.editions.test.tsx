@@ -114,6 +114,23 @@ describe("Zenod edition portal", () => {
     expect(screen.getByText("the librarian of your memory")).not.toBeNull()
   })
 
+  it("opens an old ?tab= link in its new home (EPIC-22)", async () => {
+    mocks.api.mockResolvedValue(overview())
+    window.history.replaceState(null, "", "/?tab=usage")
+    render(
+      <Settings
+        edition="hosted"
+        initialSettings={{ provider: "openrouter" } as SettingsValues}
+        onLoggedOut={() => undefined}
+      />
+    )
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Usage & plan" }).getAttribute("aria-current")).toBe("true")
+    })
+    expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
+    window.history.replaceState(null, "", "/")
+  })
+
   it("renders self-hosted Settings but no customer Account section", async () => {
     mocks.api.mockResolvedValue(overview())
 
