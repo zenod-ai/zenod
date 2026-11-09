@@ -212,6 +212,16 @@ describe("persona runner (EPIC-14 S4)", () => {
     expect(await runPersona(broken, d, "manual")).toMatchObject({ status: "failed", summary: "Failed: boom" });
   });
 
+  it("fails the run when the model's answer is empty, instead of writing that nothing was found (S5)", async () => {
+    const stub = stubModel("   ");
+    const { deps: d, written, inbox } = deps({ model: () => stub.model });
+    const run = await runPersona(OPEN_LOOPS, d, "manual");
+    expect(run).toMatchObject({ status: "failed", summary: "Failed: The model gave no answer", modelCalls: 1 });
+    expect(run!.costUsd).toBeCloseTo(0.0004);
+    expect(written).toHaveLength(0);
+    expect(inbox.list()).toHaveLength(0);
+  });
+
   it("wakes a persona that is on and never ran at once, then only in the off-peak window, once per period", () => {
     const store = new PersonaStore(join(dir, "personas.sqlite"), () => new Date("2026-11-08T20:00:00Z"));
     const noon = new Date("2026-11-08T21:00:00Z");

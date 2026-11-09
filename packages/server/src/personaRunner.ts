@@ -358,6 +358,8 @@ export async function runPersona(
       tally.inputTokens += result.inputTokens;
       tally.outputTokens += result.outputTokens;
       tally.costUsd += result.costUsd;
+      // An empty answer is a failed call, never "nothing found" (EPIC-14 S5: three runs wrote "nothing" that way).
+      if (!result.text.trim()) throw new Error("The model gave no answer");
       return result.text;
     },
     writeNote(name, content) {

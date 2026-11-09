@@ -1049,6 +1049,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       temperature: 0,
       maxOutputTokens: MAX_CHAT_OUTPUT_TOKENS,
       maxRetries: 1,
+      // DeepSeek V4.1 Flash thinks by default: on persona runs (EPIC-14 S5, production 2026-11-09) the
+      // thinking used all 700 output tokens and the answer came back empty. Effort "none" is DeepSeek's
+      // `thinking: disabled` (deepseekSeam), as filing already sends.
+      ...(this.provider === "deepseek" ? { providerOptions: { openai: { reasoningEffort: "none" as const } } } : {}),
     });
     let text = "";
     try {
