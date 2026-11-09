@@ -124,8 +124,8 @@ describe("E9-2f deepen root-only citations", { timeout: 60_000 }, () => {
     expect(result.placed.map(p => p.path)).toEqual(["Projects/Garden.md", "Notes/Raised beds.md"]);
     expect(result.pagesTouched).toContain("Notes/Raised beds.md");
     expect(result.filedLines).toEqual([
-      "- filed: [[Projects/Garden]] (Working › Garden)",
-      "- filed: [[Notes/Raised beds]] (Working › Garden › Raised beds)",
+      "- filed: [[Projects/Garden]] (Working › Garden) · 75% sure",
+      "- filed: [[Notes/Raised beds]] (Working › Garden › Raised beds) · 64% sure",
     ]);
     expect(await readFile(join(dir, "Notes/Raised beds.md"), "utf8")).toContain("[[2026-10-27#^e-aaaaaa]]");
     expect(result.treeIssues).toEqual([]);
