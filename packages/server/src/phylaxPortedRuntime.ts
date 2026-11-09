@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod/state/sqlite";
@@ -963,6 +964,23 @@ export class PhylaxPortedRuntime {
     return resumed;
   }
 
+  /**
+   * ZAL-A15: voice notes of the last 7 days that a paid transcription provider refused are
+   * transcribed again (the local whisper fallback makes this succeed without credit).
+   */
+  retryFailedTranscriptions(now = Date.now()): number {
+    const requeued = this.whatsappStore.requeueProviderFailedTranscriptions(
+      now - 7 * 24 * 60 * 60_000,
+      (path) => existsSync(path),
+      now,
+    );
+    if (requeued.length) {
+      console.log(JSON.stringify({ event: "transcription.retry", requeued: requeued.length, provider_message_ids: requeued }));
+      this.kickVoiceWorker();
+    }
+    return requeued.length;
+  }
+
   /** Hand kept voice notes whose next retry is due back to the voice worker. */
   retryDueVoiceCaptures(now = Date.now()): number {
     if (this.voiceWorkerClosed) return 0;
@@ -1022,6 +1040,7 @@ export class PhylaxPortedRuntime {
     await this.organ.resumePendingCaptures();
     const resumed = this.retryDueVoiceCaptures();
     if (resumed > 0) console.log(`[phylax] resumed ${resumed} kept voice note(s) for a save retry`);
+    this.retryFailedTranscriptions();
     this.startCaptureRetryTimer();
   }
 

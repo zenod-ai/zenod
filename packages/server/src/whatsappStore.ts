@@ -1196,6 +1196,37 @@ export class WhatsAppStore {
     ).run(safeJson(transcription), now, providerMessageId).changes);
   }
 
+  /**
+   * ZAL-A15: voice notes whose transcription failed for a provider reason (out of credit, rejected
+   * key, outage, rate limit, network) while their audio is still kept go back to the queue, to be
+   * transcribed again (now with the local whisper fallback). Returns the requeued message ids.
+   */
+  requeueProviderFailedTranscriptions(
+    since: number,
+    artifactExists: (path: string) => boolean,
+    now = Date.now(),
+  ): string[] {
+    const rows = this.db.prepare(
+      `SELECT provider_message_id AS id, artifact_path AS path FROM whatsapp_voice_jobs
+       WHERE job_state = 'failed' AND created_at >= ?
+         AND failure_reason IN ('provider_credit_exhausted', 'provider_auth_failed', 'provider_unavailable',
+                                'provider_rate_limited', 'network_error')`,
+    ).all(since) as Array<{ id: string; path: string }>;
+    const requeued: string[] = [];
+    for (const row of rows) {
+      if (!artifactExists(row.path)) continue;
+      const changed = this.db.prepare(
+        `UPDATE whatsapp_voice_jobs
+         SET job_state = 'queued', error_text = NULL, transcription_json = NULL,
+             failure_reason = NULL, failure_provider = NULL, failure_http_status = NULL,
+             failure_provider_code = NULL, updated_at = ?
+         WHERE provider_message_id = ? AND job_state = 'failed'`,
+      ).run(now, row.id).changes;
+      if (changed) requeued.push(row.id);
+    }
+    return requeued;
+  }
+
   requeueInterruptedVoiceJob(providerMessageId: string, now = Date.now()): boolean {
     return Boolean(this.db.prepare(
       `UPDATE whatsapp_voice_jobs

@@ -32,6 +32,7 @@ import {
   phylaxTranscriptionOptions,
 } from "../src/phylaxUnit.js";
 import { WhatsAppStore, type WhatsAppInboundEvent } from "../src/whatsappStore.js";
+import { transcribeAudio } from "../src/transcribe.js";
 import { PhylaxUsagePausedError } from "../src/phylaxUsageMeter.js";
 
 const dirs: string[] = [];
@@ -2535,8 +2536,55 @@ describe("PhylaxChannelsOrgan", () => {
       groqApiKey: "",
       openaiApiKey: "",
       openrouterApiKey: "tenant-key",
-      allowLocalFallback: false,
+      // ZAL-A15: a paid provider's refusal falls back to the local whisper-cli for every tenant.
+      allowLocalFallback: true,
     });
+  });
+
+  it("transcribes a voice note locally when OpenRouter refuses it (ZAL-A15: never lost to credit)", async () => {
+    const before = { ...process.env };
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "the plumber comes thursday";
+    process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS = "openrouter";
+    try {
+      const result = await transcribeAudio(Buffer.from("audio"), "voice.ogg", phylaxTranscriptionOptions(
+        { provider: "openrouter", model: "openai/whisper-large-v3-turbo", key: "tenant-key" },
+        {},
+        new AbortController().signal,
+      ));
+      expect(result).toMatchObject({ success: true, transcript: "the plumber comes thursday" });
+      expect(result.provider).toMatch(/^whisper\.cpp /);
+    } finally {
+      delete process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+      delete process.env.ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS;
+      Object.assign(process.env, before);
+    }
+  });
+
+  it("requeues voice notes a paid provider refused, with their audio kept, for a new transcription (ZAL-A15)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-requeue-"));
+    dirs.push(dataDir);
+    const store = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    const create = (id: string, createdAt: number) => store.createVoiceJob({
+      providerMessageId: id, tenantId: "alpha", conversationKey: "whatsapp:alpha", senderId: "alpha-sender", chatId: "alpha-chat",
+      artifactRef: `https://phylax.test/artifacts/alpha/${id}.ogg`, artifactPath: join(dataDir, `${id}.ogg`),
+      artifactSha256: id.padEnd(64, "a").slice(0, 64), mimeType: "audio/ogg", fileName: `${id}.ogg`, captionText: "",
+      durationSeconds: 10, state: "queued",
+    }, createdAt);
+    for (const [id, at] of [["credit", 1_000], ["speech", 1_001], ["gone", 1_002], ["old", 10]] as const) {
+      create(id, at);
+      expect(store.claimNextVoiceJob(null)?.providerMessageId).toBe(id);
+      store.queueVoiceFailureReply(id, "warned", at, { reason: id === "speech" ? "no_speech" : "provider_credit_exhausted", provider: "openrouter", httpStatus: 402 });
+    }
+    expect(store.voiceJob("credit")?.state).toBe("failed");
+    const requeued = store.requeueProviderFailedTranscriptions(500, (path) => !path.endsWith("gone.ogg"), 2_000);
+    expect(requeued).toEqual(["credit"]);
+    expect(store.voiceJob("credit")?.state).toBe("queued");
+    expect(store.voiceJob("speech")?.state).toBe("failed");
+    expect(store.voiceJob("gone")?.state).toBe("failed");
+    expect(store.voiceJob("old")?.state).toBe("failed");
+    expect(store.claimNextVoiceJob(null)?.providerMessageId).toBe("credit");
+    expect(store.requeueProviderFailedTranscriptions(500, () => true, 3_000)).toEqual(["gone"]);
+    store.close();
   });
 
   it("uses only the fresh Phylax-owned /data/whatsapp shape", () => {
