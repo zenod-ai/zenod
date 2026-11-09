@@ -55,7 +55,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
-| L2 | Ticket worker | run_41ed542e-9a52-42d6-b9c0-aa366b10bdce — claimed 2026-11-09T17:00Z, lease until 2026-11-09T19:00Z | E22-2, E22-3: build it in the live app after the mockup is approved | active (mockup round 2 after feedback E22-A1; build waits on E22-A2) | L1 | main-direct (docs only, mockup) | 0db6fd54 | http://vps3.taild81fbb.ts.net:8921/e22-l2/ ([evidence](evidence/e22-l2-2026-11-09.md)) | 2026-11-09 | mockup round 2 at http://vps3.taild81fbb.ts.net:8921/e22-l2/; waits on E22-A2 |
+| L2 | Ticket worker | unassigned | E22-2, E22-3: build it in the live app after the mockup is approved | ready | L1 | main-direct (docs only, mockup) | 0db6fd54 | http://vps3.taild81fbb.ts.net:8921/e22-l2/ ([evidence](evidence/e22-l2-2026-11-09.md)) | 2026-11-09 | mockup round 2 at http://vps3.taild81fbb.ts.net:8921/e22-l2/; waits on E22-A2 |
 
 ## Decisions
 
