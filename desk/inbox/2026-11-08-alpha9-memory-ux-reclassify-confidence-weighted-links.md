@@ -2,7 +2,8 @@
 from: alpha9
 about: Memory UX in Zenod: reclassify on the tree, a confidence per memory, weighted links (Jordi's words)
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-09-zenod-re-memory-ux-in-zenod-reclassify-on-the.md
 ---
 Jordi, 2026-11-08 (feedback on agent_team E76-S1, commit c61a27ea in agent_team), in his words: "To be honest, I'm actually curious, how is my memory right now structured? What are the branches sitting at the root of it? Maybe we should instead be kind of working more on the UX of Xenote memory. And I wish I had the feedback, the way to give feedback right there to say that's gonna reclassify that. And this was part of the product itself, not like a one-off thing here for us. And I would do this work directly on the tree itself. And also I wish every time we add something to the tree, to the memory tree, we add it with some confidence. And then we also maybe add some connections with like a strength of the connection. So it's maybe like, you could have related, It's related to 10 things, but the first one is like a 90% relationship. The 10th one is maybe a 5% relationship. There are quite a few agents and tickets on this topic, so make sure that whatever you add it's consistent with everything else that is being worked on."
 
