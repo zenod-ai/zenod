@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 // EPIC-14 S28, Memory › At a glance, "What Zenod knows you mean": the quick index. Every place in
 // the tree with its one-line summary, the other names you use for it, how many notes and when you
-// last added to it, plus what you added to this week (GET /api/console/quick-index). Read only.
+// last added to it, plus what you added to in the past 7 days (GET /api/console/quick-index). Read only.
 
 export type QuickIndexPlace = {
   path: string
@@ -79,7 +79,7 @@ export function QuickIndexPanel() {
     <section className="zp zq" aria-label="What Zenod knows you mean">
       <header className="zq-head">
         <h3>What Zenod knows you mean</h3>
-        <p className="zp-hint">Your places, the names you use for them and what is live this week. Kept fresh after each note and once a night.</p>
+        <p className="zp-hint">Your places, the names you use for them and what you added to in the past 7 days. Kept fresh after each note and once a night.</p>
       </header>
       {state.status === "loading" ? (
         <Skeleton className="h-40 w-full" />
@@ -103,7 +103,7 @@ function Index({ index, query, setQuery, all, setAll }: { index: QuickIndex; que
   return (
     <>
       <p className="zq-week" data-testid="quick-index-week">
-        <b>This week</b>{" "}
+        <b>Past 7 days</b>{" "}
         {index.thisWeek.length ? index.thisWeek.map((place) => place.title).join(", ") : "nothing new yet"}
       </p>
       <input
@@ -137,7 +137,7 @@ function Index({ index, query, setQuery, all, setAll }: { index: QuickIndex; que
       ) : null}
       <p className="zp-hint zq-cost">
         {index.totals.names} {index.totals.names === 1 ? "name" : "names"} for {index.totals.named} of {index.totals.places} places.
-        {" "}Keeping it cost {cents(index.cost.todayUsd)} today and {cents(week)} this week
+        {" "}Keeping it cost {cents(index.cost.todayUsd)} today and {cents(week)} in the past 7 days
         {index.cost.firstBuildUsd > 0 ? `, ${cents(index.cost.firstBuildUsd)} to build` : ""}.
       </p>
     </>
