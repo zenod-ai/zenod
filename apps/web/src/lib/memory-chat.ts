@@ -304,6 +304,19 @@ export async function keepInMemory(content: string): Promise<MemoryKeepReceipt> 
   return request<MemoryKeepReceipt>("/api/console/memory-keep", json({ kind: "note", content }))
 }
 
+/**
+ * EPIC-22 E22-L3: the person redid a message Zenod picked in another mode. Recorded so the pick can
+ * be tuned from it; a failed record never stops the redo.
+ */
+export async function recordModeSwitch(
+  message: string,
+  from: MemorySendRoute["action"],
+  by: MemorySendRoute["by"],
+  to: "keep" | "lookup" | "talk" | "job"
+): Promise<void> {
+  await request("/api/console/memory-switch", json({ message, from, by, to })).catch(() => undefined)
+}
+
 export function keepStatus(id: string): Promise<MemoryKeepReceipt> {
   return request(`/api/console/memory-keep/${encodeURIComponent(id)}`)
 }

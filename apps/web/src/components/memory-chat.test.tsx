@@ -356,6 +356,16 @@ describe("MemoryChat as the librarian: four modes (EPIC-22 E22-2)", () => {
     const [url, init] = fetchMock.mock.calls.at(-1)!
     expect(url).toBe("/api/console/memory-chat/stream")
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({ question: "Ana's birthday is 14 March" })
+    // E22-L3: the switch away from Zenod's pick is recorded once, with the message and both modes.
+    const switches = () => fetchMock.mock.calls.filter(([to]) => to === "/api/console/memory-switch")
+    expect(switches().map(([, sent]) => JSON.parse(String((sent as RequestInit).body)))).toEqual([
+      { message: "Ana's birthday is 14 March", from: "keep", by: "model", to: "lookup" },
+    ])
+    // A second tap redoes a redo, not Zenod's pick: nothing more is recorded.
+    fireEvent.click(screen.getByRole("button", { name: /Looked up/ }))
+    fireEvent.click(screen.getByRole("menuitem", { name: /Talk it over/ }))
+    await waitFor(() => expect(fetchMock.mock.calls.at(-1)![0]).toBe("/api/console/memory-talk/stream"))
+    expect(switches()).toHaveLength(1)
   })
 
   it("a talk started from a persona card opens in the chat, and the persona speaks first", async () => {
