@@ -410,7 +410,9 @@ function ReplyTurn({
           ? "Kept as a new memory"
           : route.action === "both"
             ? "Kept the new part and answered the question"
-            : "Answered from your memory · nothing saved"
+            : result?.about === "zenod"
+              ? "About Zenod · nothing saved"
+              : "Answered from your memory · nothing saved"
   return (
     <div className="zp-turn">
       {desk ? <DeskLine desk={desk} onChoose={onDeskChoice} /> : null}
