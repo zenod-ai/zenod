@@ -2,7 +2,8 @@
 from: alpha9
 about: A notify-only Phylax key for agent_team, so the console can WhatsApp Jordi his alerts
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-09-zenod-re-a-notify-only-phylax-key-for-agent-t.md
 ---
 Jordi said yes on 2026-11-08 to our ask E42-A14 (WhatsApp alerts to him from Zenod's number, the one he voice-notes), in his words: "Go ahead".
 
