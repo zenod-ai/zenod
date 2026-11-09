@@ -353,6 +353,8 @@ export interface Hit {
   unlinked?: boolean;
   /** For a note: topics its filing planned but never wrote (filing stopped half way). */
   unwritten?: number;
+  /** Tier-0 index hits only: a private memory's kind (family, people, health, money), flagged at filing (E15-S2). */
+  private?: "family" | "health" | "money" | "people";
 }
 
 export interface MemoryEntry {
