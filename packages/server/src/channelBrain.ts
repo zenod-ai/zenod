@@ -49,6 +49,24 @@ const SMALL_TALK = /^(?:hi|hello|hey|hola|buenas|thanks|thank you|thx|ty|gracias
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A source's name in a chat: a captured entry's raw title ("Voice note \"AC9D….ogg\" ingested…") becomes
+ * "Your voice note, 8 Nov"; a page keeps its title.
+ */
+export function channelSourceTitle(path: string, title: string): string {
+  const day = /^Log\/\d{4}-(\d{2})-(\d{2})\.md/.exec(path);
+  if (!day) return title;
+  const when = `${Number(day[2])} ${MONTHS[Number(day[1]) - 1]}`;
+  const kind = /^voice note/i.test(title) || /voice-note/i.test(title) ? "voice note"
+    : /^audio/i.test(title) ? "audio"
+      : /^screenshot|^image/i.test(title) ? "screenshot"
+        : /^(pdf|document)/i.test(title) ? "document"
+          : "note";
+  return `Your ${kind}, ${when}`;
+}
+
 /** A memory's page in the app. */
 function memoryLink(appUrl: string, path: string): string {
   return `${appUrl}/#memory?path=${encodeURIComponent(path)}`;
@@ -89,7 +107,7 @@ export function formatChannelAnswer(answer: MemoryChatAnswer, appUrl: string): {
     text = (end > CHANNEL_ANSWER_MAX_CHARS / 2 ? cut.slice(0, end + 1) : clip(text, CHANNEL_ANSWER_MAX_CHARS)).trimEnd();
   }
   const sources = kept.map((n) => byRank.get(n)!);
-  const lines = sources.map((memory, i) => `[${i + 1}] ${memory.title} ${memoryLink(appUrl, memory.path)}`);
+  const lines = sources.map((memory, i) => `[${i + 1}] ${channelSourceTitle(memory.path, memory.title)} ${memoryLink(appUrl, memory.path)}`);
   return {
     text: lines.length ? `${text}\n\n${lines.join("\n")}` : text,
     sources: sources.map((memory) => ({ path: memory.path, url: memory.url, provider: memory.provider } as SourceRef)),
