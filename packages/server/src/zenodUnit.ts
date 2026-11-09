@@ -63,7 +63,7 @@ import {
   compedAccountIdsFromEnv,
   isAccountEntitled,
 } from "./zenodPhylax.js";
-import { mountStaticSurfaces } from "./staticSurfaces.js";
+import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
@@ -829,6 +829,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     metering: { dataDir: storage.dataDir },
     ui: {
       ...(options.webDist ? { webDist: options.webDist } : {}),
+      // ZAL-A19: with the public site mounted, unknown paths are a real 404.
+      ...(options.siteDist ? { spaPath: isWebAppPath, notFound: siteNotFound(options.siteDist) } : {}),
       displayName: agent.displayName,
       tagline: agent.tagline,
       panels: options.panels ?? [
@@ -1053,6 +1055,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     await runtime.telegram.sendManagedNotice(telegramInput.chatId, replyText);
   };
   const app = new Hono<{ Bindings: HttpBindings }>();
+  app.use("*", cloudflareHttpsRedirect());
   app.use("*", async (c, next) => {
     await next();
     c.header("X-Content-Type-Options", "nosniff");

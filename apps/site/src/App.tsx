@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Footer, Nav, PaperLanding } from "@/components/paper-landing";
 import { TestersPage } from "@/components/testers-page";
 import { ConnectPage } from "@/components/connect-page";
+import { NotFoundPage } from "@/components/not-found-page";
 import {
   consumePendingHostedTier,
   createHostedCheckout,
@@ -330,6 +331,12 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
 }
 
 export default function App() {
+  // ZAL-A19: 404.html marks itself; the server sends it with HTTP 404.
+  if (typeof document !== "undefined" && document.body.dataset.page === "not-found") return <NotFoundPage />;
+  return <SiteApp />;
+}
+
+function SiteApp() {
   const customer = useCustomerJourney();
   const path = window.location.pathname;
   if (path === "/pricing") return <PricingPage customer={customer} />;

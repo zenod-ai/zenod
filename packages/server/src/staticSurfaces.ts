@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { HttpBindings } from "@hono/node-server";
 import { serveStatic, type ServeStaticOptions } from "@hono/node-server/serve-static";
-import type { Hono, MiddlewareHandler } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 
 export interface StaticSurfaceOptions {
   webDist?: string;
@@ -18,6 +20,53 @@ export function isPublicSiteHost(value: string | undefined, configuredHost?: str
   const host = requestHost(value);
   const configured = (configuredHost ?? process.env.ZENOD_PUBLIC_SITE_HOST ?? "zenod.dev").toLowerCase();
   return host === configured || host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+// ZAL-A19: the console's client routes. Its tabs live in `#hash` and `?tab=`, so
+// only these paths serve the app shell; any other unknown path is a real 404.
+export function isWebAppPath(path: string): boolean {
+  return path === "/" || path === "/index.html" || path === "/account" || path === "/admin" ||
+    path === "/app" || path.startsWith("/app/");
+}
+
+const API_PATH = /^\/(?:api|auth|oauth|mcp|internal|\.well-known)(?:\/|$)/;
+
+// ZAL-A19: the 404 for unknown paths, on zenod.dev and cloud.zenod.dev alike:
+// the site's own not-found page (apps/site/404.html), JSON for API-like paths.
+export function siteNotFound(siteDist: string | undefined): (c: Context) => Response {
+  let page: string | null | undefined;
+  return (c) => {
+    if (API_PATH.test(c.req.path)) return c.json({ error: "not found" }, 404);
+    if (page === undefined) {
+      try {
+        page = siteDist ? readFileSync(join(siteDist, "404.html"), "utf8") : null;
+      } catch {
+        page = null;
+      }
+    }
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    return page ? c.html(page, 404) : c.text("Not found", 404);
+  };
+}
+
+// ZAL-A20: http -> https behind Cloudflare. The tunnel lands every request on
+// Traefik over one scheme, so the visitor's own scheme only survives in
+// Cloudflare's Cf-Visitor header. Without that header (local, self-host) nothing changes.
+export function cloudflareHttpsRedirect(): MiddlewareHandler {
+  return async (c, next) => {
+    let scheme: unknown;
+    try {
+      scheme = (JSON.parse(c.req.header("cf-visitor") ?? "{}") as { scheme?: unknown }).scheme;
+    } catch {
+      scheme = undefined;
+    }
+    if (scheme !== "http") return next();
+    const url = new URL(c.req.url);
+    const host = requestHost(c.req.header("x-forwarded-host") ?? c.req.header("host") ?? url.hostname);
+    if (!host) return next();
+    const method = c.req.method;
+    return c.redirect(`https://${host}${url.pathname}${url.search}`, method === "GET" || method === "HEAD" ? 301 : 308);
+  };
 }
 
 export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurfaceOptions): void {

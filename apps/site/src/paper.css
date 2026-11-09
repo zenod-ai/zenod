@@ -285,3 +285,7 @@ body:has(.pp) {
   .pp-bar .pp-nav-in { gap: 0.75rem; }
   .pp-bar .pp-btn-small { padding: 0.5rem 0.9rem; }
 }
+
+/* ZAL-A19: the not-found page. */
+.pp-not-found main { min-height: 60svh; }
+.pp-not-found-links { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 2.5rem 0 0; font: 400 1rem/1.5 var(--pp-sans); }

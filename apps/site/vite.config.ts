@@ -16,6 +16,8 @@ export default defineConfig({
         main: path.resolve(__dirname, "index.html"),
         connect: path.resolve(__dirname, "connect.html"),
         testers: path.resolve(__dirname, "testers.html"),
+        // ZAL-A19: the not-found page the server sends with HTTP 404.
+        notfound: path.resolve(__dirname, "404.html"),
       },
     },
   },
