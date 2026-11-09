@@ -41,6 +41,8 @@ function channelLine(
 }
 
 function usageHeading(usage: HostedCustomerUsage): string {
+  // EPIC-14 S10: at the AI allowance only answers stop; notes are still kept and filed.
+  if (usage.state === "paused" && usage.breakdown?.ai.paused) return "Answers paused, notes still kept"
   if (usage.state === "paused") return "Managed processing paused"
   if (usage.state === "warn") return "Nearly used"
   if (usage.state === "unavailable") return "Usage temporarily unavailable"

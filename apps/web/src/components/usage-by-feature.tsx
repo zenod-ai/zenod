@@ -57,7 +57,7 @@ function limitLine(feature: UsageFeatureView, allowanceUsd: number | null): stri
 
 const STATE_WORDS: Record<UsageFeatureView["state"], string> = {
   ok: "On",
-  near: "Nearly at its limit",
+  near: "Allowance nearly used",
   paused: "Paused",
 }
 
