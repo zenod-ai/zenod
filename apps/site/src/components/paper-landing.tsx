@@ -79,7 +79,27 @@ const CONSTELLATION_KEPT = [
 
 // `base` is "" on the home page and "/" on other Paper pages, so the section
 // links always land on the home page's sections.
-export function Nav({ customer, base = "" }: { customer: Pick<PaperCustomer, "signedIn">; base?: "" | "/" }) {
+// `menu` adds a phone-width Menu with the same links (the /pricing and /connect
+// pages kept theirs from ZAL-A13); `getStartedHref` lets /pricing point at its
+// own plans.
+export function Nav({
+  customer,
+  base = "",
+  menu = false,
+  getStartedHref,
+}: {
+  customer: Pick<PaperCustomer, "signedIn">;
+  base?: "" | "/";
+  menu?: boolean;
+  getStartedHref?: string;
+}) {
+  const links = [
+    { href: `${base}#how`, label: "How it works" },
+    { href: `${base}#mcp`, label: "Your AI tools" },
+    { href: `${base}#start`, label: "Pricing" },
+    { href: "/connect", label: "Connect" },
+    { href: "/testers", label: "Testers" },
+  ];
   return (
     <header className="pp-nav">
       <div className="pp-nav-in">
@@ -87,11 +107,11 @@ export function Nav({ customer, base = "" }: { customer: Pick<PaperCustomer, "si
           Zenod
         </a>
         <nav aria-label="Primary">
-          <a href={`${base}#how`}>How it works</a>
-          <a href={`${base}#mcp`}>Your AI tools</a>
-          <a href={`${base}#start`}>Pricing</a>
-          <a href="/connect">Connect</a>
-          <a href="/testers">Testers</a>
+          {links.map((link) => (
+            <a key={link.href} href={link.href}>
+              {link.label}
+            </a>
+          ))}
         </nav>
         {customer.signedIn ? (
           <a className="pp-nav-link" href={DASHBOARD_URL}>
@@ -102,9 +122,21 @@ export function Nav({ customer, base = "" }: { customer: Pick<PaperCustomer, "si
             Sign in
           </a>
         )}
-        <a className="pp-btn pp-btn-small" href={`${base}#start`}>
+        <a className="pp-btn pp-btn-small" href={getStartedHref ?? `${base}#start`}>
           Get started
         </a>
+        {menu ? (
+          <details className="pp-menu">
+            <summary>Menu</summary>
+            <nav aria-label="Menu">
+              {links.map((link) => (
+                <a key={link.href} href={link.href}>
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+          </details>
+        ) : null}
       </div>
     </header>
   );

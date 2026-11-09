@@ -204,7 +204,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
       const anchors = [...html.matchAll(/href="\/#([^"]+)"/g)].map((match) => match[1]);
       expect(anchors.length).toBeGreaterThan(0);
       for (const anchor of anchors) expect(homeIds).toContain(anchor);
-      expect(html).toContain('class="v5-menu"');
+      expect(html).toContain('class="pp-menu"');
       expect(html).toContain("Sign in");
     }
     const pricing = render("/pricing");
@@ -212,6 +212,24 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(pricing).toMatch(/href="#start"[^>]*>Get started/);
     const css = readFileSync(new URL("./src/index.css", import.meta.url), "utf8");
     expect(css).not.toMatch(/\.v5-signin \{ display: none; \}/);
+  });
+
+  it("gives /pricing and /connect the home page's header and Z (ZAL-A17)", () => {
+    const homeHeader = render("/").match(/<header class="pp-nav">[\s\S]*?<\/header>/)?.[0];
+    expect(homeHeader).toBeTruthy();
+    for (const path of ["/pricing", "/connect"]) {
+      const html = render(path);
+      expect(html).toContain('<div class="pp pp-bar"><header class="pp-nav">');
+      expect(html).toContain('<a class="pp-brand" href="/" aria-label="Zenod home">Zenod</a>');
+      expect(html).not.toContain('class="v5-nav"');
+      expect(html).toContain("v5-paper");
+    }
+    // Content stays: the plans and the connect steps.
+    expect(render("/pricing")).toContain("Start free. Stay in control.");
+    expect(render("/connect")).toContain("cloud.zenod.dev/mcp");
+    // The listing icon is the Newsreader Z of the favicon, not the old Bodoni one.
+    const icon = readFileSync(new URL("./public/brand/zenod-icon.svg", import.meta.url), "utf8");
+    expect(icon).toBe(readFileSync(new URL("./public/favicon.svg", import.meta.url), "utf8"));
   });
 
   it("names the demo data in the footer", () => {

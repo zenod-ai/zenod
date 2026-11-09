@@ -62,7 +62,7 @@ export function ConnectPage({
   footer: React.ReactNode
 }) {
   return (
-    <div className="v5-site zc-page">
+    <div className="v5-site v5-paper zc-page">
       {header}
       <main className="v5-wrap">
         <section className="zc-intro">
