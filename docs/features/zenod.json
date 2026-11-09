@@ -10,6 +10,26 @@
    "intro": "Ask, tell and call your memory from the web app.",
    "features": [
     {
+     "id": "librarian-four-modes",
+     "title": "One box, four modes",
+     "text": "Write or speak to your librarian in one box. Zenod keeps it, looks it up, talks it over or makes it a job for the memory desk, and labels each reply. Tap the label to redo it another way.",
+     "rows": [
+      "E22-L2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "talk-it-over",
+     "title": "Talk it over",
+     "text": "Think something through with Zenod or one of your personas. It reads the memories that match, says what they show and asks one question back. Nothing is saved or changed. Start it from the chat, a persona or an inbox note.",
+     "rows": [
+      "E22-L2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
      "id": "call-your-memory",
      "title": "Call your memory",
      "text": "Press the phone button in the chat and ask your memory out loud. It answers from your own notes and passes jobs to the memory desk. Nothing from a call is saved unless you keep it.",
@@ -74,6 +94,16 @@
    "title": "Your memory tree",
    "intro": "How Zenod keeps your notes in order.",
    "features": [
+    {
+     "id": "memory-at-a-glance",
+     "title": "Your memory at a glance",
+     "text": "The Memory tab opens on your totals, how much you kept each week, your strongest places and where your memories come from, next to your recent saves.",
+     "rows": [
+      "E22-L2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
     {
      "id": "tree-tidies-itself",
      "title": "Your tree tidies itself",
