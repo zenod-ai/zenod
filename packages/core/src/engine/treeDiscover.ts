@@ -479,6 +479,8 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     for (const path of index.fields.keys()) {
       const lineage = index.lineage(path);
       if (!lineage.ok) continue;
+      // Members are the pages discovery clusters: a leaf it holds on its branch is not one (E12-S24).
+      if (!at.has(path)) continue;
       const rootPath = index.resolveRef(lineage.root.path) ?? lineage.root.path;
       membersOf.set(rootPath, [...(membersOf.get(rootPath) ?? []), path]);
     }
