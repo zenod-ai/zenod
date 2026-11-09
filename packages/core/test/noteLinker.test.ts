@@ -151,6 +151,49 @@ describe("E12-S20 every voice note linked to its topics", () => {
     expect(await readFile(join(dir, swept.pages![1]!), "utf8")).toContain(`> ${insurance}`);
   });
 
+  it("E12-S23: files a half-filed note's dropped points on moved pages, the note's own branch and one leaf per name", async () => {
+    const stakesA = "The garden beds want tomato stakes before June.";
+    const stakesB = "And the stakes for the beds should be bamboo, not pine.";
+    await writeFile(join(dir, "Notes/Travel documents.md"), page("Travel documents", "Areas/Life admin", "- Passports in the drawer."));
+    await mkdir(join(dir, "Archive/Projects/Garden"), { recursive: true });
+    await writeFile(join(dir, "Archive/Projects/Garden/Hose quote.md"), "# Hose quote\n\nRetired.\n");
+    await writeFile(join(dir, "Notes/Seeds.md"), page("Seeds", "Projects/Garden", "- Order the seeds early ([[2026-10-25#^e-aaaaa9]])."));
+    await writeFile(join(dir, "Log/2026-10-25.md"), `# 2026-10-25\n\n${voice("09:00", "e-aaaaa9", `Seeds early. Passport photos. Compost. Hose for the garden beds. ${stakesA} ${stakesB} The garden beds need mulch.`)}`);
+    await writeFile(join(dir, "Archive/Inbox/filing-2026-10-25-e-aaaaa9.md"), v1("Log/2026-10-25.md#^e-aaaaa9", [
+      // An old filing names pages since moved: by its own name, and by the folder that held it.
+      { topic: "Passport photos", ideaId: "i-1", disposition: "append_compact_note", pages: ["Projects/Trips/Travel documents.md"], quote: "Passport photos." },
+      { topic: "Compost bins", ideaId: "i-2", disposition: "append_compact_note", pages: ["Projects/Garden/Compost bins.md"], quote: "Compost." },
+      // A page retired to the Archive anchors nothing, not even through its old folder.
+      { topic: "Hose quote", ideaId: "i-7", disposition: "append_compact_note", pages: ["Projects/Garden/Hose quote.md"], quote: "Hose for the garden beds." },
+      // Two points under one name, no page: both land, on the branch the note already sits on.
+      { topic: "Tomato stakes", ideaId: "i-3", disposition: "append_compact_note", pages: [], quote: stakesA },
+      { topic: "Tomato stakes", ideaId: "i-4", disposition: "append_compact_note", pages: [], quote: stakesB },
+      // The organiser's placeholder name and the note's ingest lines are not the person's point.
+      { topic: "Unassigned source content", ideaId: "i-5", disposition: "append_compact_note", pages: [], quote: 'Voice note "x.ogg" ingested through Zenod media seam.\nRaw artifact URL: https://example.test/x\nThe garden beds need mulch.' },
+      { topic: "Unassigned source content", ideaId: "i-6", disposition: "append_compact_note", pages: [], quote: "Raw artifact URL: https://example.test/x" },
+    ], ["i-1", "i-2", "i-7", "i-3", "i-4", "i-5", "i-6"].map(ideaId => ({ ideaId, status: "pending", reason: "page_filing_failed", filedPages: [] }))));
+    const plan = await planNoteLinks(dir);
+    const note = plan.notes.find(item => item.evidenceRef === "Log/2026-10-25.md#^e-aaaaa9")!;
+    expect(note.points.map(point => [point.topic, point.text])).toEqual([
+      ["Passport photos", "Passport photos."], ["Compost bins", "Compost."], ["Hose quote", "Hose for the garden beds."],
+      ["Tomato stakes", stakesA], ["Tomato stakes", stakesB], [null, "The garden beds need mulch."],
+    ]);
+    const written = (await applyNoteLinks(dir, plan, "2026-11-09", { partial: true })).filter(item => item.evidenceRef === note.evidenceRef);
+    expect(written.map(item => [item.topic, item.parent, item.anchored])).toEqual([
+      ["Passport photos", "Areas/Life admin.md", true],
+      ["Compost bins", "Projects/Garden.md", true],
+      ["Hose quote", "Projects/Garden.md", false],
+      ["Tomato stakes", "Projects/Garden.md", false],
+      ["Tomato stakes", "Projects/Garden.md", false],
+      [null, "Projects/Garden.md", false],
+    ]);
+    const stakes = await readFile(join(dir, "Notes/Tomato stakes.md"), "utf8");
+    expect(stakes).toContain(`> ${stakesA}`);
+    expect(stakes).toContain(`> ${stakesB}`);
+    expect(await readFile(join(dir, written[5]!.leaf), "utf8")).not.toContain("example.test");
+    expect((await planNoteLinks(dir)).notes.find(item => item.evidenceRef === note.evidenceRef)).toBeUndefined();
+  });
+
   it("reads both receipt forms and skips points already written or kept as evidence", () => {
     const legacy = receiptPoints("Inbox/filing-2026-10-21-e-aaaaa1.md", "```json\n" + JSON.stringify([
       { topic: "timer", sourceSpans: [{ start: 0, end: 9 }], status: "pending", filedPages: [], pages: ["Notes/Watering.md"] },
