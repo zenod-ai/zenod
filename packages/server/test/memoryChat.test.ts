@@ -215,8 +215,8 @@ describe("answerFromMemory (E12-S1)", () => {
 });
 
 describe("the app chat: questions about Zenod, a relevance floor, sensitive notes (E15-S1)", () => {
-  const weak = (pairs: Array<[string, number, string?]>) =>
-    pairs.map(([path, percent, treePath], i) => hit(path, 10 - i, { matchPercent: percent, ...(treePath ? { treePath } : {}) }));
+  const weak = (pairs: Array<[string, number, string?, Hit["private"]?]>) =>
+    pairs.map(([path, percent, treePath, flag], i) => hit(path, 10 - i, { matchPercent: percent, ...(treePath ? { treePath } : {}), ...(flag ? { private: flag } : {}) }));
 
   it("answers a question about Zenod itself with its own description, no memories and no model call", async () => {
     const fast = vi.fn();
@@ -254,12 +254,12 @@ describe("the app chat: questions about Zenod, a relevance floor, sensitive note
   });
 
   it("never shows a family, health or money note on a weak match, unless the checked answer cites it", async () => {
-    const hits = weak([["Notes/Product decks.md", 25, "Working memory › Zenod"], ["Areas/Family matters.md", 24, "Long-term memory › Family"],
-      ["Notes/Blood test.md", 23, "Long-term memory › Health"], ["Notes/Roadmap.md", 22]]);
+    const hits = weak([["Notes/Product decks.md", 25, "Working memory › Zenod"], ["Areas/Family matters.md", 24, "Long-term memory › Family", "family"],
+      ["Notes/Blood test.md", 23, "Long-term memory › Health", "health"], ["Notes/Roadmap.md", 22]]);
     const engine = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "no_answer", text: "", cited: [] }) });
     engine.searchTimed = async () => ({ hits, tier: "index" as const, ms: 1 });
     expect((await answerFromMemory(engine, "decks", { appChat: true })).memories.map((m) => m.path)).toEqual(["Notes/Product decks.md", "Notes/Roadmap.md"]);
-    const strong = weak([["Areas/Family matters.md", 80, "Long-term memory › Family"]]);
+    const strong = weak([["Areas/Family matters.md", 80, "Long-term memory › Family", "family"]]);
     engine.searchTimed = async () => ({ hits: strong, tier: "index" as const, ms: 1 });
     expect((await answerFromMemory(engine, "family", { appChat: true })).memories).toHaveLength(1);
     const cites = fakeEngine("alpha", { fast: async () => ({ checked: true, reason: null, text: "Yes [2].", cited: [2] }) });
@@ -267,10 +267,13 @@ describe("the app chat: questions about Zenod, a relevance floor, sensitive note
     expect((await answerFromMemory(cites, "decks", { appChat: true })).memories.find((m) => m.path === "Areas/Family matters.md")).toMatchObject({ cited: true });
   });
 
-  it("tells sensitive notes by title, path and branch, not by their text", () => {
-    expect(isSensitiveMemory({ title: "Family Estrangement", path: "Areas/x.md", treePath: "" })).toBe(true);
-    expect(isSensitiveMemory({ title: "x", path: "Notes/x.md", treePath: "Working memory › Alpha9 Tax and AEAT" })).toBe(true);
-    expect(isSensitiveMemory({ title: "Product and campaign decks", path: "Notes/Product and campaign decks.md", treePath: "Working memory › Zenod" })).toBe(false);
+  it("tells private notes by the flag filing set, not by their name (E15-S2)", async () => {
+    expect(isSensitiveMemory({ private: "family" })).toBe(true);
+    expect(isSensitiveMemory({})).toBe(false);
+    // A business note under a company tax branch is no longer hidden by the word "tax".
+    const engine = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "no_answer", text: "", cited: [] }) });
+    engine.searchTimed = async () => ({ hits: weak([["Notes/Price increases.md", 40, "Working memory › Alpha9 Tax and AEAT"]]), tier: "index" as const, ms: 1 });
+    expect((await answerFromMemory(engine, "prices", { appChat: true })).memories).toHaveLength(1);
   });
 });
 

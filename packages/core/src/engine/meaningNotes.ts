@@ -324,7 +324,7 @@ export async function composeFocusedPage(llm: Pick<BrainLlm, "composePage">, inp
     classification: { ...input.classification, pages: input.classification.pages.map((page) => page.path === input.path ? { ...page, action: original ? "update" : "create" } : page) } });
   const next = parseNote(raw);
   // Model-authored frontmatter may not bypass the explicit quote validation below.
-  if (next.frontmatter) { delete next.frontmatter.memoryFacts; delete next.frontmatter.aliasEvidence; delete next.frontmatter.aliases; delete next.frontmatter.zid; }
+  if (next.frontmatter) { delete next.frontmatter.memoryFacts; delete next.frontmatter.aliasEvidence; delete next.frontmatter.aliases; delete next.frontmatter.zid; delete next.frontmatter.private; }
   // The page's node id in the weighted memory graph (E18-W1): set once, kept through renames and updates.
   const zid = typeof original?.frontmatter?.zid === "string" && original.frontmatter.zid.trim() ? original.frontmatter.zid : derivedNodeId(input.path);
   const title = String(original?.frontmatter?.title ?? next.frontmatter?.title ?? "");

@@ -36,6 +36,8 @@ export interface RankedMemory {
   unlinked?: boolean;
   /** For a note: topics its filing planned but never wrote. */
   unwritten?: number;
+  /** A private memory's kind, flagged when it was filed (E15-S2). */
+  private?: NonNullable<Hit["private"]>;
 }
 
 export interface RankedMemories {
@@ -75,6 +77,7 @@ export async function rankMemories(engine: BrainEngine, query: string, limit = R
     ...(hit.via ? { via: hit.via } : {}),
     ...(hit.unlinked ? { unlinked: true } : {}),
     ...(hit.unwritten ? { unwritten: hit.unwritten } : {}),
+    ...(hit.private ? { private: hit.private } : {}),
   }));
   return { query, tier: timed.tier, ms: Math.round((performance.now() - started) * 10) / 10, results };
 }

@@ -41,6 +41,16 @@ describe("focused meaning notes", () => {
     }), input(kept));
     expect(parseNote(updated).frontmatter!.zid).toBe("p-insurance1");
   });
+  it("never takes the private flag from the model, and keeps a page's flag through updates (E15-S2)", async () => {
+    const created = await composeFocusedPage(llm(async () => serializeNote({ ...fm, private: false }, `## Travel\n\nApril renewal ${citation}.\n`)), input(null));
+    expect(parseNote(created).frontmatter).not.toHaveProperty("private");
+    const flagged = serializeNote({ ...fm, private: "money" }, "## Travel\n\nOld policy remains.\n");
+    const updated = await composeFocusedPage(llm(async (value) => {
+      const parsed = parseNote(value.currentContent!);
+      return serializeNote({ ...parsed.frontmatter!, private: false }, parsed.body + `\nNew renewal (${value.citation}).\n`);
+    }), input(flagged));
+    expect(parseNote(updated).frontmatter!.private).toBe("money");
+  });
   it("rejects destructive section edits, malformed output, unbounded summary and missing new evidence", async () => {
     const current = serializeNote(fm, "## Travel\n\nOriginal claim [[2026-06-10#^e-7f3a2c]].\n");
     for (const generated of ["broken", serializeNote(fm, `## Travel\nReplacement ${citation}`),

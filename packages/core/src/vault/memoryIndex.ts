@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { parseLogCaptures } from "./captureOrigin.js";
 import { basenameOf, isFilingReceiptPath, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
+import { recordedPrivacy, type PrivateKind } from "./privacy.js";
 import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { pageTreeFields, parseTree, TREE_PATH } from "./tree.js";
@@ -26,9 +27,10 @@ import { buildWeightedLinks, CLOUD_DEFAULT_THRESHOLD, expandCloud, isNote, nodeI
  * and filing receipts (E12-S3c). 4: weighted memory graph (E18-W1): a filing's confidence on its
  * `filed` edges, each page's `zid`, and the derived `nodes` and `links` (strength 0..1) tables.
  * 5: pages under `Archive/Agent reports/` are marked `agent` and page bodies leave out their
- * `## Ops rollup` lines (E12-S15). An older file is rebuilt once on open.
+ * `## Ops rollup` lines (E12-S15). 7: a private page's `meta` is `private:<kind>` (E15-S2). An older
+ * file is rebuilt once on open.
  */
-const SCHEMA_VERSION = "6";
+const SCHEMA_VERSION = "7";
 const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
@@ -226,6 +228,11 @@ export interface MemoryIndexHit {
   unwritten?: number;
   /** For a memory reached along the graph (E18-W1): its path's multiplied strength from the best hit (0..1). */
   pathStrength?: number;
+  /**
+   * A private memory (E15-S2): the page's `private:` flag set at filing, or for a Log entry the flag of
+   * a page it was filed on or that cites it.
+   */
+  private?: PrivateKind;
 }
 
 /** Most `related` (shared-note) edges one graph view adds (E18-W1 round 2). */
@@ -441,6 +448,7 @@ export class MemoryIndex {
   /** Bumped by every sync that changed rows: the cached graph is rebuilt on the next read. */
   private version = 0;
   private graphCache: { version: number; graph: MemoryGraph } | null = null;
+  private privacyCache: { version: number; map: Map<string, PrivateKind> } | null = null;
   private spokenCache: { version: number; words: Map<string, number> } | null = null;
   /** The person's notes as plain words, for the asked-note pick (E12-S19). */
   private noteWordsCache: { version: number; words: Map<number, string[]> } | null = null;
@@ -534,6 +542,39 @@ export class MemoryIndex {
 
   /** BM25-ranked hits, one per path, freshest index first. Empty when nothing matches. */
   async search(query: string, limit = MAX_HITS): Promise<MemoryIndexHit[]> {
+    const hits = await this.searchHits(query, limit);
+    const privacy = this.privacy();
+    return privacy.size === 0 ? hits : hits.map((hit) => {
+      const kind = privacy.get(hit.path);
+      return kind ? { ...hit, private: kind } : hit;
+    });
+  }
+
+  /**
+   * Private memories by path (E15-S2): pages flagged at filing, and the Log entries filed on one or
+   * cited by one. Derived once per index version.
+   */
+  private privacy(): Map<string, PrivateKind> {
+    if (this.privacyCache?.version === this.version) return this.privacyCache.map;
+    const map = new Map<string, PrivateKind>();
+    const pages = this.db.prepare("SELECT path, meta FROM docs WHERE kind = 'page' AND meta LIKE 'private:%'").all() as Array<{ path: string; meta: string }>;
+    for (const page of pages) map.set(page.path, page.meta.slice("private:".length) as PrivateKind);
+    if (map.size > 0) {
+      const ties = this.db.prepare(`
+        SELECT src AS entry, target AS page FROM edges WHERE kind = 'filed'
+        UNION ALL SELECT target AS entry, src AS page FROM edges WHERE kind = 'cites'
+        UNION ALL SELECT path AS entry, filed AS page FROM docs WHERE kind = 'log' AND filed != ''
+      `).all() as Array<{ entry: string; page: string }>;
+      for (const tie of ties) {
+        const kind = map.get(tie.page);
+        if (kind && tie.entry.includes("#^") && !map.has(tie.entry)) map.set(tie.entry, kind);
+      }
+    }
+    this.privacyCache = { version: this.version, map };
+    return map;
+  }
+
+  private async searchHits(query: string, limit: number): Promise<MemoryIndexHit[]> {
     await this.fresh();
     // "What was in my last voice note?" is answered by time and the graph, not by its words (E12-S3c).
     const intent = recentIntent(query, this.now());
@@ -1411,6 +1452,9 @@ function receiptEdges(raw: string): StoredEdge[] {
   }
 }
 
+/** A private page's `meta` (E15-S2): `private:<kind>`, "" otherwise. */
+const privateMeta = (kind: PrivateKind | false | null) => (kind ? `private:${kind}` : "");
+
 /** A file's index rows and its graph edges (links and tree parent, targets as written). */
 async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft[]; edges: StoredEdge[]; zid?: string }> {
   const raw = await readFile(join(vaultPath, path), "utf8").catch(() => null);
@@ -1461,6 +1505,6 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
     // Rollup lines link agent reports: not what the page is about (E12-S15).
     body: body.replace(ROLLUP_LINE_RE, ""),
-    kind: "page", path, file: path, meta: path.startsWith(AGENT_REPORTS_DIR) ? "agent" : "",
+    kind: "page", path, file: path, meta: path.startsWith(AGENT_REPORTS_DIR) ? "agent" : privateMeta(recordedPrivacy(frontmatter)),
   }] };
 }

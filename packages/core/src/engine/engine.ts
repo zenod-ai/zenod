@@ -53,6 +53,7 @@ import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault, newLintErrors } from "../vault/lint.js";
+import { flagPrivatePage } from "../vault/privacy.js";
 import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks, rerouteHint } from "./meaningNotes.js";
 import { prepareReconciliation, applyReconciliation, newPageAdditions, reconciliationIdeaId } from "./reconciliation.js";
 import { branchContext } from "./meaningNotes.js";
@@ -750,6 +751,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
               ...(hit.via ? { via: hit.via } : {}),
               ...(hit.unlinked ? { unlinked: true } : {}),
               ...(hit.unwritten ? { unwritten: hit.unwritten } : {}),
+              ...(hit.private ? { private: hit.private } : {}),
             };
           }) };
         }
@@ -1662,11 +1664,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   async function composeMeaning(input: ComposePageInput) {
-    return composeFocusedPage({ composePage: async (bounded: ComposePageInput) => {
+    // A private page (family, people, health, own money) is flagged as it is filed (E15-S2).
+    return flagPrivatePage(vaultPath, input.path, await composeFocusedPage({ composePage: async (bounded: ComposePageInput) => {
       reportTokenCost("compose", [bounded.path, bounded.currentContent ?? bounded.template, bounded.evidenceEntry,
         bounded.citation, bounded.linkHints.join(" ")], undefined, "focused-section");
       return llm.composePage(bounded);
-    } }, input);
+    } }, input));
   }
 
   /** Shared bounded classifier for synchronous stores and capture-first enrichment. */
@@ -1957,7 +1960,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             }
           }
           if (reconciled.content !== currentContent && reconciled.appliedOperationIds.length) {
-            reconciled.content = boundExistingSummary(reconciled.content);
+            reconciled.content = await flagPrivatePage(vaultPath, path, boundExistingSummary(reconciled.content));
           }
           await prepareFile(path, currentContent, reconciled.content);
           // The model's awaited work cannot overwrite a page changed since context preparation.
@@ -1985,7 +1988,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
               classification: pageClassification, tagVocabulary: config.tags, today: todayString(now()), requiredType, linkHints,
               ...(previousErrors ? { previousErrors } : {}) });
           await mkdir(dirname(absolute), { recursive: true });
-          lastWrittenContent = appendMemoryFacts(compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next, currentContent, group.facts, factEvidence, assignedEvidence);
+          lastWrittenContent = await flagPrivatePage(vaultPath, path, appendMemoryFacts(compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next, currentContent, group.facts, factEvidence, assignedEvidence));
           for (const outcome of group.outcomes) { if (!outcome.filedPages.includes(path)) outcome.filedPages.push(path); outcome.status = outcome.pages.every(page => outcome.filedPages.includes(page)) ? "filed" : "pending"; if (outcome.status === "filed") delete outcome.reason; }
           await prepareFile(path, currentContent, lastWrittenContent);
           filingPlan?.input.assertActive?.();
@@ -2063,10 +2066,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath),
         { title: outcome.topic, content: text, evidenceRef, reason: why, today: todayString(now()) }, writes,
         { rootsOnly: true, anchors: [...new Set(anchors.map(normalizeMarkdownNotePath))] }).catch(() => null);
-      const after = leaf ? await readFile(join(vaultPath, leaf.path), "utf8").catch(() => null) : null;
+      const written = leaf ? await readFile(join(vaultPath, leaf.path), "utf8").catch(() => null) : null;
       const before = leaf ? writes.original(leaf.path) ?? null : null;
       await writes.revert();
-      if (!leaf || after === null) continue;
+      if (!leaf || written === null) continue;
+      // A rescued note under a private branch is private too (E15-S2).
+      const after = await flagPrivatePage(vaultPath, leaf.path, written);
       const absolute = join(vaultPath, leaf.path);
       const priorFile = receipt?.files[leaf.path];
       try {

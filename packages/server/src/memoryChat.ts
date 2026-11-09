@@ -33,17 +33,16 @@ const MEMORY_CHAT_CONTEXT = 16;
  * drops 7 of the 223 memories shown. A memory the checked answer cites is always shown.
  */
 export const MEMORY_CHAT_FLOOR = 15;
-/** A sensitive memory (family, people, health, money) shows only from this match up, or when cited (E15-S1). */
+/** A private memory (family, people, health, money) shows only from this match up, or when cited (E15-S1). */
 export const MEMORY_CHAT_SENSITIVE_FLOOR = 50;
-const SENSITIVE_WORDS = /\b(famil(y|ies|ia|iar)|people|relatives?|estrange\w*|parents?|mother|father|mum|mom|dad|sister|brother|son|daughter|wife|husband|partner|divorce\w*|madre|padre|herman[oa]s?|hij[oa]s?|health|salud|medical|m[eé]dic\w*|doctor|hospital|therap\w*|terapia|diagnos\w*|medication|illness|mental|money|finances?|financial|finanzas|bank|banco|salary|salario|debts?|deuda|tax(es)?|impuestos|aeat|loans?|mortgage|hipoteca|insurance|seguros?|inheritance|herencia|private|privado|personal)\b/i;
 
 /**
- * A family, people, health or money note, from its title, path and tree branch (E15-S1). A cheap
- * rule: the vault has no sensitivity tags. The note's text is not read, so a passing mention does
- * not count.
+ * A family, people, health or money note: flagged `private` when Zenod filed it, from what the note
+ * says and where it sits (E15-S2, core vault/privacy.ts). It replaces E15-S1's word rule on titles and
+ * branches, which took a company's tax branch for private money.
  */
-export function isSensitiveMemory(memory: Pick<RankedMemory, "path" | "title" | "treePath">): boolean {
-  return SENSITIVE_WORDS.test(`${memory.title} ${memory.path.replace(/[/_.#-]/g, " ")} ${memory.treePath}`);
+export function isSensitiveMemory(memory: Pick<RankedMemory, "private">): boolean {
+  return Boolean(memory.private);
 }
 
 /** Whether the app chat shows a memory: cited, or over the floor, and a sensitive one only on a strong match (E15-S1). */
