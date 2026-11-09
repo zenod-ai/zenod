@@ -411,5 +411,22 @@ class NewestPublish(unittest.TestCase):
         self.assertNotIn("behind", cloud["signal"])
 
 
+class ChatRepliesSurviveRotation(unittest.TestCase):
+    def test_chat_replies_survive_log_rotation(self):
+        """ZAL-A15: an answered WhatsApp question stays answered after its `done: chat` log line is gone."""
+        st = {"components": {}, "transitions": [], "since": None}
+        raw1 = {"probedAt": "2026-11-08T18:55:00Z", "vps1": {"zenod_log": {"chatReplies": ["2026-11-08T18:50:22Z"]}}}
+        A.remember_chat_replies(raw1, st, A.parse_ts(raw1["probedAt"]))
+        raw2 = {"probedAt": "2026-11-09T06:00:00Z", "vps1": {"zenod_log": {"chatReplies": []}}}
+        merged = A.remember_chat_replies(raw2, st, A.parse_ts(raw2["probedAt"]))
+        self.assertEqual(merged["vps1"]["zenod_log"]["chatReplies"], ["2026-11-08T18:50:22Z"])
+        self.assertEqual(raw2["vps1"]["zenod_log"]["chatReplies"], [])
+        self.assertIsNone(A.reply_stall(["2026-11-08T18:50:09Z"], "2026-11-08T16:14:05Z", A.parse_ts(raw2["probedAt"]),
+                                        chat_replies=merged["vps1"]["zenod_log"]["chatReplies"]))
+        old = {"probedAt": "2026-11-20T00:00:00Z", "vps1": {"zenod_log": {"chatReplies": []}}}
+        self.assertEqual(A.remember_chat_replies(old, st, A.parse_ts(old["probedAt"]))["vps1"]["zenod_log"]["chatReplies"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
+

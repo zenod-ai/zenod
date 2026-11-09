@@ -502,6 +502,25 @@ def _record_error(h: dict, e: dict) -> None:
     del h["errors"][:-KEEP_ERRORS]
 
 
+CHAT_REPLY_KEEP_DAYS = 8
+
+
+def remember_chat_replies(raw: dict, st: dict, ref: dt.datetime) -> dict:
+    """ZAL-A15: a WhatsApp question is answered by a chat job, seen only as a `done: chat` line in zenod-mt's
+    logs. Docker keeps the last 5 containers and production rolls many times a day, so those lines vanish and an
+    answered question turned the Phylax row red as "no reply". Every chat reply seen is kept in the state for
+    8 days and merged back into the raw probe. Mutates `st` (the caller's copy), returns a new raw."""
+    zl = ((raw.get("vps1") or {}).get("zenod_log") or {})
+    seen = {x for x in st.get("chatReplies") or [] if parse_ts(x)} | {x for x in zl.get("chatReplies") or [] if parse_ts(x)}
+    keep = sorted(x for x in seen if (ref - parse_ts(x)).total_seconds() <= CHAT_REPLY_KEEP_DAYS * 86400)[-500:]
+    st["chatReplies"] = keep
+    if not zl and "vps1" not in raw:
+        return raw
+    out = json.loads(json.dumps(raw))
+    out.setdefault("vps1", {}).setdefault("zenod_log", {})["chatReplies"] = keep
+    return out
+
+
 def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
     """Raw probe + previous state → (document, new state). Pure apart from the inputs."""
     st = json.loads(json.dumps(state))   # never mutate the caller's copy
@@ -510,6 +529,7 @@ def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
     st["since"] = st.get("since") or raw["probedAt"]
     out, new_t = [], []
     ref = parse_ts(raw["probedAt"])
+    raw = remember_chat_replies(raw, st, ref)
     for c in components(raw):
         probe_status = c["status"]
         c["status"], c["problem"], smoke = merge_smoke(c["status"], c["problem"], raw.get("smoke"), c["id"], ref)
