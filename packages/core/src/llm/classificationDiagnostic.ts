@@ -1,5 +1,5 @@
 /** Operator diagnostics: fixed vocabulary only, never provider prose or memory values. */
-const FIELDS = new Set("topics topic facts key statement effectiveDate effectiveDateQuote correctionQuote supersedesQuotes verificationQuote evidenceQuotes confidence disposition pages path action title aliases name evidenceQuote summary question tags".split(" "));
+const FIELDS = new Set("topics topic facts key statement effectiveDate effectiveDateQuote correctionQuote supersedesQuotes verificationQuote evidenceQuotes confidence disposition pages path action title aliases name evidenceQuote summary question tags operations kind ideaIds sourceIds sourceQuote targetId factKey reason replacementQuote passageReviews".split(" "));
 const CODES = new Set("invalid_type invalid_value invalid_union invalid_key invalid_element invalid_format too_big too_small not_multiple_of unrecognized_keys custom invalid_enum_value invalid_literal invalid_string invalid_date invalid_intersection_types not_finite".split(" "));
 const KINDS = new Set(["AI_NoObjectGeneratedError", "AI_TypeValidationError", "AI_JSONParseError", "ZodError", "SyntaxError", "AI_APICallError", "AI_RetryError"]);
 const FINISH = new Set(["stop", "length", "content-filter", "tool-calls", "error", "other", "unknown"]);

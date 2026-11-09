@@ -511,9 +511,9 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
  * failed and fell back to OpenRouter (EPIC-14 S11, production 2026-11-09). Ask for JSON mode and give
  * the schema in the system prompt instead; the SDK still validates the reply against the schema.
  */
-export function deepseekJsonMode(body: Record<string, unknown>): void {
+export function deepseekJsonMode(body: Record<string, unknown>): unknown {
   const format = body.response_format as { type?: unknown; json_schema?: { schema?: unknown } } | undefined;
-  if (format?.type !== "json_schema") return;
+  if (format?.type !== "json_schema") return undefined;
   const instruction = "Reply with one json object only, no prose and no code fences, valid against this JSON schema:\n" + JSON.stringify(format.json_schema?.schema ?? {});
   body.response_format = { type: "json_object" };
   const messages = Array.isArray(body.messages) ? [...body.messages] as Array<Record<string, unknown>> : [];
@@ -521,6 +521,66 @@ export function deepseekJsonMode(body: Record<string, unknown>): void {
   if (first?.role === "system" && typeof first.content === "string") messages[0] = { ...first, content: `${first.content}\n\n${instruction}` };
   else messages.unshift({ role: "system", content: instruction });
   body.messages = messages;
+  return format.json_schema?.schema;
+}
+
+type JsonSchema = { type?: unknown; const?: unknown; properties?: Record<string, JsonSchema>; items?: JsonSchema; anyOf?: JsonSchema[]; oneOf?: JsonSchema[]; $ref?: string };
+
+/**
+ * Strict json_schema makes the model write every key, nulls included; JSON mode lets DeepSeek leave a
+ * null key out, which the schema then rejects (production reconcile, S11). Put back each missing key
+ * whose schema allows null, choosing a union branch by its const fields (e.g. `kind`). Nothing else
+ * is changed: a reply that is wrong in any other way still fails validation and falls back.
+ */
+export function fillMissingNulls(value: unknown, schema: unknown, root: unknown = schema, depth = 0): unknown {
+  let node = schema as JsonSchema | undefined;
+  if (!node || typeof node !== "object" || depth > 32) return value;
+  if (typeof node.$ref === "string") {
+    const target = node.$ref.replace(/^#\//, "").split("/").reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], root);
+    return fillMissingNulls(value, target, root, depth + 1);
+  }
+  const branches = node.anyOf ?? node.oneOf;
+  if (branches) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+    const fields = value as Record<string, unknown>;
+    const resolve = (branch: JsonSchema): JsonSchema => typeof branch.$ref === "string"
+      ? (branch.$ref.replace(/^#\//, "").split("/").reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], root) as JsonSchema) ?? branch
+      : branch;
+    const objects = branches.map(resolve).filter((branch) => branch?.properties);
+    const match = objects.find((branch) => Object.entries(branch.properties!).every(([key, prop]) => prop.const === undefined || fields[key] === prop.const))
+      ?? (objects.length === 1 ? objects[0] : undefined);
+    return match ? fillMissingNulls(value, match, root, depth + 1) : value;
+  }
+  if (Array.isArray(value)) return node.items ? value.map((item) => fillMissingNulls(item, node!.items, root, depth + 1)) : value;
+  if (value === null || typeof value !== "object" || !node.properties) return value;
+  const out: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  for (const [key, prop] of Object.entries(node.properties)) {
+    if (key in out) out[key] = fillMissingNulls(out[key], prop, root, depth + 1);
+    else if (allowsNull(prop, root)) out[key] = null;
+  }
+  return out;
+}
+
+function allowsNull(schema: JsonSchema | undefined, root: unknown): boolean {
+  if (!schema) return false;
+  if (typeof schema.$ref === "string") return allowsNull(schema.$ref.replace(/^#\//, "").split("/").reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], root) as JsonSchema, root);
+  if (schema.type === "null" || schema.const === null) return true;
+  if (Array.isArray(schema.type) && schema.type.includes("null")) return true;
+  return (schema.anyOf ?? schema.oneOf ?? []).some((branch) => allowsNull(branch, root));
+}
+
+/** Rewrites each choice's JSON content with fillMissingNulls; any parse problem leaves the body as it was. */
+function fillChoiceNulls(body: Record<string, unknown>, schema: unknown): boolean {
+  let changed = false;
+  for (const choice of Array.isArray(body.choices) ? body.choices as Array<{ message?: { content?: unknown } }> : []) {
+    const content = choice.message?.content;
+    if (typeof content !== "string" || !content.trim()) continue;
+    try {
+      const filled = JSON.stringify(fillMissingNulls(JSON.parse(content), schema));
+      if (filled !== JSON.stringify(JSON.parse(content))) { choice.message!.content = filled; changed = true; }
+    } catch { /* not JSON: the SDK reports it */ }
+  }
+  return changed;
 }
 
 /** Stamps each captured usage with the request's wall time (EPIC-14 S11: latency per provider). */
@@ -561,7 +621,7 @@ function deepseekSeam(baseURL: string, onProviderUsage?: (u: ProviderCallUsage) 
     const patched: Record<string, unknown> = { ...body };
     if (patched.stream === true) patched.stream_options = { include_usage: true, ...(body.stream_options as object | undefined) };
     if (user) patched.user_id = user;
-    deepseekJsonMode(patched);
+    const jsonSchema = deepseekJsonMode(patched);
     if (patched.reasoning_effort === "none") {
       delete patched.reasoning_effort;
       patched.thinking = { type: "disabled" };
@@ -576,10 +636,17 @@ function deepseekSeam(baseURL: string, onProviderUsage?: (u: ProviderCallUsage) 
       if (contentType.includes("text/event-stream")) {
         captureStreamUsage(response.clone(), recordedModel, onUsage, (model, parsed) => deepseekUsageFrom(model, parsed, at));
       } else {
-        const bytes = await response.arrayBuffer();
-        try { onUsage(deepseekUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>, at)); } catch { /* capture is best-effort */ }
+        let bytes: ArrayBuffer | Uint8Array = await response.arrayBuffer();
+        try {
+          const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+          onUsage(deepseekUsageFrom(recordedModel, parsed, at));
+          if (jsonSchema !== undefined && fillChoiceNulls(parsed, jsonSchema)) bytes = new TextEncoder().encode(JSON.stringify(parsed));
+        } catch { /* capture is best-effort */ }
         response = new Response(bytes, { status: response.status, statusText: response.statusText, headers: response.headers });
       }
+    } else if (jsonSchema !== undefined && response.ok && !(response.headers.get("content-type") ?? "").includes("text/event-stream")) {
+      const parsed = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
+      if (parsed && fillChoiceNulls(parsed, jsonSchema)) response = new Response(JSON.stringify(parsed), { status: response.status, statusText: response.statusText, headers: response.headers });
     }
     return response;
   };
@@ -1265,6 +1332,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       return result.object.operations;
     } catch (error) {
       this.reportUsage("compose", this.classifyModelId, NoObjectGeneratedError.isInstance(error) ? error.usage : undefined, undefined, {status:"failed",errorCode:"reconciliation_unavailable"});
+      // Same operator detail as classify: fixed vocabulary, never model text (EPIC-14 S11).
+      console.warn("[reconcile] " + JSON.stringify(classificationDiagnostic(error)));
       throw new Error("reconciliation_unavailable", { cause: error });
     }
   }

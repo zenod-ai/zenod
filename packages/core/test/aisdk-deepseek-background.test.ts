@@ -161,3 +161,37 @@ it("keeps the provider status when a filing step wraps the DeepSeek error, so th
   expect(calls).toEqual(["openrouter.classify"]);
   expect(events).toEqual([{ method: "classify", status: 400, parked: false }]);
 });
+
+it("puts back null keys DeepSeek's JSON mode leaves out, so a filing reconcile validates (S11)", async () => {
+  const replies = [
+    // A clarify and an add with every null key omitted, as DeepSeek returned in production.
+    { operations: [
+      { kind: "clarify", ideaIds: ["idea-1"], sourceIds: ["s1"], sourceQuote: "The yard starts in March." },
+      { kind: "add", ideaIds: ["idea-1"], sourceIds: ["c1"], sourceQuote: "-", reason: "same subject" },
+    ] },
+  ];
+  vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    return new Response(JSON.stringify({ id: "offline", object: "chat.completion", created: 0, model: body.model, choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(replies.shift()) }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }), { headers: { "content-type": "application/json" } });
+  }));
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  const operations = await llm.reconcile!({
+    path: "Projects/Boat.md", revision: null, contextPartial: false, statements: [],
+    sources: [{ id: "s1", text: "The yard starts in March." }] as any,
+    addCandidates: [{ id: "c1", text: "The yard starts in March." }] as any,
+    ideas: [{ id: "idea-1", topic: "Yard start", sourceIds: ["s1"] }] as any,
+  });
+  expect(operations).toEqual([
+    { kind: "clarify", ideaIds: ["idea-1"], sourceIds: ["s1"], sourceQuote: "The yard starts in March.", targetId: null, correctionQuote: null, factKey: null, reason: null },
+    { kind: "add", ideaIds: ["idea-1"], sourceIds: ["c1"], sourceQuote: "-", targetId: null, correctionQuote: null, factKey: null, reason: "same subject" },
+  ]);
+});
+
+it("fills only keys whose schema allows null, and picks the union branch by its kind (S11)", async () => {
+  const { fillMissingNulls } = await import("../src/llm/aisdk.js");
+  const schema = { type: "object", properties: { items: { type: "array", items: { anyOf: [
+    { type: "object", properties: { kind: { const: "a" }, x: { type: ["string", "null"] }, y: { type: "string" } } },
+    { type: "object", properties: { kind: { const: "b" }, z: { anyOf: [{ type: "number" }, { type: "null" }] } } },
+  ] } } } };
+  expect(fillMissingNulls({ items: [{ kind: "a" }, { kind: "b" }, { kind: "c" }] }, schema)).toEqual({ items: [{ kind: "a", x: null }, { kind: "b", z: null }, { kind: "c" }] });
+});
