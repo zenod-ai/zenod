@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod plans: Free, €9 and €19, with the costs behind them</title>
+<!-- Built from the paper-deck kit (agent_team skill paper-deck). Arrow keys move one slide. -->
+<link rel="stylesheet" href="paper.css">
+<style>
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: 2rem; border-top: 1px solid var(--ink); }
+  .tiles div { padding: 1.1rem 1rem 1.2rem 0; border-bottom: 1px solid var(--line); font: 400 0.95rem/1.45 var(--sans); color: var(--muted); }
+  .tiles b { display: block; font: 400 clamp(2rem, 3.4vw, 2.8rem)/1 var(--serif); color: var(--ink); letter-spacing: -0.02em; margin-bottom: 0.45rem; }
+  .tiles span { display: block; font: 500 1rem var(--sans); color: var(--ink); margin-bottom: 0.2rem; }
+  .tiles .f b { color: var(--accent); }
+  @media (max-width: 900px) { .tiles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  td.n, th.n { text-align: right; }
+  td.n { font-variant-numeric: tabular-nums; }
+  td small { display: block; color: var(--muted); font-size: 0.85rem; }
+  .cards ul { list-style: none; padding: 0; margin: 0.9rem 0 0; }
+  .cards li { padding: 0.35rem 0; border-top: 1px solid var(--line); }
+  .cards li b { color: var(--ink); font-weight: 500; }
+  .bar { display: block; height: 6px; background: var(--stage-2); border-radius: 3px; margin-top: 0.35rem; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .bar.ink i { background: var(--ink); opacity: 0.55; }
+  .claim { font: 400 1.1rem/1.5 var(--serif); color: var(--ink); }
+  .bottom { font: 400 1rem/1.5 var(--sans); color: var(--muted); max-width: 46rem; }
+  .bottom b { color: var(--ink); font-weight: 600; }
+  .verdict { display: inline-block; font: 600 0.85rem var(--sans); color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0.15rem 0.6rem; margin-right: 0.4rem; }
+</style>
+</head>
+<body>
+
+<!-- 1. Cover: the bottom line first -->
+<section class="slide" id="cover">
+  <div class="in split">
+    <div>
+      <p class="no">Zenod pricing, round 2 &nbsp;·&nbsp; 9 November 2026</p>
+      <h1>Three plans: Free, €9 and €19.</h1>
+      <p class="lede">Every paid plan keeps at least 38% of its price after the heaviest month the limits allow. A free user costs us 20 to 40 cents a month.</p>
+      <p class="bottom"><span class="verdict">Better</span>Today there is one hosted plan. This adds a free plan to start on and a bigger plan for people who use Zenod all day, like you. The €9 plan stays exactly as it is. Nothing has changed on Stripe or in the app yet: this is for you to choose.</p>
+    </div>
+    <div class="shot">
+      <table aria-label="The three plans at a glance">
+        <thead><tr><th>Plan</th><th class="n">Price</th><th class="n">AI a month</th><th class="n">Left after a heavy month</th></tr></thead>
+        <tbody>
+          <tr><td>Free</td><td class="n">€0</td><td class="n">$0.60</td><td class="n">−$1.10</td></tr>
+          <tr><td>Tier 1</td><td class="n">€9</td><td class="n">$3</td><td class="n">$3.96 <small>38%</small></td></tr>
+          <tr><td>Tier 2</td><td class="n">€19</td><td class="n">$8</td><td class="n">$9.35 <small>43%</small></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Big numbers: cost per unit -->
+<section class="slide" id="units">
+  <div class="in">
+    <p class="no">1 &nbsp; What one of each costs us <span class="tag today">Live</span></p>
+    <h2>Almost everything costs well under a cent.</h2>
+    <p class="lede">Filing a note into a large memory and long calls are the only things that add up.</p>
+    <div class="tiles">
+      <div><span>A text note filed</span><b>0.6¢</b>on a small memory. Up to 5¢ on a 500-page memory like yours.</div>
+      <div><span>A one-minute voice note</span><b>0.9¢</b>0.3¢ of that is turning speech into text. Filing is the rest.</div>
+      <div><span>A chat answer</span><b>0.2¢</b>A deeper question that searches the memory is about 1¢.</div>
+      <div><span>A persona run</span><b>1¢</b>Most are under 1¢. A weekly recap is about 2¢.</div>
+      <div><span>A desk job</span><b>0.4¢</b>A tidy-up is 0.2 to 0.4¢. A question to the desk is 0.07¢.</div>
+      <div class="f"><span>A call minute</span><b>2–3¢</b>talking back and forth. Up to 20¢ when the voice talks at length.</div>
+      <div><span>Storage</span><b>~0¢</b>Your 540-page memory is 11 MB and lives in your own Drive or GitHub.</div>
+      <div><span>Card fee on €9</span><b>45¢</b>1.5% plus €0.25 on a European card. On €19 it is 62¢.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. What a month costs per person, today -->
+<section class="slide" id="month">
+  <div class="in split">
+    <div>
+      <p class="no">2 &nbsp; What a month costs us today <span class="tag today">Live</span></p>
+      <h2>A normal user costs $1 to $2 a month. You cost about $5.</h2>
+      <p class="lede">The difference is filing. Each note you send is filed against a memory of 540 pages, so each filing call carries more.</p>
+    </div>
+    <div>
+      <table>
+        <thead><tr><th>Who</th><th>What they do</th><th class="n">A month</th></tr></thead>
+        <tbody>
+          <tr><td>New user</td><td>2 voice notes, 3 questions and 1 deeper question a day, small memory<span class="bar ink"><i style="width:25%"></i></span></td><td class="n">$1–2</td></tr>
+          <tr><td>With extras on</td><td>the same, plus personas, 10 desk jobs and two short calls a month<span class="bar ink"><i style="width:40%"></i></span></td><td class="n">$1.30–2.40</td></tr>
+          <tr><td>You</td><td>about 4 notes a day into a large memory, questions, the weekly sweep<span class="bar"><i style="width:83%"></i></span></td><td class="n">about $5</td></tr>
+          <tr><td>Hard ceiling</td><td>today's €9 plan: answers stop at $3, filing runs on to $6<span class="bar ink"><i style="width:100%"></i></span></td><td class="n">$6</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 4. The three plans -->
+<section class="slide" id="tiers">
+  <div class="in">
+    <p class="no">3 &nbsp; The three plans <span class="tag soon">Coming</span></p>
+    <h2>A month of daily use, in each plan.</h2>
+    <p class="lede">Each plan can do all of this every day for the whole month. Every note you send is kept, always, even past the limit.</p>
+    <div class="cards">
+      <article><h3>Free</h3><p class="amt">€0</p><p>To try Zenod for real.</p>
+        <ul>
+          <li><b>1 new memory a day</b>, 30 a month</li>
+          <li><b>2 answers a day</b></li>
+          <li><b>A weekly recap</b> from one persona</li>
+          <li>No desk jobs, no calls</li>
+        </ul></article>
+      <article class="pick"><h3>Tier 1, today's plan</h3><p class="amt">€9 <small>per month + VAT</small></p><p>For everyday use.</p>
+        <ul>
+          <li><b>4 new memories a day</b>, 120 a month</li>
+          <li><b>10 answers a day</b></li>
+          <li><b>7 persona runs a week</b></li>
+          <li><b>5 desk jobs a week</b></li>
+          <li><b>10 call minutes a month</b></li>
+        </ul></article>
+      <article><h3>Tier 2</h3><p class="amt">€19 <small>per month + VAT</small></p><p>More of everything, for all-day use.</p>
+        <ul>
+          <li><b>10 new memories a day</b>, 300 a month</li>
+          <li><b>25 answers a day</b></li>
+          <li><b>21 persona runs a week</b></li>
+          <li><b>20 desk jobs a week</b></li>
+          <li><b>30 call minutes a month</b></li>
+        </ul></article>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Units table: the mix and each on its own -->
+<section class="slide" id="limits">
+  <div class="in">
+    <p class="no">4 &nbsp; How the allowance turns into memories, answers and runs</p>
+    <h2>One monthly AI allowance per plan, spent on any mix.</h2>
+    <table>
+      <thead><tr><th></th><th class="n">Free</th><th class="n">Tier 1 €9</th><th class="n">Tier 2 €19</th></tr></thead>
+      <tbody>
+        <tr><td>AI allowance</td><td class="n">$0.60</td><td class="n">$3</td><td class="n">$8</td></tr>
+        <tr><td>New memories</td><td class="n">30 a month<small>up to 110 on their own</small></td><td class="n">120 a month<small>up to 600 on their own</small></td><td class="n">300 a month<small>up to 1,200 on their own</small></td></tr>
+        <tr><td>Answers</td><td class="n">2 a day<small>up to 6 on their own</small></td><td class="n">10 a day<small>up to 33 on their own</small></td><td class="n">25 a day<small>up to 90 on their own</small></td></tr>
+        <tr><td>Persona runs</td><td class="n">1 a week<small>share $0.10</small></td><td class="n">7 a week<small>up to 23, share $1</small></td><td class="n">21 a week<small>up to 70, share $3</small></td></tr>
+        <tr><td>Desk jobs</td><td class="n">none</td><td class="n">5 a week<small>up to 29, 20 a day, share $0.50</small></td><td class="n">20 a week<small>up to 87, 50 a day, share $1.50</small></td></tr>
+        <tr><td>Call minutes</td><td class="n">none</td><td class="n">10 a month<small>up to 20, 10 a call, share $1</small></td><td class="n">30 a month<small>up to 80, 20 a call, share $4</small></td></tr>
+      </tbody>
+    </table>
+    <p class="small">Counted at 1¢ a new memory on a small or medium memory, 0.3¢ an answer, 1¢ a persona run, 0.4¢ a desk job and 5¢ a call minute. On a 500-page memory a new memory costs up to 5¢, so the same allowance files about a fifth as many. Filing keeps going past the allowance, by $0.50, $3 and $4, and after that notes are still kept as sent.</p>
+  </div>
+</section>
+
+<!-- 6. Cost and margin per tier -->
+<section class="slide" id="margin">
+  <div class="in">
+    <p class="no">5 &nbsp; Our cost and what is left, per plan</p>
+    <h2>Paid plans keep 70 to 83% in a typical month.</h2>
+    <table>
+      <thead><tr><th></th><th class="n">Price</th><th class="n">After card fee</th><th class="n">AI, typical</th><th class="n">Left, typical</th><th class="n">AI, heaviest</th><th class="n">Left, heaviest</th></tr></thead>
+      <tbody>
+        <tr><td>Free</td><td class="n">€0</td><td class="n">$0</td><td class="n">$0.20–0.40</td><td class="n">−$0.20 to −0.40</td><td class="n">$1.10</td><td class="n">−$1.10</td></tr>
+        <tr><td>Tier 1 €9</td><td class="n">$10.40</td><td class="n">$9.96</td><td class="n">$1.30–2.40</td><td class="n">$7.56–8.66<small>73–83%</small></td><td class="n">$6</td><td class="n">$3.96<small>38%</small></td></tr>
+        <tr><td>Tier 2 €19</td><td class="n">$21.96</td><td class="n">$21.35</td><td class="n">$4–6</td><td class="n">$15.35–17.35<small>70–79%</small></td><td class="n">$12</td><td class="n">$9.35<small>43%</small></td></tr>
+      </tbody>
+    </table>
+    <p class="small">Heaviest means the allowance used up and filing run to its last stop. Server and support are not in these numbers: Zenod runs on one shared server and its cost is not split per user. One typical Tier 1 user pays for about 25 typical free users.</p>
+  </div>
+</section>
+
+<!-- 7. Where today's plan and you sit -->
+<section class="slide" id="today">
+  <div class="in split">
+    <div>
+      <p class="no">6 &nbsp; Where today sits <span class="tag today">Live</span></p>
+      <h2>Today's €9 plan is Tier 1, unchanged. You would be on Tier 2.</h2>
+      <p class="lede">Tier 1 has the same $3 allowance and the same limits that run now, so nobody who pays €9 loses anything.</p>
+    </div>
+    <ul class="facts">
+      <li><b>Today's €9 plan.</b> $3 allowance, filing to $6, personas $1, desk $0.50 and 20 a day, calls $1 and $0.50 or 10 minutes a call. That is Tier 1 word for word.</li>
+      <li><b>You on Tier 1.</b> About $5 of AI a month, so your answers would stop around the 19th. Your notes would still be kept and filed.</li>
+      <li><b>You on Tier 2.</b> $8 covers your $5 month with room for personas and calls.</li>
+      <li><b>Testers.</b> Their free codes stay as they are. Each tester's month shows which plan they really need.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 8. Pricing page claims -->
+<section class="slide" id="claims">
+  <div class="in">
+    <p class="no">7 &nbsp; What the pricing page would say</p>
+    <h2>Plain claims that hold under the limits.</h2>
+    <ol class="cols3">
+      <li><b>Free</b><span class="claim">Try Zenod on your own notes. A new memory a day, a couple of answers a day and a weekly recap. Everything you send is kept.</span></li>
+      <li><b>€9 a month</b><span class="claim">For everyday use. About 4 new memories and 10 answers a day, a persona every day, desk jobs and 10 minutes of calls a month. Everything you send is kept.</span></li>
+      <li><b>€19 a month</b><span class="claim">For all-day use. About 10 new memories and 25 answers a day, three persona runs a day, 20 desk jobs a week and 30 minutes of calls a month. Everything you send is kept.</span></li>
+    </ol>
+    <p class="small">Each claim is the daily mix the plan's allowance pays for in full, so it holds even when someone uses every feature. "Everything you send is kept" is true today: filing never stops at the allowance. The €9 claim is true to the limits running now. Free and €19 become true with the change on the next slide.</p>
+  </div>
+</section>
+
+<!-- 9. Close: recommendation -->
+<section class="slide close" id="next">
+  <div class="in">
+    <p class="no">8 &nbsp; What we recommend</p>
+    <h2>Free, €9 as today, and €19.</h2>
+    <p class="lede">Keep the €9 plan as Tier 1, add a free plan to start on and a €19 plan for heavy users. The free plan costs at most $1.10 a user a month. A €5 middle plan would halve every Tier 1 number and cut what today's payers bring in.</p>
+    <div class="box"><b>If you say yes, the team then does this</b>The limits file gets one set of limits per plan instead of one for everyone, read from the account's subscription, with no subscription meaning Free. Stripe gets one new €19 monthly price next to today's €9. The pricing page shows the three cards. About two to three days of work. Nothing has been changed yet.</div>
+  </div>
+</section>
+
+<p class="foot">Sources: filing, answers, deeper questions and transcription from the per-call costs read on the OpenRouter account and the production usage ledgers on 8 November (where the money goes, round 3). Persona runs from the persona runner's runs, desk jobs from the memory desk's runs, call minutes from two live test calls of $0.0104 and $0.0103 and the team's earlier call measurements. Monthly limits as they run today, live since 9 November. Storage from an 11 MB copy of your 540-page memory. €1 = $1.156. Free and Tier 2 do not exist yet.</p>
+<script src="scenes.js"></script>
+</body>
+</html>
