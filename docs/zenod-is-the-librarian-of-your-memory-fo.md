@@ -70,7 +70,7 @@ Steps: each is independently testable and closes only with evidence.
 |---|---|---|---|---|---|---|---|---|---|---|
 | L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
 | L2 | Ticket worker | run_4b7a90b7-6a50-4887-9c53-d60a47f093af | E22-2, E22-3: build it in the live app after the mockup is approved | done (approved by Jordi 2026-11-09) | E22-A2 approved 2026-11-09 | [#1565](https://github.com/zenod-ai/zenod/pull/1565) merged fa68fce1, live 19:46:55Z | 5b2109dd | http://vps3.taild81fbb.ts.net:8921/e22-l2-live/ ([evidence](evidence/e22-l2-live-2026-11-09.md), [card](cards/L2.md)) | 2026-11-09 | followups: started L3 |
-| L3 | Ticket worker | unassigned | tune the mode pick from your switches: follow-up of L2 | ready | L2 | none | main | Jordi started it when closing L2 2026-11-09 | 2026-11-09 | worker |
+| L3 | Ticket worker | run_3f905070-9db4-49f5-8a2f-4d213b70c3f9 — claimed 2026-11-09T20:42Z, lease until 2026-11-09T22:42Z | tune the mode pick from your switches: follow-up of L2 | active | L2 | none | main | Jordi started it when closing L2 2026-11-09 | 2026-11-09 | worker |
 
 ## Decisions
 
