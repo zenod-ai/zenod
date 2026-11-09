@@ -950,6 +950,21 @@ body:has(.v5-site) {
 .v5-plan > p { flex: 1; max-width: 31rem; color: var(--v5-muted); font-size: 0.83rem; line-height: 1.65; }
 .v5-error { margin-top: 1rem; color: #ff9292; }
 .v5-offer-truth { margin-top: 1rem; color: var(--v5-muted); font-size: 0.58rem; letter-spacing: 0.04em; }
+/* ZAL-A13: Hosted offers both sign-ins; the tester code line sits under them. */
+.v5-plan-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.v5-tester-note { margin-top: 0.85rem; color: var(--v5-muted); font-size: 0.74rem; line-height: 1.5; }
+.v5-tester-note a { color: var(--v5-ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ZAL-A13: below 960 wide the section links move into a Menu. */
+.v5-menu { display: none; position: relative; }
+.v5-menu summary { list-style: none; cursor: pointer; padding: 0.55rem 0.7rem; border: 1px solid var(--v5-line-2); color: var(--v5-ink); font-size: 0.76rem; }
+.v5-menu summary::-webkit-details-marker { display: none; }
+.v5-menu nav { position: absolute; right: 0; top: calc(100% + 0.5rem); display: grid; min-width: 12rem; padding: 0.5rem 0; border: 1px solid var(--v5-line-2); background: var(--v5-bg); }
+.v5-menu nav a { padding: 0.6rem 1rem; color: var(--v5-muted); font-size: 0.85rem; }
+.v5-menu nav a:hover { color: var(--v5-ink); }
+@media (max-width: 960px) {
+  .v5-menu { display: block; }
+}
 
 .v5-faq {
   display: grid;
@@ -1031,8 +1046,8 @@ body:has(.v5-site) {
 
 @media (max-width: 620px) {
   .v5-wrap { width: min(100% - 24px, 1240px); }
-  .v5-signin { display: none; }
-  .v5-github-signin { display: inline-flex; }
+  .v5-nav-actions { gap: 0.5rem; }
+  .v5-github-signin { display: none; }
   .v5-hero { min-height: 900px; }
   .v5-hero-inner { min-height: 900px; align-items: flex-start; padding-top: 4.5rem; }
   .v5-hero-art { object-position: 70% center; }

@@ -189,6 +189,31 @@ body:has(.pp) {
 .pp-foot-links a { text-decoration: none; }
 .pp-foot-links a:hover { color: var(--pp-accent); }
 
+/* Testers (ZAL-A13): the offer in two columns, three steps, then the apply form. */
+.pp-testers main { max-width: var(--pp-max); margin: 0 auto; padding: 0 var(--pp-edge); }
+.pp-testers-hero { padding: clamp(2rem, 6vw, 5rem) 0 0; max-width: 52rem; }
+.pp-testers-terms { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 3rem); margin-top: clamp(3rem, 7vw, 6rem); }
+.pp-testers-terms > div { background: var(--pp-stage); padding: clamp(1.75rem, 3.5vw, 3rem); }
+.pp-testers-terms > div + div { background: var(--pp-field); color: var(--pp-field-ink); }
+.pp-testers-terms p { margin: 0 0 1rem; max-width: 30rem; }
+.pp-testers-steps, .pp-testers-apply { margin-top: clamp(3.5rem, 8vw, 7rem); max-width: 46rem; }
+.pp-testers-steps ol { margin: 0; padding-left: 1.4rem; }
+.pp-testers-steps li { margin: 0 0 0.75rem; padding-left: 0.3rem; }
+.pp-apply { display: grid; gap: 0.6rem; }
+.pp-apply label { font: 500 1rem var(--pp-sans); margin-top: 0.75rem; }
+.pp-apply textarea, .pp-apply input { font: 400 1.0625rem/1.5 var(--pp-sans); color: var(--pp-ink); background: #fffdf8; border: 1.5px solid var(--pp-ink); border-radius: 6px; padding: 0.8rem 0.95rem; width: 100%; box-sizing: border-box; }
+.pp-apply textarea { resize: vertical; min-height: 8rem; }
+.pp-apply-actions { margin: 1rem 0 0; }
+.pp-apply-sent { background: var(--pp-stage); padding: clamp(1.5rem, 3vw, 2.5rem); }
+.pp-apply-sent h3 { font: 400 1.6rem/1.2 var(--pp-serif); margin: 0 0 0.75rem; }
+.pp-apply-sent p { margin: 0; }
+.pp-apply-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.pp-testers .pp-foot { padding-top: clamp(4rem, 9vw, 8rem); }
+.pp-plan-note a { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 900px) {
+  .pp-testers-terms { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Motion: the headline rises line by line; each part of a section rises in once. */
 @keyframes pp-rise { from { transform: translateY(105%); } to { transform: none; } }
 @keyframes pp-fade { from { opacity: 0; transform: translateY(1.25rem); } to { opacity: 1; transform: none; } }

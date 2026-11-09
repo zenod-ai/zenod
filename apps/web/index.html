@@ -10,14 +10,7 @@
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="theme-color" content="#f6f2e9" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script>
-      // Apply the stored theme (default: system) before first paint, same key as ThemeProvider.
-      try {
-        var t = localStorage.getItem("theme");
-        var dark = t === "dark" || ((t !== "light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.classList.add(dark ? "dark" : "light");
-      } catch (e) {}
-    </script>
+    <script src="/assets/theme-init.js"></script>
     <title>Zenod</title>
   </head>
   <body>

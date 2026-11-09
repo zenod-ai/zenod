@@ -91,4 +91,6 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
   }
   app.get("/", publicHostOnly(staticFile({ root: siteRoot, path: "index.html", ...noCache })));
   app.get("/pricing", publicHostOnly(staticFile({ root: siteRoot, path: "index.html", ...noCache })));
+  // Testers program (ZAL-A13): its own page title and description for links.
+  app.get("/testers", publicHostOnly(staticFile({ root: siteRoot, path: "testers.html", ...noCache })));
 }
