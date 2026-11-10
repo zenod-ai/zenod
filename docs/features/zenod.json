@@ -2,7 +2,7 @@
  "_about": "Zenod's feature list (same shape as agent_team docs/features/epicteam.json and epicsocial.json; started by EPIC-14 S8's worker 2026-11-08). Each line is true today and names the rows that built it. Habit: when Jordi closes a row done (approved) for something new a Zenod user can see, add it here in the same change or the next wake. `title` and `text` are public words: no row codes, no file paths. A line drafted for a row still in review has \"draft\": true until he closes it.",
  "service": "Zenod",
  "title": "What Zenod does for you",
- "updated": "2026-11-10",
+ "updated": "2026-11-09",
  "groups": [
   {
    "id": "talk-to-your-memory",
@@ -58,17 +58,6 @@
       "E15-S2"
      ],
      "since": "2026-11-09",
-     "draft": true
-    },
-    {
-     "id": "read-as",
-     "title": "Zenod knows which one you mean",
-     "text": "Ask about the flat, Ana's thing or that cello thing and Zenod reads your words through what it knows you mean before it looks. A grey Read as line shows how it read you. Tap it to pick another place, and it reads your words that way from then on. Works in the chat, in Talk it over, on calls and for the AI apps you connect.",
-     "rows": [
-      "E14-S28",
-      "E14-S29"
-     ],
-     "since": "2026-11-10",
      "draft": true
     }
    ]
