@@ -200,7 +200,7 @@ function Tag({ live, children }: { live: boolean; children: React.ReactNode }) {
 
 // Zenod runs in the cloud at one MCP address; any connected AI tool reaches
 // the same library. The figure draws the path once it is on screen.
-const WhatsappScene = React.memo(function WhatsappScene() {
+export const WhatsappScene = React.memo(function WhatsappScene() {
   return <div className="pp-hero-stage scene" data-len="13500" dangerouslySetInnerHTML={WHATSAPP_HTML} />;
 });
 

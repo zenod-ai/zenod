@@ -192,6 +192,17 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(field("website")).toMatch(/tabindex="-1"/i);
     for (const line of ["A free month of Zenod Hosted", "No card needed.", "month by month", "Usage is capped", "first ten", "a few weeks", "send us a line"])
       expect(testers).toContain(line);
+    // EPIC-26 T1: the three things a tester gets come first, in this order.
+    const promises = [
+      "A WhatsApp number for your voice notes.",
+      "Your memory, word for word, in your own account.",
+      "A knowledge graph any AI can read and write.",
+    ].map((line) => testers.indexOf(line));
+    expect(promises.every((at) => at > 0)).toBe(true);
+    expect([...promises].sort((a, b) => a - b)).toEqual(promises);
+    expect(promises[0]).toBeLessThan(testers.indexOf("What it costs"));
+    expect(testers).toContain("Google Drive or GitHub");
+    expect(testers).toContain('href="/connect"');
     // Section links from a sub-page land on the home page's sections.
     expect(testers).toContain('href="/#how"');
     expect(testers).not.toMatch(/href="#(how|mcp|start)"/);
