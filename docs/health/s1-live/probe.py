@@ -214,6 +214,46 @@ def tail_new(path: str, mark: dict | None, cat: tuple = ("sudo", "-n", "cat")) -
             {"ino": ino, "off": newoff, "head": head[:min(256, newoff)].hex()}, fresh)
 
 
+# EPIC-24 M2: the log lines that mean a person hit a failure, as (kind, reason). `[ops-alert]` lines come from
+# packages/server/src/opsAlert.ts; the others are older lines the server already wrote. Fixed words only.
+OPS_PATTERNS = (
+    (re.compile(r"\[ops-alert\] (save|answer|signin|app|helper) ([A-Za-z0-9_.:/-]+)"), None),
+    (re.compile(r"\[task-job\] \S+ failed \((store|media_ingest|enrich_memory)\):"), "save"),
+    (re.compile(r"\[task-job\] \S+ failed \((chat|task)\):"), "answer"),
+    (re.compile(r"\[task-job\] (chat) lane failed"), "answer"),
+    (re.compile(r"\[chat\] (stream) failed"), "answer"),
+)
+
+
+def ops_event(rest: str) -> tuple[str, str] | None:
+    for rx, kind in OPS_PATTERNS:
+        m = rx.match(rest)
+        if m:
+            return (m.group(1), m.group(2)) if kind is None else (kind, m.group(1) + "_failed")
+    return None
+
+
+DRILL_FILE = "~/.local/state/zenod-health-remote/drill.jsonl"   # VPS1: staged faults (probe.py --drill)
+
+
+def drill_events(since: dt.datetime) -> list[list[str]]:
+    """EPIC-24 M2: staged faults written by `probe.py --drill KIND` on VPS1, read like log lines (reason drill_*),
+    so each alert row can be proven end to end without breaking anyone's account."""
+    out = []
+    try:
+        for line in open(os.path.expanduser(DRILL_FILE)):
+            try:
+                j = json.loads(line)
+            except ValueError:
+                continue
+            t = parse_ts(j.get("at"))
+            if t and t >= since and j.get("kind") in ("save", "answer", "signin", "app", "helper", "reply"):
+                out.append([iso(t), j["kind"], "drill_" + re.sub(r"[^a-z0-9_]", "", str(j.get("reason") or "staged"))[:30]])
+    except OSError:
+        pass
+    return out
+
+
 def zenod_fold(z: dict, lines: list[tuple[dt.datetime, str]]) -> None:
     """Fold zenod-mt log lines (oldest first) into the cached running state `z`."""
     for t, rest in lines:
@@ -233,6 +273,9 @@ def zenod_fold(z: dict, lines: list[tuple[dt.datetime, str]]) -> None:
         m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)
         if m and (m.group(1) in CAPTURE_KINDS or (m.group(1) is None and "filing_recovery_pending" in rest)):
             z["capturesFailingSince"] = z["capturesFailingSince"] or iso(t)
+        op = ops_event(rest)
+        if op:
+            z.setdefault("ops", []).append([iso(t), op[0], op[1]])
         m = re.match(r"\[memory-search\] tier-0 index, ([\d.]+) ms \((\d+) rows", rest)
         if m:
             z["lastIndex"] = {"at": iso(t), "ms": float(m.group(1)), "rows": int(m.group(2))}
@@ -299,6 +342,8 @@ def access_fold(hosts: dict, lines: list[str]) -> None:
         if status >= 500:
             h["last5xx"], h["status5xx"] = iso(t), status
             h["e5xx"].append(s)
+            if not path.startswith("/api/health"):
+                h.setdefault("e5xxApp", []).append(s)
 
 
 def _since(xs: list[int], cut: float) -> list[int]:
@@ -375,17 +420,19 @@ def remote() -> dict:
 
     # zenod-mt
     zc = cache.get("zenod") or {"lastJob": None, "jobs": [], "lastIndex": None, "lastError": None, "errs": [],
-                                "lines": {}, "capturesFailingSince": None, "chat": []}
+                                "lines": {}, "capturesFailingSince": None, "chat": [], "ops": []}
     zenod_fold(zc, logs(ZENOD_SVC))
     zc["jobs"], zc["errs"] = _since(zc["jobs"], dcut), _since(zc["errs"], dcut)
     zc["lines"] = {k: n for k, n in zc["lines"].items() if int(k) + 60 > wcut}
     zc["chat"] = [x for x in zc["chat"] if parse_ts(x) >= day]
+    zc["ops"] = [x for x in zc.get("ops") or [] if parse_ts(x[0]) >= day][-500:]
     for k in ("lastJob", "lastIndex", "lastError"):
         zc[k] = _within(zc[k], week)
     out["zenod_log"] = {
         "lastJob": zc["lastJob"], "jobs24h": len(zc["jobs"]), "lastIndex": zc["lastIndex"],
         "lastError": zc["lastError"], "errors24h": len(zc["errs"]), "lines": sum(zc["lines"].values()),
-        "capturesFailingSince": zc["capturesFailingSince"], "chatReplies": zc["chat"]}
+        "capturesFailingSince": zc["capturesFailingSince"], "chatReplies": zc["chat"],
+        "ops": sorted(zc["ops"] + drill_events(day))}
 
     # phylax
     pc = cache.get("phylax") or {"lastInbound": None, "inbound": [], "lastReconnect": None, "reconn": [],
@@ -414,9 +461,12 @@ def remote() -> dict:
     access_fold(hosts, lines)
     for h in hosts.values():
         h["real"], h["e5xx"] = _since(h["real"], dcut), _since(h["e5xx"], dcut)
+        h["e5xxApp"] = _since(h.get("e5xxApp") or [], dcut)[-200:]
     cache["access"] = hosts
     out["access"] = {k: {"lastReal": h["lastReal"], "real24h": len(h["real"]), "last5xx": h["last5xx"],
-                         "status5xx": h["status5xx"], "n5xx24h": len(h["e5xx"])} for k, h in hosts.items()}
+                         "status5xx": h["status5xx"], "n5xx24h": len(h["e5xx"]),
+                         "app5xx": [iso(dt.datetime.fromtimestamp(x, UTC)) for x in h["e5xxApp"]]}
+                     for k, h in hosts.items()}
 
     # journals
     def journal(unit: str, since: str, user: bool = False, failed: list | None = None) -> list[tuple[dt.datetime, str]]:
@@ -711,7 +761,16 @@ def main() -> None:
     ap.add_argument("--from-json", help="a saved raw probe (or a v1 document's raw); no state unless --state")
     ap.add_argument("--state", help="history file (default ~/.local/state/zenod-health/history.json)")
     ap.add_argument("--no-alert", action="store_true", help="do not send red components to the HQ alert queue (S5)")
+    ap.add_argument("--drill", choices=("save", "reply", "answer", "signin", "app", "helper"),
+                    help="EPIC-24 M2: stage one fault of this kind on VPS1 (its row turns red on the next run, "
+                         "alerts once, and clears 15 min later); nobody's account is touched")
     a = ap.parse_args()
+    if a.drill:
+        line = json.dumps({"at": iso(now()), "kind": a.drill, "reason": "staged"})
+        print(sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "hetzner_vps_1",
+                  f"umask 077 && mkdir -p ~/.local/state/zenod-health-remote && echo '{line}' >> {DRILL_FILE} && echo staged"],
+                 timeout=30).strip() or "failed")
+        return
     if a.remote:
         print(json.dumps(remote()))
         return

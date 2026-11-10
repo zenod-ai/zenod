@@ -70,6 +70,7 @@ import {
 import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
 import { storeReceiptHeadline } from "./recentSaves.js";
 import { rankHits } from "./rankedMemory.js";
+import { opsAlert } from "./opsAlert.js";
 
 /**
  * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
@@ -1294,6 +1295,12 @@ export function buildMcpServer(
       try {
         answer = await engine.ask(note ? `${question}\n${note}` : question, { ...(contextRefs ? { contextRefs } : {}), entrySearch: input => searchEntryPage(engine, input), signal: cancel.signal });
       } catch (error) {
+        // EPIC-24 M2: a timed-out or failed answer is counted for the health page (a caller hanging up is not).
+        if (error instanceof AnswerCancelledError) {
+          if (error.reason === "timeout") opsAlert("answer", "ask_brain_timeout", { secs: Math.round(limitMs / 1000) });
+        } else if (!(error instanceof ContextRefError)) {
+          opsAlert("answer", "ask_brain_error", { name: error instanceof Error ? error.name : "Error" });
+        }
         if (error instanceof AnswerCancelledError) {
           const text = error.reason === "timeout"
             ? `No answer this time: I stopped after ${Math.round(limitMs / 1000)} seconds so the search would not keep running unseen. Try a narrower question, or search_memory to find the pages directly.`

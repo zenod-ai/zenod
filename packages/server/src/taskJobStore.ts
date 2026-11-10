@@ -357,6 +357,17 @@ export class TaskJobStore {
     return this.get(id)!;
   }
 
+  /** EPIC-24 M2: saves (store, media_ingest) still queued or running that arrived before `before`. */
+  stuckCaptures(before: number): { count: number; oldestAt: number | null } {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM task_jobs
+         WHERE tenant_id=? AND kind IN ('store', 'media_ingest') AND status IN ('queued', 'running') AND created_at<?`,
+      )
+      .get(this.tenantId, before) as { n: number; oldest: number | null } | undefined;
+    return { count: Number(row?.n ?? 0), oldestAt: row?.oldest ?? null };
+  }
+
   /** Oldest queued job, or null. The worker drains these one at a time. */
   nextQueued(): TaskJob | null {
     const row = this.db

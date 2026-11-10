@@ -3,6 +3,7 @@ import type { InboxItem, InboxLink, InboxOption, InboxStore } from "./inboxStore
 import type { PersonaRun, PersonaRunEnd, PersonaStore, PersonaTrigger } from "./personaStore.js";
 import { zenodLimits } from "./limits.js";
 import { inTreeSweepWindow, treeSweepWeekStart, TREE_SWEEP_WINDOW_START_HOUR_UTC } from "./treeSweepSchedule.js";
+import { opsAlert } from "./opsAlert.js";
 
 /**
  * The persona runner (EPIC-14 S4). A persona is a small agent that wakes on the user's memory on a
@@ -501,9 +502,11 @@ export async function runPersona(
       if (capped) tally.revision = await commitNotes(persona, deps, notes, started);
     } catch (commitError) {
       console.warn(`[persona] ${persona.id} notes not saved: ${(commitError as Error).message}`);
+      opsAlert("helper", "notes_not_saved", { helper: persona.id });
     }
     if (capped) return end("capped", isAllowanceError(error) ? "The AI allowance for this month is used up" : (error as Error).message);
     console.warn(`[persona] ${persona.id} run ${run.id} failed: ${(error as Error).message}`);
+    opsAlert("helper", "run_failed", { helper: persona.id, trigger, name: error instanceof Error ? error.name : "Error" });
     return end("failed", `Failed: ${(error as Error).message.slice(0, 200)}`);
   }
 }

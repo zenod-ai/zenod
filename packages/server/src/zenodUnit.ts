@@ -65,6 +65,7 @@ import {
 } from "./zenodPhylax.js";
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
+import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
@@ -1320,6 +1321,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   });
   app.route("/", customer.app);
   if (agent.name === "zenod") mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress });
+  // EPIC-24 M2: the cloud app reports its own errors (class, route, status only) for the health page.
+  if (agent.name === "zenod") mountClientErrorReports(app, { clientAddress });
   // Consent needs the original browser session; the API bridge below deliberately
   // strips cookies. Mount discovery and OAuth before any SPA catch-all as well.
   app.all("/oauth/*", (c) => unit.app.fetch(c.req.raw, c.env));

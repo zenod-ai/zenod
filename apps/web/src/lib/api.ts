@@ -1,3 +1,5 @@
+import { reportApiFailure } from "@/lib/client-errors"
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string | undefined
@@ -53,12 +55,19 @@ export async function api<T>(
 ): Promise<T> {
   const { method = "GET", body } = options
 
-  const response = await fetch(path, {
-    method,
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method,
+      headers:
+        body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch (error) {
+    reportApiFailure(path, null)
+    throw error
+  }
+  if (response.status >= 500) reportApiFailure(path, response.status)
 
   let data: unknown = null
   try {
@@ -644,6 +653,8 @@ export async function transcribeVoiceNote(
     method: "POST",
     body,
   })
+  if (response.status >= 500)
+    reportApiFailure("/api/chat/voice/transcribe", response.status)
 
   let data: unknown = null
   try {
@@ -689,11 +700,18 @@ export async function chatStream(
   message: string,
   handlers: ChatStreamHandlers
 ): Promise<void> {
-  const response = await fetch("/api/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  })
+  let response: Response
+  try {
+    response = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    })
+  } catch (error) {
+    reportApiFailure("/api/chat/stream", null)
+    throw error
+  }
+  if (response.status >= 500) reportApiFailure("/api/chat/stream", response.status)
 
   if (!response.ok || !response.body) {
     let payload: { error?: string; code?: string } | null = null
@@ -755,8 +773,10 @@ export async function chatStream(
         sources: event.sources,
         ...(event.stored ? { stored: event.stored } : {}),
       })
-    } else if (event.type === "error")
+    } else if (event.type === "error") {
+      reportApiFailure("/api/chat/stream", 503)
       throw new ApiError(503, event.message, event.code)
+    }
   }
 
   for (;;) {

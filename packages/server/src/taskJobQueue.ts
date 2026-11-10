@@ -7,6 +7,7 @@ import {
   type StoreResult,
 } from "zenod";
 import { recoverInterruptedFiling } from "./vaultRecovery.js";
+import { opsAlert } from "./opsAlert.js";
 import { aiAllowanceArchivedMediaMessage } from "./customerMetering.js";
 import { withFeature, type UsageFeature } from "./limits.js";
 import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchive.js";
@@ -28,6 +29,9 @@ import type { EntryStoredListener } from "./subscribers.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 
 const VAULT_RECOVERY_COOLDOWN_MS = 5 * 60_000;
+/** EPIC-24 M2: a save (store or media_ingest) still queued or running this long after it arrived is stuck. */
+export const STUCK_SAVE_MS = 15 * 60_000;
+const STUCK_SAVE_CHECK_MS = 5 * 60_000;
 
 /**
  * Background worker that drains durable jobs independently from HTTP requests.
@@ -66,6 +70,7 @@ export class TaskJobQueue {
   private recovery: Promise<void> | null = null;
   private lastRecoveryAt = 0;
   private startCheck: ReturnType<typeof setTimeout> | null = null;
+  private stuckCheck: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly store: TaskJobStore,
@@ -153,6 +158,27 @@ export class TaskJobQueue {
       this.requestVaultRecovery("start check skipped");
     }, delayMs);
     this.startCheck.unref?.();
+    if (!this.stuckCheck) {
+      this.stuckCheck = setInterval(() => this.checkStuckSaves(), STUCK_SAVE_CHECK_MS);
+      this.stuckCheck.unref?.();
+    }
+  }
+
+  /**
+   * EPIC-24 M2: log one `[ops-alert] save stuck` line while any save waits longer than STUCK_SAVE_MS, so the
+   * health page turns its saves row red and alerts the team (counts and minutes only). Returns the count.
+   */
+  checkStuckSaves(now: number = Date.now()): number {
+    if (this.closed) return 0;
+    try {
+      const stuck = this.store.stuckCaptures(now - STUCK_SAVE_MS);
+      if (stuck.count > 0 && stuck.oldestAt !== null) {
+        opsAlert("save", "stuck", { n: stuck.count, oldest_min: Math.floor((now - stuck.oldestAt) / 60_000) });
+      }
+      return stuck.count;
+    } catch {
+      return 0;
+    }
   }
 
   /**
@@ -433,6 +459,10 @@ export class TaskJobQueue {
 
   async close(): Promise<void> {
     this.closed = true;
+    if (this.stuckCheck) {
+      clearInterval(this.stuckCheck);
+      this.stuckCheck = null;
+    }
     if (this.startCheck) {
       clearTimeout(this.startCheck);
       this.startCheck = null;

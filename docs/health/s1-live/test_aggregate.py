@@ -75,7 +75,7 @@ class StatusRules(unittest.TestCase):
         s = status(raw())
         self.assertEqual(s.pop("agent_runner"), "grey")
         self.assertEqual(set(s.values()), {"green"}, s)
-        self.assertEqual(len(A.components(raw())), 12)
+        self.assertEqual(len(A.components(raw())), 18)   # 12 parts + 6 EPIC-24 M2 alert rows
 
     def test_cloud_down_is_red(self):
         d = raw(); d["cloud"] = {"status": 503, "secs": 1, "json": {}}
@@ -434,6 +434,70 @@ class ChatRepliesSurviveRotation(unittest.TestCase):
                                         chat_replies=merged["vps1"]["zenod_log"]["chatReplies"]))
         old = {"probedAt": "2026-11-20T00:00:00Z", "vps1": {"zenod_log": {"chatReplies": []}}}
         self.assertEqual(A.remember_chat_replies(old, st, A.parse_ts(old["probedAt"]))["vps1"]["zenod_log"]["chatReplies"], [])
+
+
+class AlertRows(unittest.TestCase):
+    """EPIC-24 M2: rows 13-18 turn red within one run of a failure a person would notice, and clear after 15 min."""
+
+    def doc(self, ops=(), at="2026-11-03T12:00:00Z", **vps1):
+        r = raw(at)
+        r["vps1"]["zenod_log"]["ops"] = [list(x) for x in ops]
+        r["vps1"].update(vps1)
+        return {c["id"]: c for c in A.components(r)}
+
+    def test_all_green_when_nothing_failed(self):
+        d = self.doc()
+        for cid in ("alert_saves", "alert_replies", "alert_answers", "alert_signins", "alert_app", "alert_helpers"):
+            self.assertEqual(d[cid]["status"], "green", cid)
+
+    def test_each_kind_turns_its_own_row_red_then_clears(self):
+        for kind, cid in (("save", "alert_saves"), ("answer", "alert_answers"), ("signin", "alert_signins"),
+                          ("app", "alert_app"), ("helper", "alert_helpers")):
+            fresh = self.doc([("2026-11-03T11:57:00Z", kind, "x_failed")])
+            self.assertEqual(fresh[cid]["status"], "red", cid)
+            self.assertIn("1 ", fresh[cid]["problem"])
+            others = [k for k, c in fresh.items() if k.startswith("alert_") and k != cid and c["status"] == "red"]
+            self.assertEqual(others, [], cid)
+            old = self.doc([("2026-11-03T11:44:00Z", kind, "x_failed")])
+            self.assertEqual(old[cid]["status"], "green", cid)
+            self.assertIn("1 in 24 h", old[cid]["signal"])
+
+    def test_a_drill_says_so(self):
+        d = self.doc([("2026-11-03T11:58:00Z", "signin", "drill_staged")])
+        self.assertIn("[drill: staged fault]", d["alert_signins"]["problem"])
+        d = self.doc([("2026-11-03T11:58:00Z", "reply", "drill_staged")])
+        self.assertEqual(d["alert_replies"]["status"], "red")
+
+    def test_a_5xx_from_the_access_log_is_an_app_error(self):
+        r = raw()
+        r["vps1"]["zenod_log"]["ops"] = []
+        r["vps1"]["access"]["cloud.zenod.dev"]["app5xx"] = ["2026-11-03T11:55:00Z"]
+        d = {c["id"]: c for c in A.components(r)}
+        self.assertEqual(d["alert_app"]["status"], "red")
+        self.assertIn("http_5xx 1", d["alert_app"]["problem"])
+
+    def test_a_whatsapp_message_with_no_reply_for_15_min(self):
+        r = raw()
+        r["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T11:44:00Z"]
+        r["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T11:00:00Z"
+        d = {c["id"]: c for c in A.components(r)}
+        self.assertEqual(d["alert_replies"]["status"], "red")
+        self.assertEqual(d["phylax"]["status"], "green")          # the 60 min rule has not fired yet
+        r["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T11:45:00Z"
+        d = {c["id"]: c for c in A.components(r)}
+        self.assertEqual(d["alert_replies"]["status"], "green")
+
+    def test_one_alert_then_one_recovery_through_transitions(self):
+        st = A.load_state("/nonexistent")
+        seen = []
+        for at, ops in (("2026-11-03T11:55:00Z", []), ("2026-11-03T12:00:00Z", [("2026-11-03T11:58:00Z", "save", "stuck")]),
+                        ("2026-11-03T12:05:00Z", [("2026-11-03T11:58:00Z", "save", "stuck")]),
+                        ("2026-11-03T12:15:00Z", [("2026-11-03T11:58:00Z", "save", "stuck")])):
+            r = raw(at)
+            r["vps1"]["zenod_log"]["ops"] = [list(x) for x in ops]
+            doc, st = A.aggregate(r, st)
+            seen += [(t["component"], t["to"]) for t in doc["transitions"] if t["at"] == at and t["alert"]]
+        self.assertEqual([x for x in seen if x[0] == "alert_saves"], [("alert_saves", "red"), ("alert_saves", "green")])
 
 
 if __name__ == "__main__":

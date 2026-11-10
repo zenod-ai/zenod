@@ -6,6 +6,7 @@
 
 import os
 import sys
+import json
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -108,6 +109,28 @@ class Folds(unittest.TestCase):
         self.assertEqual(whole, parts)
         self.assertEqual(whole["capturesFailingSince"], "2026-11-09T10:01:00Z")   # a chat job is not a save
         self.assertEqual(len(whole["jobs"]), 2)
+
+    def test_failure_lines_become_ops_events_with_fixed_words_only(self):
+        cases = {
+            "[ops-alert] signin callback_failed provider=google name=Error": ("signin", "callback_failed"),
+            "[ops-alert] app client_api name=ApiError page=/app/chat status=502": ("app", "client_api"),
+            "[ops-alert] save stuck n=1 oldest_min=17": ("save", "stuck"),
+            "[ops-alert] answer ask_brain_timeout secs=120": ("answer", "ask_brain_timeout"),
+            "[ops-alert] helper run_failed helper=weekly-recap": ("helper", "run_failed"),
+            "[task-job] 3f2a failed (media_ingest): Error: my private words": ("save", "media_ingest_failed"),
+            "[task-job] 3f2a failed (chat): Error: what did I say": ("answer", "chat_failed"),
+            "[task-job] chat lane failed: x": ("answer", "chat_failed"),
+            "[chat] stream failed: x": ("answer", "stream_failed"),
+            "[task-job] 3f2a done: store": None,
+            "[ops-alert] unknown thing": None,
+        }
+        for line, want in cases.items():
+            self.assertEqual(P.ops_event(line), want, line)
+        z = {"lastJob": None, "jobs": [], "lastIndex": None, "lastError": None, "errs": [], "lines": {},
+             "capturesFailingSince": None, "chat": []}
+        P.zenod_fold(z, [(P.parse_ts("2026-11-10T03:00:00Z"), "[task-job] a failed (store): Error: secret")])
+        self.assertEqual(z["ops"], [["2026-11-10T03:00:00Z", "save", "store_failed"]])
+        self.assertNotIn("secret", json.dumps(z["ops"]))
 
 
 if __name__ == "__main__":
