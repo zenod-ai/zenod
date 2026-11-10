@@ -68,6 +68,7 @@ import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFoun
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
+import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
@@ -1349,22 +1350,26 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   let testerFlow: TesterFlow | null = null;
   if (agent.name === "zenod") {
     testerFlow = testerFlowFromEnv(storage.dataDir, env, customer.stripe);
-    mountTesterFlowRoutes(app, testerFlow, {
-      ...(options.customerAdmin ? { isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)) } : {}),
-      opsToken: env.ZENOD_TESTER_OPS_TOKEN,
-    });
-    testerFlow.start();
-    mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
-    // EPIC-26 S7: the funnel as counts only, for zenod-social and the console.
+    // EPIC-26 S7: the funnel as counts only, for zenod-social and the console; our own tests left out.
     const flow = testerFlow;
     const comped = compedAccountIdsFromEnv(env);
+    const marks = new TesterMarks(storage.dataDir, teamEmailsFromEnv(env));
     const counts = new PublicCounts(storage.dataDir, {
       applications: () => readApplications(storage.dataDir),
       testers: () => flow.snapshot().testers,
       accounts: () => customer.accounts.list(),
       comped,
       savesSince: (tenantId, sinceMs) => tenantSavesSince(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
+      isTest: (contact, use) => marks.isTest(contact, use),
     });
+    mountTesterFlowRoutes(app, testerFlow, {
+      ...(options.customerAdmin ? { isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)) } : {}),
+      opsToken: env.ZENOD_TESTER_OPS_TOKEN,
+      // S7 round 2: the counts and every application with its email, on the operator's page only.
+      admin: { counts: () => counts.refresh(), applications: () => readApplications(storage.dataDir), marks },
+    });
+    testerFlow.start();
+    mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
     mountPublicCounts(app, counts);
     counts.start();
   }

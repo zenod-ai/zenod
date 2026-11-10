@@ -413,6 +413,12 @@ export function ZenodAdmin() {
             Read-only production health and tenant state. Customer controls and
             Phylax operations remain on their own surfaces.
           </p>
+          <a
+            className="w-fit text-sm font-medium underline underline-offset-4"
+            href="/admin/testers"
+          >
+            Testers and daily counts: who applied, with their emails →
+          </a>
         </header>
         {!overview && !error && (
           <div className="flex min-h-48 items-center justify-center">

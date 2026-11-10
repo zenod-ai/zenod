@@ -56,6 +56,11 @@ describe("Zenod owner admin", () => {
     ).not.toBeNull()
     expect(await screen.findByText("jordi")).not.toBeNull()
     expect(screen.getByText("Closed")).not.toBeNull()
+    expect(
+      screen
+        .getByRole("link", { name: /Testers and daily counts/ })
+        .getAttribute("href")
+    ).toBe("/admin/testers")
     expect(document.body.textContent).not.toMatch(
       /pair|channel number|phylax admin/i
     )

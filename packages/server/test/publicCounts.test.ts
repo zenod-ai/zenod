@@ -53,7 +53,16 @@ it("counts applications, accepted, signed up, active testers and paying customer
     signed_up: 3,
     active_testers: 2,
     paying_customers: 1,
+    test_applications: 0,
   });
+});
+
+it("leaves our own test applications out of every count and counts them apart", () => {
+  const counts = funnelCounts(sources({
+    applications: () => [{ contact: "a@example.com" }, { contact: "TEST person", use: "a TEST application" }, { contact: "b@example.com" }],
+    isTest: (contact, use) => /TEST/.test(contact + use) || contact === "b@example.com",
+  }), NOW);
+  expect(counts).toMatchObject({ applications: 2, accepted: 1, test_applications: 2 });
 });
 
 it("a tester whose free month ended and who now pays counts as paying and still as signed up", () => {

@@ -27,6 +27,8 @@ export interface FunnelCounts {
   active_testers: number;
   /** Accounts on a live subscription that pays: not free, not comped. */
   paying_customers: number;
+  /** Our own test applications, left out of every count above (S7 round 2). */
+  test_applications?: number;
 }
 
 export interface PublicCountsDocument extends FunnelCounts {
@@ -38,22 +40,25 @@ export interface PublicCountsDocument extends FunnelCounts {
 }
 
 export const COUNT_DEFINITIONS: Record<keyof FunnelCounts, string> = {
-  applications: "distinct people who sent the tester form on zenod.dev/testers",
-  accepted: "applicants given a tester place",
+  applications: "distinct people who sent the tester form on zenod.dev/testers, our own tests left out",
+  accepted: "applicants given a tester place, our own tests left out",
   signed_up: "testers who finished the free checkout and have an account",
   active_testers: `testers on their free month with at least one save in the last ${ACTIVE_DAYS} days`,
   paying_customers: "accounts on a live subscription that pays (not free, not comped)",
+  test_applications: "applications that were our own tests, counted nowhere else",
 };
 
 export interface CountSources {
   /** The application lines kept by the testers form (testerApplications.ts). */
-  applications: () => Array<{ contact?: unknown }>;
+  applications: () => Array<{ contact?: unknown; use?: unknown }>;
   /** The tester flow's records (testerFlow.ts); empty when the flow is off. */
   testers: () => TesterRecord[];
   accounts: () => CustomerAccount[];
   comped: ReadonlySet<string>;
   /** Saves (store, media_ingest) finished for this tenant since `sinceMs`. */
   savesSince: (tenantId: string, sinceMs: number) => number;
+  /** True for our own test applications (testerMarks.ts); none when unset. */
+  isTest?: (contact: string, use: string) => boolean;
 }
 
 const live = (account: CustomerAccount) =>
@@ -61,13 +66,23 @@ const live = (account: CustomerAccount) =>
 
 /** The five counts from the sources. Pure apart from the sources. */
 export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts {
+  const isTest = sources.isTest ?? (() => false);
   const applicants = new Set<string>();
+  const tests = new Set<string>();
   for (const line of sources.applications()) {
     const contact = typeof line.contact === "string" ? line.contact : "";
+    const use = typeof line.use === "string" ? line.use : "";
     const key = (normalizeTesterEmail(contact) ?? contact.trim()).toLowerCase();
-    if (key) applicants.add(key);
+    if (key) (isTest(contact, use) ? tests : applicants).add(key);
   }
-  const testers = sources.testers();
+  const testers = sources.testers().filter((tester) => {
+    const key = tester.email.toLowerCase();
+    if (tests.has(key) || isTest(tester.email, "")) {
+      tests.add(key);
+      return false;
+    }
+    return true;
+  });
   for (const tester of testers) applicants.add(tester.email.toLowerCase());
   const accepted = testers.filter((tester) => tester.status === "accepted");
   const acceptedEmails = new Set(accepted.map((tester) => tester.email.toLowerCase()));
@@ -96,6 +111,7 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     signed_up: signedUp,
     active_testers: activeTesters,
     paying_customers: paying,
+    test_applications: tests.size,
   };
 }
 
@@ -120,14 +136,14 @@ export function tenantSavesSince(tasksPath: string, tenantId: string, sinceMs: n
 }
 
 /** The kept applications, one JSON object per line; unreadable lines are skipped. */
-export function readApplications(dataDir: string): Array<{ contact?: unknown }> {
+export function readApplications(dataDir: string): Array<{ at?: unknown; contact?: unknown; use?: unknown }> {
   const path = join(dataDir, TESTER_APPLICATIONS_FILE);
   if (!existsSync(path)) return [];
-  const out: Array<{ contact?: unknown }> = [];
+  const out: Array<{ at?: unknown; contact?: unknown; use?: unknown }> = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     try {
-      out.push(JSON.parse(line) as { contact?: unknown });
+      out.push(JSON.parse(line) as { at?: unknown; contact?: unknown; use?: unknown });
     } catch {
       // a torn line from a crash mid-write: skip it
     }

@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { describe, expect, it, vi } from "vitest";
+import { TesterMarks } from "../src/testerMarks.js";
+import { COUNT_DEFINITIONS } from "../src/publicCounts.js";
 import {
   generateTesterCode,
   mountTesterFlowRoutes,
@@ -233,6 +235,51 @@ describe("tester flow routes", () => {
       body: `id=${waitlisted.id}`,
     });
     expect(flow.snapshot().testers.find((t) => t.email === "b@example.com")).toMatchObject({ status: "accepted" });
+  });
+
+  it("says where the page lives and who asked, shows the counts and every application with its email, tests marked", async () => {
+    const { flow, dataDir } = flowWith({ mint: null });
+    const marks = new TesterMarks(dataDir);
+    const app = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterFlowRoutes(app, flow, {
+      isAdmin: () => true,
+      admin: {
+        counts: () => ({ schema: "zenod-counts/v1", date: "2026-11-10", definitions: COUNT_DEFINITIONS, at: "2026-11-10T20:00:00Z", applications: 1, accepted: 1, signed_up: 0, active_testers: 0, paying_customers: 0, test_applications: 1,
+          history: [{ date: "2026-11-10", applications: 1, accepted: 1, signed_up: 0, active_testers: 0, paying_customers: 0, test_applications: 1 }] }),
+        applications: () => [
+          { at: "2026-11-09T06:05:00Z", contact: "TEST", use: "TEST application <b>" },
+          { at: "2026-11-10T19:00:00Z", contact: "stranger@gmail.com", use: "My voice notes from walks" },
+        ],
+        marks,
+      },
+    });
+    flow.receive("stranger@gmail.com");
+    const page = await (await app.request("/admin/testers")).text();
+    expect(page).toContain("Where this is.");
+    expect(page).toContain("cloud.zenod.dev/admin/testers");
+    expect(page).toContain("zenod-social");
+    expect(page).toContain("/api/public/counts");
+    expect(page).toContain("stranger@gmail.com");
+    expect(page).toContain("My voice notes from walks");
+    expect(page).toContain("came before automatic acceptance");
+    expect(page).toContain("2 people have applied: 1 real, 1 our own test.");
+    expect(page).not.toContain("<b>\"");
+    expect(page).toContain("TEST application &#60;b&#62;");
+
+    const flip = await app.request("/admin/testers/mark", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "same-origin" },
+      body: "contact=stranger%40gmail.com&test=1",
+    });
+    expect(flip.status).toBe(303);
+    expect(marks.mark("stranger@gmail.com")).toEqual({ test: true, byHand: true });
+    const crossSite = await app.request("/admin/testers/mark", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "cross-site" },
+      body: "contact=stranger%40gmail.com&test=0",
+    });
+    expect(crossSite.status).toBe(404);
+    expect(marks.isTest("stranger@gmail.com")).toBe(true);
   });
 
   it("hides the operator page from everyone else", async () => {
