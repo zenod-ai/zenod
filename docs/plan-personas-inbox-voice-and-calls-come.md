@@ -83,7 +83,7 @@ Steps: each is independently testable and closes only with evidence.
 | S29 | Ticket worker | unassigned | Chat reads the quick index: Look up, Talk it over, calls and MCP answers resolve "the flat" first, with a correctable "Read as" line; measured on 20 vague questions plus the 72-message set; WhatsApp and Telegram replies unchanged (root L-6) (1.5 d) | ready | S28 | none | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-s24/) | 2026-11-09 | after S28 |
 | S30 | Ticket worker | unassigned | A week of helpers and the index on Jordi's memory: which helper earned its place, with examples (replaces the S5/S9 judgement) (1 d, then a week) | ready | S27, S29 | none | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-s24/) | 2026-11-09 | after S27 and S29 |
 | S31 | Ticket worker | unassigned | helpers post real suggestions, at most one a run: follow-up of S26 | done (no confirm: same work as S27, which builds it) | S26 | none | main | Jordi started it when closing S26 2026-11-10 | 2026-11-10 | covered by S27 |
-| S32 | Ticket worker | unassigned | chat reads the quick index: follow-up of S28 | ready | S28 | none | main | Jordi started it when closing S28 2026-11-10 | 2026-11-10 | worker |
+| S32 | Ticket worker | unassigned | chat reads the quick index: follow-up of S28 | done (no confirm: same work as S29, which builds it) | S28 | none | main | Jordi started it when closing S28 2026-11-10 | 2026-11-10 | covered by S29 |
 
 ## Decisions
 
