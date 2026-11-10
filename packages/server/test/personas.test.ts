@@ -744,6 +744,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
       const run = await runPersona(OPEN_LOOPS, d, "manual");
       expect(run).toMatchObject({ status: "done", modelCalls: 1 });
       expect(stub.calls[0]!.prompt).not.toContain("teamQuestion");
+      expect(stub.calls[0]!.system).not.toContain("team desk ONE question");
       expect(asked).toHaveLength(0);
       expect(personaView(OPEN_LOOPS, d.store, new Date("2026-11-08T12:00:00Z")).askTeam).toBe(false);
       expect(personaView(WEEKLY_RECAP, d.store, new Date("2026-11-08T12:00:00Z")).askTeam).toBeNull();
@@ -760,6 +761,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
       expect(run!.steps).toBeLessThanOrEqual(OPEN_LOOPS.limits.maxSteps);
       expect(asked).toEqual([{ question: "Which of my plans does the flat decision connect to?", helper: "open-loops", run: run!.id }]);
       expect(stub.calls[0]!.prompt).toContain('"teamQuestion"');
+      expect(stub.calls[0]!.system).toContain("ask the person's team desk ONE question");
       expect(stub.calls[1]!.prompt).toContain("Answer: It connects to the milestone House decision, which is stuck. (about: House decision)");
       expect(stub.calls[1]!.prompt).not.toContain('"teamQuestion"');
       const card = inbox.list()[0]!;

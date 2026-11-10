@@ -255,12 +255,16 @@ interface ModelPersonaSpec {
 
 /** When the helpers kept to the memory only (S27 round 2): each wakes once more at once, in its own period. */
 const SUGGESTS_SINCE = "2026-11-10T04:15:00.000Z";
+/** S35 round 2: when the helpers that can ask the team were told plainly when to ask. */
+const ASKS_SINCE = "2026-11-10T10:50:00.000Z";
 
 /**
  * S35: what a helper may ask the Team desk. Read only: how something in the memories connects to
  * the person's projects, milestones and plans; never to pick, start or change work.
  */
-const TEAM_QUESTION_ASK = '"teamQuestion": "one short question in plain words for the person\'s own team desk, only when knowing how something in these memories connects to their projects, milestones or plans would change your suggestion, else null"';
+const TEAM_QUESTION_ASK = '"teamQuestion": "one short question in plain words for the person\'s team desk about how something in these memories connects to their projects, milestones or plans, or null when no memory touches a plan, decision or project of theirs"';
+/** S35 round 2: on DeepSeek the cautious wording above alone never asked; the system words say when to ask. */
+const TEAM_ASK_SYSTEM = "This run you may ask the person's team desk ONE question in teamQuestion. The desk only reads the state of their projects, milestones and plans and answers in words; it never does anything. Ask it whenever a memory touches a plan, a decision or a project of theirs, so you know how that memory connects before you suggest where it belongs or what to link. The answer is context for organising their memory, never a task.";
 const TEAM_ANSWER_ASK = '"usedTeamAnswer": true when the team\'s answer changed or supports your suggestion, else false';
 
 /** S35: the team's answer in the helper's words: context only, never a task. */
@@ -292,7 +296,8 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
     defaultEnabled: false,
     // S35: two more steps when it asks the team: the question and the second call with the answer.
     limits: { maxSteps: 9, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
-    revisedAt: SUGGESTS_SINCE,
+    // S35 round 2: a helper that may ask the team wakes once more with the clearer words.
+    revisedAt: ASKS_SINCE,
     asksTeam: true,
     async fingerprint(ctx) {
       const entries = await ctx.recentMemories({ days: spec.days, limit: RECAP_MAX_MEMORIES });
@@ -319,6 +324,7 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
         MEMORY_ONLY,
         spec.system,
         ...(canSuggest ? [`You may also offer ONE change to how their memory is organised: ${spec.suggests}`, DESK_CAN, "Offer a change only when the memories clearly call for it; otherwise suggestion is null."] : []),
+        ...(mayAsk ? [TEAM_ASK_SYSTEM] : []),
         "Use only what the memories say. Never invent facts, names or dates. Plain words.",
       ].join(" ");
       let reply = parseJsonReply(await ctx.think({ system, prompt }));
