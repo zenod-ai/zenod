@@ -14,31 +14,34 @@ Integration policy: main-direct
 
 Jordi is getting errors on Zenod now: find and fix them today; then monitoring that alerts the team before he notices (failed saves, replies, answers, sign-ins), in the launch board.
 
+Goal sentence: The errors Jordi is hitting are fixed today, and the team hears of any new error before he does.
+
 ## Serves
 
-[EPIC-0: Zenod — a paying user on WhatsApp](EPIC-0-FOUNDATION-SPINE.md): <one sentence: how this serves its parent>
+[EPIC-0: Zenod — a paying user on WhatsApp](EPIC-0-FOUNDATION-SPINE.md): testers start today, so Zenod has to work and the team has to hear about errors first.
 
 ## Done means
 
-- [ ] E24-1 <observable outcome and how it is measured>
-- [ ] E24-2 <a second outcome (2-5 in all), or delete this line>
+- [ ] E24-1 Every error Jordi hit on 9 to 10 Nov (WhatsApp replies, chat answers, sign-ins, saves, the new app) is found in the logs, fixed live and proven, listed on one page
+- [ ] E24-2 Monitoring on production alerts the team within 15 minutes of a failed save, a missed reply, a failed answer, a failed sign-in or an app error, before he notices, shown on the launch board
+- [ ] E24-3 A week with no error he finds first
 
 ## Current State
 
-Owner: unassigned
-Status: draft
-Last attempted: scaffolded with spine_new.py on 2026-11-10
+Owner: Delivery Manager (Zenod launch)
+Status: active
+Last attempted: 2026-11-10 stamped ready on Jordi's ask and planned; M1 and M2 dispatched
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
 Approved work: none
-Next action: fill Goal, Serves and Done means
+Next action: M1 finds and fixes today's errors; M2 builds the alerts
 Source revision: uncommitted scaffold
 Verified at: 2026-11-10
 
 ## Non-Goals
 
-TBD
+- New features; only errors and the alerts for them.
 
 ## Issue Ledger
 
@@ -46,7 +49,8 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | first step | draft | none | none | none | none | 2026-11-10 | write the first step |
+| M1 | Ticket worker | unassigned | E24-1: find and fix today every error Jordi is hitting (logs of the last 24 h: WhatsApp, chat, sign-in, saves, app), one page | ready | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| M2 | Ticket worker | unassigned | E24-2: alerts within 15 minutes for failed saves, missed replies, failed answers, failed sign-ins and app errors, on the launch board | ready | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
 
 ## Decisions
 
@@ -55,6 +59,7 @@ One line per decision; detail goes to a linked page.
 | Date | Outcome | Decision / Attempt | Durable Summary | Evidence | Revisit When |
 |---|---|---|---|---|---|
 | 2026-11-10 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
+| 2026-11-10 | accepted | Ready on Jordi's own ask (L-37), Chat voice note 2026-11-10 02:30Z vn_8f8279fe: "I need to have some monitoring on Zenod because right now I think I am getting some errors. So what the fuck, man?"; urgent | M1 fixes today's errors, M2 the alerts, side by side | his voice note | when M1 reports |
 
 ## Operating Learnings
 
