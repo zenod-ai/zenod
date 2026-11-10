@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createEngine, SqliteStateStore, VaultRepo, type BrainEngine, type BrainLlm, type MemoryEntry } from "zenod";
+import { createEngine, SqliteStateStore, VaultRepo, type BrainEngine, type BrainLlm, type MemoryEntry, type MemoryTreeOutline } from "zenod";
 import { InboxStore } from "../src/inboxStore.js";
 import { answerDeskQuestion } from "../src/memoryDesk.js";
 import {
@@ -66,8 +66,26 @@ const entry = (n: number, day: string, title: string): MemoryEntry => ({
   source: "whatsapp", verbatim: true, capturedAt: `${day}T09:00:00.000Z`, url: "", provider: "github",
 });
 
-function fakeMemory(entries: MemoryEntry[]) {
+/** A made-up tree outline (S27): two places, one loose page. */
+const OUTLINE: MemoryTreeOutline = {
+  groups: [
+    {
+      id: "working", kind: "group", memory: "working", title: "Working memory", path: null, pages: 3, latest: null, url: null,
+      children: [
+        { id: "Areas/Home.md", kind: "root", memory: "working", title: "Home", path: "Areas/Home.md", summary: "The flat and its repairs.", pages: 2, latest: null, url: null,
+          children: [{ id: "Notes/Boiler.md", kind: "page", memory: "working", title: "Boiler", path: "Notes/Boiler.md", pages: 1, latest: null, url: null, children: [] }] },
+        { id: "Areas/Garden.md", kind: "root", memory: "working", title: "Garden", path: "Areas/Garden.md", pages: 1, latest: null, url: null, children: [] },
+      ],
+    },
+    { id: "long-term", kind: "group", memory: "long-term", title: "Long-term memory", path: null, pages: 0, latest: null, url: null, children: [] },
+  ],
+  roots: 2, placed: 3, unplaced: 4,
+  unplacedPages: [{ title: "Dentist", path: "Notes/Dentist.md" }, { title: "Compost", path: "Notes/Compost.md" }, { title: "Ana", path: "People/Ana.md" }, { title: "Shed", path: "Notes/Shed.md" }],
+};
+
+function fakeMemory(entries: MemoryEntry[], outline: MemoryTreeOutline | null = null) {
   return {
+    async memoryTreeOutline() { return outline; },
     async searchEntries(query: { capturedAfter?: string; limit?: number | null } = {}) {
       return entries.filter((e) => !query.capturedAfter || e.capturedAt >= query.capturedAfter).slice(0, query.limit ?? undefined);
     },
@@ -76,12 +94,12 @@ function fakeMemory(entries: MemoryEntry[]) {
   };
 }
 
-function deps(over: Partial<PersonaRunnerDeps> & { entries?: MemoryEntry[]; model?: () => PersonaModel; now?: () => Date }) {
+function deps(over: Partial<PersonaRunnerDeps> & { entries?: MemoryEntry[]; outline?: MemoryTreeOutline | null; model?: () => PersonaModel; now?: () => Date }) {
   const written: Array<{ personaId: string; files: Array<{ name: string; content: string }>; message: string }> = [];
   const inbox = new InboxStore(join(dir, "inbox.sqlite"));
   const store = new PersonaStore(join(dir, "personas.sqlite"), over.now);
   const base: PersonaRunnerDeps = {
-    memory: fakeMemory(over.entries ?? [entry(1, "2026-11-07", "Dentist next week"), entry(2, "2026-11-04", "Call the dentist")]),
+    memory: fakeMemory(over.entries ?? [entry(1, "2026-11-07", "Dentist next week"), entry(2, "2026-11-04", "Call the dentist")], over.outline ?? null),
     model: over.model ?? (() => stubModel().model),
     inbox,
     store,
@@ -448,10 +466,11 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       expect(every3.personas[1]).toMatchObject({ id: "open-loops", enabled: false, schedule: "Every 3 days, at night", cadence: { every: "days", days: 3 } });
       expect((await post({ cadence: { every: "days", days: 1 } })).status).toBe(400);
       expect((await post({ cadence: { every: "hourly" } })).status).toBe(400);
-      const daily = await (await post({ enabled: true, cadence: { every: "night" } })).json() as Listed;
-      expect(daily.personas[1]).toMatchObject({ enabled: true, schedule: "Daily, at night" });
+      const weekly = await (await post({ enabled: true, cadence: { every: "week" } })).json() as Listed;
+      expect(weekly.personas[1]).toMatchObject({ enabled: true, schedule: "Weekly, Sunday night" });
+      // S27: Open loops finder's default is every night.
       const back = await (await post({ cadence: null })).json() as Listed;
-      expect(back.personas[1]).toMatchObject({ enabled: true, schedule: "Weekly, Sunday night" });
+      expect(back.personas[1]).toMatchObject({ enabled: true, schedule: "Daily, at night" });
       expect((await app.request("/api/console/personas/open-loops/run", { method: "POST" })).status).toBe(200);
       signedIn = false;
       expect((await app.request("/api/console/personas")).status).toBe(401);
@@ -534,18 +553,82 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     expect(ideas.inbox.list()[0]!.title).toBe("1 ideas this fortnight. Most on your mind: A shed for the bikes");
   });
 
-  it("Topic gardener proposes a desk job as Run it or Not now and changes nothing itself", async () => {
-    const reply = JSON.stringify({ tidy: { request: "Join Garden and Allotment into one topic", why: "Garden and Allotment hold the same notes." } });
-    const { deps: d, inbox, written } = deps({ model: () => stubModel(reply).model });
-    expect(await runPersona(TOPIC_GARDENER, d, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories and proposed one tidy-up" });
+  it("Topic gardener suggests one tidy-up as a suggestion card and changes nothing itself (S27)", async () => {
+    const reply = JSON.stringify({ looked: "Home and Garden", suggestion: { title: "Boiler is filed under Garden", why: "Every boiler note is about the flat.", action: "Move Boiler under Home.", sources: [1] } });
+    const stub = stubModel(reply);
+    const { deps: d, inbox, written } = deps({ model: () => stub.model, outline: OUTLINE });
+    expect(await runPersona(TOPIC_GARDENER, d, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories and suggested one tidy-up" });
     const card = inbox.list()[0]!;
-    expect(card).toMatchObject({ kind: "question", from: "Topic gardener", title: "Garden and Allotment hold the same notes. Run it?", body: "Join Garden and Allotment into one topic" });
-    expect(card.sourceKey!.startsWith("desk-ask:")).toBe(true);
-    expect(written[0]!.files[0]!.content).toContain("Proposed: Join Garden and Allotment");
-    // The desk owns the answer: Not now starts nothing.
-    const queue = { enqueued: 0, enqueue() { this.enqueued += 1; return { id: "j1" }; }, get: () => null, recent: () => [] };
-    expect(answerDeskQuestion(card, "no", inbox, queue)).toBe(true);
-    expect(queue.enqueued).toBe(0);
+    expect(card).toMatchObject({ kind: "suggestion", status: "open", from: "Topic gardener", title: "Boiler is filed under Garden", body: "Every boiler note is about the flat.", action: "Move Boiler under Home." });
+    expect(card.links.map((l) => l.path)).toEqual(["Log/2026-11-07.md", "Personas/topic-gardener/2026-11-08.md"]);
+    expect(written[0]!.files[0]!.content).toContain("Proposed: Move Boiler under Home.");
+    // It saw the tree and what the desk can do.
+    expect(stub.calls[0]!.prompt).toContain("- Home: The flat and its repairs.");
+    expect(stub.calls[0]!.prompt).toContain("  - Boiler");
+    expect(stub.calls[0]!.system).toContain("The memory desk can do only these changes");
+    // Without a tree there is nothing a desk job could change: no suggestion is asked for, no card.
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const bare = stubModel(reply);
+    const none = deps({ model: () => bare.model });
+    expect(await runPersona(TOPIC_GARDENER, none.deps, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories, nothing to tidy" });
+    expect(bare.calls[0]!.prompt).not.toContain('"suggestion"');
+    expect(none.inbox.list()).toHaveLength(0);
+  });
+
+  it("the helpers post at most one suggestion a run, never the same waiting change twice, and read what became of earlier ones (S27)", async () => {
+    let clock = new Date("2026-11-08T03:00:00Z");
+    const reply = JSON.stringify({ loops: [{ title: "Book the dentist", sources: [1] }], suggestion: { title: "Link the dentist notes", why: "Both say next week.", action: "Link Dentist to Home.", sources: [1, 2] } });
+    const stub = stubModel(reply);
+    const { deps: d, inbox } = deps({ model: () => stub.model, outline: OUTLINE, now: () => clock });
+    expect(await runPersona(OPEN_LOOPS, d, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories, found 1 open loops and suggested one change" });
+    expect(inbox.list().map((item) => item.kind)).toEqual(["suggestion"]);
+    // Again, the same change still waiting: no second card.
+    clock = new Date("2026-11-08T04:00:00Z");
+    await runPersona(OPEN_LOOPS, d, "manual");
+    expect(inbox.list()).toHaveLength(1);
+    expect(stub.calls[1]!.prompt).toContain("- waiting: Link Dentist to Home.");
+    // Not now with a reason: the next run sees it as an earlier suggestion and in its system words.
+    inbox.declineSuggestion(inbox.list()[0]!.id, "Dentist is not about the flat");
+    clock = new Date("2026-11-08T05:00:00Z");
+    await runPersona(OPEN_LOOPS, d, "manual");
+    expect(stub.calls[2]!.prompt).toContain("- not now (Dentist is not about the flat): Link Dentist to Home.");
+    expect(stub.calls[2]!.system).toContain("Not now: Dentist is not about the flat");
+    // A helper that tries two suggestions in one run is stopped at the first.
+    const greedy: PersonaDefinition = {
+      ...OPEN_LOOPS, id: "greedy", name: "Greedy",
+      async run(ctx) {
+        ctx.postSuggestion({ title: "One", action: "Move Boiler under Home." });
+        ctx.postSuggestion({ title: "Two", action: "Rename Garden to Allotment." });
+        return { summary: "two" };
+      },
+    };
+    expect(await runPersona(greedy, d, "manual")).toMatchObject({ status: "capped", summary: "Stopped at one suggestion a run" });
+    expect(inbox.list().filter((item) => item.from === "Greedy").map((item) => item.title)).toEqual(["One"]);
+  });
+
+  it("People and follow-ups and Ideas digest each offer one change when the tree allows it (S27)", async () => {
+    const people = deps({ outline: OUTLINE, model: () => stubModel(JSON.stringify({ people: [{ name: "Ana", followUp: "Send her the notebook", sources: [1] }], suggestion: { title: "Ana keeps coming up", why: "Three notes about her this fortnight.", action: "Link the notebook note to Ana.", sources: [1] } })).model });
+    expect(await runPersona(PEOPLE_FOLLOW_UPS, people.deps, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories, 1 people, suggested one change" });
+    expect(people.inbox.list()[0]).toMatchObject({ kind: "suggestion", from: "People and follow-ups", action: "Link the notebook note to Ana." });
+
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const ideas = deps({ outline: OUTLINE, model: () => stubModel(JSON.stringify({ ideas: [{ title: "A shed for the bikes", sources: [1] }], suggestion: { title: "The shed has come up three times", why: "", action: "Give Shed its own place.", sources: [1] } })).model });
+    expect(await runPersona(IDEAS_DIGEST, ideas.deps, "manual")).toMatchObject({ status: "done" });
+    expect(ideas.inbox.list()[0]).toMatchObject({ kind: "suggestion", from: "Ideas digest", action: "Give Shed its own place." });
+    expect(ideas.inbox.list()[0]!.body).toBeNull();
+  });
+
+  it("Health of your memory suggests filing loose pages, by name, with no model call (S27)", async () => {
+    const noModel = () => { throw new Error("no model for this persona"); };
+    const { deps: d, inbox, written } = deps({ model: noModel, outline: OUTLINE });
+    expect(await runPersona(MEMORY_HEALTH, d, "manual")).toMatchObject({ status: "done", modelCalls: 0, costUsd: 0, summary: "Counted 2 memories and 4 loose pages, suggested filing them" });
+    expect(written[0]!.files[0]!.content).toContain("- Pages under no place in the tree: 4");
+    expect(inbox.list()[0]).toMatchObject({
+      kind: "suggestion", from: "Health of your memory", title: "4 pages in your memory are not under any place yet.",
+      action: 'Move these pages, which are under no place in the tree yet, each under the place it belongs to: "Dentist", "Compost", "Ana", "Shed".',
+    });
   });
 
   it("Health of your memory makes no model call and posts only when saving has gone quiet", async () => {

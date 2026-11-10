@@ -1,6 +1,6 @@
 import type { MemoryEntry } from "zenod";
 import type { InboxLink } from "./inboxStore.js";
-import type { PersonaContext, PersonaDefinition, PersonaSkill } from "./personaRunner.js";
+import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill } from "./personaRunner.js";
 
 /**
  * The built-in personas (EPIC-14 S4): a catalog the user switches on one by one. Only Weekly recap
@@ -178,56 +178,130 @@ function personaNote(id: string, title: string, today: string, read: number, bod
   return ["---", `title: ${title} ${today}`, "type: persona-note", `persona: ${id}`, `created: ${today}`, `memories_read: ${read}`, "---", "", `# ${title} ${today}`, "", ...body, ""].join("\n");
 }
 
+/**
+ * S27: what a helper may offer as a change. Do it hands the words to the memory desk as one job, and
+ * the desk can only do these, so a suggestion outside them would fail when pressed.
+ */
+const DESK_CAN = [
+  "The memory desk can do only these changes: move a page under another place, give a page its own place at the top of the tree, rename a place, link two memories so each shows the other, or unlink them.",
+  "It never writes new words, never creates or deletes a page and never edits what the person said.",
+].join(" ");
+
+const SUGGESTION_ASK = '"suggestion": {"title": "one sentence the person reads first", "why": "one sentence, from the memories", "action": "the one change, as the person would ask the memory desk, naming places exactly as listed", "sources": [numbers]} or "suggestion": null';
+
+/** A helper's suggestion from its reply, or null. */
+export function parseSuggestion(reply: Record<string, unknown> | null): { title: string; why: string; action: string; sources: number[] } | null {
+  const raw = reply?.suggestion && typeof reply.suggestion === "object" ? (reply.suggestion as Record<string, unknown>) : null;
+  const title = str(raw?.title);
+  const action = str(raw?.action, 600);
+  if (!title || !action) return null;
+  return { title, why: str(raw?.why), action, sources: nums(raw?.sources) };
+}
+
+function earlierLines(ctx: PersonaContext): string[] {
+  if (!ctx.earlierSuggestions.length) return [];
+  return [
+    "",
+    "Your earlier suggestions and what the person did. Never suggest one of these again, and after a Not now stop suggesting that kind of change:",
+    ...ctx.earlierSuggestions.map((s) => `- ${s.status}${s.reason ? ` (${s.reason.slice(0, 200)})` : ""}: ${s.action.slice(0, 200)}`),
+  ];
+}
+
 interface ModelPersonaSpec {
   id: string;
   name: string;
   purpose: string;
   brief: string;
   skills: PersonaSkill[];
+  schedule: PersonaSchedule;
   days: number;
   system: string;
-  /** What to reply with, as JSON. */
+  /** S27: the kind of change it may offer, within what the desk can do. */
+  suggests: string;
+  /** What to reply with, as JSON, besides the suggestion. */
   ask: string;
-  /** Write its note and post its card from the parsed reply; returns the run's one-line summary. */
-  handle(ctx: PersonaContext, entries: MemoryEntry[], reply: Record<string, unknown> | null, notePath: string): string;
+  /**
+   * Write its note and post its one card from the parsed reply; returns the run's one-line summary.
+   * `suggestion` is the change it offers, already checked; it posts that instead of its old card.
+   */
+  handle(ctx: PersonaContext, entries: MemoryEntry[], reply: Record<string, unknown> | null, notePath: string, suggestion: ReturnType<typeof parseSuggestion>): string;
 }
 
-/** A persona that reads a window of memories and makes one call on the cheap model. Off until switched on. */
+/** When the helpers learned to suggest (S27): each wakes once more at once, in its own period. */
+const SUGGESTS_SINCE = "2026-11-10T00:45:00.000Z";
+
+/** A persona that reads a window of memories and the tree, and makes one call on the cheap model. Off until switched on. */
 function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
   return {
     id: spec.id,
     name: spec.name,
     purpose: spec.purpose,
     brief: spec.brief,
-    schedule: { every: "week" },
+    schedule: spec.schedule,
     skills: spec.skills,
     defaultEnabled: false,
-    limits: { maxSteps: 6, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
+    limits: { maxSteps: 7, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
+    revisedAt: SUGGESTS_SINCE,
     async fingerprint(ctx) {
       const entries = await ctx.recentMemories({ days: spec.days, limit: RECAP_MAX_MEMORIES });
       return entries.length ? `${entries.length}:${entries[0]!.evidenceRef}` : null;
     },
     async run(ctx) {
       const entries = await ctx.recentMemories({ days: spec.days, limit: RECAP_MAX_MEMORIES });
-      const prompt = [`These are the memories the user saved in the last ${spec.days} days, newest first:`, "", ...memoryLines(entries), "", `Reply with JSON only: ${spec.ask}`].join("\n");
-      const reply = parseJsonReply(await ctx.think({ system: `You are ${spec.name}, a quiet helper that reads a person's own memory. ${spec.system} Use only what the memories say. Never invent facts, names or dates. Plain words.`, prompt }));
-      return { summary: spec.handle(ctx, entries, reply, `Personas/${spec.id}/${ctx.today}.md`) };
+      const places = await ctx.places();
+      const canSuggest = places !== null && places.lines.length > 0;
+      const prompt = [
+        `These are the memories the user saved in the last ${spec.days} days, newest first:`,
+        "",
+        ...memoryLines(entries),
+        ...(canSuggest ? ["", "The places in their memory, as the memory desk knows them:", ...places.lines] : []),
+        ...(canSuggest ? earlierLines(ctx) : []),
+        "",
+        `Reply with JSON only: {${spec.ask}${canSuggest ? `, ${SUGGESTION_ASK}` : ""}}`,
+      ].join("\n");
+      const system = [
+        `You are ${spec.name}, a quiet helper that reads a person's own memory.`,
+        spec.system,
+        ...(canSuggest ? [`You may also offer ONE change to how their memory is organised: ${spec.suggests}`, DESK_CAN, "Offer a change only when the memories clearly call for it; otherwise suggestion is null."] : []),
+        "Use only what the memories say. Never invent facts, names or dates. Plain words.",
+      ].join(" ");
+      const reply = parseJsonReply(await ctx.think({ system, prompt }));
+      const suggestion = canSuggest ? parseSuggestion(reply) : null;
+      return { summary: spec.handle(ctx, entries, reply, `Personas/${spec.id}/${ctx.today}.md`, suggestion) };
     },
   };
 }
+
+/** S27: post the helper's one suggestion with its sources and its note; the run's summary words. */
+function postSuggestionCard(ctx: PersonaContext, entries: MemoryEntry[], suggestion: NonNullable<ReturnType<typeof parseSuggestion>>, note: InboxLink): void {
+  ctx.postSuggestion({
+    title: suggestion.title,
+    ...(suggestion.why ? { body: suggestion.why } : {}),
+    action: suggestion.action,
+    links: [...sourceLinks(entries, suggestion.sources), note],
+  });
+}
+
+const suggestionNote = (suggestion: ReturnType<typeof parseSuggestion>) => (suggestion ? ["", "## Suggested", "", `- ${suggestion.action}`, ...(suggestion.why ? [`- Why: ${suggestion.why}`] : [])] : []);
 
 export const OPEN_LOOPS: PersonaDefinition = modelPersona({
   id: "open-loops",
   name: "Open loops finder",
   purpose: "Finds things you said you would do and have not closed.",
-  brief: "Reads the last 14 days, lists what still looks open in its own folder and asks you about the most important one.",
-  skills: ["read", "write-own-folder", "post-inbox", "ask"],
+  brief: "Every night it reads the last 14 days and lists what still looks open in its own folder. It suggests one change, like linking a loop to the memory that closed it, or asks you about the most important loop.",
+  skills: ["read", "write-own-folder", "post-inbox", "ask", "propose-desk-job"],
+  schedule: { every: "night" },
   days: 14,
   system: "Find things the person said they would do, decide or check that later memories do not show as done.",
-  ask: '{"loops": [{"title": "one short line", "sources": [numbers]}]} with at most 5 loops, the most important first, or an empty list.',
-  handle(ctx, entries, reply, notePath) {
+  suggests: "link a memory where they said they would do something to the later memory that shows it done, or to the place it belongs, so the loop is easy to find and close.",
+  ask: '"loops": [{"title": "one short line", "sources": [numbers]}] with at most 5 loops, the most important first, or an empty list',
+  handle(ctx, entries, reply, notePath, suggestion) {
     const loops = list(reply?.loops).map((loop) => ({ title: str(loop.title), sources: nums(loop.sources) })).filter((loop) => loop.title).slice(0, 5);
-    ctx.writeNote(`${ctx.today}.md`, personaNote("open-loops", "Open loops", ctx.today, entries.length, loops.length ? loops.map((loop) => `- ${loop.title}`) : ["- Nothing looks open."]));
+    ctx.writeNote(`${ctx.today}.md`, personaNote("open-loops", "Open loops", ctx.today, entries.length, [...(loops.length ? loops.map((loop) => `- ${loop.title}`) : ["- Nothing looks open."]), ...suggestionNote(suggestion)]));
+    if (suggestion) {
+      postSuggestionCard(ctx, entries, suggestion, { label: "All open loops", path: notePath });
+      return `Read ${entries.length} memories, found ${loops.length} open loops and suggested one change`;
+    }
     const top = loops[0];
     if (!top) return `Read ${entries.length} memories, nothing looks open`;
     ctx.postQuestion({
@@ -243,15 +317,21 @@ export const PEOPLE_FOLLOW_UPS: PersonaDefinition = modelPersona({
   id: "people-follow-ups",
   name: "People and follow-ups",
   purpose: "Who you talked about lately and what you owe them.",
-  brief: "Reads the last 14 days, keeps a list of the people you mentioned with any follow-up in its own folder, and posts the most pressing follow-up.",
-  skills: ["read", "write-own-folder", "post-inbox"],
+  brief: "Every night it reads the last 14 days and keeps a list of the people you mentioned with any follow-up in its own folder. It suggests one change, like linking a follow-up to that person's page, or posts the most pressing follow-up.",
+  skills: ["read", "write-own-folder", "post-inbox", "propose-desk-job"],
+  schedule: { every: "night" },
   days: 14,
   system: "List the people the person mentions and any follow-up they owe or expect from each.",
-  ask: '{"people": [{"name": "as written", "followUp": "one short line or empty", "sources": [numbers]}]} with at most 8 people, the most pressing follow-up first.',
-  handle(ctx, entries, reply, notePath) {
+  suggests: "link the memory with the most pressing follow-up to the page of the person it is about, when that person has a place, or give a person who keeps coming up their own place.",
+  ask: '"people": [{"name": "as written", "followUp": "one short line or empty", "sources": [numbers]}] with at most 8 people, the most pressing follow-up first',
+  handle(ctx, entries, reply, notePath, suggestion) {
     const people = list(reply?.people).map((p) => ({ name: str(p.name, 80), followUp: str(p.followUp), sources: nums(p.sources) })).filter((p) => p.name).slice(0, 8);
     ctx.writeNote(`${ctx.today}.md`, personaNote("people-follow-ups", "People and follow-ups", ctx.today, entries.length,
-      people.length ? people.map((p) => `- ${p.name}${p.followUp ? `: ${p.followUp}` : ""}`) : ["- Nobody mentioned."]));
+      [...(people.length ? people.map((p) => `- ${p.name}${p.followUp ? `: ${p.followUp}` : ""}`) : ["- Nobody mentioned."]), ...suggestionNote(suggestion)]));
+    if (suggestion) {
+      postSuggestionCard(ctx, entries, suggestion, { label: "Everyone this fortnight", path: notePath });
+      return `Read ${entries.length} memories, ${people.length} people, suggested one change`;
+    }
     const due = people.find((p) => p.followUp);
     if (!due) return `Read ${entries.length} memories, ${people.length} people, no follow-up`;
     ctx.postFinding({ title: `${due.name}: ${due.followUp}`, links: [...sourceLinks(entries, due.sources), { label: "Everyone this fortnight", path: notePath }] });
@@ -262,20 +342,20 @@ export const PEOPLE_FOLLOW_UPS: PersonaDefinition = modelPersona({
 export const TOPIC_GARDENER: PersonaDefinition = modelPersona({
   id: "topic-gardener",
   name: "Topic gardener",
-  purpose: "Spots one tidy-up in your topics and offers it as a job you can run.",
-  brief: "Reads the last 30 days and proposes one tidy-up, like joining two topics that are the same thing. It changes nothing itself: you press Run it, or Not now.",
+  purpose: "Spots one tidy-up in your topics and offers it as a change you can make.",
+  brief: "Every 3 days it reads the last 30 days and the tree and suggests one tidy-up, like moving a page under the place it belongs to or giving a topic that grew its own place. It changes nothing itself: you press Do it, Change or Not now.",
   skills: ["read", "write-own-folder", "propose-desk-job"],
+  schedule: { every: "days", days: 3 },
   days: 30,
-  system: "Look for one tidy-up of how these memories are filed: two names for the same topic, one topic that has grown into two, or a stray memory in the wrong place.",
-  ask: '{"tidy": {"request": "the job as the person would ask it, one sentence", "why": "one sentence"}} or {"tidy": null} when nothing needs tidying.',
-  handle(ctx, entries, reply) {
-    const tidy = reply?.tidy && typeof reply.tidy === "object" ? (reply.tidy as Record<string, unknown>) : null;
-    const request = str(tidy?.request, 600);
-    const why = str(tidy?.why);
-    ctx.writeNote(`${ctx.today}.md`, personaNote("topic-gardener", "Topic gardener", ctx.today, entries.length, request ? [`- Proposed: ${request}`, `- Why: ${why}`] : ["- Nothing needs tidying."]));
-    if (!request) return `Read ${entries.length} memories, nothing to tidy`;
-    ctx.proposeDeskJob({ request, why: why || "One tidy-up for your topics." });
-    return `Read ${entries.length} memories and proposed one tidy-up`;
+  system: "Look at how these memories are filed in the places below.",
+  suggests: "one tidy-up of how memories are filed: a page under the wrong place moved where it belongs, a topic that has grown into two given its own place, a place renamed to what the person calls it, or two pages about the same thing linked.",
+  ask: '"looked": "one short line on what you checked"',
+  handle(ctx, entries, reply, notePath, suggestion) {
+    ctx.writeNote(`${ctx.today}.md`, personaNote("topic-gardener", "Topic gardener", ctx.today, entries.length,
+      suggestion ? [`- Proposed: ${suggestion.action}`, `- Why: ${suggestion.why}`] : [`- Nothing needs tidying.${str(reply?.looked) ? ` ${str(reply?.looked)}` : ""}`]));
+    if (!suggestion) return `Read ${entries.length} memories, nothing to tidy`;
+    postSuggestionCard(ctx, entries, suggestion, { label: "Its notes", path: notePath });
+    return `Read ${entries.length} memories and suggested one tidy-up`;
   },
 });
 
@@ -283,14 +363,20 @@ export const IDEAS_DIGEST: PersonaDefinition = modelPersona({
   id: "ideas-digest",
   name: "Ideas digest",
   purpose: "Collects the ideas you had into one digest.",
-  brief: "Reads the last 14 days, gathers your ideas into one digest in its own folder and posts the one you came back to most.",
-  skills: ["read", "write-own-folder", "post-inbox"],
+  brief: "Once a week it reads the last 14 days and gathers your ideas into one digest in its own folder. It suggests giving an idea you keep coming back to its own place, or posts the one you came back to most.",
+  skills: ["read", "write-own-folder", "post-inbox", "propose-desk-job"],
+  schedule: { every: "week" },
   days: 14,
   system: "Collect the ideas the person had: plans, what-ifs, things to try or build. Not tasks or facts.",
-  ask: '{"ideas": [{"title": "one short line", "sources": [numbers]}]} with at most 8 ideas, the one they came back to most first, or an empty list.',
-  handle(ctx, entries, reply, notePath) {
+  suggests: "give an idea they came back to several times, which already has a page, its own place at the top of the tree, or link two memories of the same idea.",
+  ask: '"ideas": [{"title": "one short line", "sources": [numbers]}] with at most 8 ideas, the one they came back to most first, or an empty list',
+  handle(ctx, entries, reply, notePath, suggestion) {
     const ideas = list(reply?.ideas).map((idea) => ({ title: str(idea.title), sources: nums(idea.sources) })).filter((idea) => idea.title).slice(0, 8);
-    ctx.writeNote(`${ctx.today}.md`, personaNote("ideas-digest", "Ideas digest", ctx.today, entries.length, ideas.length ? ideas.map((idea) => `- ${idea.title}`) : ["- No ideas this time."]));
+    ctx.writeNote(`${ctx.today}.md`, personaNote("ideas-digest", "Ideas digest", ctx.today, entries.length, [...(ideas.length ? ideas.map((idea) => `- ${idea.title}`) : ["- No ideas this time."]), ...suggestionNote(suggestion)]));
+    if (suggestion) {
+      postSuggestionCard(ctx, entries, suggestion, { label: "The digest", path: notePath });
+      return `Read ${entries.length} memories, collected ${ideas.length} ideas and suggested one change`;
+    }
     const top = ideas[0];
     if (!top) return `Read ${entries.length} memories, no ideas`;
     ctx.postFinding({ title: `${ideas.length} ideas this fortnight. Most on your mind: ${top.title}`, links: [...sourceLinks(entries, top.sources), { label: "The digest", path: notePath }] });
@@ -299,17 +385,22 @@ export const IDEAS_DIGEST: PersonaDefinition = modelPersona({
 });
 
 const HEALTH_DAYS = 28;
+/** S27: from this many pages under no place, Health suggests filing them. */
+const HEALTH_LOOSE_PAGES = 3;
+/** The pages named in that suggestion: the rest come in a later week. */
+const HEALTH_LOOSE_NAMED = 6;
 
 /** No model: counts only. Tells you when capture has gone quiet or many memories are nearly empty. */
 export const MEMORY_HEALTH: PersonaDefinition = {
   id: "memory-health",
   name: "Health of your memory",
-  purpose: "Tells you when saving has gone quiet or memories are nearly empty.",
-  brief: "Once a week it counts what you saved in the last 4 weeks, with no AI call and no cost, writes the numbers in its own folder and posts only when something stands out.",
+  purpose: "Tells you when saving has gone quiet, memories are nearly empty or pages have no place.",
+  brief: "Once a week it counts what you saved in the last 4 weeks and the pages that are under no place, with no AI call and no cost, writes the numbers in its own folder and posts only when something stands out. It suggests filing the loose pages.",
   schedule: { every: "week" },
-  skills: ["read", "write-own-folder", "post-inbox"],
+  skills: ["read", "write-own-folder", "post-inbox", "propose-desk-job"],
   defaultEnabled: false,
-  limits: { maxSteps: 4, maxRunUsd: 0.001, maxMonthUsd: 0.001 },
+  limits: { maxSteps: 6, maxRunUsd: 0.001, maxMonthUsd: 0.001 },
+  revisedAt: SUGGESTS_SINCE,
 
   async fingerprint(ctx) {
     const entries = await ctx.recentMemories({ days: HEALTH_DAYS, limit: 100 });
@@ -324,11 +415,25 @@ export const MEMORY_HEALTH: PersonaDefinition = {
     for (const entry of entries) perWeek[week(entry)]! += 1;
     const days = new Set(entries.filter((entry) => week(entry) === 0).map((entry) => entry.capturedAt.slice(0, 10))).size;
     const thin = entries.filter((entry) => memoryWords(entry.content).split(" ").filter(Boolean).length < 5).length;
+    const places = await ctx.places();
+    const loose = places?.unplaced ?? 0;
     ctx.writeNote(`${ctx.today}.md`, personaNote("memory-health", "Health of your memory", ctx.today, entries.length, [
       `- Saved this week: ${perWeek[0]}, the three weeks before: ${perWeek[1]}, ${perWeek[2]}, ${perWeek[3]}`,
       `- Days with something saved this week: ${days} of 7`,
       `- Nearly empty memories, under 5 words: ${thin} of ${entries.length}`,
+      ...(places ? [`- Pages under no place in the tree: ${loose}`] : []),
     ]));
+    const numbers = { label: "The numbers", path: `Personas/memory-health/${ctx.today}.md` };
+    // S27: loose pages are one change the desk can make, so they come first, as a suggestion.
+    if (loose >= HEALTH_LOOSE_PAGES && places && places.loose.length) {
+      ctx.postSuggestion({
+        title: loose > HEALTH_LOOSE_NAMED ? `${loose} pages in your memory are not under any place yet. Here are ${HEALTH_LOOSE_NAMED} to file.` : `${loose} pages in your memory are not under any place yet.`,
+        body: "A page with no place is harder to find in the tree and in answers.",
+        action: `Move these pages, which are under no place in the tree yet, each under the place it belongs to: ${places.loose.slice(0, HEALTH_LOOSE_NAMED).map((title) => `"${title.slice(0, 60)}"`).join(", ")}.`,
+        links: [numbers],
+      });
+      return { summary: `Counted ${entries.length} memories and ${loose} loose pages, suggested filing them` };
+    }
     const before = (perWeek[1]! + perWeek[2]! + perWeek[3]!) / 3;
     const quiet = before >= 3 && perWeek[0]! < before / 2;
     const empty = entries.length >= 5 && thin / entries.length > 0.3;
@@ -337,7 +442,7 @@ export const MEMORY_HEALTH: PersonaDefinition = {
       title: quiet
         ? `You saved ${perWeek[0]} memories this week, against about ${Math.round(before)} a week before.`
         : `${thin} of your last ${entries.length} memories are nearly empty.`,
-      links: [{ label: "The numbers", path: `Personas/memory-health/${ctx.today}.md` }],
+      links: [numbers],
     });
     return { summary: `Counted ${entries.length} memories and posted one finding` };
   },

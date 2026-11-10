@@ -1,4 +1,4 @@
-import type { Hit, MemoryEntry, MemoryEntryQuery, Note, PersonaNotesInput } from "zenod";
+import type { Hit, MemoryEntry, MemoryEntryQuery, MemoryTreeOutline, MemoryTreeOutlineNode, Note, PersonaNotesInput } from "zenod";
 import type { InboxItem, InboxLink, InboxOption, InboxStore } from "./inboxStore.js";
 import type { PersonaRun, PersonaRunEnd, PersonaStore, PersonaTrigger } from "./personaStore.js";
 import { zenodLimits } from "./limits.js";
@@ -113,12 +113,58 @@ export interface PersonaReadContext {
    * first. Every model call also gets it in its system words, so no persona can miss it.
    */
   readonly feedback: ReadonlyArray<{ about: string; text: string; at: string }>;
+  /**
+   * S27: its own latest suggestions and what became of each (waiting, done, or Not now with the
+   * reason), newest first, so it neither repeats one nor suggests what the user turned down.
+   */
+  readonly earlierSuggestions: ReadonlyArray<PersonaEarlierSuggestion>;
   /** The memories captured in the last `days` days, newest first. One step. */
   recentMemories(options: { days: number; limit?: number }): Promise<MemoryEntry[]>;
   /** Search the memory (no model). One step. */
   search(query: string): Promise<Hit[]>;
   /** Read one note. One step. */
   read(path: string): Promise<Note>;
+  /** S27: the places in the memory tree, as names a desk job can use; null without a tree. One step. */
+  places(): Promise<PersonaPlaces | null>;
+}
+
+/** S27: one of the helper's earlier suggestions and what the user did with it. */
+export interface PersonaEarlierSuggestion {
+  title: string;
+  action: string;
+  status: "waiting" | "done" | "not now";
+  /** The Not now reason, when one was given. */
+  reason?: string;
+}
+
+/** S27: the memory tree as a helper sees it: one line per place, indented by depth. */
+export interface PersonaPlaces {
+  lines: string[];
+  /** Pages of the tree that are under no place. */
+  unplaced: number;
+  /** The first of them, by title. */
+  loose: string[];
+}
+
+export const PERSONA_PLACES_MAX_LINES = 120;
+const PLACES_MAX_CHARS = 6_000;
+
+/** The tree outline as short lines: `- House: the flat and its repairs` then its pages, indented. */
+export function placesFromOutline(outline: MemoryTreeOutline): PersonaPlaces {
+  const lines: string[] = [];
+  let used = 0;
+  const walk = (node: MemoryTreeOutlineNode, depth: number) => {
+    if (lines.length >= PERSONA_PLACES_MAX_LINES) return;
+    const summary = node.summary ? `: ${node.summary.replace(/\s+/g, " ").trim().slice(0, 100)}` : "";
+    const line = `${"  ".repeat(depth)}- ${node.title.replace(/\s+/g, " ").trim().slice(0, 80)}${summary}`;
+    if (used + line.length > PLACES_MAX_CHARS) return;
+    used += line.length;
+    lines.push(line);
+    // Deep pages add little a desk job can use: two levels under each place.
+    if (depth < 2) for (const child of node.children) walk(child, depth + 1);
+  };
+  for (const group of outline.groups) for (const root of group.children) walk(root, 0);
+  return { lines, unplaced: outline.unplaced, loose: (outline.unplacedPages ?? []).map((page) => page.title) };
 }
 
 export interface PersonaContext extends PersonaReadContext {
@@ -147,6 +193,8 @@ export interface PersonaMemory {
   searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
   search(query: string): Promise<Hit[]>;
   get(path: string): Promise<Note>;
+  /** The tree (S27): absent or null when the memory has none yet. */
+  memoryTreeOutline?(options?: { listUnplaced?: boolean }): Promise<MemoryTreeOutline | null>;
 }
 
 /** One model call and what it cost. */
@@ -179,6 +227,9 @@ export interface PersonaRunnerDeps {
 export const PERSONA_TOTAL_MONTH_USD = zenodLimits().personas.monthUsd;
 export const PERSONA_MAX_NOTES_PER_RUN = 5;
 export const PERSONA_MAX_POSTS_PER_RUN = 3;
+/** S27: a helper offers at most one change a run. */
+export const PERSONA_MAX_SUGGESTIONS_PER_RUN = 1;
+const EARLIER_SUGGESTIONS = 8;
 const MAX_NOTE_CHARS = 20_000;
 
 export class PersonaCapError extends Error {
@@ -305,9 +356,22 @@ export async function runPersona(
         .map((entry) => `- On "${entry.about.slice(0, 200)}": ${entry.text}`)
         .join("\n")}`
     : "";
+  const earlierSuggestions: PersonaEarlierSuggestion[] = deps.inbox.list(500)
+    .filter((item) => item.kind === "suggestion" && item.from === persona.name && !item.example)
+    .slice(0, EARLIER_SUGGESTIONS)
+    .map((item) => {
+      const reason = item.status === "declined" ? item.replies.find((reply) => reply.kind === "notnow")?.text : undefined;
+      return {
+        title: item.title,
+        action: item.done?.action ?? item.action ?? "",
+        status: item.status === "accepted" ? "done" : item.status === "declined" ? "not now" : "waiting",
+        ...(reason ? { reason } : {}),
+      };
+    });
   const read: PersonaReadContext = {
     today: isoDay(started),
     feedback,
+    earlierSuggestions,
     // Spread over the days, newest first within each, so a busy day cannot crowd out the rest of the week.
     async recentMemories({ days, limit = 40 }) {
       skilled("read");
@@ -337,6 +401,12 @@ export async function runPersona(
       step();
       return deps.memory.get(path);
     },
+    async places() {
+      skilled("read");
+      step();
+      const outline = deps.memory.memoryTreeOutline ? await deps.memory.memoryTreeOutline({ listUnplaced: true }) : null;
+      return outline ? placesFromOutline(outline) : null;
+    },
   };
 
   const notes: Array<{ name: string; content: string }> = [];
@@ -346,6 +416,7 @@ export async function runPersona(
     tally.inboxItemIds.push(item.id);
     return item;
   };
+  let suggestions = 0;
   const beforePost = () => {
     if (tally.inboxItemIds.length >= PERSONA_MAX_POSTS_PER_RUN) throw new PersonaCapError("posts", `Stopped at ${PERSONA_MAX_POSTS_PER_RUN} inbox posts`);
     step();
@@ -387,7 +458,13 @@ export async function runPersona(
     postSuggestion(input) {
       // S26: one change the helper proposes; the user does it (one undoable desk job), changes it first or says not now.
       skilled("propose-desk-job");
+      if (suggestions >= PERSONA_MAX_SUGGESTIONS_PER_RUN) throw new PersonaCapError("posts", "Stopped at one suggestion a run");
+      // S27: the same change still waiting on a card is not posted twice.
+      const same = deps.inbox.list(500).find((item) => item.kind === "suggestion" && item.from === persona.name && !item.example
+        && item.status === "open" && sameWords(item.action ?? "", input.action));
+      if (same) return same;
       beforePost();
+      suggestions += 1;
       return posted(deps.inbox.post({ kind: "suggestion", from: persona.name, sourceKey: sourceKey(), ...input }));
     },
     proposeDeskJob({ request, why }) {
@@ -430,6 +507,8 @@ export async function runPersona(
     return end("failed", `Failed: ${(error as Error).message.slice(0, 200)}`);
   }
 }
+
+const sameWords = (a: string, b: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === b.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 async function commitNotes(persona: PersonaDefinition, deps: PersonaRunnerDeps, notes: Array<{ name: string; content: string }>, at: Date): Promise<string | null> {
   if (notes.length === 0) return null;

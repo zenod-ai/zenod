@@ -37,6 +37,9 @@ describe("memory tree outline (E9-2e)", () => {
   it("returns both groups, roots with page counts and the newest capture, deeper levels nested", async () => {
     const outline = (await memoryTreeOutline(await vault(FILES), { urlFor: (path) => `https://github.com/acme/vault/blob/main/${path}` }))!;
     expect(outline).toMatchObject({ roots: 3, placed: 8, unplaced: 1 });
+    expect(outline.unplacedPages).toBeUndefined();
+    // EPIC-14 S27: the loose page by title, only when asked (the Health helper).
+    expect((await memoryTreeOutline(await vault(FILES), { listUnplaced: true }))!.unplacedPages).toEqual([{ title: "Legacy page", path: "Notes/Legacy page.md" }]);
     const [working, longTerm] = outline.groups;
     expect(working).toMatchObject({ id: "working", kind: "group", title: "Working memory", pages: 5, path: null, url: null });
     expect(working!.latest).toEqual({ date: "2026-11-01", title: "Vigo yards", path: "Notes/Vigo yards.md" });
