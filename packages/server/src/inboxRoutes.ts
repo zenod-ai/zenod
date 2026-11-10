@@ -64,6 +64,23 @@ function failure(c: Context, error: unknown) {
   return c.json({ error: "inbox unavailable" }, 503);
 }
 
+/**
+ * EPIC-14 S30: one content-free log line per tap on a real card, so a week of helpers can be judged
+ * by counts (which helper's cards were done, changed, put away, answered or undone). It carries the
+ * helper's name as a slug, the card's kind and the button, never the card's words. Examples are not
+ * counted. An undone desk job names the helper whose suggestion started it, when one did.
+ */
+export function inboxTapLine(tenantId: string | undefined, item: InboxItem, action: string, about?: InboxItem | null): string {
+  const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
+  const helper = about && about.from !== DESK_FROM ? about.from : item.from;
+  return `[inbox-tap] tenant=${tenantId ?? "unknown"} helper=${slug(helper ?? DESK_FROM)} kind=${item.kind} action=${action} item=${item.id}`;
+}
+
+function logTap(runtime: InboxRuntime, item: InboxItem | null | undefined, action: string, about?: InboxItem | null): void {
+  if (!item || item.example) return;
+  console.log(inboxTapLine(runtime.tenantId, item, action, about));
+}
+
 export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, resolve: InboxResolve<R>, options: { transcribe?: InboxTranscribe<R> } = {}): void {
   app.get("/api/console/inbox", async (c) => {
     const found = await resolve(c);
@@ -108,6 +125,7 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
       if (!option) throw new InboxError("invalid", "not one of the choices");
       let savedJobId: string | null = null;
       // The memory desk's own questions (a plan card, "run it?") start or cancel a job instead.
+      logTap(found.runtime, item, "answer");
       if (!item.example && inbox.answerByDesk(item, option.id)) {
         return c.json({ item: view(inbox.answer(item.id, option.id, null)), needsYou: inbox.needsYouCount() });
       }
@@ -145,6 +163,7 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
       if (!item) throw new InboxError("not_found", "no such inbox item");
       if (takesFeedback(item)) {
         inbox.addReply(item.id, { kind: "feedback", text: words, readAt: null });
+        logTap(found.runtime, item, "feedback");
         return done(item.id);
       }
       const toDesk = item.kind === "job" || item.from === DESK_FROM;
@@ -159,6 +178,7 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
           ).id;
         }
         inbox.answerInWords(item.id, words, savedJobId);
+        logTap(found.runtime, item, "answer-words");
         return done(item.id);
       }
       // To the desk. Examples start nothing: the words are kept on the card only.
@@ -177,6 +197,7 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
       inbox.linkFollowUp(next.id, item);
       if (item.kind === "question" && inbox.answerByDesk(item, "no")) inbox.answer(item.id, "no", null);
       inbox.addReply(item.id, { kind: "followup", text: words, followUpItemId: next.id });
+      logTap(found.runtime, item, "followup");
       return c.json({ item: view(inbox.get(item.id)!), followUp: view(inbox.get(next.id)!), needsYou: inbox.needsYouCount() });
     } catch (error) {
       if (error instanceof DeskLimitError) return c.json({ error: "desk_limit", message: error.message }, 429);
@@ -209,6 +230,7 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
       if (!queue.get || !queue.recent) return c.json({ error: "desk_unavailable", message: "The memory desk is not available here." }, 409);
       const job = startDeskJob(inbox, queue as DeskQueue, `${action}\n\nSuggested by ${item.from}: "${item.title}"`.slice(0, DESK_REQUEST_MAX_CHARS));
       const linked = inbox.linkFollowUp(job.id, item);
+      logTap(found.runtime, item, edited ? "change" : "do");
       return c.json({ item: view(inbox.acceptSuggestion(item.id, action, job.id)), followUp: view(linked), needsYou: inbox.needsYouCount() });
     } catch (error) {
       if (error instanceof DeskLimitError) return c.json({ error: "desk_limit", message: error.message }, 429);
@@ -227,7 +249,9 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
     try {
       const item = inbox.get(c.req.param("id"));
       if (!item || item.kind !== "suggestion") throw new InboxError("not_found", "no such suggestion in the inbox");
-      return c.json({ item: view(inbox.declineSuggestion(item.id, reason)), needsYou: inbox.needsYouCount() });
+      const declined = inbox.declineSuggestion(item.id, reason);
+      logTap(found.runtime, item, reason ? "not-now-reason" : "not-now");
+      return c.json({ item: view(declined), needsYou: inbox.needsYouCount() });
     } catch (error) {
       return failure(c, error);
     }
@@ -241,7 +265,9 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
     try {
       const item = inbox.get(c.req.param("id"));
       if (!item || item.kind !== "suggestion") throw new InboxError("not_found", "no such suggestion in the inbox");
-      return c.json({ item: view(inbox.reopenSuggestion(item.id)), needsYou: inbox.needsYouCount() });
+      const reopened = inbox.reopenSuggestion(item.id);
+      logTap(found.runtime, item, "bring-back");
+      return c.json({ item: view(reopened), needsYou: inbox.needsYouCount() });
     } catch (error) {
       return failure(c, error);
     }
@@ -283,6 +309,7 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
     try {
       const words = (typed ? `${typed}\n\n${heard}` : heard).slice(0, INBOX_VOICE_REPLY_MAX_CHARS);
       inbox.addReply(item.id, { kind: "feedback", text: words, readAt: null, voice: { seconds: duration } });
+      logTap(found.runtime, item, "voice-feedback");
       return c.json({ item: view(inbox.get(item.id)!), needsYou: inbox.needsYouCount() });
     } catch (error) {
       return failure(c, error);
@@ -295,7 +322,9 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
     if ("response" in found) return found.response;
     const inbox = inboxFor(found.runtime);
     try {
-      return c.json({ item: view(inbox.dismiss(c.req.param("id"))), needsYou: inbox.needsYouCount() });
+      const dismissed = inbox.dismiss(c.req.param("id"));
+      logTap(found.runtime, dismissed, "dismiss");
+      return c.json({ item: view(dismissed), needsYou: inbox.needsYouCount() });
     } catch (error) {
       return failure(c, error);
     }
@@ -307,7 +336,9 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
     if ("response" in found) return found.response;
     const inbox = inboxFor(found.runtime);
     try {
-      return c.json({ item: view(await inbox.undoJob(c.req.param("id"))), needsYou: inbox.needsYouCount() });
+      const undone = await inbox.undoJob(c.req.param("id"));
+      logTap(found.runtime, undone, "undo", undone.followUpOf ? inbox.get(undone.followUpOf.id) : null);
+      return c.json({ item: view(undone), needsYou: inbox.needsYouCount() });
     } catch (error) {
       return failure(c, error);
     }

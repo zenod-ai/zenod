@@ -77,10 +77,10 @@ import { IngestStore } from "./ingestStore.js";
 import { UsageStore, estimateCostUsd } from "./usageStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
-import { duePersonas, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
+import { duePersonas, nextPersonaWakeAt, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import { putAwayProjectSuggestions } from "./helperScope.js";
 import { correctReading, QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
-import { readAs, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
+import { readAs, shownReadings, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { NotificationStore } from "./notificationStore.js";
@@ -1005,6 +1005,7 @@ export class Runtime {
 
   private personaWake: Promise<PersonaRun[]> | null = null;
   private helperScopeSettled = false;
+  private helperRosterDay: string | null = null;
 
   /**
    * EPIC-14 S4: wake the personas that are due (switched on, off-peak window, period not yet run),
@@ -1021,6 +1022,24 @@ export class Runtime {
         if (putAway) console.log(`[persona] tenant=${this.tenantId} put away ${putAway} earlier suggestions about project work`);
       } catch (error) {
         console.warn(`[persona] tenant=${this.tenantId} could not put away project suggestions: ${(error as Error).message}`);
+      }
+    }
+    // EPIC-14 S30: once a day, which helpers are switched on, their cadence and next wake (ids and
+    // times only), so the week's tally can check that each one runs on its schedule.
+    const day = now.toISOString().slice(0, 10);
+    if (this.helperRosterDay !== day) {
+      this.helperRosterDay = day;
+      try {
+        const store = personasFor(this);
+        const on = personas.filter((persona) => personaEnabled(store, persona)).map((persona) => {
+          const cadence = personaSchedule(store, persona);
+          const next = nextPersonaWakeAt(cadence, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, cadence)));
+          const every = cadence.every === "days" ? `days${cadence.days}` : cadence.every;
+          return `${persona.id}:${every}:${next.toISOString().slice(0, 16)}Z`;
+        });
+        console.log(`[persona] tenant=${this.tenantId} switched-on=${on.join(",") || "none"}`);
+      } catch (error) {
+        console.warn(`[persona] tenant=${this.tenantId} roster unavailable: ${(error as Error).message}`);
       }
     }
     const due = duePersonas(personas, personasFor(this), now);
@@ -1053,7 +1072,16 @@ export class Runtime {
       aiAllowanceBlock: () => this.featureBlock("personas"),
       totalMonthUsd: zenodLimits().personas.monthUsd,
     }, trigger);
-    if (run) console.log(`[persona] tenant=${this.tenantId} ${persona.id} ${run.trigger} ${run.status}: steps=${run.steps} calls=${run.modelCalls} tokens=${run.inputTokens}/${run.outputTokens} usd=${run.costUsd.toFixed(5)}`);
+    if (run) {
+      // EPIC-14 S30: what the run posted, by kind (counts only), for the week's helper tally.
+      const inbox = inboxFor(this);
+      const posted = { suggestion: 0, finding: 0, question: 0 };
+      for (const id of run.inboxItemIds) {
+        const kind = inbox.get(id)?.kind;
+        if (kind === "suggestion" || kind === "finding" || kind === "question") posted[kind] += 1;
+      }
+      console.log(`[persona] tenant=${this.tenantId} ${persona.id} ${run.trigger} ${run.status}: steps=${run.steps} calls=${run.modelCalls} tokens=${run.inputTokens}/${run.outputTokens} usd=${run.costUsd.toFixed(5)} suggestions=${posted.suggestion} findings=${posted.finding} questions=${posted.question}`);
+    }
     return run;
   }
 
@@ -1108,7 +1136,11 @@ export class Runtime {
         const state = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir)).read();
         this.readAsCache = { at: now, index: { places: view.places, corrections: state.corrections } };
       }
-      return readAs(message, this.readAsCache.index);
+      const readings = readAs(message, this.readAsCache.index);
+      // EPIC-14 S30: a "Read as" line was shown (counts only, never the words), for the week's tally.
+      const shown = shownReadings(readings).length;
+      if (shown) console.log(`[read-as] tenant=${this.tenantId} shown=${shown}`);
+      return readings;
     } catch (error) {
       console.warn(`[quick-index] read-as unavailable: ${error instanceof Error ? error.message.slice(0, 200) : "error"}`);
       return [];
@@ -1130,6 +1162,8 @@ export class Runtime {
     store.write(state);
     const fresh = await this.quickIndex(now);
     this.readAsCache = fresh ? { at: now, index: { places: fresh.places, corrections: state.corrections } } : null;
+    // EPIC-14 S30: a "Read as" was corrected (to a place, or to none), counts only.
+    console.log(`[read-as] tenant=${this.tenantId} corrected to=${path === null ? "none" : "place"}`);
     return true;
   }
 
