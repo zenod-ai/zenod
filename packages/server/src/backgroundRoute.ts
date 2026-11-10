@@ -149,3 +149,100 @@ export function startBackgroundBalanceMonitor(route: BackgroundRoute | null): vo
 export function backgroundHealth(): BackgroundHealth {
   return processMonitor ? processMonitor.status() : { provider: "off", state: "off" };
 }
+
+/**
+ * EPIC-26 S8: what is left on the platform OpenRouter key (ZENOD_PLATFORM_OPENROUTER_KEY), so the health page
+ * can say how many days of chat and voice credit remain at the current daily spend. Read with the key itself
+ * (GET /api/v1/key): its own limit and what it spent today, this week and this month. The account's whole
+ * balance needs a management key, which deliberately stays off the servers; a key with no limit reads
+ * "unlimited" and the health page then watches for 402 refusals instead.
+ */
+export interface OpenRouterKeyHealth {
+  /** ok: above the alert line · low: at or under it · empty: no limit left · unlimited: the key has no limit · unknown: not read yet or unreadable · off: no key. */
+  state: "ok" | "low" | "empty" | "unlimited" | "unknown" | "off";
+  limitUsd?: number | null;
+  remainingUsd?: number | null;
+  usageDailyUsd?: number | null;
+  usageWeeklyUsd?: number | null;
+  usageMonthlyUsd?: number | null;
+  checkedAt?: string | null;
+}
+
+export const OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key";
+
+const num = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+export type OpenRouterKeyRead = Required<Omit<OpenRouterKeyHealth, "state" | "checkedAt">>;
+
+export async function readOpenRouterKey(apiKey: string, fetchImpl: typeof globalThis.fetch = globalThis.fetch): Promise<OpenRouterKeyRead> {
+  const response = await fetchImpl(OPENROUTER_KEY_URL, {
+    headers: { authorization: `Bearer ${apiKey}`, accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`openrouter key http ${response.status}`);
+  const body = await response.json() as { data?: Record<string, unknown> };
+  const data = body.data ?? {};
+  return {
+    limitUsd: num(data.limit),
+    remainingUsd: num(data.limit_remaining),
+    usageDailyUsd: num(data.usage_daily),
+    usageWeeklyUsd: num(data.usage_weekly),
+    usageMonthlyUsd: num(data.usage_monthly),
+  };
+}
+
+export class OpenRouterKeyMonitor {
+  private health: OpenRouterKeyHealth = { state: "unknown", checkedAt: null };
+  private timer: NodeJS.Timeout | null = null;
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly options: { fetch?: typeof globalThis.fetch; intervalMs?: number; now?: () => number; lowUsd?: number } = {},
+  ) {}
+
+  status(): OpenRouterKeyHealth {
+    return { ...this.health };
+  }
+
+  async check(): Promise<OpenRouterKeyHealth> {
+    const checkedAt = new Date((this.options.now ?? Date.now)()).toISOString();
+    try {
+      const read = await readOpenRouterKey(this.apiKey, this.options.fetch);
+      const low = this.options.lowUsd ?? 5;
+      const state: OpenRouterKeyHealth["state"] = read.limitUsd === null || read.remainingUsd === null ? "unlimited"
+        : read.remainingUsd <= 0 ? "empty"
+        : read.remainingUsd <= low ? "low" : "ok";
+      this.health = { state, ...read, checkedAt };
+    } catch {
+      this.health = { state: "unknown", checkedAt };
+    }
+    return this.status();
+  }
+
+  start(): void {
+    if (this.timer) return;
+    void this.check();
+    this.timer = setInterval(() => void this.check(), this.options.intervalMs ?? 15 * 60_000);
+    this.timer.unref?.();
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+}
+
+let openRouterMonitor: OpenRouterKeyMonitor | null = null;
+
+/** Start the one process-wide OpenRouter key monitor (idempotent); nothing without the platform key. */
+export function startOpenRouterKeyMonitor(apiKey: string | undefined): void {
+  const key = apiKey?.trim();
+  if (!key || openRouterMonitor) return;
+  openRouterMonitor = new OpenRouterKeyMonitor(key);
+  openRouterMonitor.start();
+}
+
+/** The platform OpenRouter key's credit for /api/health: amounts only, never the key. */
+export function openRouterKeyHealth(): OpenRouterKeyHealth {
+  return openRouterMonitor ? openRouterMonitor.status() : { state: "off" };
+}

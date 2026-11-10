@@ -66,6 +66,7 @@ import {
 } from "./zenodPhylax.js";
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
+import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
@@ -73,7 +74,7 @@ import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
 import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
 import { subscribersEnabled } from "./subscribers.js";
-import { backgroundHealth, backgroundRouteFromEnv, startBackgroundBalanceMonitor, type BackgroundRoute } from "./backgroundRoute.js";
+import { backgroundHealth, backgroundRouteFromEnv, openRouterKeyHealth, startBackgroundBalanceMonitor, startOpenRouterKeyMonitor, type BackgroundRoute } from "./backgroundRoute.js";
 import {
   ZENOD_PUBLISHED_SKILL,
   ZENOD_SKILL_BUNDLE_PATH,
@@ -131,6 +132,8 @@ export class ZenodRuntimePool {
   /** Resolve the background route now, starting its balance monitor when the key exists. */
   startBackgroundRoute(): void {
     void this.backgroundRoute;
+    // EPIC-26 S8: the platform OpenRouter key's credit, next to DeepSeek's balance on /api/health.
+    startOpenRouterKeyMonitor(this.env.ZENOD_PLATFORM_OPENROUTER_KEY);
   }
 
   /** EPIC-14 S10 round 4: background jobs on DeepSeek once the host has its key; starts the balance monitor /api/health reads. */
@@ -1158,7 +1161,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     );
   }
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth() }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth(), credit: { openrouter: openRouterKeyHealth() } }),
   );
   if (
     agent.name === "zenod" &&
@@ -1351,6 +1354,18 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     });
     testerFlow.start();
     mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
+    // EPIC-26 S7: the funnel as counts only, for zenod-social and the console.
+    const flow = testerFlow;
+    const comped = compedAccountIdsFromEnv(env);
+    const counts = new PublicCounts(storage.dataDir, {
+      applications: () => readApplications(storage.dataDir),
+      testers: () => flow.snapshot().testers,
+      accounts: () => customer.accounts.list(),
+      comped,
+      savesSince: (tenantId, sinceMs) => tenantSavesSince(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
+    });
+    mountPublicCounts(app, counts);
+    counts.start();
   }
   // EPIC-24 M2: the cloud app reports its own errors (class, route, status only) for the health page.
   if (agent.name === "zenod") mountClientErrorReports(app, { clientAddress });
