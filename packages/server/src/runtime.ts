@@ -84,6 +84,7 @@ import { readAs, shownReadings, type ReadAs, type ReadAsIndex } from "./quickInd
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { switchOnTeamAskForConnected, teamAskFor, teamAskSubscription } from "./teamAsk.js";
+import { switchOnClarifierForOwner } from "./clarifier.js";
 import { NotificationStore } from "./notificationStore.js";
 import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
@@ -1030,6 +1031,12 @@ export class Runtime {
         if (switched.length) console.log(`[persona] tenant=${this.tenantId} asking the team switched on for ${switched.join(",")}`);
       } catch (error) {
         console.warn(`[persona] tenant=${this.tenantId} could not switch on asking the team: ${(error as Error).message}`);
+      }
+      // EPIC-14 S37: the Clarifier is off for everyone (testers start with helpers off, E23-A2) and on, once, for the account that owns the team.
+      try {
+        if (switchOnClarifierForOwner(personasFor(this), this.subscribers)) console.log(`[persona] tenant=${this.tenantId} clarifier switched on`);
+      } catch (error) {
+        console.warn(`[persona] tenant=${this.tenantId} could not switch on the clarifier: ${(error as Error).message}`);
       }
     }
     // EPIC-14 S30: once a day, which helpers are switched on, their cadence and next wake (ids and

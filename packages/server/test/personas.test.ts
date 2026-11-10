@@ -446,7 +446,7 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
         ["weekly-recap", false, null], ["open-loops", false, null], ["people-follow-ups", false, null],
-        ["topic-gardener", false, null], ["ideas-digest", false, null], ["memory-health", false, null],
+        ["topic-gardener", false, null], ["ideas-digest", false, null], ["memory-health", false, null], ["clarifier", false, null],
       ]);
       // E23-A2: a new account starts with every helper off; the user switches one on.
       const on = await (await app.request("/api/console/personas/weekly-recap", { method: "POST", body: JSON.stringify({ enabled: true }), headers: { "content-type": "application/json" } })).json() as { personas: Array<{ enabled: boolean }> };
@@ -498,8 +498,8 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     entry(16, "2026-11-06", "Only one this week"),
   ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 
-  it("lists six personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
-    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Health of your memory"]);
+  it("lists seven personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
+    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Health of your memory", "Clarifier"]);
     expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual([]);
     for (const persona of BUILT_IN_PERSONAS) {
       expect(persona.purpose.length).toBeGreaterThan(10);
@@ -513,7 +513,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     store.setEnabled("weekly-recap", true);
     store.setEnabled("ideas-digest", true);
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap", "ideas-digest"]);
-    // All six together stay within the $1 for personas.
+    // All of them together stay within the $1 for personas.
     expect(BUILT_IN_PERSONAS.reduce((sum, p) => sum + p.limits.maxMonthUsd, 0)).toBeLessThanOrEqual(1);
   });
 
