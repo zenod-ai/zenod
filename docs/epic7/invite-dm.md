@@ -8,24 +8,20 @@ Fill in per person: `{NAME}` (Reddit handle or first name), `{CODE}` (their own 
 
 ## The first invite: someone Jordi knows, by WhatsApp or email (EPIC-26 T1)
 
-Jordi's voice note of 2026-11-10 (Zenod Log ^e-ecf0b8): the invite says plainly what a tester gets, three things, then what happens next. Fill in `{NAME}` and `{CODE}`; Jordi sends it himself, agents never do. About 190 words, one message.
+Round 2 (Jordi, 2026-11-10: "the invite should be at the end, you make a click and you go through the funnel"): one line of what Zenod is, the three things, and one link with the code inside. The link signs them in with Google or GitHub and opens Stripe Checkout with the code already applied (€0, no card), then a "You're in" page with the two next steps. Fill in `{NAME}` and `{CODE}`; Jordi sends it himself, agents never do. About 80 words.
 
-> Hi {NAME}, I've been building something called Zenod, a memory you talk to, and I'd love you to be one of the first people to try it.
+> Hi {NAME}, I'm building Zenod, a memory you talk to, and I'd love you to be one of the first to try it. You get three things:
 >
-> You get three things:
-> 1. A WhatsApp number for your voice notes. Talk to it like you'd leave yourself a note. It writes down every word and files it.
-> 2. Your memory stays in your own account. Everything you send is written word for word into plain files in your own Google Drive or GitHub.
-> 3. A knowledge graph of your notes that Claude, ChatGPT, Cursor or any AI tool with MCP can read and add to.
+> 1. A WhatsApp number for your voice notes.
+> 2. Your memory, word for word, in your own Google Drive or GitHub.
+> 3. A knowledge graph of your notes that any AI tool with MCP can read and write.
 >
-> It's free while you test, and no card is needed. What happens next:
-> 1. Sign in at https://cloud.zenod.dev with Google, choose Hosted, and at checkout click "Add promotion code" and enter {CODE}. The total is €0.
-> 2. Pick Google Drive or GitHub for your notes. Then in Settings › WhatsApp & Telegram type your number and send the code it shows to the Zenod number on WhatsApp. From then on, just talk to it.
->
-> More on what you get: https://zenod.dev/testers. If anything breaks or feels odd, tell me, even one line helps. The code is only for you and works for two weeks.
+> It's free while you test, no card needed. Start here, your code is already in the link:
+> https://cloud.zenod.dev/join?code={CODE}
 
 Email subject, if he sends it by email: "Want to try Zenod before anyone else?"
 
-Every claim holds on production today: the WhatsApp scene, the log in your own Drive or GitHub and the graph view are the real screens on zenod.dev/testers (PR #1581); MCP read and write tools are listed on zenod.dev/connect; €0 checkout with no card and the monthly extension are proven below.
+Every claim holds on production today: the one link is live (EPIC-26 T1 round 2); the WhatsApp scene, the log in your own Drive or GitHub and the graph view are the real screens on zenod.dev/testers (PR #1581); MCP read and write tools are listed on zenod.dev/connect; €0 checkout with no card and the monthly extension are proven below.
 
 ## The Reddit DM
 
@@ -33,7 +29,7 @@ Every claim holds on production today: the WhatsApp scene, the log in your own D
 >
 > You get three things: a WhatsApp number you send voice notes to; a word-for-word copy of everything you send, in your own Google Drive or GitHub; and a knowledge graph of your notes that Claude, ChatGPT, Cursor or any AI tool with MCP can read and add to.
 >
-> It's yours free while you test. Sign up at https://cloud.zenod.dev with Google, hit Subscribe, and at checkout click "Add promotion code" and put in {CODE}. The total goes to €0. You don't need to add a card or any payment details, and you won't be charged.
+> It's yours free while you test. Start here, your code is already in the link: https://cloud.zenod.dev/join?code={CODE}. Sign in with Google or GitHub and checkout opens with the code applied, so the total is €0. You don't need to add a card or any payment details, and you won't be charged.
 >
 > The code gives you a month free, and I'll keep extending it month by month while you're using it and telling me how it goes. I'm never going to charge you for this.
 >
