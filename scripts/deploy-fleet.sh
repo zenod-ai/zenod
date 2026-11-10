@@ -83,9 +83,9 @@ set -eEuo pipefail
 # actually running. An app that already has the right image but still carries the
 # override is also fixed (re-deployed), not skipped.
 #
-# Downtime: the script does not manage rollout ordering. Zenod production uses a
-# single SQLite-backed /data volume and Swarm stop-first; expect a brief restart blip
-# (see docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md). The image has no HEALTHCHECK.
+# Downtime: the script does not manage rollout ordering. Since EPIC-24 M6 zenod-mt rolls
+# Swarm start-first behind a healthcheck (the image's HEALTHCHECK and the Dokploy one), so
+# a roll serves without a gap; see "Zero-downtime rolls" in docs/DEPLOYMENTS.md.
 
 IMAGE="${IMAGE:-}"
 DOKPLOY_API_BASE="${DOKPLOY_API_BASE:-}"
