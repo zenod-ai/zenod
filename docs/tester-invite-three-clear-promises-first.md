@@ -62,7 +62,7 @@ Steps: each is independently testable and closes only with evidence.
 | E26-S4 | Ticket worker | run_8fe0bb21-396a-490e-a0fa-6a588368bc38 — claimed 2026-11-10T18:08Z, lease until 2026-11-10T20:08Z | Renew the Google Drive sign-in proof before it expires on 28 Nov (new checkouts close then), or raise the one ask to Jordi with the exact steps | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
 | E26-S5 | Ticket worker | unassigned | Tester month end without hands: the free month extends or ends by itself under a rule; the alert only for exceptions | ready | E26-S2 | none | main | none | 2026-11-10 | after E26-S2 |
 | E26-S6 | Ticket worker | unassigned | From tester to paying: the end-of-test offer (what the tester sees, one click to the €9 Hosted checkout) and one live €9 journey recorded (with ZAL-A5) | draft | E26-S5 | none | main | none | 2026-11-10 | after the first testers; the live payment needs Jordi (ZAL-A5) |
-| E26-S7 | Ticket worker | unassigned | Daily counts anyone can read, no names: applications, accepted, signed up, active testers, paying customers | ready | E26-S2 | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| E26-S7 | Ticket worker | run_3c01dcde-de5f-47f7-9e3b-a5f57dd3ffb8 — claimed 2026-11-10T18:08Z, lease until 2026-11-10T20:08Z | Daily counts anyone can read, no names: applications, accepted, signed up, active testers, paying customers | active | E26-S2 | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
 | E26-S8 | Ticket worker | unassigned | Capture never stops for AI credit: an alert reaches HQ days before the DeepSeek or OpenRouter balance runs out, and who tops up is named | ready | none | none | main | none | 2026-11-10 | with E26-S7 |
 
 ## Decisions
