@@ -84,3 +84,13 @@ test("only methods the real client has are visible to the engine", () => {
   assert.equal(typeof m.classify, "function");
   assert.equal(m.reconcile, undefined);
 });
+
+test("a failed call is counted with its reason in a few words, never cached", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "live-test-"));
+  const make = () => ({ async reconcile() { throw new Error("reconciliation_unavailable", { cause: Object.assign(new Error("No object generated: response did not match schema."), { name: "AI_NoObjectGeneratedError" }) }); } });
+  const m = new LiveModel({ make, model: "stub", dir, runCapUsd: 1, monthCapUsd: 5, runId: "t" });
+  await assert.rejects(m.reconcile({ sources: [] }), /reconciliation_unavailable/);
+  await assert.rejects(m.reconcile({ sources: [] }), /reconciliation_unavailable/);
+  assert.equal(m.calls.failed, 2);
+  assert.deepEqual(m.summary().failures, { "reconcile: Error: reconciliation_unavailable (AI_NoObjectGeneratedError: No object generated: response did not match schema.)": 2 });
+});

@@ -86,6 +86,7 @@ export class LiveModel {
     this.replayedMs = 0;
     this.calls = { live: 0, cached: 0, refused: 0, failed: 0 };
     this.byMethod = {};
+    this.failures = {};
     this.lastAnswerPrompt = null;
     this.lastAnswerTokens = null;
     this.lastAnswerText = null;
@@ -151,6 +152,8 @@ export class LiveModel {
       out = await real[method](...args);
     } catch (e) {
       this.calls.failed += 1;
+      const why = failureKind(e);
+      this.failures[`${method}: ${why}`] = (this.failures[`${method}: ${why}`] ?? 0) + 1;
       throw e;
     } finally {
       this.inflight -= 1;
@@ -167,9 +170,18 @@ export class LiveModel {
   takeReplayedMs() { const ms = this.replayedMs; this.replayedMs = 0; return ms; }
 
   summary() {
-    return { model: this.model, calls: this.calls, byMethod: this.byMethod, spentUsd: Math.round(this.spentUsd * 1e5) / 1e5,
+    return { model: this.model, calls: this.calls, byMethod: this.byMethod, failures: this.failures, spentUsd: Math.round(this.spentUsd * 1e5) / 1e5,
       runCapUsd: this.runCapUsd, monthCapUsd: this.monthCapUsd, monthSpentUsd: Math.round((this.monthBefore + this.spentUsd) * 1e5) / 1e5 };
   }
+}
+
+/** Why a live call failed, in a few words: error name, HTTP status and the start of the message (never a body). */
+export function failureKind(e) {
+  const name = e?.name ?? "Error";
+  const status = e?.statusCode ?? e?.status ?? e?.cause?.statusCode;
+  const msg = String(e?.message ?? e ?? "").replace(/\s+/g, " ").slice(0, 60);
+  const cause = e?.cause ? ` (${e.cause.name ?? "Error"}: ${String(e.cause.message ?? "").replace(/\s+/g, " ").slice(0, 60)})` : "";
+  return `${name}${status ? ` ${status}` : ""}: ${msg}${cause}`;
 }
 
 /** The DeepSeek client production builds for background work (packages/server/src/runtime.ts backgroundLlm). */
