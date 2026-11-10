@@ -1,0 +1,23 @@
+[
+  {
+    "from": "Open loops finder",
+    "action": "Link the memory 'Boiler' under Garden to the memory from 2026-11-02 about Marc fixing the pressure, so each shows the other.",
+    "links": [{ "label": "Voice note 2026-11-02", "path": "Log/2026-11-02.md" }, { "label": "All open loops", "path": "Personas/open-loops/2026-11-10.md" }],
+    "before": { "title": "Link the memory 'Boiler' under Garden to the memory from 2026-11-02 about Marc fixing the pressure, so each shows the other.", "body": "Memory 12 says the invoice is not here yet, and memory 5 answers part of it." },
+    "after": { "title": "I'd link \"Boiler\" with \"Marc fixed the boiler pressure\".", "card": { "picture": { "change": "link", "from": "Boiler", "to": "Marc fixed the boiler pressure" }, "yes": "Your voice note of 9 Nov still waits for Marc's invoice, and this note says what he fixed.", "no": "The boiler is fine now, so you may not need the two side by side." } }
+  },
+  {
+    "from": "Topic gardener",
+    "action": "Move the page 'Boiler' from Garden to Home.",
+    "links": [{ "label": "Its notes", "path": "Personas/topic-gardener/2026-11-10.md" }],
+    "before": { "title": "Boiler is filed under Garden", "body": "That page is about the flat's boiler, which the notes tie to Home, not to Garden." },
+    "after": { "title": "I'd move \"Boiler\" under \"Home\".", "card": { "picture": { "change": "move", "from": "Boiler", "to": "Home" }, "yes": "Every boiler note is about the flat, and the flat lives under Home.", "no": "If you think of the boiler as part of the outside works, Garden is fine." } }
+  },
+  {
+    "from": "Topic gardener",
+    "action": "Give the page 'Bike shed' its own place at the top of the tree.",
+    "links": [{ "label": "Its notes", "path": "Personas/topic-gardener/2026-11-10.md" }],
+    "before": { "title": "Give Bike shed its own place", "body": "Memories 3, 6 and 10 are all about the shed." },
+    "after": { "title": "I'd give \"Bike shed\" its own place at the top of your memory.", "card": { "picture": { "change": "own-place", "from": "Bike shed", "to": null }, "yes": "You came back to the shed three times in two weeks, with measures and a plan.", "no": "It may stay a small idea, and a place of its own would sit mostly empty." } }
+  }
+]

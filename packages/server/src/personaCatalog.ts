@@ -3,6 +3,7 @@ import type { InboxLink } from "./inboxStore.js";
 import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill } from "./personaRunner.js";
 import { hasWorkCode, isProjectWork } from "./helperScope.js";
 import { createClarifier } from "./clarifier.js";
+import { cleanHelperCard, HELPER_CARD_ASK, HELPER_CARD_WORDS, namedCard, namedMemories, pictureTitle, type HelperCard } from "./helperCard.js";
 
 /**
  * The built-in personas (EPIC-14 S4): a catalog the user switches on one by one. Only Weekly recap
@@ -49,6 +50,21 @@ export function memoryTitle(entry: MemoryEntry): string {
   return entry.title.replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
+const SHORT_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
+/**
+ * S36: each memory as the person knows it, for a card: "your voice note of 3 Nov", or a note's own
+ * name in quotes. The model numbers what it read; a card says these words instead.
+ */
+export function memoryPhrases(entries: ReadonlyArray<MemoryEntry>): string[] {
+  return entries.map((entry) => {
+    const title = memoryTitle(entry);
+    const day = Number.isNaN(Date.parse(entry.capturedAt)) ? "" : ` of ${SHORT_DATE.format(new Date(entry.capturedAt))}`;
+    const media = /^(Voice note|Audio|Image|Screenshot|PDF|Document|Link)$/.exec(title);
+    return media ? `your ${media[1]!.toLowerCase()}${day}` : `your note "${title.slice(0, 60)}"`;
+  });
+}
+
 function recapPrompt(entries: MemoryEntry[]): string {
   const lines: string[] = [];
   let used = 0;
@@ -73,6 +89,7 @@ const RECAP_SYSTEM = [
   MEMORY_ONLY,
   "Write a short recap of the week in their words, then pick ONE finding about their memory or their own life: a pattern in what they keep coming back to, a loose end in their life, or something they said they would do and have not mentioned since. Never a project's status or next step.",
   "Use only what the memories say. Never invent facts, names or dates. Plain words, no advice beyond the finding.",
+  HELPER_CARD_WORDS,
 ].join(" ");
 
 interface RecapReply {
@@ -153,7 +170,10 @@ export const WEEKLY_RECAP: PersonaDefinition = {
       ...sources.slice(0, 5).map((entry) => ({ label: `${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}`, path: entry.path })),
       { label: "This week's recap", path: notePath },
     ];
-    ctx.postFinding({ title: reply.finding.title, ...(reply.finding.detail ? { body: reply.finding.detail } : {}), links });
+    // S36: the finding names memories the way the person knows them, never by the model's numbers.
+    const said = memoryPhrases(entries);
+    const detail = namedMemories(reply.finding.detail, said);
+    ctx.postFinding({ title: namedMemories(reply.finding.title, said), ...(detail ? { body: detail } : {}), links });
     return { summary: `Read ${entries.length} memories, wrote a recap and posted one finding` };
   },
 };
@@ -206,15 +226,17 @@ const DESK_CAN = [
   "It never writes new words, never creates or deletes a page and never edits what the person said.",
 ].join(" ");
 
-const SUGGESTION_ASK = '"suggestion": {"title": "one sentence the person reads first", "why": "one sentence, from the memories", "action": "the one change, as the person would ask the memory desk, naming places exactly as listed", "sources": [numbers]} or "suggestion": null';
+const SUGGESTION_ASK = `"suggestion": {"title": "one sentence the person reads first", "action": "the one change, as the person would ask the memory desk, naming places exactly as listed", ${HELPER_CARD_ASK}, "sources": [numbers]} or "suggestion": null`;
 
-/** A helper's suggestion from its reply, or null. */
-export function parseSuggestion(reply: Record<string, unknown> | null): { title: string; why: string; action: string; sources: number[] } | null {
+/** A helper's suggestion from its reply, or null. S36: `card` is its picture, why yes and why not. */
+export function parseSuggestion(reply: Record<string, unknown> | null): { title: string; why: string; action: string; sources: number[]; card: HelperCard | null } | null {
   const raw = reply?.suggestion && typeof reply.suggestion === "object" ? (reply.suggestion as Record<string, unknown>) : null;
   const title = str(raw?.title);
   const action = str(raw?.action, 600);
   if (!title || !action) return null;
-  return { title, why: str(raw?.why), action, sources: nums(raw?.sources) };
+  const card = cleanHelperCard(raw);
+  // Before S36 the reason came as `why`; a card's why yes is the same line.
+  return { title, why: card?.yes ?? str(raw?.why), action, sources: nums(raw?.sources), card };
 }
 
 /**
@@ -222,8 +244,8 @@ export function parseSuggestion(reply: Record<string, unknown> | null): { title:
  * project-management words in what the person reads first (the change itself names pages, which
  * may hold any word).
  */
-export function aboutProjectWork(suggestion: { title: string; why: string; action: string }): boolean {
-  return hasWorkCode(suggestion.action) || isProjectWork(suggestion.title, suggestion.why);
+export function aboutProjectWork(suggestion: { title: string; why: string; action: string; card?: HelperCard | null }): boolean {
+  return hasWorkCode(suggestion.action) || isProjectWork(suggestion.title, suggestion.why) || (suggestion.card ? isProjectWork(suggestion.card.no) : false);
 }
 
 function earlierLines(ctx: PersonaContext): string[] {
@@ -252,13 +274,13 @@ interface ModelPersonaSpec {
    * Write its note and post its one card from the parsed reply; returns the run's one-line summary.
    * `suggestion` is the change it offers, already checked; it posts that instead of its old card.
    */
-  handle(ctx: PersonaContext, entries: MemoryEntry[], reply: Record<string, unknown> | null, notePath: string, suggestion: ReturnType<typeof parseSuggestion>): string;
+  handle(ctx: PersonaContext, entries: MemoryEntry[], reply: Record<string, unknown> | null, notePath: string, suggestion: (NonNullable<ReturnType<typeof parseSuggestion>> & { team?: string }) | null): string;
 }
 
 /** When the helpers kept to the memory only (S27 round 2): each wakes once more at once, in its own period. */
 const SUGGESTS_SINCE = "2026-11-10T04:15:00.000Z";
-/** S35 round 2: when the helpers that can ask the team were told plainly when to ask. */
-const ASKS_SINCE = "2026-11-10T10:50:00.000Z";
+/** S36: when the helpers' cards took Jordi's shape (picture, why yes, why not): each wakes once more. */
+const CARDS_SINCE = "2026-11-10T23:45:00.000Z";
 
 /**
  * S35: what a helper may ask the Team desk. Read only: how something in the memories connects to
@@ -298,8 +320,8 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
     defaultEnabled: false,
     // S35: two more steps when it asks the team: the question and the second call with the answer.
     limits: { maxSteps: 9, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
-    // S35 round 2: a helper that may ask the team wakes once more with the clearer words.
-    revisedAt: ASKS_SINCE,
+    // S36: a helper with a card wakes once more to say it Jordi's way (S35 round 2 woke them at 10:50Z for its clearer words).
+    revisedAt: CARDS_SINCE,
     asksTeam: true,
     async fingerprint(ctx) {
       const entries = await ctx.recentMemories({ days: spec.days, limit: RECAP_MAX_MEMORIES });
@@ -328,6 +350,7 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
         ...(canSuggest ? [`You may also offer ONE change to how their memory is organised: ${spec.suggests}`, DESK_CAN, "Offer a change only when the memories clearly call for it; otherwise suggestion is null."] : []),
         ...(mayAsk ? [TEAM_ASK_SYSTEM] : []),
         "Use only what the memories say. Never invent facts, names or dates. Plain words.",
+        HELPER_CARD_WORDS,
       ].join(" ");
       let reply = parseJsonReply(await ctx.think({ system, prompt }));
       // S35: at most one question to the Team desk, then one more call with its answer as context.
@@ -342,12 +365,14 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
           usedTeam = second.usedTeamAnswer === true;
         }
       }
-      let offered = canSuggest ? parseSuggestion(reply) : null;
+      let offered: Offered | null = canSuggest ? parseSuggestion(reply) : null;
       const leftOut = offered !== null && aboutProjectWork(offered);
-      if (offered && !leftOut && asked && usedTeam) {
-        const line = askedTeamLine(asked);
-        offered = { ...offered, why: offered.why ? `${offered.why}\n\n${line}` : line };
+      if (offered) {
+        // S36: the card names memories the way the person knows them, never by the model's numbers.
+        const said = memoryPhrases(entries);
+        offered = { ...offered, title: namedMemories(offered.title, said), why: namedMemories(offered.why, said), card: offered.card ? namedCard(offered.card, said) : null };
       }
+      if (offered && !leftOut && asked && usedTeam) offered = { ...offered, team: askedTeamLine(asked) };
       const summary = spec.handle(ctx, entries, reply, `Personas/${spec.id}/${ctx.today}.md`, leftOut ? null : offered);
       const teamWords = asked ? `; asked the team one question${usedTeam ? " and used the answer" : ""}` : question ? "; the team gave no answer" : "";
       return { summary: `${leftOut ? `${summary}; left out one suggestion about project work` : summary}${teamWords}` };
@@ -355,17 +380,31 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
   };
 }
 
-/** S27: post the helper's one suggestion with its sources and its note; the run's summary words. */
-function postSuggestionCard(ctx: PersonaContext, entries: MemoryEntry[], suggestion: NonNullable<ReturnType<typeof parseSuggestion>>, note: InboxLink): void {
+/** A helper's suggestion as it posts it: S35's line about what the team said rides along. */
+type Offered = NonNullable<ReturnType<typeof parseSuggestion>> & { team?: string };
+
+/**
+ * S27: post the helper's one suggestion with its sources and its note. S36: with a card, its first
+ * line says the change in plain words from the picture, and why yes and why not sit on the card; the
+ * body keeps only what the team said.
+ */
+function postSuggestionCard(ctx: PersonaContext, entries: MemoryEntry[], suggestion: Offered, note: InboxLink): void {
+  const card = suggestion.card;
+  const body = card ? suggestion.team : [suggestion.why, suggestion.team].filter(Boolean).join("\n\n");
   ctx.postSuggestion({
-    title: suggestion.title,
-    ...(suggestion.why ? { body: suggestion.why } : {}),
+    title: card?.picture ? pictureTitle(card.picture) : suggestion.title,
+    ...(body ? { body } : {}),
     action: suggestion.action,
     links: [...sourceLinks(entries, suggestion.sources), note],
+    ...(card ? { card } : {}),
   });
 }
 
-const suggestionNote = (suggestion: ReturnType<typeof parseSuggestion>) => (suggestion ? ["", "## Suggested", "", `- ${suggestion.action}`, ...(suggestion.why ? [`- Why: ${suggestion.why}`] : [])] : []);
+/** The suggestion in the helper's own note: the change, why yes, why not, and the team's answer. */
+const suggestionLines = (suggestion: Offered | null, lead: string) => suggestion
+  ? [`- ${lead}${suggestion.action}`, ...(suggestion.why ? [`- Why: ${suggestion.why}`] : []), ...(suggestion.card ? [`- Why not: ${suggestion.card.no}`] : []), ...(suggestion.team ? ["", suggestion.team] : [])]
+  : [];
+const suggestionNote = (suggestion: Offered | null) => (suggestion ? ["", "## Suggested", "", ...suggestionLines(suggestion, "")] : []);
 
 export const OPEN_LOOPS: PersonaDefinition = modelPersona({
   id: "open-loops",
@@ -435,7 +474,7 @@ export const TOPIC_GARDENER: PersonaDefinition = modelPersona({
   ask: '"looked": "one short line on what you checked"',
   handle(ctx, entries, reply, notePath, suggestion) {
     ctx.writeNote(`${ctx.today}.md`, personaNote("topic-gardener", "Topic gardener", ctx.today, entries.length,
-      suggestion ? [`- Proposed: ${suggestion.action}`, `- Why: ${suggestion.why}`] : [`- Nothing needs tidying.${str(reply?.looked) ? ` ${str(reply?.looked)}` : ""}`]));
+      suggestion ? suggestionLines(suggestion, "Proposed: ") : [`- Nothing needs tidying.${str(reply?.looked) ? ` ${str(reply?.looked)}` : ""}`]));
     if (!suggestion) return `Read ${entries.length} memories, nothing to tidy`;
     postSuggestionCard(ctx, entries, suggestion, { label: "Its notes", path: notePath });
     return `Read ${entries.length} memories and suggested one tidy-up`;
@@ -596,9 +635,13 @@ export const MEMORY_HEALTH: PersonaDefinition = {
     if (loose >= HEALTH_LOOSE_PAGES && places && places.loose.length) {
       ctx.postSuggestion({
         title: loose > HEALTH_LOOSE_NAMED ? `${loose} pages in your memory are not under any place yet. Here are ${HEALTH_LOOSE_NAMED} to file.` : `${loose} pages in your memory are not under any place yet.`,
-        body: "A page with no place is harder to find in the tree and in answers.",
         action: `Move these pages, which are under no place in the tree yet, each under the place it belongs to: ${places.loose.slice(0, HEALTH_LOOSE_NAMED).map((title) => `"${title.slice(0, 60)}"`).join(", ")}.`,
         links: [numbers],
+        card: {
+          picture: null,
+          yes: "A page with no place is harder to find in the tree and in answers.",
+          no: "The memory desk picks each page's place itself, so one may land somewhere you would not put it. Undo puts it back.",
+        },
       });
       return { summary: `Counted ${entries.length} memories and ${loose} loose pages, suggested filing them` };
     }

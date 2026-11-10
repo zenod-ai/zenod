@@ -1,4 +1,5 @@
 import type { Hit, MemoryEntry, MemoryEntryQuery, MemoryTreeOutline, MemoryTreeOutlineNode, Note, PersonaNotesInput } from "zenod";
+import type { HelperCard } from "./helperCard.js";
 import type { InboxItem, InboxLink, InboxOption, InboxStore } from "./inboxStore.js";
 import type { PersonaRun, PersonaRunEnd, PersonaStore, PersonaTrigger } from "./personaStore.js";
 import { zenodLimits } from "./limits.js";
@@ -195,12 +196,12 @@ export interface PersonaContext extends PersonaReadContext {
   /** A note in its own folder; all of a run's notes are one commit at the end. One step. */
   writeNote(name: string, content: string): void;
   /** A finding for the user's inbox. One step. */
-  postFinding(input: { title: string; body?: string; links?: InboxLink[] }): InboxItem;
+  postFinding(input: { title: string; body?: string; links?: InboxLink[]; card?: HelperCard }): InboxItem;
   /**
    * A question for the user's inbox, the recommended choice first. One step. With `about` (S37: the
    * memory it asks about) the same question is never posted twice: the earlier card comes back.
    */
-  postQuestion(input: { title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[]; about?: string }): InboxItem;
+  postQuestion(input: { title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[]; about?: string; card?: HelperCard }): InboxItem;
   /**
    * Propose a job on the memory to the memory desk: an inbox card "Run it?". Nothing changes and
    * nothing is spent unless the user says Run it; then the desk runs it, with Undo. One step.
@@ -210,7 +211,7 @@ export interface PersonaContext extends PersonaReadContext {
    * S26: a suggestion card: one change in words (`action`, as the desk would run it) with Do it,
    * Change, Not now and Your feedback. Nothing changes unless the user presses Do it. One step.
    */
-  postSuggestion(input: { title: string; body?: string; action: string; links?: InboxLink[] }): InboxItem;
+  postSuggestion(input: { title: string; body?: string; action: string; links?: InboxLink[]; card?: HelperCard }): InboxItem;
   /** S35: true when this run may ask the Team desk its one question. */
   readonly canAskTeam: boolean;
   /**

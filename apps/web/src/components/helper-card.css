@@ -1,0 +1,75 @@
+/* EPIC-14 S36: a helper's card. Two ideas on the paper stage, the change drawn between them in the
+   one green, then why yes and why not. Paper language (docs/epic12/DESIGN-LANGUAGE.md). */
+.zh-card { display: flex; flex-direction: column; gap: 0.7rem; max-width: 64ch; }
+
+.zh-picture {
+  margin: 0.2rem 0 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8.5rem, auto) minmax(0, 1fr);
+  align-items: center;
+  padding: 0.9rem;
+  background: var(--zp-stage);
+  border-radius: 10px;
+}
+.zh-idea {
+  font: 400 1rem / 1.3 var(--zp-serif);
+  color: var(--zp-ink);
+  background: var(--zp-bg);
+  border: 1px solid var(--zp-line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.zh-join { position: relative; display: flex; align-items: center; justify-content: center; min-height: 2.6rem; padding: 0 0.9rem; }
+.zh-line { position: absolute; left: 0.35rem; right: 0.35rem; top: 50%; border-top: 2px solid var(--zp-accent); }
+.zh-change {
+  position: relative;
+  font: 500 0.74rem var(--zp-sans);
+  letter-spacing: 0.02em;
+  color: var(--zp-accent);
+  background: var(--zp-stage);
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+/* A new link: both ends marked, the line in green. */
+.zh-link .zh-line::before, .zh-link .zh-line::after {
+  content: ""; position: absolute; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--zp-accent);
+}
+.zh-link .zh-line::before { left: -4px; }
+.zh-link .zh-line::after { right: -4px; }
+/* A link taken off: dashed, in the faint ink. */
+.zh-unlink .zh-line { border-top: 2px dashed var(--zp-faint); }
+.zh-unlink .zh-change { color: var(--zp-muted); }
+.zh-unlink .zh-change::before { content: "✕ "; }
+/* Move, rename, own place: an arrow to where it goes. */
+.zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after {
+  content: ""; position: absolute; right: -1px; top: -6px;
+  border-left: 8px solid var(--zp-accent); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+}
+.zh-move .zh-to, .zh-top { border-color: var(--zp-accent); }
+.zh-rename .zh-from { text-decoration: line-through; color: var(--zp-muted); }
+.zh-top { font-family: var(--zp-sans); font-size: 0.9rem; border-style: dashed; color: var(--zp-accent); }
+
+.zh-why { margin: 0; display: grid; gap: 0.35rem; }
+.zh-why div { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 0.6rem; align-items: baseline; }
+.zh-why dt { font: 500 0.8rem var(--zp-sans); color: var(--zp-accent); }
+.zh-why div + div dt { color: var(--zp-warn); }
+.zh-why dd { margin: 0; font-size: 0.96rem; line-height: 1.45; }
+.zh-call { margin: 0; font: italic 400 1rem var(--zp-serif); color: var(--zp-muted); }
+
+@media (max-width: 560px) {
+  .zh-picture { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
+  .zh-join { min-height: 3.4rem; }
+  .zh-line { left: 50%; right: auto; top: 0; bottom: 0; border-top: 0; border-left: 2px solid var(--zp-accent); }
+  .zh-unlink .zh-line { border-top: 0; border-left: 2px dashed var(--zp-faint); }
+  .zh-link .zh-line::before { left: -5px; top: -4px; }
+  .zh-link .zh-line::after { left: -5px; right: auto; top: auto; bottom: -4px; }
+  .zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after {
+    right: auto; left: -6px; top: auto; bottom: -1px;
+    border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--zp-accent); border-bottom: 0;
+  }
+  .zh-why div { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; }
+}

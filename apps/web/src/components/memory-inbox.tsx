@@ -23,6 +23,7 @@ import {
 } from "@/lib/inbox"
 import { formatLength } from "@/lib/voice-note"
 import { VoiceNoteButton } from "@/components/voice-note-button"
+import { HelperCardView } from "@/components/helper-card"
 import "@/components/memory-inbox.css"
 
 // EPIC-14 S2: the inbox. One list of what is addressed to you: a persona's question (decide),
@@ -551,7 +552,8 @@ function Suggestion({
   const reason = item.replies.find((reply) => reply.kind === "notnow")
   return (
     <>
-      {open && item.action ? (
+      {/* S36: the picture says the change; the desk's own words wait behind Change. */}
+      {open && item.action && !item.card?.picture ? (
         <p className="zi-action">
           <b>The change</b> {item.action}
         </p>
@@ -778,6 +780,10 @@ function InboxCard({
             {item.followUpOf.title}
           </button>
         </p>
+      ) : null}
+
+      {item.card ? (
+        <HelperCardView card={item.card} open={item.status === "open"} />
       ) : null}
 
       {item.kind === "suggestion" ? (
