@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { describe, expect, it } from "vitest";
 import { mountTesterApplications, TESTER_APPLICATIONS_FILE } from "../src/testerApplications.js";
+import { TesterFlow } from "../src/testerFlow.js";
 import { clientAddress } from "../src/zenodUnit.js";
 
 function setup() {
@@ -59,5 +60,24 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     expect(limited.headers.get("retry-after")).toBe("3600");
     expect((await apply({ use: "Voice notes from someone else", contact: "you@example.com" }, "198.51.100.2")).status).toBe(200);
     expect(kept()).toHaveLength(6);
+  });
+
+  it("with the tester flow on, asks for an email and answers accepted or waitlist (EPIC-26 S2)", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "zenod-testers-flow-"));
+    const flow = new TesterFlow({ dataDir, cap: 1 });
+    const app = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterApplications(app, { dataDir, clientAddress, flow });
+    const apply = (contact: string) =>
+      app.request("/api/public/testers/apply", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
+        body: JSON.stringify({ use: "Voice notes on my walks", contact }),
+      });
+    const handle = await apply("u/my_reddit");
+    expect(handle.status).toBe(400);
+    expect(await handle.json()).toEqual({ error: expect.stringMatching(/email/) });
+    expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted" });
+    expect(await (await apply("second@example.com")).json()).toEqual({ ok: true, status: "waitlist" });
+    expect(flow.snapshot().testers.map((t) => t.email)).toEqual(["first@example.com", "second@example.com"]);
   });
 });

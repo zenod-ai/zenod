@@ -23,6 +23,7 @@ export interface CustomerStripeClient {
   };
   promotionCodes?: {
     list(params: Stripe.PromotionCodeListParams): Promise<{ data: Stripe.PromotionCode[] }>;
+    create?(params: Stripe.PromotionCodeCreateParams): Promise<Stripe.PromotionCode>;
   };
   webhooks: {
     constructEvent(payload: string | Buffer, signature: string, secret: string): Stripe.Event;

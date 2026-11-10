@@ -18,13 +18,14 @@ import graphLivePhone from "@/assets/shots/graph-live-phone.webp";
 import { WhatsappScene } from "@/components/paper-landing";
 import { countSignup } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
-import { inviteCodeFromSearch, joinUrl, submitTesterApplication, TESTERS_QUESTION } from "@/lib/testers";
+import { inviteCodeFromSearch, joinUrl, submitTesterApplication, TESTERS_QUESTION, type TesterApplyStatus } from "@/lib/testers";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
 function ApplyForm() {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
+  const [outcome, setOutcome] = React.useState<TesterApplyStatus>(null);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,12 +33,13 @@ function ApplyForm() {
     setStatus("sending");
     setError(null);
     try {
-      await submitTesterApplication({
+      const result = await submitTesterApplication({
         use: String(form.get("use") ?? ""),
         contact: String(form.get("contact") ?? ""),
         website: String(form.get("website") ?? ""),
       });
       countSignup();
+      setOutcome(result);
       setStatus("sent");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Could not send your application.");
@@ -48,11 +50,23 @@ function ApplyForm() {
   if (status === "sent")
     return (
       <div className="pp-apply pp-apply-sent" role="status">
-        <h3>Thank you, your application is in.</h3>
-        <p>
-          We read every answer ourselves. If you are one of the first ten, we
-          write to you with your personal code.
-        </p>
+        {outcome === "waitlist" ? (
+          <>
+            <h3>Thank you, you are on the waitlist.</h3>
+            <p>
+              The first ten places are taken. If a place opens, we email you
+              your personal link.
+            </p>
+          </>
+        ) : (
+          <>
+            <h3>You're in. Thank you for applying.</h3>
+            <p>
+              You are one of our first ten testers. Your personal link comes by
+              email, with your code inside. It works once, only for you.
+            </p>
+          </>
+        )}
       </div>
     );
 
@@ -68,16 +82,16 @@ function ApplyForm() {
         maxLength={2000}
         placeholder="For example: voice notes on my walks, and Claude Code saving what we work out on my side project."
       />
-      <label htmlFor="tester-contact">Where can we reach you?</label>
+      <label htmlFor="tester-contact">Your email</label>
       <input
         id="tester-contact"
         name="contact"
-        type="text"
+        type="email"
         required
         minLength={3}
         maxLength={200}
         autoComplete="email"
-        placeholder="Email, or your Reddit or X handle"
+        placeholder="you@example.com"
       />
       <div className="pp-apply-trap" aria-hidden="true">
         <label htmlFor="tester-website">Leave this empty</label>
@@ -91,7 +105,7 @@ function ApplyForm() {
       {error ? <p className="pp-fine pp-error">{error}</p> : null}
       <p className="pp-fine">
         Your answer stays with the Zenod team and is never published. We use
-        your contact only to write to you about testing.
+        your email only to send your link and write to you about testing.
       </p>
     </form>
   );
@@ -186,8 +200,8 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
           <h1 id="testers-title">Test Zenod with us.</h1>
           <p className="pp-lead">
             Zenod is a librarian for your memory. We are letting in our first
-            testers now, and we pick the first ten by hand from what you tell
-            us below. Here is what you get.
+            ten testers now. Apply below with your email, and while places are
+            open you are in straight away. Here is what you get.
           </p>
           {code ? (
             <div className="pp-testers-code">
@@ -230,8 +244,8 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
         <section className="pp-testers-steps" aria-labelledby="steps-title">
           <h2 id="steps-title">How it works</h2>
           <ol>
-            <li>Apply below. It takes a minute.</li>
-            <li>We read every answer and send the first ten a personal link with their code inside.</li>
+            <li>Apply below with your email. It takes a minute.</li>
+            <li>The first ten are in straight away. Each gets a personal link by email, with a code inside that works once, only for them.</li>
             <li>
               Open the link and sign in with Google or GitHub. Checkout opens
               with your code already applied: you pay €0 and no card is asked for.
