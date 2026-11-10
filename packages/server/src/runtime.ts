@@ -78,7 +78,8 @@ import { UsageStore, estimateCostUsd } from "./usageStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
 import { duePersonas, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
-import { QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
+import { correctReading, QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
+import { readAs, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { NotificationStore } from "./notificationStore.js";
@@ -1066,15 +1067,58 @@ export class Runtime {
         now,
       });
       store.write(state);
-      if (update.pass) {
-        const view = quickIndexView(base, state, now);
-        console.log(`[quick-index] tenant=${this.tenantId} ${update.pass}: calls=${update.calls} names+${update.names} usd=${update.costUsd.toFixed(5)} places=${view.totals.places} named=${view.totals.named} names=${view.totals.names} week=${view.totals.thisWeek} today_usd=${view.cost.todayUsd.toFixed(5)}`);
+      // S29: the tick keeps what chat reads warm, so a message never waits on reading the vault.
+      const view = quickIndexView(base, state, now);
+      this.readAsCache = { at: now, index: { places: view.places, corrections: state.corrections } };
+      if (update.pass || update.calls) {
+        console.log(`[quick-index] tenant=${this.tenantId} ${update.pass ?? "summary"}: calls=${update.calls} names+${update.names} usd=${update.costUsd.toFixed(5)} places=${view.totals.places} named=${view.totals.named} names=${view.totals.names} week=${view.totals.thisWeek} today_usd=${view.cost.todayUsd.toFixed(5)}`);
       }
       return update;
     })();
     this.quickIndexRun = active;
     void active.catch(() => {}).finally(() => { if (this.quickIndexRun === active) this.quickIndexRun = null; });
     return active;
+  }
+
+  private readAsCache: { at: number; index: ReadAsIndex } | null = null;
+
+  /**
+   * EPIC-14 S29: what the vague words in a message mean, read from the quick index (no model call).
+   * The index is kept in memory for ten minutes, renewed by every update and correction. Empty when
+   * the tenant has no tree or the index cannot be read: an answer never waits on it.
+   */
+  async readAs(message: string, now: number = Date.now()): Promise<ReadAs[]> {
+    if (this.agent.vaultless === true || !this.settings.vaultConfigured()) return [];
+    try {
+      if (!this.readAsCache || now - this.readAsCache.at > 10 * 60_000) {
+        const view = await this.quickIndex(now);
+        if (!view) return [];
+        const state = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir)).read();
+        this.readAsCache = { at: now, index: { places: view.places, corrections: state.corrections } };
+      }
+      return readAs(message, this.readAsCache.index);
+    } catch (error) {
+      console.warn(`[quick-index] read-as unavailable: ${error instanceof Error ? error.message.slice(0, 200) : "error"}`);
+      return [];
+    }
+  }
+
+  /**
+   * EPIC-14 S29: the person corrected a "Read as": these words mean this place (or none). Kept in the
+   * index, so the next message reads them this way and the place shows the name. False when the
+   * place is not in the index.
+   */
+  async correctReadAs(phrase: string, path: string | null, now: number = Date.now()): Promise<boolean> {
+    const view = await this.quickIndex(now);
+    if (!view || (path !== null && !view.places.some((place) => place.path === path))) return false;
+    // Never between an update's read and its write.
+    if (this.quickIndexRun) await this.quickIndexRun.catch(() => null);
+    const store = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir));
+    const state = correctReading(store.read(), phrase, path, now);
+    store.write(state);
+    const fresh = await this.quickIndex(now);
+    this.readAsCache = fresh ? { at: now, index: { places: fresh.places, corrections: state.corrections } } : null;
+    return true;
   }
 
   /** The quick index as Memory › At a glance shows it; null without a tree. Reads only. */

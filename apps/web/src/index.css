@@ -473,6 +473,17 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
 .zl-sub button { font-size: 0.88rem; border: 1px solid var(--border); border-radius: 999px; padding: 0.3rem 0.9rem; color: var(--muted-foreground); background: transparent; cursor: pointer; }
 .zl-sub button[aria-current="true"] { background: #1f4d3a; border-color: #1f4d3a; color: #f6f2e9; }
 .dark .zl-sub button[aria-current="true"] { background: #2d6a4e; border-color: #2d6a4e; }
+/* EPIC-14 S29: the grey "Read as" line under a reply; tap a reading to put it right. */
+.zp-readas { position: relative; color: var(--zp-faint); font-size: 0.82rem; line-height: 1.5; margin: 0.15rem 0 0.35rem; }
+.zp-readas-k { color: var(--zp-faint); }
+.zp-readas-item { position: relative; }
+.zp .zp-readas-btn { all: unset; cursor: pointer; color: var(--zp-faint); border-bottom: 1px dotted var(--zp-line); }
+.zp .zp-readas-btn:hover, .zp .zp-readas-btn:focus-visible { color: var(--zp-muted); border-bottom-color: var(--zp-muted); }
+.zp-readas-btn b { color: var(--zp-muted); font-weight: 600; }
+.zp-readas-menu { width: min(20rem, 86vw); color: var(--zp-ink); line-height: 1.35; }
+.zp .zp-readas-find { margin: 0.2rem 0.4rem 0.35rem; padding: 0.35rem 0.5rem; border: 1px solid var(--zp-line); border-radius: 6px; background: var(--zp-bg); color: inherit; font: inherit; font-size: 0.85rem; }
+.zp-readas-note { font-size: 0.78rem; color: var(--zp-faint); padding: 0.3rem 0.55rem; }
+.zp-readas-saved { color: var(--zp-accent); }
 .zp-modehead { display: flex; align-items: center; gap: 0.5rem; min-height: 1.6rem; }
 .zp-modewrap { position: relative; display: inline-block; }
 .zp .zp-chip { font: 600 0.82rem var(--zp-sans); padding: 0.18rem 0.75rem; background: transparent; color: var(--zp-accent); border: 1.5px solid var(--zp-accent); }

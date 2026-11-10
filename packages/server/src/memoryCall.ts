@@ -156,7 +156,7 @@ export const CALL_TOOLS = [
   {
     type: "function" as const,
     name: "ask_memory",
-    description: "Ask Zenod's answer engine a question about the caller's memory. Returns a checked answer from their own notes, or says there is none.",
+    description: "Ask Zenod's answer engine a question about the caller's memory. Returns a checked answer from their own notes, or says there is none. When it returns readAs (what their vague words were taken to mean, such as \"the flat\" → Housing), say that in a few words before the answer, so they can put you right.",
     parameters: { type: "object", properties: { question: { type: "string", description: "The caller's question, in their words." } }, required: ["question"] },
   },
   {
@@ -483,7 +483,7 @@ export interface CallTenant {
   /** The AI allowance's stop, or null while AI work may run. */
   allowanceBlock(): { message: string } | null;
   /** Zenod's checked answer for a question (memoryChat.answerFromMemory). */
-  answer(question: string): Promise<{ answered: boolean; answer: string; sources: string[] }>;
+  answer(question: string): Promise<{ answered: boolean; answer: string; sources: string[]; readAs?: string }>;
   /** Start a memory desk job (memoryDesk.startDeskJob); throws a message when it cannot. */
   deskJob(job: string): { id: string; title: string };
   /** File text as a new memory through the durable store queue (as Keep). */
@@ -666,7 +666,7 @@ export function createMemoryCall(deps: { store: CallStore; tenant: CallTenant; k
         const found = await tenant.answer(question);
         return {
           output: found.answered
-            ? { answered: true, answer: spokenAnswer(found.answer), from: found.sources.slice(0, 3) }
+            ? { answered: true, answer: spokenAnswer(found.answer), from: found.sources.slice(0, 3), ...(found.readAs ? { readAs: found.readAs } : {}) }
             : { answered: false, note: "No checked answer in their memory for this. Say so plainly; do not guess." },
         };
       } catch (error) {
