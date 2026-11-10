@@ -112,6 +112,8 @@ export type MemorySendHandlers = MemoryChatStreamHandlers & {
   onKept?: (kept: MemoryKeepReceipt | { error: string }) => void
   /** The desk job a job message started (or why it could not start). */
   onDesk?: (desk: MemoryDeskJob | { error: string }) => void
+  /** The question the last reply answered: "I meant …" corrects it (EPIC-14 S29 round 2). */
+  previous?: string | null
 }
 
 export type MemorySendResult = {
@@ -233,7 +235,8 @@ export async function sendToMemory(
   let answer: MemoryChatAnswer | null = null
   let desk: MemorySendResult["desk"] = null
   let talk: MemoryTalkReply | null = null
-  await readLines("/api/console/memory-send/stream", { message }, (event) => {
+  const previous = handlers.previous?.trim()
+  await readLines("/api/console/memory-send/stream", previous ? { message, previous } : { message }, (event) => {
     if (event.type === "route") {
       route = event.route
       handlers.onRoute?.(event.route)
@@ -251,6 +254,15 @@ export async function sendToMemory(
   })
   if (!route) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
   return { route, kept, answer, desk, talk }
+}
+
+/** The question the last reply answered, so "I meant …" corrects it (EPIC-14 S29 round 2). */
+export function lastQuestion(turns: ReadonlyArray<{ kind: string; route?: { question?: string | null } | null }>): string | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i]!
+    if (turn.kind === "reply") return turn.route?.question ?? null
+  }
+  return null
 }
 
 /** "Look it up" from the label menu (EPIC-22): answer the message from memory, keeping nothing. */

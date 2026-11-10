@@ -7,6 +7,7 @@ import {
   correctReadAs,
   keepInMemory,
   keepStatus,
+  lastQuestion,
   lookUpInMemory,
   MemoryChatError,
   recordModeSwitch,
@@ -868,6 +869,7 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
       if (talkingRef.current) return await talkTurn(pendingId, message, talkingRef.current)
       const updatePending = updatePendingOf(pendingId)
       const sent = await sendToMemory(message, {
+        previous: lastQuestion(turns),
         onRoute: (route) =>
           updatePending((turn) => ({ ...turn, route, keep: route.keep ? { state: "keeping" } : null })),
         onKept: (kept) =>

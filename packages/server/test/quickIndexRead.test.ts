@@ -132,7 +132,12 @@ describe("chat reads the index (E14-S29)", () => {
   const readings = readAs("what did the agent say about the flat?", INDEX);
   it("keeps the question's own top matches, mixes in the place's search and pins the place page", async () => {
     const own = Array.from({ length: 10 }, (_, i) => `Log/own-${i}.md`);
-    const e = engine({ "what did the agent say about the flat?": own, "what did the agent say about the flat? Moving to Valencia": ["Log/move-note.md"] });
+    // Strong matches, 90 % down to 81 %: they keep their places (E14-S29 round 2).
+    const e = {
+      search: async (query: string) => query === "what did the agent say about the flat?"
+        ? own.map((path, i) => ({ ...hit(path, 10 - i), matchPercent: 90 - i }) as Hit)
+        : [hit("Log/move-note.md", 10)],
+    } as unknown as BrainEngine;
     const ranked = await rankWithReadings(e, "what did the agent say about the flat?", readings, 20, 16);
     const paths = ranked.results.map((m) => m.path);
     expect(paths.slice(0, 3)).toEqual(own.slice(0, 3));
@@ -140,6 +145,19 @@ describe("chat reads the index (E14-S29)", () => {
     expect(paths.slice(4, 9)).toEqual(own.slice(3, 8));
     expect(paths).toContain("Log/move-note.md");
     expect(ranked.results.map((m) => m.rank)).toEqual(paths.map((_, i) => i + 1));
+  });
+
+  it("weak plain matches take turns with the readings' search, the readings first (E14-S29 round 2)", async () => {
+    // "my preferences in buying the flat": only "preferences" matched, weakly, in other places.
+    const question = "my preferences in buying the flat";
+    const weak = (path: string) => ({ ...hit(path, 2), matchPercent: 20 }) as Hit;
+    const e = {
+      search: async (query: string) => query === question
+        ? ["Notes/Bag preferences.md", "Notes/Report preferences.md", "Notes/Other.md"].map(weak)
+        : [{ ...hit("Log/viewing.md", 9), matchPercent: 80 } as Hit, { ...hit("Projects/Move.md", 8), matchPercent: 70 } as Hit],
+    } as unknown as BrainEngine;
+    const ranked = await rankWithReadings(e, question, readAs(question, INDEX), 16, 16);
+    expect(ranked.results.map((m) => m.path)).toEqual(["Log/viewing.md", "Notes/Bag preferences.md", "Projects/Move.md", "Notes/Report preferences.md", "Notes/Other.md"]);
   });
 
   it("the answer carries its Read as line and tells the model; without readAs nothing changes (WhatsApp, Telegram)", async () => {

@@ -76,6 +76,8 @@ import {
   memoryKeepIdempotencyKey,
   parseMemoryKeep,
   routeSendMessage,
+  appSendRoute,
+  isFollowUp,
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import { readAsLine } from "./quickIndexRead.js";
@@ -1599,7 +1601,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const session = readCustomerSession(c, env);
     if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
     // E16-B1: the one Send button posts `message`; the older ask route posts `question`.
-    const body = await c.req.json<{ question?: unknown; message?: unknown }>().catch(() => ({}) as { question?: unknown; message?: unknown });
+    const body = await c.req.json<{ question?: unknown; message?: unknown; previous?: unknown }>().catch(() => ({}) as { question?: unknown; message?: unknown; previous?: unknown });
+    // EPIC-14 S29 round 2: the question asked just before in this chat, so "I meant …" corrects it.
+    const previous = typeof body.previous === "string" ? body.previous.trim().slice(0, MEMORY_CHAT_MAX_QUESTION_CHARS) : "";
     // EPIC-22 E22-2: a talk also carries its persona and earlier turns; a talk opened from a card has no message.
     const talk = options.talk ? parseTalkRequest(body) : null;
     if (options.talk && !talk) return { response: c.json({ error: "message is required" }, 400) };
@@ -1635,7 +1639,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (left > 0) memoryChatsInFlight.set(tenantId, left);
       else memoryChatsInFlight.delete(tenantId);
     };
-    return { question, talk, runtime, tenantId, release };
+    return { question, previous, talk, runtime, tenantId, release };
   };
   // A chat failure as { status, body }: the allowance and vault states keep their own codes.
   const memoryChatFailure = (tenantId: string, error: unknown) => {
@@ -1688,7 +1692,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.post("/api/console/memory-send/stream", async (c) => {
     const start = await memoryChatStart(c);
     if ("response" in start) return start.response;
-    const { question: message, runtime, tenantId, release } = start;
+    const { question: message, previous, runtime, tenantId, release } = start;
     c.header("content-type", "application/x-ndjson; charset=utf-8");
     c.header("cache-control", "no-store");
     c.header("x-accel-buffering", "no");
@@ -1697,7 +1701,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const send = (event: Record<string, unknown>) => out.aborted ? Promise.resolve(out) : out.write(`${JSON.stringify(event)}\n`);
       try {
         const engine = await runtime.getEngine();
-        const route = await routeSendMessage(engine, message);
+        // EPIC-14 S29 round 2: a follow-up ("I meant …") is answered as the corrected question, with no
+        // routing call; a desk job only the model saw in words naming no topic, page or note is not one.
+        const route = appSendRoute(isFollowUp(message) ? { action: "answer", keep: null, question: message, by: "rules" } : await routeSendMessage(engine, message), message, previous);
+        console.log(`[memory-send] route=${route.action} by=${route.by}${isFollowUp(message) ? " follow-up" : ""}`);
         await send({ type: "route", route });
         // EPIC-14 S3: a job on the memory goes to the memory desk and shows in the inbox at once.
         // "unsure" asks first in the app ("keep it, or do it as a job?"); nothing runs on a guess.
