@@ -167,7 +167,8 @@ it("puts back null keys DeepSeek's JSON mode leaves out, so a filing reconcile v
     // A clarify and an add with every null key omitted, as DeepSeek returned in production.
     { operations: [
       { kind: "clarify", ideaIds: ["idea-1"], sourceIds: ["s1"], sourceQuote: "The yard starts in March." },
-      { kind: "add", ideaIds: ["idea-1"], sourceIds: ["c1"], sourceQuote: "-", reason: "same subject" },
+      // The model sees add candidates as add-<n> (E24-M8); the host's id comes back.
+      { kind: "add", ideaIds: ["idea-1"], sourceIds: ["add-1"], sourceQuote: "-", reason: "same subject" },
     ] },
   ];
   vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
@@ -185,6 +186,86 @@ it("puts back null keys DeepSeek's JSON mode leaves out, so a filing reconcile v
     { kind: "clarify", ideaIds: ["idea-1"], sourceIds: ["s1"], sourceQuote: "The yard starts in March.", targetId: null, correctionQuote: null, factKey: null, reason: null },
     { kind: "add", ideaIds: ["idea-1"], sourceIds: ["c1"], sourceQuote: "-", targetId: null, correctionQuote: null, factKey: null, reason: "same subject" },
   ]);
+});
+
+/** Answers every DeepSeek call with `reply` as the JSON-mode content; returns the requests sent. */
+function deepseekReplies(...replies: unknown[]) {
+  const sent: any[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    sent.push(body);
+    return new Response(JSON.stringify({ id: "offline", object: "chat.completion", created: 0, model: body.model, choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(replies.shift()) }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }), { headers: { "content-type": "application/json" } });
+  }));
+  return sent;
+}
+
+// E24-M8: the shapes below are DeepSeek's failed filing replies from the live checks of 10 Nov 2026
+// (17 of 32 reconcile calls), with the private text replaced. Ids keep production's form.
+const yard = {
+  path: "Projects/Boat.md", revision: null, contextPartial: false,
+  statements: [{ id: "st-1a2b", text: "The boat goes to the yard in spring.", sectionId: "s", factKey: null }],
+  sources: [{ id: "source:0:60", start: 0, end: 60, text: "The yard starts in March. The mast needs new rigging first." },
+    { id: "source:61:90", start: 61, end: 90, text: "We still sail in the autumn." }],
+  addCandidates: [{ id: "source:26:60", start: 26, end: 60, text: "The mast needs new rigging first.", ideaIds: ["idea-2"] }],
+  ideas: [{ id: "idea-1", topic: "Yard start", sourceIds: ["source:0:60"] }, { id: "idea-2", topic: "Rigging", sourceIds: ["source:0:60"] },
+    { id: "idea-3", topic: "Autumn sailing", sourceIds: ["source:61:90"] }],
+} as any;
+
+it("shows DeepSeek add candidates under their own add-<n> ids and maps them back (E24-M8)", async () => {
+  const sent = deepseekReplies({ operations: [{ kind: "add", ideaIds: ["idea-2"], sourceIds: ["add-1"], sourceQuote: "-", targetId: null, correctionQuote: null, factKey: null, reason: "rigging is new" }] });
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  const operations = await llm.reconcile!(yard);
+  const prompt = JSON.parse(sent[0].messages.find((m: { role: string }) => m.role === "user").content);
+  expect(prompt.addCandidates.map((c: { id: string }) => c.id)).toEqual(["add-1"]);
+  expect(prompt.sources.map((c: { id: string }) => c.id)).toEqual(["source:0:60", "source:61:90"]);
+  expect(operations).toEqual([{ kind: "add", ideaIds: ["idea-2"], sourceIds: ["source:26:60"], sourceQuote: "-", targetId: null, correctionQuote: null, factKey: null, reason: "rigging is new" }]);
+});
+
+it("keeps an ADD that writes its own quote: the host ignores it and persists the candidate (E24-M8)", async () => {
+  // 53 of the failed operations: ADD with the source words instead of the asked-for dash.
+  deepseekReplies({ operations: [{ kind: "add", ideaIds: ["idea-2"], sourceIds: ["add-1"], sourceQuote: "The mast needs new rigging first.", targetId: null, correctionQuote: null, factKey: null, reason: null }] });
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  await expect(llm.reconcile!(yard)).resolves.toEqual([{ kind: "add", ideaIds: ["idea-2"], sourceIds: ["source:26:60"], sourceQuote: "-", targetId: null, correctionQuote: null, factKey: null, reason: null }]);
+});
+
+it("drops only the wrong operations and every operation on their ideas, never the whole reply (E24-M8)", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  deepseekReplies({ operations: [
+    // Right: idea-1 links its source to the existing statement.
+    { kind: "link_source", ideaIds: ["idea-1"], sourceIds: ["source:0:60"], sourceQuote: "The yard starts in March.", targetId: "st-1a2b", correctionQuote: null, factKey: null, reason: null },
+    // Wrong (40 failed operations): ADD citing a context source instead of a candidate, with its own quote.
+    { kind: "add", ideaIds: ["idea-2"], sourceIds: ["source:0:60"], sourceQuote: "The mast needs new rigging first.", targetId: null, correctionQuote: null, factKey: null, reason: null },
+    // Valid alone, but on idea-2 too: dropped with it so idea-2 is never half decided.
+    { kind: "clarify", ideaIds: ["idea-2"], sourceIds: ["source:0:60"], sourceQuote: "The mast needs new rigging first.", targetId: null, correctionQuote: null, factKey: null, reason: null },
+    // Wrong (too_small): a clarify that cites no source.
+    { kind: "clarify", ideaIds: ["idea-3"], sourceIds: [], sourceQuote: "-", targetId: null, correctionQuote: null, factKey: null, reason: "Which autumn?" },
+  ] });
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  const operations = await llm.reconcile!(yard);
+  expect(operations).toEqual([{ kind: "link_source", ideaIds: ["idea-1"], sourceIds: ["source:0:60"], sourceQuote: "The yard starts in March.", targetId: "st-1a2b", correctionQuote: null, factKey: null, reason: null }]);
+  const logged = warn.mock.calls.map(([line]) => String(line)).find((line) => line.startsWith("[reconcile] "))!;
+  expect(JSON.parse(logged.slice(12)).dropped).toMatchObject({ operations: 3, ideas: 2 });
+  // Counts and issue codes only: no source words reach the log.
+  expect(logged).not.toMatch(/mast|yard|autumn/i);
+  warn.mockRestore();
+});
+
+it("cites a candidate on a non-ADD operation: dropped, as the host could not quote it (E24-M8)", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  deepseekReplies({ operations: [
+    { kind: "link_source", ideaIds: ["idea-2"], sourceIds: ["add-1"], sourceQuote: "The mast needs new rigging first.", targetId: "st-1a2b", correctionQuote: null, factKey: null, reason: null },
+    { kind: "clarify", ideaIds: ["idea-3"], sourceIds: ["source:61:90"], sourceQuote: "We still sail in the autumn.", targetId: null, correctionQuote: null, factKey: null, reason: null },
+  ] });
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  expect((await llm.reconcile!(yard)).map((operation) => operation.ideaIds)).toEqual([["idea-3"]]);
+});
+
+it("still fails a reply it cannot read, so filing falls back as before (E24-M8)", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  deepseekReplies({ operations: [{ kind: "add", sourceIds: ["add-1"], sourceQuote: "-" }] }, "not an object");
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  await expect(llm.reconcile!(yard)).rejects.toThrow("reconciliation_unavailable");
+  await expect(llm.reconcile!(yard)).rejects.toThrow("reconciliation_unavailable");
 });
 
 it("clips an over-long reconcile reason instead of rejecting the whole batch (E24-M1)", async () => {

@@ -109,19 +109,22 @@ it('requires explicit retry IDs only on corrective classification and preserves 
   const prepared=prepareReconciliation({path:'Notes/Test.md',raw:null,title:'Test',type:'note',today:'2026-09-15',sourceContent:text,
    evidence:{content:text,evidenceRef:'Log/2026-09-15.md#^e-123abc'} as any,sources:[{id:'context',start:0,end:text.length,text}],ideas:[{id:'idea',topic:'Conditional check',sourceIds:['context']}],
    addCandidates:[{id:'candidate',ideaIds:['idea'],start:0,end:text.length,text}],context:{branches:[],partial:false,omitted:[],omittedCount:0,discoveryGaps:0,contextChars:0,estimatedTokens:0},links:[]});
-  const base={kind:'add',ideaIds:['idea'],sourceIds:['candidate'],sourceQuote:'-',targetId:null,factKey:null,correctionQuote:null,reason:null};
+  // The model sees the candidate as add-1 (E24-M8); the host id comes back.
+  const base={kind:'add',ideaIds:['idea'],sourceIds:['add-1'],sourceQuote:'-',targetId:null,factKey:null,correctionQuote:null,reason:null};
   const requests=transport(classified,{operations:[base]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
   const result=await llm.reconcile!(prepared.request);
   const schema=requests[0].response_format.json_schema.schema;
   const branches=schema.properties.operations.items.anyOf,add=branches.find((b:any)=>b.properties.kind.const==='add');
-  expect(add.properties.sourceIds.items.enum).toEqual(['candidate']);expect(add.properties.sourceQuote.const).toBe('-');
+  expect(add.properties.sourceIds.items.enum).toEqual(['add-1']);expect(result).toMatchObject([{sourceIds:['candidate']}]);expect(add.properties.sourceQuote.const).toBe('-');
   expect(branches.find((b:any)=>b.properties.kind.const==='link_source').properties.sourceIds.items.enum).toEqual(['context']);
   expect(JSON.stringify(schema)).not.toContain('"oneOf"');
   const applied=await applyReconciliation(prepared,result);expect(applied.pending).toEqual([]);expect(applied.content).toContain(text);
-  transport(classified,{operations:[{...base,sourceIds:['context'],sourceQuote:text}]});
-  await expect(llm.reconcile!(prepared.request)).rejects.toThrow('reconciliation_unavailable');
-  transport(classified,{operations:[{...base,kind:'conflict',sourceIds:['candidate'],sourceQuote:text}]});
-  await expect(llm.reconcile!(prepared.request)).rejects.toThrow('reconciliation_unavailable');
+  // A wrong selector is dropped with its idea, never applied: the idea stays pending and retries (E24-M8).
+  for(const wrong of [{...base,sourceIds:['context'],sourceQuote:text},{...base,kind:'conflict',sourceIds:['add-1'],sourceQuote:text},{...base,kind:'conflict',sourceIds:['candidate'],sourceQuote:text}]){
+   transport(classified,{operations:[wrong]});
+   const dropped=await llm.reconcile!(prepared.request);expect(dropped).toEqual([]);
+   expect((await applyReconciliation(prepared,dropped)).pending).toMatchObject([{ideaIds:['idea'],reason:'reconciliation_idea_unassigned'}]);
+  }
   transport(classified,{operations:[{...base,kind:'conflict',sourceIds:['context'],sourceQuote:text}]});
   await expect(llm.reconcile!(prepared.request)).resolves.toMatchObject([{kind:'conflict',sourceIds:['context']}]);
   const empty=transport(classified,{operations:[{...base,kind:'clarify',sourceIds:['context'],sourceQuote:text,reason:'No complete candidate'}]});
