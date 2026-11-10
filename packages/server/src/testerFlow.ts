@@ -10,8 +10,9 @@
 // Minting tries Stripe from here (it needs "Promotion codes: Write" on the key); when the
 // key cannot, the code stays queued "waiting for the code command" until the operator
 // script attaches one (scripts/tester-flow-codes.mjs, through the tester-code command).
-// Email goes through Resend once RESEND_API_KEY is set; until then it stays queued
-// "waiting for the mail key". Every queued step is retried, so nothing is lost.
+// Email goes through Zenod's one sender (zenodMail.ts: Gmail with Zenod's own key, E26-T2)
+// once its key is set; until then it stays queued "waiting for the mail key". Every queued
+// step is retried, so nothing is lost.
 //
 // The list lives in a private file on the data volume (0600) and is shown only on
 // cloud.zenod.dev/admin/testers to the operator, with the stop switch; since S7 round 2 that page
@@ -25,6 +26,7 @@ import type { HttpBindings } from "@hono/node-server";
 import { bodyLimit } from "hono/body-limit";
 import type { PublicCountsDocument } from "./publicCounts.js";
 import type { TesterMarks } from "./testerMarks.js";
+import { mailerFromEnv, resendMailer, type SendMail, type ZenodMail } from "./zenodMail.js";
 
 export const TESTER_FLOW_FILE = "tester-flow.json";
 export const DEFAULT_TESTER_CAP = 10;
@@ -56,16 +58,13 @@ interface TesterFlowState {
   testers: TesterRecord[];
 }
 
-export interface TesterMail {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-}
+/** Mail goes through Zenod's one sender (zenodMail.ts, EPIC-26 T2). */
+export type TesterMail = ZenodMail;
+export { resendMailer };
+export type { SendMail };
 
 /** Returns a fresh single-use code for this tester id, or throws when it cannot mint. */
 export type MintCode = (testerId: string) => Promise<string>;
-export type SendMail = (mail: TesterMail) => Promise<void>;
 
 export interface TesterFlowOptions {
   dataDir: string;
@@ -123,25 +122,6 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
 <p>Questions or something broke? Just reply to this email.</p>
 </div></body></html>`;
   return { to, subject, text, html };
-}
-
-/** Resend's HTTP API (https://resend.com/docs/api-reference/emails/send-email). */
-export function resendMailer(apiKey: string, from: string, replyTo?: string, fetchImpl: typeof fetch = fetch): SendMail {
-  return async (mail) => {
-    const response = await fetchImpl("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: [mail.to],
-        subject: mail.subject,
-        text: mail.text,
-        html: mail.html,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-      }),
-    });
-    if (!response.ok) throw new Error(`mail provider answered ${response.status}`);
-  };
 }
 
 interface PromotionCodeCreator {
@@ -360,7 +340,6 @@ export function testerFlowFromEnv(
   stripe: PromotionCodeCreator | null,
 ): TesterFlow {
   const cap = Number(env.ZENOD_TESTER_CAP);
-  const resendKey = env.RESEND_API_KEY?.trim();
   return new TesterFlow({
     dataDir,
     cap: Number.isSafeInteger(cap) && cap >= 0 ? cap : DEFAULT_TESTER_CAP,
@@ -368,9 +347,7 @@ export function testerFlowFromEnv(
     joinUrl: `${(env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "")}/join`,
     // Minting from the server is opt-in: it only works once the Stripe key may write promotion codes.
     mint: env.ZENOD_TESTER_MINT === "stripe" && stripe ? stripeMinter(stripe) : null,
-    sendMail: resendKey
-      ? resendMailer(resendKey, env.ZENOD_MAIL_FROM?.trim() || "Zenod <testers@zenod.dev>", env.ZENOD_MAIL_REPLY_TO?.trim() || "support@zenod.dev")
-      : null,
+    sendMail: mailerFromEnv(env),
   });
 }
 
