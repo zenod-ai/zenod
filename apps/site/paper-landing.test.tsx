@@ -100,15 +100,33 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(html.indexOf('id="mcp"')).toBeLessThan(html.indexOf('id="kept"'));
     expect(mcp).toContain("over MCP, from the cloud");
     expect(mcp).toContain("cloud.zenod.dev/mcp");
-    for (const tool of ["Claude", "ChatGPT", "Cursor", "VS Code", "Gemini CLI"]) expect(mcp).toContain(tool);
+    for (const tool of ["WhatsApp", "Claude", "ChatGPT", "Codex", "Cursor", "VS Code", "Gemini CLI"]) expect(mcp).toContain(tool);
     expect(mcp).toContain("dev.zenod/memory");
     expect(mcp).toContain('href="/connect"');
-    expect(mcp).toMatch(/class="pp-mcp-stage scene"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/);
+    expect(mcp).toMatch(/class="mv-stage scene mv-hub"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/);
+  });
+
+  it("opens with five short animated moves before the MCP section (EPIC-25)", () => {
+    const html = render("/");
+    const order = ["how-zenod-works", "forever", "cloud", "helpers", "librarian", "mcp", "kept"];
+    const at = order.map((id) => html.indexOf(`id="${id}"`));
+    for (const index of at) expect(index).toBeGreaterThan(-1);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    const moves = html.slice(at[0], at[5]);
+    expect(moves).toContain("forever, exactly as you said them");
+    expect(moves).toContain("Google Drive or GitHub");
+    expect(moves).toContain("cloud of thoughts");
+    expect(moves).toContain("Helpers read it and add new memories");
+    expect(moves).toContain("Zenod is the librarian");
+    expect(html).toContain("One memory that every AI reads and writes.");
+    // Every stage is a scene with a description, so the final frame says it without motion.
+    expect(html.match(/class="mv-stage scene[^"]*"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/g)).toHaveLength(5);
   });
 
   it("marks the graph view and match strengths live, each with a real screen of the app (EPIC-18 W4)", () => {
     const html = render("/");
-    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(4);
+    // Three product scenes plus the five moves (the fifth replaced the old MCP scene).
+    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(8);
     // Everything on the page shipped: no Coming tag is left.
     expect(html).not.toContain("pp-tag-soon");
     const graph = html.slice(html.indexOf('id="graph"'), html.indexOf('id="constellation"'));
