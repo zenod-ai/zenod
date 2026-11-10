@@ -1006,7 +1006,7 @@ export function buildMcpServer(
         : hits.map((hit) => `${hit.path} (score ${hit.score}, ${hit.matchPercent}% match) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}\n  app: ${hit.appPath}`).join("\n");
       if (timed?.ms != null && rankedHits.length) {
         // E24-M7: `tool` is the whole call so far (vault sync, index, tree places, entries).
-        console.info(`[memory-search] ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB)` : ""}, tool ${Math.round(performance.now() - started)} ms`);
+        console.info(`[memory-search] ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB${timed.index.refreshMs != null ? `, refresh ${timed.index.refreshMs} ms` : ""})` : ""}, tool ${Math.round(performance.now() - started)} ms`);
       }
       const entryText = entries.length === 0
         ? structuralQuery ? "No memory entries match the structural filters." : ""

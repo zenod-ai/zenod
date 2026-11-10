@@ -3,6 +3,7 @@ import { eventLoopHealth } from "./eventLoopHealth.js";
 import type { HttpBindings } from "@hono/node-server";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { USAGE_FEATURES, usageView, zenodLimits } from "./limits.js";
 import { readFeatureSpend } from "./usageStore.js";
 import { nextUtcMonthlyReset } from "./customerMetering.js";
@@ -977,18 +978,33 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   if (agent.name === "zenod" && (env.ZENOD_WARM_TENANTS === "1" || (env.NODE_ENV !== "test" && env.ZENOD_WARM_TENANTS !== "0"))) {
     const warm = setTimeout(() => {
       let loaded = 0;
+      const searchable: Runtime[] = [];
       for (const tenantId of new Set(customer.accounts.list().flatMap((account) =>
         account.tenant_id && (account.subscription_status === "active" || account.subscription_status === "past_due" || isOperatorTenant(account.tenant_id))
           ? [account.tenant_id] : []))) {
         try {
           const runtime = runtimes.get(tenantId) ?? runtimes.forTenantStorage(tenantId, storage.forTenant({ id: tenantId }));
           loaded += 1;
+          // E24-M7: a tenant that has searched before keeps its index file; warm it below.
+          if (existsSync(join(runtime.dataDir, "memory-index.sqlite"))) searchable.push(runtime);
           if (refileSince && isOperatorTenant(tenantId)) scheduleRefileUnfiled(runtime.taskJobQueue, refileSince);
         } catch (error) {
           console.error("[warm] a tenant did not load:", error instanceof Error ? error.message : String(error));
         }
       }
       console.log(`[warm] ${loaded} tenants loaded, their schedules running`);
+      // E24-M7: the first memory search after a restart built the index caches and the tree itself
+      // (5.6 s on production at 08:44 UTC on 10 Nov). Do it now, one tenant at a time, in the background.
+      void (async () => {
+        for (const runtime of searchable) {
+          try {
+            const warmed = await (await runtime.getEngine()).warmMemorySearch?.();
+            if (warmed) console.log(`[warm] memory search ready for a tenant in ${warmed.ms} ms (${warmed.rows} rows)`);
+          } catch (error) {
+            console.warn("[warm] memory search not warmed:", error instanceof Error ? error.message : String(error));
+          }
+        }
+      })();
     }, Number(env.ZENOD_WARM_TENANTS_MS) || 30_000);
     warm.unref();
   }
