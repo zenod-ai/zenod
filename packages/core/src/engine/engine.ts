@@ -778,7 +778,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { hits, tier: "scan", ms: ms() };
   }
 
-  async function syncForRead(options: { wait?: boolean } = {}): Promise<void> {
+  async function syncForRead(): Promise<void> {
     if (!repo) return; // vaultless: nothing to pull
     if (now().getTime() - lastSyncMs < readSyncTtl) return;
     // Never block an interactive turn on a best-effort freshness pull. If a
@@ -787,15 +787,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // background filing stall replies for minutes (#96). lastSyncMs is left
     // untouched so the next idle read retries the pull.
     if (queue.busy) return;
-    const pull = queue.run(async () => {
+    await queue.run(async () => {
       if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
       await (repo.pullForFiling ? repo.pullForFiling() : repo.pull()).catch(() => {});
       lastSyncMs = now().getTime();
     }, "interactive", { lockWaitMs: 0 }).catch(error => { if (!(error instanceof VaultWriteBusyError)) throw error; });
-    // A search serves the local clone now and lets the pull land behind it (E24-M7): the pull
-    // took 1-2 s on production once a minute, and the index re-reads what it changed next time.
-    if (options.wait === false) { pull.catch(() => {}); return; }
-    await pull;
   }
 
   function estimateTokens(text: string): number {
@@ -4115,12 +4111,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       llm.describeImage(imageData, mimeType, prompt),
     search: async (query: string): Promise<Hit[]> => {
       assertVault(repo);
-      await syncForRead({ wait: false });
+      await syncForRead();
       return rankedSearch(query);
     },
     searchTimed: async (query: string) => {
       assertVault(repo);
-      await syncForRead({ wait: false });
+      await syncForRead();
       return timedSearch(query);
     },
     memoryGraph: async (request = {}) => {
@@ -4185,7 +4181,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     writePersonaNotes,
     memoryTree: async () => {
       assertVault(repo);
-      await syncForRead({ wait: false });
+      await syncForRead();
       return loadMemoryTree(vaultPath);
     },
     memoryTreeOutline: async (options?: { listUnplaced?: boolean }) => {
