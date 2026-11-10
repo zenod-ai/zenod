@@ -226,8 +226,9 @@ OPS_PATTERNS = (
 
 
 # E26-S8: a provider refusing a call for credit (HTTP 402, "insufficient balance"), in zenod-mt or phylax logs.
-CREDIT_RX = re.compile(r"\b(openrouter|deepseek)\b.*?(\(402\)|\b402\b|insufficient balance|requires at least \$[\d.]+ in "
-                       r"balance|credit_exhausted)", re.I)
+# Only an HTTP status 402 counts: `[llm-usage] … output=402` is 402 tokens on a call that worked (2026-11-10).
+CREDIT_RX = re.compile(r"\b(openrouter|deepseek)\b.*?(\(402\)|\b(?:http|status|code)[ :]*402\b|\b402 payment required|"
+                       r"insufficient balance|requires at least \$[\d.]+ in balance|credit_exhausted)", re.I)
 
 
 def credit_event(rest: str) -> tuple[str, str] | None:

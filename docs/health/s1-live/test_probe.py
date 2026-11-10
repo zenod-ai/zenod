@@ -133,5 +133,20 @@ class Folds(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(z["ops"]))
 
 
+
+class CreditRefusals(unittest.TestCase):
+    """E26-S8: only an HTTP 402 or a balance message counts as a credit refusal, never a token count of 402."""
+
+    def test_refusals(self):
+        for line, want in (
+            ("[transcribe] openrouter failed, falling back to whisper.cpp: request failed (402)", "openrouter_402"),
+            ("OpenRouter requires at least $0.50 in balance for audio", "openrouter_402"),
+            ("[background] deepseek call failed: http 402 Insufficient Balance", "deepseek_402"),
+            ("[llm-usage] operation=classify provider=deepseek feature=filing status=succeeded output=402 cost_usd=0.001", None),
+            ("[llm-usage] provider=openrouter input=402 output=12", None),
+        ):
+            got = P.credit_event(line)
+            self.assertEqual(got[1] if got else None, want, line)
+
 if __name__ == "__main__":
     unittest.main()
