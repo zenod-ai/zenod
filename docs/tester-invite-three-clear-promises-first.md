@@ -48,7 +48,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T1 | Ticket worker | unassigned | E26-1, E26-2: the three promises on the tester page and the invite, and the first invite ready to send | ready | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| T1 | Ticket worker | run_dcd204c7-29b6-4957-95a2-de3c83044505 — claimed 2026-11-10T03:58Z, lease until 2026-11-10T05:58Z | E26-1, E26-2: the three promises on the tester page and the invite, and the first invite ready to send | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
 
 ## Decisions
 
