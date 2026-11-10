@@ -159,7 +159,15 @@ export interface MemoryIndexOptions {
    * paths reach (multiplied strength at or above `threshold`), at most `joins` of them.
    */
   cloud?: { threshold?: number; joins?: number };
+  /**
+   * Re-read the vault in the background as soon as it is marked dirty, and rebuild the derived
+   * caches, so the next search does not pay for the filing that changed it (E24-M7).
+   */
+  eagerRefresh?: boolean;
 }
+
+/** Commits of one filing land within moments of each other: one background refresh covers them. */
+const EAGER_REFRESH_DELAY_MS = 250;
 
 export const CLOUD_DEFAULT_JOINS = 4;
 /** The best word matches the ranked list's paths start from, and the least a seed must match (E18-W1). */
@@ -447,6 +455,10 @@ function snippetOf(row: { summary: string; body: string } | undefined, words: re
 export class MemoryIndex {
   private readonly db: DatabaseSync;
   private dirty = true;
+  /** Bumped by every markDirty: a sync clears `dirty` only if none came in while it read the vault. */
+  private dirtyGen = 0;
+  private eagerTimer: ReturnType<typeof setTimeout> | null = null;
+  private closed = false;
   private lastCheck = Number.NEGATIVE_INFINITY;
   private inflight: Promise<unknown> | null = null;
   /** Bumped by every sync that changed rows: the cached graph is rebuilt on the next read. */
@@ -512,9 +524,33 @@ export class MemoryIndex {
   /** The vault changed (a filing committed, a pull landed): the next search re-checks it. */
   markDirty(): void {
     this.dirty = true;
+    this.dirtyGen++;
+    if (!this.options.eagerRefresh || this.eagerTimer || this.closed) return;
+    this.eagerTimer = setTimeout(() => {
+      this.eagerTimer = null;
+      if (this.closed) return;
+      this.refresh().then(() => this.warm()).catch((error: unknown) => {
+        if (!this.closed) console.warn(`[memory-index] background refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, EAGER_REFRESH_DELAY_MS);
+    this.eagerTimer.unref?.();
+  }
+
+  /** Build the per-version caches a search reads (privacy, graph, links, spoken words) ahead of it. */
+  private warm(): void {
+    if (this.closed) return;
+    this.privacy();
+    this.memoryGraph();
+    this.weightedLinks();
+    this.spokenVocabulary();
+    // search_memory reads the tree for each hit's place: build it now too (cached per vault state).
+    void loadMemoryTree(this.options.vaultPath).catch(() => {});
   }
 
   close(): void {
+    this.closed = true;
+    if (this.eagerTimer) clearTimeout(this.eagerTimer);
+    this.eagerTimer = null;
     this.db.close();
   }
 
@@ -1268,6 +1304,9 @@ export class MemoryIndex {
 
   private async fresh(): Promise<void> {
     if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
+    // A sync already under way (a background refresh) clears `dirty` before it commits: wait for
+    // it, so a search reads the same rows it would have after running the sync itself.
+    else if (this.inflight) await this.inflight.catch(() => {});
   }
 
   /** Rarity-weighted share (0..1) of the query's words each row contains, by the same FTS5 matching as the search. */
@@ -1298,6 +1337,7 @@ export class MemoryIndex {
 
   private async sync(full: boolean): Promise<{ changed: number; removed: number }> {
     const { vaultPath } = this.options;
+    const gen = this.dirtyGen;
     const files = (await listMarkdownFiles(vaultPath)).filter(indexable);
     const known = new Map((this.db.prepare("SELECT path, mtime_ms, size FROM files").all() as Array<{ path: string; mtime_ms: number; size: number }>)
       .map((row) => [row.path, row]));
@@ -1312,7 +1352,7 @@ export class MemoryIndex {
     const present = new Set(files);
     const removed = full ? [...known.keys()] : [...known.keys()].filter((path) => !present.has(path));
     this.lastCheck = this.now();
-    this.dirty = false;
+    this.dirty = this.dirtyGen !== gen;
     if (!full && changed.length === 0 && removed.length === 0) return { changed: 0, removed: 0 };
 
     const parsed = await Promise.all(changed.map(async (file) => ({ ...file, ...(await rowsOf(vaultPath, file.path)) })));
