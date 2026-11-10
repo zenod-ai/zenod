@@ -8,7 +8,9 @@
 // hold for production today, and WhatsApp only captures and acknowledges
 // (root L-6). The screenshots are rendered by apps/site/shots/capture.mjs with
 // demo content; the graph view and lit answer screens (EPIC-18 W4) are the
-// shipped web app on the made-up demo vault.
+// shipped web app on the made-up demo vault. EPIC-25 puts five short animated
+// moves right after the hero (kept forever, the cloud, helpers, the librarian,
+// one memory for every AI); the real screens below prove them.
 import * as React from "react";
 import "@fontsource-variable/newsreader";
 import "@fontsource/instrument-sans/400.css";
@@ -42,7 +44,7 @@ import {
   type PaidTier,
   SIGN_IN_PATH,
 } from "@/lib/customer";
-import { MCP_SERVER_URL } from "@/lib/connect";
+import { FiveMoves, OneMemorySection } from "@/components/five-moves";
 import { startScenes } from "@/lib/scenes";
 
 const GITHUB_URL = "https://github.com/zenod-ai/zenod";
@@ -56,8 +58,6 @@ export interface PaperCustomer {
   // to zenod.dev and opens the live Stripe checkout.
   subscribe: (tier: PaidTier, signInPath?: string) => void;
 }
-
-const AI_TOOLS = ["Claude", "ChatGPT", "Cursor", "VS Code", "Gemini CLI"];
 
 // The deck's scene markup, verbatim. The objects stay constant and the scene
 // components are memoised, so a re-render (sign-in state, readiness) never
@@ -198,72 +198,8 @@ function Tag({ live, children }: { live: boolean; children: React.ReactNode }) {
   return <span className={live ? "pp-tag pp-tag-live" : "pp-tag pp-tag-soon"}>{children}</span>;
 }
 
-// Zenod runs in the cloud at one MCP address; any connected AI tool reaches
-// the same library. The figure draws the path once it is on screen.
 export const WhatsappScene = React.memo(function WhatsappScene() {
   return <div className="pp-hero-stage scene" data-len="13500" dangerouslySetInnerHTML={WHATSAPP_HTML} />;
-});
-
-const McpSection = React.memo(function McpSection() {
-  return (
-    <section className="pp-mcp" id="mcp" aria-labelledby="mcp-title">
-      <div className="pp-mcp-say" data-reveal>
-        <h2 id="mcp-title">Your AI tools reach it over MCP, from the cloud.</h2>
-        <p>
-          Zenod runs in the cloud at one address. Add it once as a connector
-          and Claude, ChatGPT, Cursor, VS Code or Gemini CLI can search your
-          memory, open a note and save what you worked out, from any computer.
-          There is nothing to host or keep running.
-        </p>
-        <p className="pp-actions">
-          <a className="pp-btn pp-btn-primary" href="/connect">
-            Connect your AI tool
-          </a>
-        </p>
-        <p className="pp-fine">
-          Listed in the official MCP Registry as dev.zenod/memory. Your tool
-          asks you to sign in to Zenod once, with Google or GitHub.
-        </p>
-      </div>
-      <figure className="pp-mcp-fig">
-        <div
-          className="pp-mcp-stage scene"
-          data-len="9000"
-          role="img"
-          aria-label="Claude, ChatGPT, Cursor, VS Code and Gemini CLI connect over MCP to Zenod at cloud.zenod.dev/mcp, which reads and writes your library of Markdown files in GitHub or Google Drive"
-        >
-          <ul className="pp-mcp-tools">
-            {AI_TOOLS.map((tool, index) => (
-              <li key={tool} className="st" data-at={300 + index * 220}>
-                {tool}
-              </li>
-            ))}
-          </ul>
-          <div className="pp-wire st" data-at="1600">
-            <span>MCP</span>
-          </div>
-          <div className="pp-hub st" data-at="2000">
-            <b>Zenod</b>
-            <span>
-              {MCP_SERVER_URL.replace("https://", "").replace("/mcp", "")}
-              <wbr />
-              /mcp
-            </span>
-          </div>
-          <div className="pp-wire st" data-at="2600">
-            <span>Markdown</span>
-          </div>
-          <div className="pp-vault st" data-at="3000">
-            <b>Your library</b>
-            <span>GitHub or Google Drive</span>
-          </div>
-        </div>
-        <figcaption>
-          <Tag live>Live</Tag> One connector address for every tool.
-        </figcaption>
-      </figure>
-    </section>
-  );
 });
 
 // A memory joining the graph: filing and the graph view are both live (E12-S2),
@@ -551,7 +487,9 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
           </figure>
         </section>
 
-        <McpSection />
+        <FiveMoves />
+
+        <OneMemorySection />
 
         <div id="how" className="pp-how">
           <Showcase
