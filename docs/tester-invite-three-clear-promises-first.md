@@ -32,7 +32,7 @@ Status: active
 Last attempted: 2026-11-10T17:25Z E26-S2: the full tester picture on one page; the server now accepts the first 10 applicants itself and creates each a Stripe code and email; live on 0274bf2f
 Result: E26-1 met; application and acceptance live; invites are created automatically, never by hand; Stripe code making waits on one permission tick or E26-A2; emails wait on a Resend key; welcome email to build; E26-S2 and T1 in review on one page
 Evidence: [full tester picture](http://vps3.taild81fbb.ts.net:8921/e26-s2/), [e26-s2](evidence/e26-s2-2026-11-10.md), cards docs/cards/E26-S2.md and docs/cards/E26-T1.md
-Waiting on: E26-A3 (needs Mac agent: one Stripe setting so Zenod makes each code); E26-A5 (needs Mac agent: look at the Google Drive sign-in setup before 28 Nov)
+Waiting on: E26-A3 (needs Mac agent: one Stripe setting so Zenod makes each code); E26-A5 (needs Mac agent: look at the Google Drive sign-in setup before 28 Nov) ; E26-A6 (needs Mac agent: Zenod's own Google Workspace mail key)
 Approved work: none
 Next action: post the mail key ask and the code permission ask from the E26-S2 page; once both land, watch the first stranger's sign-up live
 Source revision: 0274bf2f
