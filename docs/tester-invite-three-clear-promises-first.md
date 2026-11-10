@@ -27,16 +27,16 @@ Goal sentence: The tester page and invite say plainly what a tester gets, and th
 
 ## Current State
 
-Owner: unassigned
-Status: ready
-Last attempted: 2026-11-10 planned from Jordi's voice note (WhatsApp 03:54Z, Zenod Log 2026-11-10 ^e-ecf0b8); first row dispatched
-Result: created, not started
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Owner: run_dcd204c7 (T1)
+Status: active
+Last attempted: 2026-11-10T04:45Z T1: zenod.dev/testers leads with the three promises, live on ce1181e (PR #1581); first invite written, its tester code not made (agents lack the root line)
+Result: E26-1 met on production, in review; E26-2 invite text ready with {CODE} placeholder, not sent
+Evidence: [e26-t1](evidence/e26-t1-2026-11-10.md), [page](http://vps3.taild81fbb.ts.net:8921/e26-t1/), card docs/cards/E26-T1.md
+Waiting on: Jordi, T1 card verdict; E23-A1 (who the first tester is); proposed ask: a narrow root line so agents make tester codes (in the T1 evidence, for the Delivery manager to post)
 Approved work: none
-Next action: first row dispatched 2026-11-10
-Source revision: uncommitted scaffold
-Verified at: 2026-11-10
+Next action: post the tester-code ask; on E23-A1's name, issue that person's code and hand Jordi the filled invite
+Source revision: ce1181e
+Verified at: 2026-11-10T04:45Z (health sha ce1181ec, live page read)
 
 ## Non-Goals
 
@@ -48,7 +48,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T1 | Ticket worker | run_dcd204c7-29b6-4957-95a2-de3c83044505 — claimed 2026-11-10T03:58Z, lease until 2026-11-10T05:58Z | E26-1, E26-2: the three promises on the tester page and the invite, and the first invite ready to send | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| T1 | Ticket worker | run_dcd204c7-29b6-4957-95a2-de3c83044505 | E26-1, E26-2: the three promises on the tester page and the invite, and the first invite ready to send | review | none | [#1581](https://github.com/zenod-ai/zenod/pull/1581) merged ce1181e | main | [e26-t1](evidence/e26-t1-2026-11-10.md), [page](http://vps3.taild81fbb.ts.net:8921/e26-t1/): zenod.dev/testers leads with the three promises, live on ce1181e (deployed 2026-11-10T04:38Z); invite for WhatsApp or email written in [invite-dm](epic7/invite-dm.md), Reddit DM updated too; tester code not made: agents' VPS1 root list has no issue line | 2026-11-10T04:45Z | followups: start tester-code ask — agents cannot make the code the invite needs (root line on VPS1); start EPIC-23 U2 on E23-A1's name — issue that person's code, hand Jordi the filled invite; confirm: yes — Jordi reads the live page and the invite and says if the three promises land |
 
 ## Decisions
 

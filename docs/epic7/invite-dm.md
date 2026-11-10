@@ -1,4 +1,4 @@
-# EPIC-7 T5: tester invite DM (draft, not sent)
+# Tester invites (EPIC-7 T5, EPIC-26 T1; drafts, not sent)
 
 Spine: [EPIC-7](../EPIC-7-REAL-USER-TEST.md), row T5. Sent by T9 (zenod-social Responder, as Jordi on Reddit) only after T8's go; nothing here has been sent or posted. Jordi reviews the wording after the fact.
 
@@ -6,9 +6,32 @@ Voice: zenod-social [message house](https://github.com/AlfaBlok/zenod-social/blo
 
 Fill in per person: `{NAME}` (Reddit handle or first name), `{CODE}` (their own single-use code from T4; unused codes expire 14 days after they are made). Keep `{HOOK}` to one line about what they said on the thread, or drop it.
 
-## The DM
+## The first invite: someone Jordi knows, by WhatsApp or email (EPIC-26 T1)
+
+Jordi's voice note of 2026-11-10 (Zenod Log ^e-ecf0b8): the invite says plainly what a tester gets, three things, then what happens next. Fill in `{NAME}` and `{CODE}`; Jordi sends it himself, agents never do. About 190 words, one message.
+
+> Hi {NAME}, I've been building something called Zenod, a memory you talk to, and I'd love you to be one of the first people to try it.
+>
+> You get three things:
+> 1. A WhatsApp number for your voice notes. Talk to it like you'd leave yourself a note. It writes down every word and files it.
+> 2. Your memory stays in your own account. Everything you send is written word for word into plain files in your own Google Drive or GitHub.
+> 3. A knowledge graph of your notes that Claude, ChatGPT, Cursor or any AI tool with MCP can read and add to.
+>
+> It's free while you test, and no card is needed. What happens next:
+> 1. Sign in at https://cloud.zenod.dev with Google, choose Hosted, and at checkout click "Add promotion code" and enter {CODE}. The total is €0.
+> 2. Pick Google Drive or GitHub for your notes. Then in Settings › WhatsApp & Telegram type your number and send the code it shows to the Zenod number on WhatsApp. From then on, just talk to it.
+>
+> More on what you get: https://zenod.dev/testers. If anything breaks or feels odd, tell me, even one line helps. The code is only for you and works for two weeks.
+
+Email subject, if he sends it by email: "Want to try Zenod before anyone else?"
+
+Every claim holds on production today: the WhatsApp scene, the log in your own Drive or GitHub and the graph view are the real screens on zenod.dev/testers (PR #1581); MCP read and write tools are listed on zenod.dev/connect; €0 checkout with no card and the monthly extension are proven below.
+
+## The Reddit DM
 
 > Hey {NAME}, Jordi here, I built Zenod. {HOOK} You said you'd be up for testing it, so here's a proper invite.
+>
+> You get three things: a WhatsApp number you send voice notes to; a word-for-word copy of everything you send, in your own Google Drive or GitHub; and a knowledge graph of your notes that Claude, ChatGPT, Cursor or any AI tool with MCP can read and add to.
 >
 > It's yours free while you test. Sign up at https://cloud.zenod.dev with Google, hit Subscribe, and at checkout click "Add promotion code" and put in {CODE}. The total goes to €0. You don't need to add a card or any payment details, and you won't be charged.
 >
