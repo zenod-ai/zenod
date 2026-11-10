@@ -101,6 +101,11 @@ COPY scripts/verify-zenod-data.mjs ./scripts/verify-zenod-data.mjs
 
 VOLUME /data
 EXPOSE 8080
+# EPIC-24 M6: releases roll start-first, so Swarm must know when the new task can take traffic.
+# zenod-mt also sets the same check in Dokploy (docs/DEPLOYMENTS.md); this one keeps the roll
+# gated on health if that setting is ever cleared. busybox wget, no extra package.
+HEALTHCHECK --interval=5s --timeout=5s --start-period=60s --retries=6 \
+  CMD wget -q -T 5 -O /dev/null "http://127.0.0.1:${PORT:-8080}/api/health" || exit 1
 
 # The vault clone and SQLite state live on /data — one volume, whole state.
 # tini is PID 1: reaps orphans and forwards SIGTERM to node (E15-R10 shutdown grace).
