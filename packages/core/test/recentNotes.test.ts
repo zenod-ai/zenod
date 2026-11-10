@@ -1,7 +1,12 @@
+import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createEngine } from "../src/engine/engine.js";
+import { VaultRepo } from "../src/git/vaultRepo.js";
+import type { BrainLlm } from "../src/llm/types.js";
+import { SqliteStateStore } from "../src/state/sqlite.js";
 import { MemoryIndex } from "../src/vault/memoryIndex.js";
 import { buildWeightedLinks } from "../src/vault/memoryWeights.js";
 import { isVoiceCapture, recentIntent } from "../src/vault/recentIntent.js";
@@ -224,5 +229,54 @@ describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () =>
     for (const hit of hits.filter((hit) => hit.relation)) expect(hit.pathStrength).toBeGreaterThanOrEqual(0.8);
     // Only the tree path says "long term": whatever is kept reads weak (E12-S3c round 1).
     for (const hit of await index.search("long term", 5)) expect(hit.matchPercent).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("the chat's index reads the day on the engine's clock (E12-S36)", () => {
+  // The bench pins the engine to 8 Nov; the index read "yesterday" on the wall clock and missed 7 Nov,
+  // so the answer came from an older note. Made-up notes on the days of his real questions.
+  const vn = (day: string, time: string, anchor: string, words: string) => [
+    `## ${time} Voice note "${anchor}.ogg" ingested  ^${anchor}`, "- source: whatsapp", "- verbatim: yes", "- content-type: voice_note",
+    `- captured-at: ${day}T${time}:00.000Z`, "", `> ${words}`, "",
+  ].join("\n");
+  const AT = Date.parse("2026-11-08T16:00:00Z");
+
+  async function engineAt(files: Record<string, string>) {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-recent-engine-"));
+    dirs.push(dir);
+    const seed = join(dir, "seed");
+    for (const [path, content] of Object.entries(files)) {
+      await mkdir(dirname(join(seed, path)), { recursive: true });
+      await writeFile(join(seed, path), content);
+    }
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: seed, stdio: "ignore" });
+    git("init", "-q", "-b", "main");
+    git("-c", "user.email=t@example.invalid", "-c", "user.name=t", "add", "-A");
+    git("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "-m", "seed");
+    execFileSync("git", ["clone", "-q", "--bare", seed, join(dir, "origin.git")]);
+    const repo = await VaultRepo.open({ workdir: join(dir, "vault"), remoteUrl: join(dir, "origin.git") });
+    return createEngine({ repo, llm: {} as BrainLlm, state: new SqliteStateStore(":memory:"), memoryIndex: { path: join(dir, "index.sqlite"), tenantId: "t" }, now: () => new Date(AT) });
+  }
+
+  const VAULT = {
+    "Log/2026-10-02.md": ["# 2026-10-02", "", vn("2026-10-02", "10:00", "e-0c0201", "I said the volatility clusters model tested live and was well calibrated.")].join("\n"),
+    "Log/2026-11-06.md": ["# 2026-11-06", "", vn("2026-11-06", "09:00", "e-0b0601", "The shed roof leaks again near the door."),
+      vn("2026-11-06", "18:00", "e-0b0602", "Ana said the boat quote from Porto came in high, we should ask a second yard.")].join("\n"),
+    "Log/2026-11-07.md": ["# 2026-11-07", "", vn("2026-11-07", "21:00", "e-0b0701", "How I work now: the VPS, T3, the personas and goals, and getting testers for Zenod."),
+      vn("2026-11-07", "22:30", "e-0b0702", "The Zenod app should open on a chat first, with the memory graph lighting up.")].join("\n"),
+  };
+
+  it("answers his question about yesterday from 7 Nov when the engine says it is 8 Nov", async () => {
+    const engine = await engineAt(VAULT);
+    const hits = await engine.search("what did I say in my voice notes yesterday?");
+    const notes = hits.filter((hit) => hit.path.startsWith("Log/")).map((hit) => hit.path);
+    expect(notes.slice(0, 2).sort()).toEqual(["Log/2026-11-07.md#^e-0b0701", "Log/2026-11-07.md#^e-0b0702"]);
+    expect(notes).not.toContain("Log/2026-10-02.md#^e-0c0201");
+  });
+
+  it("still lists a named day's notes", async () => {
+    const engine = await engineAt(VAULT);
+    const notes = (await engine.search("what did I send on November 6?")).filter((hit) => hit.path.startsWith("Log/")).map((hit) => hit.path);
+    expect(notes.slice(0, 2).sort()).toEqual(["Log/2026-11-06.md#^e-0b0601", "Log/2026-11-06.md#^e-0b0602"]);
   });
 });

@@ -543,7 +543,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
   const openMemoryIndex = (): MemoryIndex | null => {
     if (memoryIndex !== undefined) return memoryIndex;
     try {
-      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath, eagerRefresh: true });
+      // E12-S36: the index reads "yesterday" on the engine's clock, the same day the answer is told it is.
+      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath, eagerRefresh: true, now: () => now().getTime() });
     } catch (error) {
       if (error instanceof MemoryIndexTenantError) throw error;
       console.warn(`[memory-index] unavailable, using the scan search: ${error instanceof Error ? error.message : String(error)}`);
