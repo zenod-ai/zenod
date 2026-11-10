@@ -67,6 +67,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-08 | accepted | Planned by the Delivery Manager with EPIC-14 S1 round 2 (Jordi's relaunch vn_10331915: "Are we then transcribing twice? … can we send him the transcription if we already have it?"): one worker builds the ingest door that accepts a ready transcript, so neither the cloud chat button nor forwarding apps transcribe twice. | one seam, one worker | vn_d4b0d617, vn_10331915 | — |
 | 2026-11-09 | accepted | V2 answered Jordi's "are my voice notes landing?" (vn_bd75972d) read only: Chat forwarding works; the gaps are agent_team's (card answers, no replay) and go to them as a desk note, never edited here (root L-7) | V3 folded into V2's card; V4 tracks the back-fill | [evidence](evidence/e21-v2-2026-11-09.md) | agent_team replies |
 | 2026-11-10 | accepted | V4 verified agent_team's E42-S42 back-fill read only: 71 of 71 forwarded notes once each, right tag and date; test notes vn_8a891947 and vn_e59dac3f left as immutable Log evidence (on no page, so no vault commit) | V5 folded into V4's card; card `completes: goal` | [evidence](evidence/e21-v4-2026-11-10.md) | Jordi's verdict on V4 |
+| 2026-11-10 | accepted | desk notes about the voice-note back-fill closed and answered | agent_team took both gaps (95f3ee0) and V4 verified their back-fill (97864d7) | 95f3ee0, 97864d7 | never |
 
 ## Operating Learnings
 
