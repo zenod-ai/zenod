@@ -10,7 +10,7 @@ import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { issueCustomerSession } from "../src/customerSession.js";
 import { InboxError, InboxStore, closeInboxFor, inboxFor, inboxNeedsYou } from "../src/inboxStore.js";
-import { registerInboxRoutes } from "../src/inboxRoutes.js";
+import { inboxTapLine, registerInboxRoutes } from "../src/inboxRoutes.js";
 import { Runtime } from "../src/runtime.js";
 
 let dir: string;
@@ -329,5 +329,43 @@ describe("suggestions and voice feedback (EPIC-14 S26)", () => {
       closeInboxFor(runtime);
       await runtime.close();
     }
+  });
+});
+
+describe("the week's tally (EPIC-14 S30)", () => {
+  it("logs one content-free line per tap on a real card, none for an example", async () => {
+    const runtime = new Runtime(join(dir, "tenant-t"), undefined, { tenantId: "tenant-t", seedFromEnv: false, platformLlm: { apiKey: "sk-or-v1-test-platform" } });
+    const app = new Hono();
+    registerInboxRoutes(app, async () => ({ runtime, tenantId: "tenant-t" }));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const inbox = inboxFor(runtime);
+      const real = inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Join Flat hunt into Moving", action: "Join Flat hunt into Moving." });
+      const example = inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Made up", action: "Made up.", example: true });
+      const post = (id: string, path: string, body: unknown = {}) =>
+        app.request(`/api/console/inbox/${id}/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      expect((await post(real.id, "reply", { text: "Keep the Ruzafa visits apart." })).status).toBe(200);
+      expect((await post(real.id, "not-now", { reason: "Not this month" })).status).toBe(200);
+      expect((await post(real.id, "bring-back")).status).toBe(200);
+      expect((await post(example.id, "not-now")).status).toBe(200);
+      const lines = log.mock.calls.map((call) => String(call[0])).filter((line) => line.startsWith("[inbox-tap]"));
+      expect(lines).toEqual([
+        `[inbox-tap] tenant=tenant-t helper=topic-gardener kind=suggestion action=feedback item=${real.id}`,
+        `[inbox-tap] tenant=tenant-t helper=topic-gardener kind=suggestion action=not-now-reason item=${real.id}`,
+        `[inbox-tap] tenant=tenant-t helper=topic-gardener kind=suggestion action=bring-back item=${real.id}`,
+      ]);
+      expect(lines.join("\n")).not.toMatch(/Ruzafa|Flat hunt|this month/);
+    } finally {
+      log.mockRestore();
+      closeInboxFor(runtime);
+      await runtime.close();
+    }
+  });
+
+  it("names the helper whose suggestion started an undone desk job", () => {
+    const suggestion = { id: "s1", kind: "suggestion", from: "Open loops finder" } as never;
+    const job = { id: "j1", kind: "job", from: "Memory desk" } as never;
+    expect(inboxTapLine("t", job, "undo", suggestion)).toBe("[inbox-tap] tenant=t helper=open-loops-finder kind=job action=undo item=j1");
+    expect(inboxTapLine("t", job, "undo", null)).toBe("[inbox-tap] tenant=t helper=memory-desk kind=job action=undo item=j1");
   });
 });
