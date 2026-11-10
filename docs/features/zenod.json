@@ -124,6 +124,16 @@
      ],
      "since": "2026-11-09",
      "draft": true
+    },
+    {
+     "id": "knows-what-you-mean",
+     "title": "See what Zenod knows you mean",
+     "text": "Memory, At a glance lists every part of your memory with a one-line summary, the nicknames you use for it, how many notes it holds, when you last added to it and what you added to in the past 7 days. Zenod picks up a nickname only when you said it yourself, keeps the list fresh after each note and once a night, and shows what keeping it cost.",
+     "rows": [
+      "E14-S28"
+     ],
+     "since": "2026-11-10",
+     "draft": true
     }
    ]
   },
