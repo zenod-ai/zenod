@@ -192,6 +192,19 @@ body:has(.pp) {
 /* Testers (ZAL-A13): the offer in two columns, three steps, then the apply form. */
 .pp-testers main { max-width: var(--pp-max); margin: 0 auto; padding: 0 var(--pp-edge); }
 .pp-testers-hero { padding: clamp(2rem, 6vw, 5rem) 0 0; max-width: 52rem; }
+/* EPIC-26 T1: the three things a tester gets, each beside its real screen. */
+.pp-testers-get { margin-top: clamp(3rem, 7vw, 6rem); }
+.pp-testers-get > h2 { margin-bottom: clamp(1.5rem, 3vw, 2.5rem); }
+.pp-promises { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(3rem, 7vw, 6rem); }
+.pp-promise { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(1.5rem, 4vw, 4rem); align-items: center; border-top: 1px solid var(--pp-ink); padding-top: clamp(1.5rem, 3vw, 2.5rem); }
+.pp-promise-n { display: block; font: 400 clamp(3.5rem, 7vw, 6rem)/1 var(--pp-serif); color: var(--pp-accent); margin-bottom: 0.75rem; }
+.pp-promise-say h3 { font: 400 clamp(1.6rem, 2.6vw, 2.3rem)/1.15 var(--pp-serif); letter-spacing: -0.015em; margin: 0 0 1rem; }
+.pp-promise-say p { margin: 0 0 1rem; max-width: 30rem; }
+.pp-promise-say .pp-fine a { text-decoration: underline; text-underline-offset: 3px; }
+.pp-promise-fig { margin: 0; }
+.pp-promise-fig picture { display: block; }
+.pp-promise-fig figcaption { font: 400 0.95rem/1.5 var(--pp-sans); color: var(--pp-muted); margin-top: 0.85rem; }
+.pp-promise-wa .pp-hero-stage .wa { height: min(34rem, calc(100svh - 9rem)); min-height: 26rem; }
 .pp-testers-terms { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 3rem); margin-top: clamp(3rem, 7vw, 6rem); }
 .pp-testers-terms > div { background: var(--pp-stage); padding: clamp(1.75rem, 3.5vw, 3rem); }
 .pp-testers-terms > div + div { background: var(--pp-field); color: var(--pp-field-ink); }
@@ -211,7 +224,7 @@ body:has(.pp) {
 .pp-testers .pp-foot { padding-top: clamp(4rem, 9vw, 8rem); }
 .pp-plan-note a { text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 900px) {
-  .pp-testers-terms { grid-template-columns: minmax(0, 1fr); }
+  .pp-testers-terms, .pp-promise { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Motion: the headline rises line by line; each part of a section rises in once. */
