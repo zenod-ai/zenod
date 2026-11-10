@@ -33,7 +33,7 @@ Status: active
 Last attempted: 2026-11-10 roll-up: Q0, Q1, Q2 and Q4 done (memory test suite live, cost hygiene and faster filing live) ; S1 done ("who are you?" answered directly, relevance floor) ; S2 done (private notes marked at filing) ; Q3 in review (first live DeepSeek runs: right facts 17-18 of 20, errors 14% from filing format failures) ; Q5 draft
 Result: his three numbers on the suite are 93.8 / 96.2 / 1.6 (ingestion, retrieval, errors) after S33 on 9 Nov; live model checks wait on one root step
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: Jordi: Q3 card
+Waiting on: nobody (Q3 card in review)
 Approved work: none
 Next action: Jordi judges the Q3 card (live checks on his notes); the DeepSeek filing format failures go to EPIC-24
 Source revision: uncommitted scaffold
