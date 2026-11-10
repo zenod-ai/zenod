@@ -2,6 +2,7 @@ import { accessSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
+import { outlastProxyKeepAlive } from "./proxyKeepAlive.js";
 import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
 import {
@@ -40,6 +41,8 @@ const server = serve({ fetch: unit.app.fetch, port }, (info) => {
     `phylax ${instance.mode} instance ${instance.instanceId} listening on :${info.port} (data: ${dataDir})`,
   );
 });
+
+outlastProxyKeepAlive(server);
 
 const shutdown = createGracefulShutdown({
   server,
