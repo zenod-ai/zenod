@@ -1,4 +1,5 @@
 import { mergeMemoryEntries, searchMemoryEntryPage } from "./memoryEntryCatalog.js";
+import { readAsLine, readAsNote, shownReadings, type ReadAs } from "./quickIndexRead.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
@@ -566,6 +567,7 @@ export function buildMcpServer(
   chatInterceptor?: ChatTurnInterceptor,
   githubCapability?: () => boolean,
   onGithubAuthorizationRevoked?: () => void,
+  readAsFor?: (question: string) => Promise<ReadAs[]>,
 ): McpServer {
   const server =
     existingServer ??
@@ -1285,9 +1287,12 @@ export function buildMcpServer(
       const timer = setTimeout(() => cancel.abort(new AnswerCancelledError("timeout")), limitMs);
       const hangUp = () => cancel.abort(new AnswerCancelledError("caller"));
       if (extra?.signal?.aborted) hangUp(); else extra?.signal?.addEventListener("abort", hangUp, { once: true });
+      // EPIC-14 S29: the question's vague words read against the quick index; the answer says how.
+      const readings = readAsFor ? shownReadings(await readAsFor(question).catch(() => [] as ReadAs[])) : [];
+      const note = readAsNote(readings);
       let answer;
       try {
-        answer = await engine.ask(question, { ...(contextRefs ? { contextRefs } : {}), entrySearch: input => searchEntryPage(engine, input), signal: cancel.signal });
+        answer = await engine.ask(note ? `${question}\n${note}` : question, { ...(contextRefs ? { contextRefs } : {}), entrySearch: input => searchEntryPage(engine, input), signal: cancel.signal });
       } catch (error) {
         if (error instanceof AnswerCancelledError) {
           const text = error.reason === "timeout"
@@ -1320,9 +1325,10 @@ export function buildMcpServer(
         type: "read_only_status" as const,
         text: "Read-only answer — no action was performed.",
       };
+      const readAsText = readings.length ? `Read as: ${readAsLine(readings)}\n\n` : "";
       return {
-        content: [{ type: "text", text: `${sources ? `${answerContent.text}\n\nSources:\n${sources}` : answerContent.text}\n\n${status.text}` }],
-        structuredContent: { ...answerContent, status },
+        content: [{ type: "text", text: `${readAsText}${sources ? `${answerContent.text}\n\nSources:\n${sources}` : answerContent.text}\n\n${status.text}` }],
+        structuredContent: { ...answerContent, status, ...(readings.length ? { readAs: readings } : {}) },
       };
     },
   );

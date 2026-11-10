@@ -4,7 +4,8 @@ import type { Answer, BrainEngine, SourceRef } from "zenod";
 import { askNonAnswer } from "zenod/answer-protocol";
 import { ruleSendRoute, type SendRoute } from "zenod/send-route";
 import type { TaskJobInput } from "./taskJobStore.js";
-import { memoryAppPath, rankMemories, type RankedMemory } from "./rankedMemory.js";
+import { memoryAppPath, rankMemories, type RankedMemories, type RankedMemory } from "./rankedMemory.js";
+import { readAsNote, readAsQuery, shownReadings, type ReadAs } from "./quickIndexRead.js";
 
 /**
  * The web app's chat with your memory (EPIC-12 E12-1, row S1). A question is answered from the
@@ -27,6 +28,8 @@ const MEMORY_CHAT_POOL = 20;
  * of the misses; the engine also adds the person's own best-matching notes after these.
  */
 const MEMORY_CHAT_CONTEXT = 16;
+/** EPIC-14 S29: the question's own top matches that keep their places when the quick index adds its readings. */
+const READ_AS_KEEP = 8;
 /**
  * The app chat's relevance floor (E15-S1): a memory under this match is not shown. Picked on Jordi's
  * 45 real questions: the lowest right source shown read 19 %, so 15 % keeps every one of them and
@@ -134,6 +137,8 @@ export interface MemoryChatAnswer {
   checkedBy?: "quoted" | "ask";
   /** "zenod" when the question was about Zenod itself and `answer` is its own description (E15-S1). */
   about?: "zenod";
+  /** EPIC-14 S29: what the question's vague words were read as, from the quick index; the app shows it as "Read as". */
+  readAs?: ReadAs[];
 }
 
 export interface MemoryChatStreamHandlers {
@@ -146,6 +151,11 @@ export interface MemoryChatStreamHandlers {
    * relevance floor and sensitive ones on a weak match are not shown. WhatsApp, Telegram and calls leave it off.
    */
   appChat?: boolean;
+  /**
+   * EPIC-14 S29: read the question's vague words against the quick index first (Runtime.readAs). The
+   * app chat, calls and MCP answers pass it; WhatsApp and Telegram never do (root L-6).
+   */
+  readAs?: (question: string) => Promise<ReadAs[]>;
 }
 
 const basePath = (path: string) => path.split("#")[0]!;
@@ -181,12 +191,64 @@ export async function streamAnswerFromMemory(
   handlers: MemoryChatStreamHandlers = {},
 ): Promise<MemoryChatAnswer> {
   const started = performance.now();
-  const appChat = handlers.appChat === true;
-  if (appChat && isAboutZenod(question)) {
+  if (handlers.appChat === true && isAboutZenod(question)) {
     handlers.onMemories?.([]);
     return { question, answered: true, answer: ABOUT_ZENOD, memories: [], alsoCited: [], ms: Math.round(performance.now() - started), about: "zenod" };
   }
-  const ranked = await rankMemories(engine, question, MEMORY_CHAT_POOL);
+  const readings = handlers.readAs ? await handlers.readAs(question).catch(() => [] as ReadAs[]) : [];
+  const answer = await answerWithReadings(engine, question, handlers, readings, started);
+  const shown = shownReadings(readings);
+  return shown.length ? { ...answer, readAs: shown } : answer;
+}
+
+/**
+ * EPIC-14 S29: ranked retrieval with the quick index's readings. The question's own top matches
+ * keep their places; after them the search with each place's name is mixed in, and each place's own
+ * page is kept among the memories the answer reads, so "the flat" reaches the flat's page even when
+ * the words never match it, and a question the words already answer is not pushed down.
+ */
+export async function rankWithReadings(engine: BrainEngine, question: string, readings: readonly ReadAs[], pool: number, reach: number): Promise<RankedMemories> {
+  const query = readAsQuery(question, readings);
+  const [plain, read] = await Promise.all([
+    rankMemories(engine, question, pool),
+    query === question ? null : rankMemories(engine, query, pool),
+  ]);
+  const keep = Math.min(READ_AS_KEEP, plain.results.length);
+  const results: RankedMemory[] = plain.results.slice(0, keep);
+  const has = (path: string) => results.some((memory) => memory.path === path);
+  const rest = plain.results.slice(keep);
+  const extra = read?.results ?? [];
+  for (let i = 0; i < Math.max(rest.length, extra.length); i++) {
+    for (const memory of [rest[i], extra[i]]) if (memory && !has(memory.path)) results.push(memory);
+  }
+  const missing = readings.filter((reading) => !results.slice(0, reach).some((memory) => memory.path === reading.path));
+  if (missing.length) {
+    const percents = engine.matchPercentsFor ? await engine.matchPercentsFor(query, missing.map((reading) => reading.path)).catch(() => ({} as Record<string, number>)) : {};
+    const pinned = missing.map((reading): RankedMemory => {
+      const found = results.find((memory) => memory.path === reading.path);
+      return found ?? {
+        rank: 0, path: reading.path, title: reading.title, snippet: "", matchPercent: percents[reading.path] ?? 1,
+        url: "", provider: "github", appPath: memoryAppPath(reading.path), treePath: reading.lineage.join(" › "), kind: "page",
+      };
+    });
+    const others = results.filter((memory) => !missing.some((reading) => reading.path === memory.path));
+    // After the top three, so the best word matches still lead.
+    others.splice(Math.min(3, others.length), 0, ...pinned);
+    results.splice(0, results.length, ...others);
+  }
+  return { ...plain, query, results: results.slice(0, Math.max(pool, reach)).map((memory, i) => ({ ...memory, rank: i + 1 })) };
+}
+
+async function answerWithReadings(
+  engine: BrainEngine,
+  question: string,
+  handlers: MemoryChatStreamHandlers,
+  readings: readonly ReadAs[],
+  started: number,
+): Promise<MemoryChatAnswer> {
+  const appChat = handlers.appChat === true;
+  const note = readAsNote(readings);
+  const ranked = readings.length ? await rankWithReadings(engine, question, readings, MEMORY_CHAT_POOL, MEMORY_CHAT_CONTEXT) : await rankMemories(engine, question, MEMORY_CHAT_POOL);
   // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage (E12-S3c).
   const shownMemories = (cited: ReadonlySet<string>) =>
     ranked.results
@@ -200,7 +262,7 @@ export async function streamAnswerFromMemory(
     return { question, answered: false, answer: NON_ANSWER_TEXT.none, memories: [], alsoCited: [], ms: Math.round(performance.now() - started), checkedBy: "quoted" };
   }
   const check = await engine.answerFromMemories(
-    question,
+    note ? `${question}\n${note}` : question,
     ranked.results.slice(0, MEMORY_CHAT_CONTEXT).map((memory) => ({ n: memory.rank, path: memory.path, title: memory.title, snippet: memory.snippet })),
     handlers.onText,
   );
@@ -238,7 +300,7 @@ async function noteLinksFor(engine: BrainEngine, ranked: readonly RankedMemory[]
   return links ? { noteLinks: { voiceNotes: links.voiceNotes, unlinked: links.unlinked } } : {};
 }
 
-export function answerFromMemory(engine: BrainEngine, question: string, options: { appChat?: boolean } = {}): Promise<MemoryChatAnswer> {
+export function answerFromMemory(engine: BrainEngine, question: string, options: Pick<MemoryChatStreamHandlers, "appChat" | "readAs"> = {}): Promise<MemoryChatAnswer> {
   return streamAnswerFromMemory(engine, question, options);
 }
 

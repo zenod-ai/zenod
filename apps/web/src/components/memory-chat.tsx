@@ -4,12 +4,14 @@ import remarkGfm from "remark-gfm"
 
 import {
   askMemoryDesk,
+  correctReadAs,
   keepInMemory,
   keepStatus,
   lookUpInMemory,
   MemoryChatError,
   recordModeSwitch,
   presentAnswer,
+  readAsPlaces,
   sendToMemory,
   talkFromHash,
   talkWithMemory,
@@ -21,6 +23,7 @@ import {
   type MemorySendRoute,
   type MemoryTalkReply,
   type MemoryTalkTurn,
+  type ReadAs,
 } from "@/lib/memory-chat"
 import { litHash } from "@/lib/memory-graph"
 import { formatLength, voiceNoteStatus } from "@/lib/voice-note"
@@ -496,6 +499,116 @@ function ModeChip({ modes, onSwitch }: { modes: ChatMode[]; onSwitch: (mode: Cha
   )
 }
 
+type ReadAsPlace = Awaited<ReturnType<typeof readAsPlaces>>[number]
+type Reading = ReadAs & { saved?: "place" | "none" }
+
+/**
+ * EPIC-14 S29: the grey "Read as" line, what Zenod took the vague words to mean from the quick
+ * index. Tap a reading to put it right: pick the place you meant, or none; it is kept and the index
+ * learns the name.
+ */
+export function ReadAsLine({ readings, loadPlaces = readAsPlaces, save = correctReadAs }: {
+  readings: ReadAs[]
+  loadPlaces?: typeof readAsPlaces
+  save?: typeof correctReadAs
+}) {
+  const [items, setItems] = React.useState<Reading[]>(readings)
+  const [open, setOpen] = React.useState<number | null>(null)
+  const [places, setPlaces] = React.useState<ReadAsPlace[] | null>(null)
+  const [find, setFind] = React.useState("")
+  const [error, setError] = React.useState<string | null>(null)
+  const ref = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    if (open === null) return
+    const close = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(null)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(null)
+    }
+    document.addEventListener("mousedown", close)
+    document.addEventListener("keydown", escape)
+    return () => {
+      document.removeEventListener("mousedown", close)
+      document.removeEventListener("keydown", escape)
+    }
+  }, [open])
+  const start = (i: number) => {
+    setOpen(open === i ? null : i)
+    setFind("")
+    setError(null)
+    if (!places) loadPlaces().then(setPlaces, () => setPlaces([]))
+  }
+  const pick = async (i: number, place: ReadAsPlace | null) => {
+    const reading = items[i]!
+    try {
+      await save(reading.phrase, place ? place.path : null)
+      setItems((all) => all.map((item, k) => k !== i ? item : place
+        ? { ...item, path: place.path, title: place.title, lineage: place.lineage, by: "correction", saved: "place" }
+        : { ...item, saved: "none" }))
+      setOpen(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That could not be saved. Try again.")
+    }
+  }
+  const q = find.trim().toLowerCase()
+  const shown = (places ?? [])
+    .filter((place) => !q || [place.title, ...place.names, ...place.lineage].some((text) => text.toLowerCase().includes(q)))
+    .sort((a, b) => b.memories - a.memories)
+    .slice(0, 8)
+  const saved = items.find((item) => item.saved)
+  return (
+    <div className="zp-readas" data-testid="memory-read-as" ref={ref}>
+      <span className="zp-readas-k">Read as:</span>{" "}
+      {items.map((item, i) => (
+        <span key={`${item.phrase}-${i}`} className="zp-readas-item">
+          {i > 0 ? " · " : null}
+          <button
+            type="button"
+            className="zp-readas-btn"
+            aria-haspopup="dialog"
+            aria-expanded={open === i}
+            title="Not what you meant? Tap to put it right"
+            onClick={() => start(i)}
+          >
+            <b>“{item.phrase}”</b>
+            {item.saved === "none" ? <span> → not a place</span> : <span> → {item.lineage.join(" › ")}</span>}
+          </button>
+          {open === i ? (
+            <span className="zp-modemenu zp-readas-menu" role="dialog" aria-label={`What did you mean by ${item.phrase}?`}>
+              <span className="zp-modemenu-k">What did you mean by “{item.phrase}”?</span>
+              <input
+                className="zp-readas-find"
+                placeholder="Find a place in your memory"
+                value={find}
+                onChange={(event) => setFind(event.target.value)}
+                autoFocus
+              />
+              {places === null ? <span className="zp-readas-note">Loading your places…</span> : null}
+              {shown.map((place) => (
+                <button key={place.path} type="button" onClick={() => void pick(i, place)}>
+                  <b>{place.title}</b>
+                  <span>{place.lineage.slice(0, -1).join(" › ") || "Your memory"}{place.names.length ? ` · also ${place.names.slice(0, 3).join(", ")}` : ""}</span>
+                </button>
+              ))}
+              <button type="button" onClick={() => void pick(i, null)}>
+                <b>None of these</b>
+                <span>Do not read these words as a place</span>
+              </button>
+              {error ? <span className="zp-readas-note" role="alert">{error}</span> : null}
+            </span>
+          ) : null}
+        </span>
+      ))}
+      {saved ? (
+        <span className="zp-readas-saved" role="status">
+          {" "}Saved. Zenod will read “{saved.phrase}” this way from now on.
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 /** A Talk it over reply (EPIC-22): the persona's words, then the memories it read. */
 function TalkTurn({ talk }: { talk: MemoryTalkReply }) {
   return (
@@ -563,6 +676,8 @@ function ReplyTurn({
           <span className="zp-who">with {talk.persona.name}</span>
         ) : null}
       </div>
+      {result?.readAs?.length ? <ReadAsLine readings={result.readAs} /> : null}
+      {talk?.readAs?.length ? <ReadAsLine readings={talk.readAs} /> : null}
       {desk ? <DeskLine desk={desk} onChoose={onDeskChoice} /> : null}
       {keep ? <KeepLine keep={keep} route={route} /> : null}
       {result ? <AnswerTurn result={result} /> : null}

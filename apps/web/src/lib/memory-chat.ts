@@ -44,6 +44,17 @@ export type MemoryChatAnswer = {
   noteLinks?: { voiceNotes: number; unlinked: number }
   /** "zenod": a question about Zenod itself, answered with its own description and no memories (E15-S1). */
   about?: "zenod"
+  /** EPIC-14 S29: what the question's vague words were read as, from the quick index. */
+  readAs?: ReadAs[]
+}
+
+/** EPIC-14 S29: one reading of the person's words: "the flat" was taken as this place in their memory. */
+export type ReadAs = {
+  phrase: string
+  path: string
+  title: string
+  lineage: string[]
+  by: "name" | "correction" | "title" | "word"
 }
 
 export type MemoryChatStreamHandlers = {
@@ -85,6 +96,8 @@ export type MemoryTalkReply = {
   text: string
   memories: MemoryChatMemory[]
   ms: number
+  /** EPIC-14 S29: what the message's vague words were read as. */
+  readAs?: ReadAs[]
 }
 
 export type MemoryTalkTurn = { role: "person" | "persona"; text: string }
@@ -373,4 +386,18 @@ export function vaultLabel(provider: string): string {
   return provider === "google-drive" || provider === "google_drive"
     ? "Drive"
     : "GitHub"
+}
+
+/**
+ * EPIC-14 S29: the person corrected a "Read as": these words mean this place (path), or no place
+ * (null). Zenod keeps it in the quick index and reads the words this way from now on.
+ */
+export async function correctReadAs(phrase: string, path: string | null): Promise<void> {
+  await request("/api/console/quick-index/read-as", json({ phrase, path }))
+}
+
+/** The places a "Read as" can be corrected to: the quick index's places (Memory › At a glance). */
+export async function readAsPlaces(): Promise<Array<{ path: string; title: string; lineage: string[]; names: string[]; memories: number }>> {
+  const index = await request<{ status: string; places?: Array<{ path: string; title: string; lineage: string[]; names: string[]; memories: number }> }>("/api/console/quick-index")
+  return index.places ?? []
 }

@@ -78,6 +78,7 @@ import {
   routeSendMessage,
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
+import { readAsLine } from "./quickIndexRead.js";
 import { parseTalkRequest, streamTalk, talkPersona } from "./memoryTalk.js";
 import { parseModeSwitch, recordModeSwitch } from "./modeSwitches.js";
 import { memoryGlance, MemoryGlanceCache } from "./memoryGlance.js";
@@ -1437,6 +1438,29 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
   });
 
+  // EPIC-14 S29: the person corrected a "Read as" line: these words mean this place, or no place.
+  // Kept in the quick index (the place learns the name); no model call, nothing in the vault changes.
+  app.post("/api/console/quick-index/read-as", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const body = await c.req.json<{ phrase?: unknown; path?: unknown }>().catch(() => ({}) as { phrase?: unknown; path?: unknown });
+    const phrase = typeof body.phrase === "string" ? body.phrase.replace(/\s+/g, " ").trim() : "";
+    const path = typeof body.path === "string" && body.path.trim() ? body.path.trim() : body.path === null ? null : undefined;
+    if (!phrase || phrase.length > 80 || path === undefined) return c.json({ error: "phrase and path are required" }, 400);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      const saved = await runtime.correctReadAs(phrase, path);
+      return saved ? c.json({ ok: true, phrase, path }) : c.json({ error: "not_found" }, 404);
+    } catch (error) {
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);
+      console.warn(`[quick-index] read-as correction not kept for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "quick index unavailable" }, 503);
+    }
+  });
+
   // EPIC-12 E12-S27: the person checks where Zenod filed things, on their own tree: the filings to
   // check (least sure first), "Right place", "Wrong place" with where it belongs, and Undo. Each
   // change is one commit in their vault with a correction record (S6 landing feedback shape); no model call.
@@ -1634,6 +1658,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           onMemories: (memories) => { void send({ type: "memories", memories }); },
           onText: (text) => { void send({ type: "text", text }); },
           appChat: true,
+          readAs: (words) => runtime.readAs(words),
         });
         await send({ type: "answer", answer });
       } catch (error) {
@@ -1683,6 +1708,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           const talk = await streamTalk(engine, { message: route.talk || message, persona: talkPersona(null), history: [], opener: false }, {
             onMemories: (memories) => { void send({ type: "memories", memories }); },
             onText: (text) => { void send({ type: "text", text }); },
+            readAs: (words) => runtime.readAs(words),
           });
           await send({ type: "talk", talk });
         }
@@ -1700,6 +1726,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
             onMemories: (memories) => { void send({ type: "memories", memories }); },
             onText: (text) => { void send({ type: "text", text }); },
             appChat: true,
+            readAs: (words) => runtime.readAs(words),
           });
           await send({ type: "answer", answer });
         }
@@ -1730,6 +1757,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         const reply = await streamTalk(await runtime.getEngine(), talk!, {
           onMemories: (memories) => { void send({ type: "memories", memories }); },
           onText: (text) => { void send({ type: "text", text }); },
+          readAs: (words) => runtime.readAs(words),
         });
         await send({ type: "talk", talk: reply });
       } catch (error) {
@@ -1746,7 +1774,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if ("response" in start) return start.response;
     const { question, runtime, tenantId, release } = start;
     try {
-      return c.json(await answerFromMemory(await runtime.getEngine(), question, { appChat: true }));
+      return c.json(await answerFromMemory(await runtime.getEngine(), question, { appChat: true, readAs: (words) => runtime.readAs(words) }));
     } catch (error) {
       const failure = memoryChatFailure(tenantId, error);
       return c.json(failure.body, failure.status);
@@ -1943,9 +1971,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         allowanceBlock: () => runtime.featureBlock("calls"),
         answer: async (question) => {
           // A call's lookups count as the call's spend, not as chat answers.
-          const found = await withFeature("calls", async () => answerFromMemory(await runtime.getEngine(), question));
+          // EPIC-14 S29: the call reads the quick index first, and tells the voice what it read the words as.
+          const found = await withFeature("calls", async () => answerFromMemory(await runtime.getEngine(), question, { readAs: (words) => runtime.readAs(words) }));
           const sources = [...found.memories.filter((m) => m.cited).map((m) => m.title), ...found.alsoCited.map((m) => m.title)];
-          return { answered: found.answered, answer: found.answer, sources };
+          return { answered: found.answered, answer: found.answer, sources, ...(found.readAs?.length ? { readAs: readAsLine(found.readAs) } : {}) };
         },
         deskJob: (job) => {
           const deskBlock = runtime.featureBlock("desk");

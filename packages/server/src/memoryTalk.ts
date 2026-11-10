@@ -1,6 +1,7 @@
 import type { BrainEngine, MemoryEntry } from "zenod";
 import { memoryAppPath, rankMemories } from "./rankedMemory.js";
-import { isSensitiveMemory, MEMORY_CHAT_FLOOR, MEMORY_CHAT_MAX_QUESTION_CHARS, MEMORY_CHAT_SENSITIVE_FLOOR, type MemoryChatMemory } from "./memoryChat.js";
+import { isSensitiveMemory, MEMORY_CHAT_FLOOR, MEMORY_CHAT_MAX_QUESTION_CHARS, MEMORY_CHAT_SENSITIVE_FLOOR, rankWithReadings, type MemoryChatMemory } from "./memoryChat.js";
+import { readAsNote, shownReadings, type ReadAs } from "./quickIndexRead.js";
 import { BUILT_IN_PERSONAS, memoryTitle, personaById } from "./personaCatalog.js";
 
 /**
@@ -37,6 +38,8 @@ export interface MemoryTalkReply {
   /** The memories the persona read, the cited ones marked. */
   memories: MemoryChatMemory[];
   ms: number;
+  /** EPIC-14 S29: what the message's vague words were read as, from the quick index. */
+  readAs?: ReadAs[];
 }
 
 /** The persona to talk with: a built-in persona by id or name (an inbox card names its sender), else the librarian. */
@@ -82,30 +85,41 @@ async function newestMemories(engine: BrainEngine): Promise<MemoryChatMemory[]> 
 export async function streamTalk(
   engine: BrainEngine,
   request: TalkRequest,
-  handlers: { onMemories?(memories: MemoryChatMemory[]): void; onText?(delta: string): void } = {},
+  handlers: {
+    onMemories?(memories: MemoryChatMemory[]): void;
+    onText?(delta: string): void;
+    /** EPIC-14 S29: read the message's vague words against the quick index first (Runtime.readAs). */
+    readAs?(message: string): Promise<ReadAs[]>;
+  } = {},
 ): Promise<MemoryTalkReply> {
   const started = performance.now();
   const about = request.opener ? request.message : "";
   const message = request.opener ? openerMessage(request.persona, about) : request.message;
+  const said = request.opener ? about : request.message;
+  const readings = said && handlers.readAs ? await handlers.readAs(said).catch(() => [] as ReadAs[]) : [];
+  const query = [...request.history.filter((turn) => turn.role === "person").slice(-1).map((turn) => turn.text), message].join(" ");
   const pool: MemoryChatMemory[] = request.opener && !about
     ? await newestMemories(engine)
-    : (await rankMemories(engine, [...request.history.filter((turn) => turn.role === "person").slice(-1).map((turn) => turn.text), message].join(" "), TALK_MEMORIES)).results.map((memory) => ({ ...memory, cited: false }));
+    : (readings.length ? await rankWithReadings(engine, query, readings, TALK_MEMORIES, TALK_MEMORIES) : await rankMemories(engine, query, TALK_MEMORIES)).results.map((memory) => ({ ...memory, cited: false }));
+  const note = readAsNote(readings);
+  const shownAs = shownReadings(readings);
+  const readAs = shownAs.length ? { readAs: shownAs } : {};
   const persona = { id: request.persona.id, name: request.persona.name };
   handlers.onMemories?.(pool.filter((memory) => memory.matchPercent === 0 || shown(memory)));
   const reply = engine.talkOverMemories
     ? await engine.talkOverMemories({
       persona: request.persona,
-      message,
+      message: note ? `${message}\n${note}` : message,
       history: request.history,
       memories: pool.map((memory) => ({ n: memory.rank, path: memory.path, title: memory.title, snippet: memory.snippet })),
     }, handlers.onText)
     : null;
   if (!reply || !reply.text) {
-    return { persona, message, talked: false, text: "Talk it over needs Zenod's chat model, and it is not available just now. Try again in a moment.", memories: [], ms: Math.round(performance.now() - started) };
+    return { persona, message, talked: false, text: "Talk it over needs Zenod's chat model, and it is not available just now. Try again in a moment.", memories: [], ms: Math.round(performance.now() - started), ...readAs };
   }
   const cited = new Set(reply.cited);
   const memories = pool
     .map((memory) => ({ ...memory, cited: cited.has(memory.rank) }))
     .filter((memory) => memory.cited || (memory.matchPercent > 0 && shown(memory)));
-  return { persona, message, talked: true, text: reply.text, memories, ms: Math.round(performance.now() - started) };
+  return { persona, message, talked: true, text: reply.text, memories, ms: Math.round(performance.now() - started), ...readAs };
 }
