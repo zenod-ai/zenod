@@ -41,14 +41,14 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 Status: active
 Phase: A0 re-check done and proposed done 2026-10-25 (worker run_f010b4a9); A1–A5 not started
 Last verified: 2026-10-25
-Last attempted: 2026-11-09 09:20Z: A13 testers page live and in review ; A15 lost WhatsApp voice notes fixed (local transcription fallback, his 03:19Z note saved) ; A16 receipts after reconnect and 7-day media links live ; A17 new header and logo on /connect and /pricing live and in review ; A14 alert key waits on ZAL-A14-A1
-Result: production is up (health ok on 5f7aa149) with background work on DeepSeek and WhatsApp voice notes saving again; the tester program is open on zenod.dev; no tester invited yet; live billing never performed
+Last attempted: 2026-11-10 roll-up: EPIC-7 (active) all leaked keys rolled, dress rehearsal waits on the team sign-in E7-A18 on Jordi's Mac list ; EPIC-6 (ready) health page waits on his S1 review ; A13 testers page done, its applications page waits on infra-vps/EPIC-2-A46 ; A14 alerts key and A15..A20 fixes done ; the first real tester now goes through EPIC-23 and EPIC-26
+Result: production is up (health ok) with alerts, seamless releases, voice notes saving; the tester page leads with three promises; no tester invited yet
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: through EPIC-7: E7-A16 key page and E7-A18 (needs Mac agent) one sign-in
+Waiting on: Jordi: E23-A1 name the first tester ; Mac list: E7-A18, E26-A2 ; infra-vps/EPIC-2-A46 (his root key)
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: Jordi reviews A13 and A17 ; once ZAL-A13-A1 is answered agents list the applications for him to pick ten ; EPIC-7 T7 once he signs in
-Verified at: 2026-11-09T09:20Z health ok on 5f7aa149; zenod.dev/connect and /testers 200
+Next action: EPIC-26 T1 round 2 builds the one-link tester funnel; then the first invite goes out
+Verified at: 2026-11-10T09:20Z
 
 ## Waiting on
 
@@ -124,7 +124,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | decided by Delivery Manager: A18 opened ready from the infra-vps desk note | our checks re-read a 265 MB log every few minutes and burst VPS1 CPU at the hour marks; fixing our own load is tier do; rollback revert | desk/inbox/2026-11-09-infra-vps-vps1-load-spikes-zenod-probe-and-timelin.md, d6444350, row opened 5c05498, note answered b141b35 |
 | 2026-11-09 | accepted | Jordi approved ZAL-A14-A1 (one-time use of the relay admin key to mint the alerts-only key) and ZAL-A13-A1 (agents read the tester applications file only) | A14 mint run_039b6279; A13 read rule and private applications list run_0e46d4c7; each worker marks its ask consumed | b68941a7, 873fd0fe, A14 ask consumed 84cb5a2, agent_team confirmed 3f5c83b, note closed 5e56ee7 | when both report |
 | 2026-11-09 | commits named under their rows | worker spine commit | A19, A20: afd2a1b (live ba6b56e) |
-| 2026-11-10 | infra-vps answered the tester-applications read rule | the one-file rule waits on their ask infra-vps/EPIC-2-A46 (one write-enabled run), then Jordi applies it as root; A13's private applications page fills once it is live | desk notes 1163a06, closed 0ed8e26e |
+| 2026-11-10 | infra-vps answered the tester-applications read rule | the one-file rule waits on their ask infra-vps/EPIC-2-A46 (one write-enabled run), then Jordi applies it as root; A13's private applications page fills once it is live | desk notes 1163a06, closed 0ed8e26e ; secret reinstall note closed 2ae6594 |
 
 
 ## Spine Map
