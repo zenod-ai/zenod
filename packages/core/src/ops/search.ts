@@ -37,13 +37,22 @@ function normalizePhrase(value: string): string {
  * dropped whole once it holds MAX_NORMALIZED texts.
  */
 const MAX_NORMALIZED = 200_000;
+/** E24-M3: bounded by characters too. 200,000 long transcript lines held twice exhausted the heap. */
+const MAX_NORMALIZED_CHARS = 8_000_000;
+const MAX_CACHED_TEXT_CHARS = 2_000;
 const normalizedTexts = new Map<string, string>();
+let normalizedChars = 0;
 function normalizedText(text: string): string {
   let value = normalizedTexts.get(text);
   if (value === undefined) {
-    if (normalizedTexts.size >= MAX_NORMALIZED) normalizedTexts.clear();
     value = normalizePhrase(text);
+    if (text.length > MAX_CACHED_TEXT_CHARS) return value;
+    if (normalizedTexts.size >= MAX_NORMALIZED || normalizedChars + text.length + value.length > MAX_NORMALIZED_CHARS) {
+      normalizedTexts.clear();
+      normalizedChars = 0;
+    }
     normalizedTexts.set(text, value);
+    normalizedChars += text.length + value.length;
   }
   return value;
 }
@@ -164,6 +173,16 @@ interface BodyHit {
 }
 
 /**
+ * E24-M3: one body search may hold only so much. A filing query of up to 128 common terms matches most
+ * lines of a large vault; up to 8 such searches at once ran Zenod out of memory (production 2026-11-10,
+ * 3 restarts). Lines are clipped, each file counts at most MAX_BODY_LINES_PER_FILE lines, and the
+ * search stops reading once MAX_BODY_HIT_BYTES are collected: the ranking then uses what it has.
+ */
+export const MAX_BODY_LINE_CHARS = 1_000;
+export const MAX_BODY_LINES_PER_FILE = 200;
+export const MAX_BODY_HIT_BYTES = 4 * 1024 * 1024;
+
+/**
  * ripgrep pass: case-insensitive fixed-string match over markdown bodies, any term matches (OR — same
  * semantics as scanBodies). Plain `path NUL line` output: a long filing query matches tens of thousands
  * of lines, and parsing one JSON event per line cost seconds per search (E15-Q4).
@@ -179,6 +198,11 @@ function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
         "--with-filename",
         "--null",
         "--no-line-number",
+        "--max-count",
+        String(MAX_BODY_LINES_PER_FILE),
+        "--max-columns",
+        String(MAX_BODY_LINE_CHARS),
+        "--max-columns-preview",
         "--color",
         "never",
         "--glob",
@@ -192,11 +216,20 @@ function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
     );
     const hits: BodyHit[] = [];
     const chunks: Buffer[] = [];
-    rg.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let bytes = 0;
+    let capped = false;
+    rg.stdout.on("data", (chunk: Buffer) => {
+      if (capped) return;
+      chunks.push(chunk);
+      bytes += chunk.length;
+      if (bytes >= MAX_BODY_HIT_BYTES) { capped = true; rg.kill(); }
+    });
     rg.on("error", reject); // rg not installed
     rg.on("close", (code) => {
-      if (code !== 0 && code !== 1) return reject(new Error(`rg exited with ${code}`)); // 1 = no matches
-      for (const line of Buffer.concat(chunks).toString("utf8").split("\n")) {
+      if (!capped && code !== 0 && code !== 1) return reject(new Error(`rg exited with ${code}`)); // 1 = no matches
+      const lines = Buffer.concat(chunks).subarray(0, MAX_BODY_HIT_BYTES).toString("utf8").split("\n");
+      if (capped) lines.pop(); // the last line may be cut mid-way
+      for (const line of lines) {
         const split = line.indexOf("\0");
         if (split < 0) continue;
         const path = line.slice(0, split).replace(/^\.\//, "");
@@ -211,13 +244,19 @@ function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
 /** Fallback when ripgrep is unavailable: plain JS substring scan. */
 async function scanBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
   const hits: BodyHit[] = [];
+  let bytes = 0;
   for (const file of await listMarkdownFiles(vaultPath)) {
     if (isFilingReceiptPath(file)) continue;
     const content = await readFile(join(vaultPath, file), "utf8");
+    let lines = 0;
     for (const line of content.split("\n")) {
       const lower = line.toLowerCase();
       if (terms.some((t) => lower.includes(t))) {
-        hits.push({ path: file, line });
+        const kept = line.slice(0, MAX_BODY_LINE_CHARS);
+        hits.push({ path: file, line: kept });
+        bytes += kept.length + file.length;
+        if (bytes >= MAX_BODY_HIT_BYTES) return hits;
+        if (++lines >= MAX_BODY_LINES_PER_FILE) break;
       }
     }
   }

@@ -229,10 +229,12 @@ export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultP
     fallbackAttempted = true;
     try {
       // Per-topic retrieval prevents the first/widest topic from monopolizing fallback context.
-      const groups = await Promise.all(decisions.slice(0, 8).map(async topic => ({
-        topic: topic.summary, query: [topic.summary, ...topic.pages.map(page => page.title)].join(" "),
-        pages: await candidatePages(vaultPath, snapshot, [topic.summary, ...topic.pages.map(page => page.title)].join(" "), input.hints, exclude),
-      })));
+      // One search at a time (E24-M3): eight whole-vault searches at once ran Zenod out of memory.
+      const groups: Array<{ topic: string; query: string; pages: PageIndexEntry[] }> = [];
+      for (const topic of decisions.slice(0, 8)) {
+        const query = [topic.summary, ...topic.pages.map(page => page.title)].join(" ");
+        groups.push({ topic: topic.summary, query, pages: await candidatePages(vaultPath, snapshot, query, input.hints, exclude) });
+      }
       const combined = new Map(initial.slice(0, 4).map(page => [page.path, page]));
       for (let rank = 0; rank < CANDIDATE_LIMIT && combined.size < CANDIDATE_LIMIT; rank++) for (const group of groups) {
         const page = group.pages[rank]; if (page && combined.size < CANDIDATE_LIMIT) combined.set(page.path, page);
