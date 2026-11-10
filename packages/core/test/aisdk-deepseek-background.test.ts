@@ -187,6 +187,25 @@ it("puts back null keys DeepSeek's JSON mode leaves out, so a filing reconcile v
   ]);
 });
 
+it("clips an over-long reconcile reason instead of rejecting the whole batch (E24-M1)", async () => {
+  // Production 2026-11-10: DeepSeek wrote reasons past 240 characters and every operation was thrown away.
+  const reason = "The source restates the branch subject in more words than needed. ".repeat(8);
+  vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    const content = JSON.stringify({ operations: [{ kind: "clarify", ideaIds: ["idea-1"], sourceIds: ["s1"], sourceQuote: "The yard starts in March.", reason }] });
+    return new Response(JSON.stringify({ id: "offline", object: "chat.completion", created: 0, model: body.model, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }), { headers: { "content-type": "application/json" } });
+  }));
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: () => {} });
+  const operations = await llm.reconcile!({
+    path: "Projects/Boat.md", revision: null, contextPartial: false, statements: [],
+    sources: [{ id: "s1", text: "The yard starts in March." }] as any,
+    ideas: [{ id: "idea-1", topic: "Yard start", sourceIds: ["s1"] }] as any,
+  });
+  expect(reason.length).toBeGreaterThan(240);
+  expect(operations).toHaveLength(1);
+  expect(operations[0]!.reason).toBe(reason.slice(0, 240));
+});
+
 it("fills only keys whose schema allows null, and picks the union branch by its kind (S11)", async () => {
   const { fillMissingNulls } = await import("../src/llm/aisdk.js");
   const schema = { type: "object", properties: { items: { type: "array", items: { anyOf: [
