@@ -182,6 +182,10 @@ describe("memory desk routes (EPIC-14 S3)", { timeout: 30_000 }, () => {
       const four = post("Join Boat and Yard");
       expect((await (await t.call("POST", `/api/console/inbox/${four.id}/not-now`, t.ada, {})).json()).item.replies).toEqual([]);
       expect(inbox.unreadFeedback("Topic gardener").map((entry) => [entry.reply.kind, entry.reply.text])).toEqual([["notnow", "They are two different flats"]]);
+      // S27 round 2: Bring it back opens a suggestion put away, its reason kept; an open one cannot come back.
+      const back = await (await t.call("POST", `/api/console/inbox/${three.id}/bring-back`, t.ada, {})).json();
+      expect(back.item).toMatchObject({ status: "open", needsYou: true, replies: [{ kind: "notnow", text: "They are two different flats" }] });
+      expect((await t.call("POST", `/api/console/inbox/${three.id}/bring-back`, t.ada, {})).status).toBe(409);
       expect(deskJob).toHaveBeenCalledTimes(2);
     } finally {
       await t.close();
