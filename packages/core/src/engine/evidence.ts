@@ -174,6 +174,41 @@ function parseEvidenceFile(path: string, text: string, location: VaultSourceCont
   });
 }
 
+/**
+ * EPIC-24 M3: Log entries on or after `since` (YYYY-MM-DD) that are filed nowhere: no `- filed:` line
+ * under the entry, no filing receipt, and no page outside the Log citing it. Oldest first. Read-only.
+ */
+export async function unfiledEvidenceEntries(vaultPath: string, since: string, location: VaultSourceContext = {}): Promise<MemoryEntry[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) throw new Error("since must be YYYY-MM-DD");
+  const files = await listMarkdownFiles(vaultPath);
+  const cited = new Set<string>();
+  for (const path of files) {
+    if (logDate(path) !== null || /^Inbox\/filing-/.test(path)) continue;
+    const text = await readFile(join(vaultPath, path), "utf8").catch(() => "");
+    for (const match of text.matchAll(/(\d{4}-\d{2}-\d{2})(?:\.md)?#\^(e-[0-9a-fA-F]{6})/g)) cited.add(`${match[1]}#^${match[2]!.toLowerCase()}`);
+  }
+  const receipts = new Set(files.filter((path) => /^Inbox\/filing-/.test(path)));
+  const unfiled: MemoryEntry[] = [];
+  for (const path of files.filter((candidate) => (logDate(candidate) ?? "") >= since).sort()) {
+    const date = logDate(path)!;
+    const text = await readFile(join(vaultPath, path), "utf8");
+    const lines = text.split("\n");
+    const filed = new Set<string>();
+    let current: string | null = null;
+    for (const line of lines) {
+      const heading = entryHeading(line);
+      if (heading) current = heading.anchor;
+      else if (current && line.startsWith("- filed: ")) filed.add(current);
+    }
+    for (const entry of parseEvidenceFile(path, text, location)) {
+      if (filed.has(entry.anchor) || receipts.has(`Inbox/filing-${date}-${entry.anchor}.md`)) continue;
+      if (cited.has(`${date}#^${entry.anchor.toLowerCase()}`)) continue;
+      unfiled.push(entry);
+    }
+  }
+  return unfiled;
+}
+
 /** Legacy zone-less timestamps are interpreted as UTC, never host-local time. */
 export function memoryTimestamp(value: string): number {
   if (!/^\d{4}-\d{2}-\d{2}(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?$/.test(value)) {

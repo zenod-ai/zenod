@@ -69,7 +69,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
-import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
+import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString, unfiledEvidenceEntries } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
@@ -713,6 +713,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
         ...(entry.capturedAt ? { capturedAt: entry.capturedAt } : {}),
         ...(entry.sourceId ? { sourceId: entry.sourceId } : {}) };
     } catch { return null; }
+  }
+
+  /** EPIC-24 M3: enrichment inputs for Log entries since `since` that are filed nowhere (read-only, background lane). */
+  async function unfiledEvidence(since: string): Promise<EnrichEvidenceInput[]> {
+    assertVault(repo);
+    return queue.run(async () => (await unfiledEvidenceEntries(vaultPath, since, sourceResolver)).map((entry) => ({
+      evidenceRef: entry.evidenceRef, content: entry.content, source: entry.source,
+      ...(entry.verbatim ? { verbatim: true } : {}),
+      ...(entry.contentType ? { contentType: entry.contentType } : {}),
+      ...(entry.capturedAt ? { capturedAt: entry.capturedAt } : {}),
+      ...(entry.sourceId ? { sourceId: entry.sourceId } : {}),
+    })), "background");
   }
 
   async function safeReadRevision(): Promise<VaultRevision> {
@@ -2431,7 +2443,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
         prior = await loadReceipt();
       }
       if (changes.length || !localPublished) {
-        if (!prior) throw new Error("filing_unrecognized_local_changes");
+        if (!prior) {
+          // EPIC-24 M3: another filing's plan is in the vault (one interrupted by a restart, or the other process
+          // during a rolling release). Wait for vault recovery like a capture does, instead of failing for good.
+          if ((await describeInterruptedFiling(true)).interrupted) throw new Error("filing_recovery_pending");
+          throw new Error("filing_unrecognized_local_changes");
+        }
         if (prior.phase === "prepared") {
           if (!localPublished || prior.baseRevision.provider !== published.provider || prior.baseRevision.id !== published.id
             || !verifyPreparedFilingChanges(prior, changes, receiptPath)) throw new Error("filing_prepared_plan_conflict");
@@ -4075,6 +4092,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     inspectInterruptedFiling,
     recoverUnpublishedHead,
     evidenceEnrichInput,
+    unfiledEvidence,
     ask,
     answerFromMemories,
     talkOverMemories,
