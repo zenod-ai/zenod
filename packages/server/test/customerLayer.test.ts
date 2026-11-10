@@ -17,6 +17,9 @@ import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.
 import { issueCustomerSession } from "../src/customerSession.js";
 import { customerMetering } from "../src/customerMetering.js";
 import { Runtime } from "../src/runtime.js";
+import { mountTesterApplications } from "../src/testerApplications.js";
+import { stripeMinter, TesterFlow, type TesterMail } from "../src/testerFlow.js";
+import type { HttpBindings } from "@hono/node-server";
 
 const DESTINATION = "https://cloud.zenod.dev";
 const CALLBACK = `${DESTINATION}/auth/github/callback`;
@@ -862,6 +865,55 @@ describe("hosted customer layer", () => {
       const again = await app.request("/join?code=TESTER1", { headers: { cookie } });
       expect(again.status).toBe(303);
       expect(again.headers.get("location")).toBe(`${DESTINATION}/app`);
+    });
+
+    it("takes a stranger from the apply form to checkout with a code minted only for them (EPIC-26 S2)", async () => {
+      // One fake Stripe for both sides: the code the flow mints is the one checkout finds.
+      const minted = new Map<string, string>();
+      stripe.promotionCodes = {
+        list: vi.fn(async (params: Stripe.PromotionCodeListParams) => {
+          promoLookups.push(params);
+          const id = params.code ? minted.get(params.code) : undefined;
+          return { data: id ? [{ id } as Stripe.PromotionCode] : [] };
+        }),
+        create: vi.fn(async (params: Stripe.PromotionCodeCreateParams) => {
+          const id = `promo_${minted.size + 1}`;
+          minted.set(params.code!, id);
+          return { id, code: params.code } as Stripe.PromotionCode;
+        }),
+      };
+      const mails: TesterMail[] = [];
+      const flow = new TesterFlow({
+        dataDir: dir,
+        mint: stripeMinter(stripe as Parameters<typeof stripeMinter>[0]),
+        sendMail: async (mail) => {
+          mails.push(mail);
+        },
+      });
+      const site = new Hono<{ Bindings: HttpBindings }>();
+      mountTesterApplications(site, { dataDir: dir, clientAddress: () => "203.0.113.5", flow });
+
+      const applied = await site.request("/api/public/testers/apply", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ use: "Voice notes on my walks, and Claude reading them.", contact: "stranger@example.com" }),
+      });
+      expect(await applied.json()).toEqual({ ok: true, status: "accepted" });
+      await flow.process();
+      expect(mails.map((mail) => mail.to)).toEqual(["stranger@example.com"]);
+      const link = mails[0]!.text.match(/https:\/\/cloud\.zenod\.dev\/join\?code=(ZT-[A-Z2-9]{8})/);
+      expect(link).not.toBeNull();
+      const code = link![1]!;
+      expect(stripe.promotionCodes.create).toHaveBeenCalledWith(expect.objectContaining({ coupon: "ZENOD_TESTER_1M", code, max_redemptions: 1 }));
+
+      const app = customerApp();
+      const page = await (await app.request(`/join?code=${code}`)).text();
+      expect(page).toContain(code);
+      const { cookie } = await inviteSignIn(app, `/join?code=${code}`);
+      const join = await app.request(`/join?code=${code}&signed_up=1`, { headers: { cookie } });
+      expect(join.status).toBe(303);
+      expect(join.headers.get("location")).toBe(session.url);
+      expect(createdParams).toMatchObject({ discounts: [{ promotion_code: minted.get(code) }], payment_method_collection: "if_required" });
     });
 
     it("keeps the code field open when the code is unknown or Stripe will not apply it", async () => {

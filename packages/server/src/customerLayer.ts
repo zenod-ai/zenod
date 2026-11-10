@@ -2425,6 +2425,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     usageForAccount,
     reconcileEntitlement,
     refreshAuthoritativeSubscriptions,
+    /** EPIC-26 S2: the tester flow mints codes with the same client when allowed. */
+    stripe,
     close() {
       mcpTokens.close();
     },

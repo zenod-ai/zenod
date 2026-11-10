@@ -1,6 +1,7 @@
 // Zenod testers program (ZAL-A13): the zenod.dev/testers apply form posts here.
 // Answers go to a private file on the production data volume, never to a repo
-// or a public page; agents read it on the server to pick the first 10 by hand.
+// or a public page. EPIC-26 S2: the email goes on to the tester flow, which
+// accepts the first ten automatically and mails each their personal link.
 // Spam-safe without cookies: a honeypot field, a per-address limit kept only in
 // memory, and a daily ceiling.
 import { appendFileSync, mkdirSync } from "node:fs";
@@ -8,6 +9,7 @@ import { join } from "node:path";
 import type { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { bodyLimit } from "hono/body-limit";
+import { normalizeTesterEmail, type TesterFlow, type TesterStatus } from "./testerFlow.js";
 
 export const TESTER_APPLICATIONS_FILE = "tester-applications.jsonl";
 const USE_MIN = 10;
@@ -21,6 +23,8 @@ export interface TesterApplicationOptions {
   dataDir: string;
   clientAddress: (c: { req: { header(name: string): string | undefined }; env?: unknown }) => string;
   now?: () => Date;
+  /** EPIC-26 S2: acceptance, code and email after each application. */
+  flow?: TesterFlow;
 }
 
 export interface TesterApplication {
@@ -51,7 +55,11 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
       return c.json({ error: "Tell us in a sentence or two how you would use Zenod Memory." }, 400);
     }
     if (contact.length < CONTACT_MIN || contact.length > CONTACT_MAX) {
-      return c.json({ error: "Leave an email or a handle we can reach you on." }, 400);
+      return c.json({ error: "Leave your email, so we can send you your link." }, 400);
+    }
+    const email = normalizeTesterEmail(contact);
+    if (options.flow && !email) {
+      return c.json({ error: "That email does not look right. Please check it, so we can send you your link." }, 400);
     }
 
     const at = now();
@@ -81,6 +89,15 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
       return c.json({ error: "Could not save your application. Please try again." }, 500);
     }
     console.log("[testers] application kept");
-    return c.json({ ok: true });
+    let status: TesterStatus | undefined;
+    if (options.flow && email) {
+      try {
+        status = options.flow.receive(email);
+        void options.flow.process();
+      } catch (error) {
+        console.error("[testers] could not queue an application:", error instanceof Error ? error.message : String(error));
+      }
+    }
+    return c.json(status ? { ok: true, status } : { ok: true });
   });
 }

@@ -66,6 +66,7 @@ import {
 } from "./zenodPhylax.js";
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
+import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
@@ -1340,7 +1341,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
   });
   app.route("/", customer.app);
-  if (agent.name === "zenod") mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress });
+  // EPIC-26 S2: after an application, acceptance, a code and the email with the personal link.
+  let testerFlow: TesterFlow | null = null;
+  if (agent.name === "zenod") {
+    testerFlow = testerFlowFromEnv(storage.dataDir, env, customer.stripe);
+    mountTesterFlowRoutes(app, testerFlow, {
+      ...(options.customerAdmin ? { isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)) } : {}),
+      opsToken: env.ZENOD_TESTER_OPS_TOKEN,
+    });
+    testerFlow.start();
+    mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
+  }
   // EPIC-24 M2: the cloud app reports its own errors (class, route, status only) for the health page.
   if (agent.name === "zenod") mountClientErrorReports(app, { clientAddress });
   // Consent needs the original browser session; the API bridge below deliberately
@@ -1530,6 +1541,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => options.customerAdmin?.close?.()),
           Promise.resolve().then(() => {
           }),
+          Promise.resolve().then(() => testerFlow?.stop()),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => subscriberApi.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),
