@@ -31,11 +31,11 @@ Status: active
 Last attempted: 2026-11-02 E11-S1 merged (PR #1475, 9b5d18d): describe_zenod, get_plans, open_docs, go_to_sign_in in apps/site/src/lib/webmcp.ts
 Result: tools registered behind feature detection, tested with a stubbed modelContext; not yet tried in a real WebMCP Chrome; awaiting image publish to reach zenod.dev
 Evidence: zenod-in-every-mcp-directory-listing-spr.md
-Waiting on: Jordi signs operations@alpha9.io into the agent browser once (waits on EPIC-7/E7-A11); S1 does not wait on it
+Waiting on: EPIC-7/E7-A18 (needs Mac agent: the team sign-in) for the trial token; S1 done
 Approved work: readied by Jordi 2026-11-02 ("do epicspine and zenod dev")
 Next action: confirm describe_zenod in the live zenod.dev bundle after Publish image; then E11-S2: an agent registers the trial in the signed-in agent browser (E11-A1 answered, waits on EPIC-7/E7-A11) and adds the token via PR
 Source revision: uncommitted scaffold
-Verified at: 2026-11-02
+Verified at: 2026-11-10T07:00Z
 
 ## Waiting on
 

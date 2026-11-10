@@ -31,15 +31,15 @@ Goal sentence: Five real people use production Zenod as ordinary users, capped a
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-09 roll-up from the ledger: T0–T6 and T3.1–T3.4 done (every leaked key rolled, key page stopped) ; T7 rehearsal blocked on the team sign-in (E7-A15) ; T8–T11 draft
-Result: a new tester could sign up, get a free month with no card and be capped, but nobody new has walked the whole path yet; every leaked outside key is rolled and production runs on a restricted Stripe key with the DeepSeek route live
+Last attempted: 2026-11-10 roll-up: T0..T6 and T3.1..T3.4 done (all leaked keys rolled, key page stopped) ; T7 dress rehearsal blocked on the team sign-in, now E7-A18 on Jordi's Mac list ; T8..T11 draft ; the first real tester now goes through EPIC-23 (ask E23-A1) without waiting for the rehearsal
+Result: a new tester could sign up, get a free month with no card and be capped; tester-watch alerts on Stripe renewals; nobody new has walked the whole path yet
 Evidence: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md); live readiness ready=true read 2026-10-31
 Waiting on: E7-A18 (needs Mac agent: sign the team account into the agents' browser once)
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: once signed in, the T7 rehearsal, then T8 go or no-go and the invites
 Monitoring: Drive OAuth readiness proof since 2026-11-01 until 2026-11-28 · next check 2026-11-21 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
 Source revision: see git log
-Verified at: 2026-11-09T05:10Z (ledger read; key page http://100.104.206.10:8783/ 200; cloud.zenod.dev health ok on 551bb7d)
+Verified at: 2026-11-10T07:00Z (ledger read; health ok on 1f1ebae)
 
 ## Waiting on
 
