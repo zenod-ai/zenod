@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | M1 | Ticket worker | unassigned | E24-1: find and fix today every error Jordi is hitting (logs of the last 24 h: WhatsApp, chat, sign-in, saves, app), one page | ready | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
-| M2 | Ticket worker | unassigned | E24-2: alerts within 15 minutes for failed saves, missed replies, failed answers, failed sign-ins and app errors, on the launch board | ready | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| M2 | Ticket worker | run_7ea46bf8-ba5d-48db-a2d8-300133163fcd — claimed 2026-11-10T02:37Z, lease until 2026-11-10T04:37Z | E24-2: alerts within 15 minutes for failed saves, missed replies, failed answers, failed sign-ins and app errors, on the launch board | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
 
 ## Decisions
 
