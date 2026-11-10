@@ -344,6 +344,8 @@ function registerZenodTools(
       settings.revokeGithubAuthorization();
       runtime.invalidate();
     },
+    // EPIC-14 S29: ask_brain reads the quick index first, for the AI apps a person connects.
+    agent.name === "zenod" ? (question) => runtime.readAs(question) : undefined,
   );
 }
 
