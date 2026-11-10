@@ -54,6 +54,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | T1 | Ticket worker | run_dcd204c7-29b6-4957-95a2-de3c83044505 | E26-1, E26-2: the three promises on the tester page and the invite, and the first invite ready to send | active (iteration 2, relaunched by Jordi 2026-11-10: So let's think about what's the workflow for this campaign. He basically, why isn't he given a code, and then if he registers with the code, like he makes a new user and makes a payment. I don't know if there is like a single link where he can authenticate and pay. Like, choose an email and pay, li…) | none | [#1581](https://github.com/zenod-ai/zenod/pull/1581) merged ce1181e | main | [e26-t1](evidence/e26-t1-2026-11-10.md), [page](http://vps3.taild81fbb.ts.net:8921/e26-t1/): zenod.dev/testers leads with the three promises, live on ce1181e (deployed 2026-11-10T04:38Z); invite for WhatsApp or email written in [invite-dm](epic7/invite-dm.md), Reddit DM updated too; tester code not made: agents' VPS1 root list has no issue line | 2026-11-10T04:45Z | followups: start tester-code ask — agents cannot make the code the invite needs (root line on VPS1); start EPIC-23 U2 on E23-A1's name — issue that person's code, hand Jordi the filled invite; confirm: yes — Jordi reads the live page and the invite and says if the three promises land |
+| E26-S1 | Ticket worker | unassigned | Tester funnel: a code, one link to sign up and pay, a welcome email: The invite ends in one link: the tester gets a code, picks an email, signs up and pays at checkout using the code (a Stripe coupon), then gets an email saying they are provisioned, with their WhatsApp number and next steps. | ready | none | none | main | none | 2026-11-10 | dispatch (Jordi's ask, L-37) |
 
 ## Decisions
 
@@ -64,6 +65,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-10 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
 | 2026-11-10 | accepted | epic “Tester invite: three clear promises, first invite out” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (WhatsApp → Zenod), 2026-11-10 03:54Z Zenod: Log/2026-11-10.md#^e-ecf0b8 I think there is this diagram in ") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-10 | accepted | Planned from Jordi's voice note (WhatsApp 2026-11-10 03:54Z, Zenod Log 2026-11-10 ^e-ecf0b8); ready on his ask (L-37); works with EPIC-23 ask E23-A1 (he names the first tester) | T1 makes the page and invite plain and ready; sending stays his | his voice note | when T1 is in review |
+| 2026-11-10 | accepted | E26-S1 ready on Jordi's ask (L-37, Team desk: "📎 Also in this note (vn_c837c0f6): workflow for the campaign; user registration with a code; single link for authentica") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 
 ## Operating Learnings
 
