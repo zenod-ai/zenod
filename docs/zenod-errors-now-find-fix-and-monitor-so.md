@@ -55,7 +55,7 @@ Steps: each is independently testable and closes only with evidence.
 | M4 | Ticket worker | unassigned | E24-1 follow-up: a few seconds of failed requests on each release (13 across 3 releases), and memory search taking 1 to 4.5 s while holding other requests | done (no confirm: split into M6 and M7, started by Jordi) | M1 | none | main | none | 2026-11-10 | covered by M6 and M7 |
 | M5 | Ticket worker | unassigned | find why one filing answer used all of Zenod's memory, then move filing back to the cheaper model: follow-up of M1 | done (no confirm: same work as M3 round 2, run_fa9393bf, which builds it) | M1 | none | main | Jordi started it when closing M1 2026-11-10 | 2026-11-10 | covered by M3 |
 | M6 | Ticket worker | run_ebd55a5d-4f20-45d1-b361-e5d4a17526ef — claimed 2026-11-10T06:00Z, lease until 2026-11-10T08:00Z | make releases seamless so a new version never answers with an error: follow-up of M1 | active | M1 | none | main | Jordi started it when closing M1 2026-11-10 | 2026-11-10 | dispatched 2026-11-10 |
-| M7 | Ticket worker | unassigned | make memory search fast again after new notes are filed: follow-up of M1 | ready | M1 | none | main | Jordi started it when closing M1 2026-11-10 | 2026-11-10 | dispatched 2026-11-10 |
+| M7 | Ticket worker | run_43992fdf-21b1-477d-a87d-46e5af576910 — claimed 2026-11-10T06:00Z, lease until 2026-11-10T08:00Z | make memory search fast again after new notes are filed: follow-up of M1 | active | M1 | none | main | Jordi started it when closing M1 2026-11-10 | 2026-11-10 | dispatched 2026-11-10 |
 
 ## Decisions
 
