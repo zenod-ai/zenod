@@ -50,7 +50,7 @@ const voice = (time: string, anchor: string, words: string) => [
 describe("time words (E12-S1b round 2)", () => {
   it("reads periods, named days and weekdays next to a say/talk word", () => {
     expect(recentIntent("what are the top five topics I talked about in the last week?", NOW))
-      .toEqual({ window: { kind: "range", from: "2026-11-02", to: "2026-11-08" }, voice: false, topic: "" });
+      .toEqual({ window: { kind: "range", from: "2026-11-02", to: "2026-11-08" }, voice: false, topic: "", one: false });
     expect(recentIntent("what did I say in the past 3 days about the fence", NOW))
       .toMatchObject({ window: { kind: "range", from: "2026-11-06", to: "2026-11-08" }, topic: "fence" });
     expect(recentIntent("what did I send on November 6?", NOW)).toMatchObject({ window: { kind: "day", date: "2026-11-06" }, topic: "" });
