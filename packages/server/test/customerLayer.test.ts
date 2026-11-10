@@ -19,6 +19,7 @@ import { customerMetering } from "../src/customerMetering.js";
 import { Runtime } from "../src/runtime.js";
 import { mountTesterApplications } from "../src/testerApplications.js";
 import { stripeMinter, TesterFlow, type TesterMail } from "../src/testerFlow.js";
+import { WelcomeMailer } from "../src/welcomeMail.js";
 import type { HttpBindings } from "@hono/node-server";
 
 const DESTINATION = "https://cloud.zenod.dev";
@@ -1134,6 +1135,83 @@ describe("hosted customer layer", () => {
       }),
     ]);
     tenants.close();
+  });
+
+  it("sends one welcome email per account across the return page and webhook retries (EPIC-26 T2)", async () => {
+    const mails: TesterMail[] = [];
+    const welcome = new WelcomeMailer({
+      dataDir: dir,
+      sendMail: async (mail) => {
+        mails.push(mail);
+      },
+    });
+    const app = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+        onCheckoutWelcome: (account, email) => {
+          welcome.queue(account.account_id, email);
+        },
+      },
+    ).app;
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    const back = await app.request(`/checkout/complete?session_id=${session.id}`, { headers: { cookie } });
+    expect(back.status).toBe(303);
+    for (let i = 0; i < 2; i += 1) {
+      const hook = await app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+        body: "{}",
+      });
+      expect(hook.status).toBe(200);
+    }
+    await welcome.process();
+    expect(mails).toHaveLength(1);
+    expect(mails[0]).toMatchObject({ to: "customer@example.com" });
+    expect(mails[0]!.subject).toContain("You're in");
+    expect(welcome.counts()).toEqual({ enabled: true, queued: 0, sent: 1, failing: 0 });
+  });
+
+  it("never fails a checkout when the welcome email cannot be queued (EPIC-26 T2)", async () => {
+    const app = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+        onCheckoutWelcome: () => {
+          throw new Error("mail store unavailable");
+        },
+      },
+    ).app;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    const hook = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(await hook.json()).toEqual({ received: true, result: "completed" });
   });
 
   it.each(["paid", "no_payment_required"] as const)("lets a non-GitHub internal identity own checkout, account, Stripe metadata, and tenant records (%s)", async (paymentStatus) => {

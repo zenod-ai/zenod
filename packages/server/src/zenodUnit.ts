@@ -69,6 +69,7 @@ import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
+import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
@@ -877,6 +878,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       });
     },
   });
+  // EPIC-26 T2: one welcome email per account after checkout (off until its switch and key are set).
+  const welcomeMailer = agent.name === "zenod" ? welcomeMailerFromEnv(storage.dataDir, env) : null;
+  welcomeMailer?.start();
   const customer = createCustomerLayer(
     {
       dataDir: storage.dataDir,
@@ -896,6 +900,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         exchangeCode: exchangeGoogleDriveOAuthCode,
       },
       product: options.customerProduct ?? options.customer?.product,
+      async onCheckoutWelcome(account, email) {
+        await options.customer?.onCheckoutWelcome?.(account, email);
+        welcomeMailer?.queue(account.account_id, email);
+      },
       async onEntitlementChanged(account, input) {
         await options.customer?.onEntitlementChanged?.(account, input);
         await zenodPhylax?.setEntitlement(account, input.entitled);
@@ -1590,6 +1598,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => {
           }),
           Promise.resolve().then(() => testerFlow?.stop()),
+          Promise.resolve().then(() => welcomeMailer?.stop()),
           Promise.resolve().then(() => testerMonthEnd?.stop()),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => subscriberApi.close()),

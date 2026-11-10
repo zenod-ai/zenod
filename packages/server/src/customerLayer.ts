@@ -131,6 +131,12 @@ export interface CustomerLayerOptions {
   stripe?: CustomerStripeClient;
   tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
+  /**
+   * EPIC-26 T2: after the tenant bind succeeded, hand the account and the buyer's email to
+   * the welcome email. Called on both completion paths; the receiver keeps it to one mail.
+   * Its errors never fail a checkout.
+   */
+  onCheckoutWelcome?: (account: CustomerAccount, email: string | null) => Promise<void> | void;
   /** Product-owned sidecar lifecycle; it must durably record desired state before returning. */
   onEntitlementChanged?: (
     account: CustomerAccount,
@@ -442,6 +448,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   };
   const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
     await bindCheckout(account, session);
+    if (!options.onCheckoutWelcome) return;
+    try {
+      await options.onCheckoutWelcome(
+        account,
+        session.customer_details?.email ?? session.customer_email ?? account.github_email ?? null,
+      );
+    } catch (error) {
+      console.warn("[welcome] could not queue the welcome email:", error instanceof Error ? error.message : "error");
+    }
   };
   const isEntitledStatus = (status: CustomerAccount["subscription_status"]) =>
     status === "active" || status === "past_due";
