@@ -3,6 +3,7 @@ import { accessSync } from "node:fs";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
+import { outlastProxyKeepAlive } from "./proxyKeepAlive.js";
 import { createApp } from "./app.js";
 import { Runtime } from "./runtime.js";
 import { resolveAgent } from "./agent.js";
@@ -97,6 +98,8 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
     `${agent.name} ${unit ? "chassis unit" : "server"} listening on :${info.port} (data: ${dataDir}${hasWeb ? `, dashboard: ${webDist}` : ", no dashboard build"}${hasSite ? `, site: ${siteDist}` : ", no site build"})`,
   );
 });
+
+outlastProxyKeepAlive(server);
 
 const shutdown = createGracefulShutdown({
   server,
