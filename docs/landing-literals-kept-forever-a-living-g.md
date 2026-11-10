@@ -49,6 +49,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | G1 | Ticket worker | run_f9669997-5116-45b6-b964-5ff1802e78b2 — claimed 2026-11-10T04:01Z, lease until 2026-11-10T06:01Z | E25-1: the animated landing sections on zenod.dev, live | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| G2 | Ticket worker | run_f9669997 (with G1) | E25-2: Jordi says yes to the live page (his verdict on G1's review card) | active | G1 | none | main | none | 2026-11-10 | closes when Jordi closes G1's card |
 
 ## Decisions
 
