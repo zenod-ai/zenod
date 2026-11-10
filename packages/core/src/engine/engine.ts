@@ -4165,10 +4165,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await syncForRead();
       return loadMemoryTree(vaultPath);
     },
-    memoryTreeOutline: async () => {
+    memoryTreeOutline: async (options?: { listUnplaced?: boolean }) => {
       assertVault(repo);
       await syncForRead();
-      return memoryTreeOutline(vaultPath, { urlFor: (path) => repositoryUrl(path) || null });
+      return memoryTreeOutline(vaultPath, { urlFor: (path) => repositoryUrl(path) || null, ...(options?.listUnplaced ? { listUnplaced: true } : {}) });
     },
     quickIndexBase: async () => {
       assertVault(repo);

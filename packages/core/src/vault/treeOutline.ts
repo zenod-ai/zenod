@@ -50,12 +50,17 @@ export interface MemoryTreeOutline {
   placed: number;
   /** Tree pages whose lineage does not reach a root (shown as a count, not listed). */
   unplaced: number;
+  /** EPIC-14 S27: the first of those pages, titles and paths only, for the Health helper; only with `listUnplaced`. */
+  unplacedPages?: Array<{ title: string; path: string }>;
 }
 
 export interface MemoryTreeOutlineOptions {
   urlFor?: (path: string) => string | null;
+  /** EPIC-14 S27: also list the first unplaced pages (the console shows only their count). */
+  listUnplaced?: boolean;
 }
 
+const UNPLACED_PAGES_LISTED = 20;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function frontmatterDate(value: unknown): string | null {
@@ -152,10 +157,12 @@ export async function memoryTreeOutline(vaultPath: string, options: MemoryTreeOu
     };
   });
   const placed = groups.reduce((sum, group) => sum + group.pages, 0);
+  const unplaced = [...index.fields.keys()].filter((path) => !seen.has(path)).sort();
   return {
     groups,
     roots: groups.reduce((sum, group) => sum + group.children.length, 0),
     placed,
-    unplaced: [...index.fields.keys()].filter((path) => !seen.has(path)).length,
+    unplaced: unplaced.length,
+    ...(options.listUnplaced ? { unplacedPages: unplaced.slice(0, UNPLACED_PAGES_LISTED).map((path) => ({ title: index.fields.get(path)?.title ?? basenameOf(path), path })) } : {}),
   };
 }

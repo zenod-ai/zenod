@@ -649,7 +649,7 @@ export interface BrainEngine {
    */
   writePersonaNotes?(input: PersonaNotesInput): Promise<VaultRevision | null>;
   /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
-  memoryTreeOutline?(): Promise<MemoryTreeOutline | null>;
+  memoryTreeOutline?(options?: { listUnplaced?: boolean }): Promise<MemoryTreeOutline | null>;
   /** EPIC-14 S28: the quick index's model-free part (places, summaries, counts, this week); null without a Tree.md. No LLM. */
   quickIndexBase?(): Promise<import("./vault/quickIndex.js").QuickIndexBase | null>;
   /** Deterministic vault validation. No LLM. */
