@@ -34,6 +34,13 @@ describe("read as (E14-S29)", () => {
     expect(readAs("anything", { places: [] })).toEqual([]);
   });
 
+  it("a place's own name is never taken by another page's nickname", () => {
+    const ROOT = vp("Projects/Boat.md", "Boat", [], 20);
+    const RUNBOOK = vp("Projects/Boat/Engine runbook.md", "Engine runbook", ["the boat"], 4, ["Boat", "Engine runbook"]);
+    const readings = readAs("where did I leave the boat?", { places: [ROOT, RUNBOOK] });
+    expect(readings.map((r) => [r.path, r.by])).toEqual([["Projects/Boat.md", "title"]]);
+  });
+
   it("keeps one reading per place, at most three, in the order of the message", () => {
     const readings = readAs("Ruzafa and the flat, Ana's thing and that cello thing", INDEX);
     expect(readings.map((r) => r.path)).toEqual(["Projects/Move.md", "People/Ana.md", "Areas/Cello lessons.md"]);

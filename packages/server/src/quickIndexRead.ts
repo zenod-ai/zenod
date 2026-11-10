@@ -88,10 +88,15 @@ export function readAs(message: string, index: ReadAsIndex | null): ReadAs[] {
     for (const at of findAll(folded, phrase)) add(at.start, at.end, correction.path, "correction", 300);
   }
   const corrected = new Set(Object.keys(index.corrections ?? {}).map(foldPhrase));
+  // A place's own name is that place's: another page's nickname with the same words never takes it.
+  const bareName = (text: string) => foldPhrase(text).replace(/^(the|my|our|that|this|el|la|mi) /, "");
+  const titleOwner = new Map(index.places.map((place) => [bareName(place.title), place.path]));
   for (const place of index.places) {
     for (const name of place.names) {
       const phrase = foldPhrase(name);
       if (phrase.length < 3 || blocked.has(phrase) || corrected.has(phrase)) continue;
+      const owner = titleOwner.get(bareName(name));
+      if (owner && owner !== place.path) continue;
       for (const at of findAll(folded, phrase)) {
         // "the flat" is one name with "flat"; a leading article in the message is part of the words.
         const lead = /(?:^|\s)((?:the|my|our|that|this|el|la|mi) )$/.exec(folded.slice(0, at.start))?.[1] ?? "";
