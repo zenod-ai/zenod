@@ -52,6 +52,31 @@ turn a row red, which goes to Jordi's HQ thread through the S5 sender like any r
 
 Both read the container logs since the container started, so a redeploy starts them fresh.
 
+## EPIC-24 M2: alert rows 13 to 18, what a person would notice
+
+Jordi, 2026-11-10: "I need to have some monitoring on Zenod because right now I think I am getting some errors."
+Six rows turn red within one probe run (5 min) of a failure a person would notice, so the S5 sender puts it in the
+HQ alert thread well inside 15 minutes, and each clears by itself once `ALERT_MIN` (15 min) pass without another:
+
+| Row | Red while, in the last 15 min | Source |
+|---|---|---|
+| 13 failed or stuck saves | a save job failed, or a save (store, media_ingest) still waits 15 min after it arrived | `[task-job] … failed (store\|media_ingest\|enrich_memory)`, `[ops-alert] save stuck` (checked every 5 min per tenant) |
+| 14 WhatsApp messages with no reply | a message has had no “Saved” reply and no chat answer for 15 min (the ZAL-A8 rule at 15 min, row 4 keeps 60) | Phylax log, tester-watch, chat replies |
+| 15 chat and ask_brain answers that fail | a WhatsApp or app chat answer failed, or MCP ask_brain errored or timed out | `[task-job] … failed (chat)`, `[chat] stream failed`, `[ops-alert] answer` |
+| 16 failed sign-ins | a Google or GitHub sign-in came back and failed (expired, other browser, signup closed, provider error) | `[ops-alert] signin` |
+| 17 app errors | a 5xx on cloud.zenod.dev or zenod.dev, or the app reported a script error, an unhandled rejection or a failed API call | Traefik access log, `[ops-alert] app` from `POST /api/public/client-error` |
+| 18 helper runs that fail | a helper run failed, could not save its notes, or could not start | `[ops-alert] helper` |
+
+`[ops-alert] <kind> <reason> key=value…` lines come from `packages/server/src/opsAlert.ts`: fixed words, counts,
+minutes, error class names and route templates only (no message text, emails, ids or tokens). The probe keeps 24 h
+of these events in its VPS1 cache (`raw.vps1.zenod_log.ops`, `[time, kind, reason]`), so a redeploy does not lose them.
+
+**Drill (a staged fault, nobody's account touched):** `python3 probe.py --drill save|reply|answer|signin|app|helper`
+appends one line to `~/.local/state/zenod-health-remote/drill.jsonl` on VPS1; the next run reads it like a log line
+with reason `drill_staged`, the row turns red with `[drill: staged fault]`, the HQ thread gets one alert, and the row
+clears and sends one RECOVERED 15 min later. Tests: `AlertRows` in `test_aggregate.py`, `Folds` in `test_probe.py`,
+`packages/server/test/opsAlerts.test.ts`, `apps/web/src/lib/client-errors.test.ts`.
+
 ## Document (`schema: zenod-health/v1`)
 
 | Field | Meaning |
@@ -64,7 +89,8 @@ Both read the container logs since the container started, so a redeploy starts t
 | `raw` | the raw probe values the rules read (counts, states, timestamps) |
 
 Component ids: `site`, `cloud`, `database`, `phylax`, `agent_runner`, `memory_index`, `deploy`, `watchdog`,
-`readiness`, `tester_watch`, `ingress`, `host`.
+`readiness`, `tester_watch`, `ingress`, `host`, and the EPIC-24 M2 alert rows `alert_saves`, `alert_replies`,
+`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`.
 
 **Last errors survive redeploys.** Docker stdout resets when a container is redeployed, so `last_error`,
 `errors` and `last_activity` come from a history file on VPS3 (`~/.local/state/zenod-health/history.json`,

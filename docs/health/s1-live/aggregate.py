@@ -121,6 +121,23 @@ def reply_stall(inbound_times: list[str] | None, last_saved_reply: str | None, r
     return first if first and (ref - first).total_seconds() > minutes * 60 else None
 
 
+ALERT_MIN = 15  # EPIC-24 M2: a failure a person would notice turns its alert row red for this long (and alerts)
+
+
+def recent_ops(ops: list | None, kinds: tuple, ref: dt.datetime, minutes: int = ALERT_MIN) -> list[tuple[dt.datetime, str]]:
+    """(time, reason) of the failure events of these kinds in the last `minutes`, oldest first."""
+    out = []
+    for x in ops or []:
+        t = parse_ts(x[0]) if len(x) == 3 else None
+        if t and x[1] in kinds and 0 <= (ref - t).total_seconds() <= minutes * 60:
+            out.append((t, x[2]))
+    return sorted(out)
+
+
+def day_ops(ops: list | None, kinds: tuple, ref: dt.datetime) -> list[tuple[dt.datetime, str]]:
+    return recent_ops(ops, kinds, ref, minutes=24 * 60)
+
+
 def saves_failing(since: str | None, ref: dt.datetime, minutes: int = STALL_MIN) -> dt.datetime | None:
     """When saves started failing with none finished since, if that is longer ago than `minutes`."""
     t = parse_ts(since)
@@ -414,6 +431,77 @@ def components(d: dict) -> list[dict]:
         error="none" if col == "green" else "disk or observatory",
         source="df and disk-guard journal on VPS1; observatory from VPS3", tests="infra-vps tests/test_disk_guard.py",
         link="https://health.alpha9.io/")
+
+    # 13-18 EPIC-24 M2: what a person would notice. Each row is red while such a failure happened in the last
+    # ALERT_MIN minutes (or, for replies, a WhatsApp message has waited that long), so it reaches the HQ alert thread
+    # on the next run (every 5 min) and clears by itself once ALERT_MIN minutes pass without one.
+    ops = zl.get("ops") or []
+    app5xx = [[t, "app", "http_5xx"] for h in ("cloud.zenod.dev", "zenod.dev") for t in (acc.get(h) or {}).get("app5xx") or []]
+
+    def alert_row(n, cid, name, kinds, what, where, source, tests, extra=None, events=None):
+        rows = extra if extra is not None else ops
+        now_ = recent_ops(rows, kinds, ref)
+        day_ = day_ops(rows, kinds, ref)
+        reasons: dict[str, int] = {}
+        for _, r in now_:
+            reasons[r] = reasons.get(r, 0) + 1
+        newest = day_[-1] if day_ else None
+        prob = None
+        if now_:
+            prob = (f"{len(now_)} {what} in the last {ALERT_MIN} min, newest {ago(iso(now_[-1][0]), ref)} ("
+                    + ", ".join(f"{k} {v}" for k, v in sorted(reasons.items())) + ")"
+                    + (" [drill: staged fault]" if all(r.startswith("drill_") for r in reasons) else ""))
+        row(id=cid, n=n, name=name, where=where, status="red" if now_ else "green", problem=prob,
+            signal=(prob or f"no {what} in the last {ALERT_MIN} min") + f"; {len(day_)} in 24 h",
+            signal_value={"window": len(now_), "day": len(day_), "reasons": reasons},
+            activity=f"last one {ago(iso(newest[0]), ref)} ({newest[1]})" if newest else "none in 24 h",
+            activity_at=None,
+            error=f"last {ago(iso(newest[0]), ref)}: {newest[1]}" if newest else "none in 24 h",
+            events=(events or []) + [ev(iso(newest[0]), f"{what}: {newest[1]}", source)] if newest else (events or []),
+            source=source, tests=tests)
+
+    alert_row("13", "alert_saves", "Alerts: failed or stuck saves", ("save",), "failed or stuck saves",
+              "VPS1 · zenod-mt: a save job that failed, or one still waiting after 15 min",
+              "zenod-mt container log ([task-job] … failed, [ops-alert] save)",
+              "packages/server/test/opsAlerts.test.ts; test_aggregate.py AlertRows")
+
+    # replies: the ZAL-A8 stall rule at 15 min instead of 60, plus staged faults
+    rstall = reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref, minutes=ALERT_MIN,
+                         chat_replies=zl.get("chatReplies"))
+    rdrill = recent_ops(ops, ("reply",), ref)
+    rprob = None
+    if rstall:
+        rprob = f"a WhatsApp message from {ago(iso(rstall), ref)} has had no reply"
+    elif rdrill:
+        rprob = f"a WhatsApp message with no reply, {ago(iso(rdrill[-1][0]), ref)} [drill: staged fault]"
+    row(id="alert_replies", n="14", name="Alerts: WhatsApp messages with no reply",
+        where="VPS1 · Phylax receives, zenod-mt saves or answers and replies",
+        status="red" if rprob else "green", problem=rprob,
+        signal=rprob or f"every WhatsApp message got its reply within {ALERT_MIN} min",
+        signal_value={"waitingSince": iso(rstall) if rstall else None},
+        activity=f"last inbound {ago(pl.get('lastInbound'), ref)}; last “Saved” reply {ago(ac.get('lastSavedReply'), ref)}",
+        activity_at=None, error=rprob or "none",
+        source="phylax container log (message read) and tester-watch (last “Saved” reply), chat replies from zenod-mt",
+        tests="test_aggregate.py ReplyStall and AlertRows")
+
+    alert_row("15", "alert_answers", "Alerts: chat and ask_brain answers that fail", ("answer",),
+              "failed or timed-out answers",
+              "VPS1 · zenod-mt: WhatsApp and app chat, MCP ask_brain",
+              "zenod-mt container log ([task-job] … failed (chat), [chat] stream failed, [ops-alert] answer)",
+              "packages/server/test/opsAlerts.test.ts; test_aggregate.py AlertRows")
+    alert_row("16", "alert_signins", "Alerts: failed sign-ins", ("signin",), "failed sign-ins",
+              "VPS1 · zenod-mt: Google and GitHub sign-in at cloud.zenod.dev/auth",
+              "zenod-mt container log ([ops-alert] signin)",
+              "packages/server/test/opsAlerts.test.ts; test_aggregate.py AlertRows")
+    alert_row("17", "alert_app", "Alerts: app errors (5xx and errors in the browser)", ("app",), "app errors",
+              "VPS1 · cloud.zenod.dev and zenod.dev; the app reports its own errors to /api/public/client-error",
+              "Traefik access log (5xx) and zenod-mt container log ([ops-alert] app)",
+              "packages/server/test/opsAlerts.test.ts, apps/web client-errors.test.ts; test_aggregate.py AlertRows",
+              extra=sorted(ops + app5xx))
+    alert_row("18", "alert_helpers", "Alerts: helper runs that fail", ("helper",), "failed helper runs",
+              "VPS1 · zenod-mt: helpers (scheduled and run now)",
+              "zenod-mt container log ([ops-alert] helper)",
+              "packages/server/test/opsAlerts.test.ts; test_aggregate.py AlertRows")
     return R
 
 

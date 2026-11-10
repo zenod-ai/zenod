@@ -96,6 +96,7 @@ import {
   productionReadinessReport,
   reportPublicSignupReadiness,
 } from "./productionReadiness.js";
+import { opsAlert } from "./opsAlert.js";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
@@ -553,7 +554,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   ) => {
     const identity = identityProviders[provider];
     const stateSecret = customerStateSecret(env);
-    if (!identity || !stateSecret) return c.text("Sign-in is not configured.", 503);
+    if (!identity || !stateSecret) {
+      opsAlert("signin", "not_configured", { provider });
+      return c.text("Sign-in is not configured.", 503);
+    }
     const session = mode === "link_identity" ? readCustomerSession(c, env) : null;
     if (mode === "link_identity" && !session) return c.json({ error: "unauthorized" }, 401);
     if (session) principalForSession(session);
@@ -597,12 +601,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       (state.mode !== "signin" && state.mode !== "link_identity") ||
       (!legacyGithubSignin && (state.provider !== provider || !state.flow))
     ) {
+      // A request with no code is a bot or a stray click, not a person's failed sign-in (EPIC-24 M2).
+      if (code) opsAlert("signin", "invalid_state", { provider });
       return c.text("Invalid or expired sign-in. Please retry.", 400);
     }
     if (state.rt) {
       const expected = Buffer.from(state.browserNonce ?? "");
       const actual = Buffer.from(getCookie(c, MCP_SIGNIN_COOKIE) ?? "");
       if (!expected.length || expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+        opsAlert("signin", "other_browser", { provider });
         return c.text("This sign-in was started in another browser or has expired. Reopen the connection from your agent.", 400);
       }
       deleteCookie(c, MCP_SIGNIN_COOKIE, mcpSignInCookieOptions(env));
@@ -621,6 +628,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         !proof.nonce ||
         !proof.verifier
       ) {
+        opsAlert("signin", "google_flow_expired", { provider });
         return c.text("Invalid or expired Google sign-in. Please retry.", 400);
       }
       nonce = proof.nonce;
@@ -660,6 +668,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           email_verified: user.email_verified,
         }, env)
       ) {
+        opsAlert("signin", "signup_closed", { provider });
         return c.text("Google signup is not open. Existing Google customers can still sign in.", 403);
       }
       const identityInput = {
@@ -692,6 +701,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const ownedByAnotherUser = errorMessage.includes("already linked to another user");
       const providerAlreadyLinked = errorMessage.includes("already linked to this user with a different subject");
       const collision = ownedByAnotherUser || providerAlreadyLinked;
+      opsAlert("signin", collision ? "identity_collision" : "callback_failed", { provider, name: error instanceof Error ? error.name : "Error" });
       return c.text(
         ownedByAnotherUser
           ? "This sign-in identity is already linked to another Zenod account."

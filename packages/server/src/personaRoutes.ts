@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { personaById, BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { parsePersonaSchedule, PERSONA_MAX_EVERY_DAYS, PERSONA_MIN_EVERY_DAYS, PERSONA_SKILLS, PERSONA_TOTAL_MONTH_USD, personaEnabled, personaView, type PersonaDefinition } from "./personaRunner.js";
 import { personasFor, type PersonaRun } from "./personaStore.js";
+import { opsAlert } from "./opsAlert.js";
 
 /**
  * The personas' settings routes (EPIC-14 S4): the catalog with each persona's skills, last runs and
@@ -70,6 +71,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
       return c.json({ run, ...list(found.runtime) });
     } catch (error) {
       console.warn(`[persona] run now unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      opsAlert("helper", "run_unavailable", { helper: persona.id });
       return c.json({ error: "unavailable", message: "Your memory is not ready for helpers yet" }, 503);
     }
   });
