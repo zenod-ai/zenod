@@ -30,14 +30,14 @@ Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-09 A1 (run_b72ff779): WhatsApp brain live, card to review; ZAL-A15 incident found and recorded
-Result: WhatsApp text gets the cloud chat's decision and checked answers (#1532, live in `468ee50`); his 6 WhatsApp questions on 9 Nov were all answered; decision 40/40 and 39/40 blind; answers graded the same as the cloud chat (8/10 each); live reply 6.6 s warm, 17.5 s first after a restart. voice notes, refused by OpenRouter from 03:19Z, fall back to local whisper since 07:27Z (ZAL-A15, #1555)
+Last attempted: 2026-11-10 roll-up: A1 done (WhatsApp uses the cloud chat's brain, closed by Jordi) ; A2 draft (the first reply after a restart, 17.5 s, E20-3) ; related: ZAL A15 and A16 made voice notes save with a local transcription fallback and receipts after reconnect ; EPIC-24 M6 is making releases seamless, which also removes most first-reply delays after a restart
+Result: WhatsApp text and voice work with the same brain as the cloud chat; answers 6.6 s typical; first answer after a restart still slow
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
-Waiting on: nobody (A1 card in review; E20-3 still open: the first reply after a restart took 17.5 s)
+Waiting on: nobody; A2 waits on EPIC-24 M6 (seamless releases) to see whether the slow first answer remains
 Approved work: L-6 mandate (vn_14cb0d46)
-Next action: Jordi judges A1; then a speed step for the first answer after each restart (E20-3)
+Next action: after M6 lands, measure the first WhatsApp answer after a release; start A2 only if it is still over a few seconds
 Source revision: main `468ee50` live
-Verified at: 2026-11-09T06:30Z live health `468ee50`
+Verified at: 2026-11-10T08:10Z
 
 ## Non-Goals
 
