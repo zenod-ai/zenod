@@ -129,6 +129,20 @@ async function createHostedDriveCustomer(
 const expectedHostedDriveStatusKeys = [...HOSTED_DRIVE_STATUS_PUBLIC_KEYS].sort();
 
 describe("Zenod chassis unit", () => {
+  it("loads every entitled hosted tenant shortly after boot, so their schedules run without a request (EPIC-14 S27)", async () => {
+    const dataDir = await tempDir();
+    const accounts = new CustomerAccountStore(dataDir);
+    accounts.upsert("warm-active", { account_id: "warm-active", github_id: 501, github_login: "warm", tenant_id: "warm-active", subscription_status: "active" });
+    accounts.upsert("warm-canceled", { account_id: "warm-canceled", github_id: 502, github_login: "gone", tenant_id: "warm-canceled", subscription_status: "canceled" });
+    const unit = createZenodUnit({ dataDir, env: { NODE_ENV: "test", CHASSIS_VAULT_MASTER_KEY, ZENOD_WARM_TENANTS: "1", ZENOD_WARM_TENANTS_MS: "10" } });
+    try {
+      await vi.waitFor(() => expect(unit.runtimes.get("warm-active")).not.toBeNull());
+      expect(unit.runtimes.get("warm-canceled")).toBeNull();
+    } finally {
+      await unit.close();
+    }
+  });
+
   it("retries failed legacy billing-period refresh independently and clears the retry lane on close", async () => {
     const dataDir = await tempDir();
     const accounts = new CustomerAccountStore(dataDir);
