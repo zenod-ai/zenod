@@ -108,8 +108,9 @@ export const WEEKLY_RECAP: PersonaDefinition = {
   brief: "Once a week it reads what you saved in the last 7 days, writes a short recap in its own folder and posts one finding to your inbox.",
   schedule: { every: "week" },
   skills: ["read", "write-own-folder", "post-inbox"],
-  // On by default: one cheap call a week, capped at $0.10 a month; the user can switch it off.
-  defaultEnabled: true,
+  // EPIC-23 E23-A2: off by default, so testers start with memory only; accounts that used helpers
+  // before 2026-11-11 keep it on (personasFor). One cheap call a week, capped at $0.10 a month.
+  defaultEnabled: false,
   // One model call a week on the cheap chat model: well under a cent each run.
   limits: { maxSteps: 6, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
   // S27 round 2: memory only, never a project's next step.

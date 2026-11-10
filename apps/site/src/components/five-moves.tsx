@@ -5,7 +5,7 @@
 // librarian of your library; one memory every AI reads and writes. Each move
 // is a scene for lib/scenes.ts (data-at steps, final frame without motion).
 // Every claim holds for production today: the log is append-only and verbatim,
-// strengths rank answers, the weekly recap helper is on by default and writes
+// strengths rank answers, helpers start off (E23-A2) and the weekly recap writes
 // into its own folder, and cloud.zenod.dev/mcp signs any MCP client in with
 // OAuth. WhatsApp only captures and acknowledges (root L-6), so its line runs
 // one way, into the memory.
@@ -307,7 +307,7 @@ export const FiveMoves = React.memo(function FiveMoves() {
         </p>
         <p>
           Others suggest a tidy-up, and you answer Do it or Not now from your
-          inbox. The weekly recap starts on, and you switch the others on.
+          inbox. Every helper starts off, and you switch on the ones you want.
         </p>
       </Move>
 

@@ -164,6 +164,20 @@ export class PersonaStore {
     return row ? row.enabled === 1 : null;
   }
 
+  /**
+   * EPIC-23 E23-A2: keep a helper on, as an explicit switch, for an account that used helpers before
+   * `beforeIso` (a run or a settings change) and never switched this one itself. An account made later
+   * gets the helper's new default. Returns true when it wrote the switch.
+   */
+  keepOnIfUsedBefore(personaId: string, beforeIso: string): boolean {
+    if (this.enabled(personaId) !== null) return false;
+    const ran = this.db.prepare(`SELECT 1 FROM persona_runs WHERE started_at < ? LIMIT 1`).get(beforeIso);
+    const set = this.db.prepare(`SELECT 1 FROM persona_settings WHERE updated_at < ? LIMIT 1`).get(beforeIso);
+    if (!ran && !set) return false;
+    this.setEnabled(personaId, true);
+    return true;
+  }
+
   /** `defaultEnabled` fills a new row when only the cadence is set, so setting it never switches one on. */
   setEnabled(personaId: string, enabled: boolean): void {
     this.db
@@ -264,12 +278,18 @@ export class PersonaStore {
 
 const stores = new Map<string, PersonaStore>();
 
+/** EPIC-23 E23-A2: from here on, new accounts start with the weekly recap off. */
+export const WEEKLY_RECAP_OFF_SINCE = "2026-11-11T00:00:00.000Z";
+
 /** The tenant's persona store, opened once per data directory (like inboxFor). */
 export function personasFor(runtime: { readonly dataDir: string }): PersonaStore {
   let store = stores.get(runtime.dataDir);
   if (!store) {
     store = new PersonaStore(join(runtime.dataDir, "personas.sqlite"));
     store.recoverInterrupted();
+    // EPIC-23 E23-A2: the weekly recap is off for new accounts (testers start with memory only); accounts
+    // that used helpers before the change keep it on.
+    store.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE);
     stores.set(runtime.dataDir, store);
   }
   return store;

@@ -25,6 +25,7 @@ import { isProjectWork, isTeamRecord, OUT_OF_SCOPE_REASON, putAwayProjectSuggest
 import {
   duePersonas,
   nextPersonaWakeAt,
+  personaEnabled,
   personaPeriodKey,
   personaView,
   runPersona,
@@ -32,7 +33,7 @@ import {
   type PersonaModel,
   type PersonaRunnerDeps,
 } from "../src/personaRunner.js";
-import { closePersonasFor, PersonaStore, personasFor } from "../src/personaStore.js";
+import { closePersonasFor, PersonaStore, personasFor, WEEKLY_RECAP_OFF_SINCE } from "../src/personaStore.js";
 import type { TeamAsk } from "../src/teamAsk.js";
 
 /**
@@ -270,6 +271,9 @@ describe("persona runner (EPIC-14 S4)", () => {
   it("wakes a persona that is on and never ran at once, then only in the off-peak window, once per period", () => {
     const store = new PersonaStore(join(dir, "personas.sqlite"), () => new Date("2026-11-10T20:00:00Z"));
     const noon = new Date("2026-11-10T21:00:00Z");
+    // E23-A2: off by default; switched on, it wakes at once.
+    expect(duePersonas(BUILT_IN_PERSONAS, store, noon)).toEqual([]);
+    store.setEnabled("weekly-recap", true);
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap"]);
     const run = store.start("weekly-recap", "manual")!;
     store.finish(run.id, { status: "done", steps: 1, modelCalls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0, summary: "", inboxItemIds: [], revision: null, fingerprint: "x" });
@@ -288,12 +292,12 @@ describe("persona runner (EPIC-14 S4)", () => {
     let clock = new Date("2026-11-08T12:00:00Z");
     const stub = stubModel();
     const { deps: d, store } = deps({ model: () => stub.model, now: () => clock });
-    const v1: PersonaDefinition = { ...WEEKLY_RECAP, revisedAt: undefined };
+    const v1: PersonaDefinition = { ...WEEKLY_RECAP, defaultEnabled: true, revisedAt: undefined };
     expect(duePersonas([v1], store, clock).length).toBe(1);
     expect(await runPersona(v1, d, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08" });
     expect(duePersonas([v1], store, clock)).toEqual([]);
     clock = new Date("2026-11-08T20:00:00Z");
-    const v2: PersonaDefinition = { ...WEEKLY_RECAP, revisedAt: "2026-11-08T19:30:00.000Z" };
+    const v2: PersonaDefinition = { ...WEEKLY_RECAP, defaultEnabled: true, revisedAt: "2026-11-08T19:30:00.000Z" };
     expect(duePersonas([v2], store, clock).length).toBe(1);
     expect(await runPersona(v2, d, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08@2026-11-08T19:30:00.000Z" });
     expect(duePersonas([v2], store, clock)).toEqual([]);
@@ -441,9 +445,12 @@ describe("persona settings routes (EPIC-14 S4)", () => {
     try {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
-        ["weekly-recap", true, null], ["open-loops", false, null], ["people-follow-ups", false, null],
+        ["weekly-recap", false, null], ["open-loops", false, null], ["people-follow-ups", false, null],
         ["topic-gardener", false, null], ["ideas-digest", false, null], ["memory-health", false, null],
       ]);
+      // E23-A2: a new account starts with every helper off; the user switches one on.
+      const on = await (await app.request("/api/console/personas/weekly-recap", { method: "POST", body: JSON.stringify({ enabled: true }), headers: { "content-type": "application/json" } })).json() as { personas: Array<{ enabled: boolean }> };
+      expect(on.personas[0]).toMatchObject({ enabled: true });
       expect(first.personas[0]!.skills.map((skill) => skill.label)).toContain("Write only into its own folder");
       expect(first.skills).toHaveLength(6);
       expect(first.budget.capUsd).toBe(1);
@@ -491,9 +498,9 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     entry(16, "2026-11-06", "Only one this week"),
   ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 
-  it("lists six personas with a purpose and their skills; only Weekly recap is on, so only it wakes", () => {
+  it("lists six personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
     expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Health of your memory"]);
-    expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual(["weekly-recap"]);
+    expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual([]);
     for (const persona of BUILT_IN_PERSONAS) {
       expect(persona.purpose.length).toBeGreaterThan(10);
       expect(persona.skills).toContain("read");
@@ -501,12 +508,35 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     }
     const store = new PersonaStore(join(dir, "catalog.sqlite"));
     const noon = new Date("2026-11-08T12:00:00Z");
-    expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap"]);
+    expect(duePersonas(BUILT_IN_PERSONAS, store, noon)).toEqual([]);
     // Switched on: it wakes at once, the same day.
+    store.setEnabled("weekly-recap", true);
     store.setEnabled("ideas-digest", true);
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap", "ideas-digest"]);
     // All six together stay within the $1 for personas.
     expect(BUILT_IN_PERSONAS.reduce((sum, p) => sum + p.limits.maxMonthUsd, 0)).toBeLessThanOrEqual(1);
+  });
+
+  it("keeps the weekly recap on for an account that used helpers before it went off by default (E23-A2)", () => {
+    const at = (iso: string) => () => new Date(iso);
+    const earlier = new PersonaStore(join(dir, "earlier.sqlite"), at("2026-11-09T12:00:00Z"));
+    earlier.setEnabled("open-loops", true);
+    expect(earlier.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE)).toBe(true);
+    expect(earlier.enabled("weekly-recap")).toBe(true);
+    const ran = new PersonaStore(join(dir, "ran.sqlite"), at("2026-11-08T03:00:00Z"));
+    ran.start("weekly-recap", "schedule", "week:2026-11-08");
+    expect(ran.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE)).toBe(true);
+    // A choice the user made stays as it is.
+    const chose = new PersonaStore(join(dir, "chose.sqlite"), at("2026-11-09T12:00:00Z"));
+    chose.setEnabled("weekly-recap", false);
+    expect(chose.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    expect(chose.enabled("weekly-recap")).toBe(false);
+    // A new account, or one whose first helper came later, starts with it off.
+    const fresh = new PersonaStore(join(dir, "fresh.sqlite"), at("2026-11-12T12:00:00Z"));
+    expect(fresh.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    fresh.setEnabled("open-loops", true);
+    expect(fresh.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    expect(personaEnabled(fresh, WEEKLY_RECAP)).toBe(false);
   });
 
   it("keeps a cadence per persona: every 3 days runs once per 3-day period, the switch untouched", async () => {
