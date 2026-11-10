@@ -1,7 +1,7 @@
 import { accessSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
-import { createGracefulShutdown } from "./gracefulShutdown.js";
+import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
 import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
 import {
@@ -45,6 +45,7 @@ const shutdown = createGracefulShutdown({
   server,
   closeResources: () => unit.close(),
   label: "phylax",
+  ...shutdownTimings(process.env),
 });
 
 process.once("SIGINT", shutdown);

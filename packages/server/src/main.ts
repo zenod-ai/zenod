@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { accessSync } from "node:fs";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
-import { createGracefulShutdown } from "./gracefulShutdown.js";
+import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
 import { createApp } from "./app.js";
 import { Runtime } from "./runtime.js";
 import { resolveAgent } from "./agent.js";
@@ -101,6 +101,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 const shutdown = createGracefulShutdown({
   server,
   closeResources: () => unit?.close() ?? runtime?.close(),
+  ...shutdownTimings(process.env),
 });
 
 process.once("SIGINT", shutdown);
