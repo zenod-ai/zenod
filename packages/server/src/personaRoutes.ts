@@ -13,6 +13,8 @@ import { opsAlert } from "./opsAlert.js";
 export interface PersonaRuntime {
   readonly dataDir: string;
   runPersona(persona: PersonaDefinition, trigger: "schedule" | "manual"): Promise<PersonaRun | null>;
+  /** S35: whether a Team connection exists for helpers to ask. */
+  teamAskAvailable?(): boolean;
 }
 
 export type PersonaResolve = (c: Context) => Promise<{ runtime: PersonaRuntime } | { response: Response }>;
@@ -23,6 +25,7 @@ function list(runtime: PersonaRuntime, now = new Date()) {
   return {
     personas,
     budget: { spentUsd: personas[0]?.budget.totalUsd ?? 0, capUsd: PERSONA_TOTAL_MONTH_USD },
+    teamConnected: runtime.teamAskAvailable?.() ?? false,
     skills: Object.entries(PERSONA_SKILLS).map(([id, label]) => ({ id, label })),
   };
 }
@@ -34,15 +37,19 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     return c.json(list(found.runtime));
   });
 
-  // Switch a persona on or off, and/or set its cadence (null: back to its default).
+  // Switch a persona on or off, and/or set its cadence (null: back to its default), and/or (S35)
+  // whether it may ask the Team desk one question a run.
   app.post("/api/console/personas/:id", async (c) => {
     const found = await resolve(c);
     if ("response" in found) return found.response;
     const persona = personaById(c.req.param("id"));
     if (!persona) return c.json({ error: "not_found", message: "no such helper" }, 404);
-    const body = await c.req.json<{ enabled?: unknown; cadence?: unknown }>().catch(() => ({}) as { enabled?: unknown; cadence?: unknown });
-    if (body.enabled === undefined && body.cadence === undefined) return c.json({ error: "invalid", message: "send enabled or cadence" }, 400);
+    const body = await c.req.json<{ enabled?: unknown; cadence?: unknown; askTeam?: unknown }>().catch(() => ({}) as { enabled?: unknown; cadence?: unknown; askTeam?: unknown });
+    if (body.enabled === undefined && body.cadence === undefined && body.askTeam === undefined) return c.json({ error: "invalid", message: "send enabled, cadence or askTeam" }, 400);
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") return c.json({ error: "invalid", message: "enabled must be true or false" }, 400);
+    if (body.askTeam !== undefined && typeof body.askTeam !== "boolean") return c.json({ error: "invalid", message: "askTeam must be true or false" }, 400);
+    if (body.askTeam === true && !persona.asksTeam) return c.json({ error: "invalid", message: `${persona.name} cannot ask the team` }, 400);
+    if (body.askTeam === true && !(found.runtime.teamAskAvailable?.() ?? false)) return c.json({ error: "conflict", message: "Connect your team first" }, 409);
     const cadence = body.cadence === undefined || body.cadence === null ? null : parsePersonaSchedule(body.cadence);
     if (body.cadence !== undefined && body.cadence !== null && !cadence) {
       return c.json({ error: "invalid", message: `cadence is daily, weekly or every ${PERSONA_MIN_EVERY_DAYS} to ${PERSONA_MAX_EVERY_DAYS} days` }, 400);
@@ -50,6 +57,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     const store = personasFor(found.runtime);
     if (body.cadence !== undefined) store.setCadence(persona.id, cadence, persona.defaultEnabled);
     if (typeof body.enabled === "boolean") store.setEnabled(persona.id, body.enabled);
+    if (typeof body.askTeam === "boolean") store.setAskTeam(persona.id, body.askTeam, persona.defaultEnabled);
     return c.json(list(found.runtime));
   });
 

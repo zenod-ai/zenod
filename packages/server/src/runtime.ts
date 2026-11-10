@@ -77,12 +77,13 @@ import { IngestStore } from "./ingestStore.js";
 import { UsageStore, estimateCostUsd } from "./usageStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
-import { duePersonas, nextPersonaWakeAt, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
+import { duePersonas, nextPersonaWakeAt, withAskRevision, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import { putAwayProjectSuggestions } from "./helperScope.js";
 import { correctReading, QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
 import { readAs, shownReadings, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
+import { switchOnTeamAskForConnected, teamAskFor, teamAskSubscription } from "./teamAsk.js";
 import { NotificationStore } from "./notificationStore.js";
 import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
@@ -1023,6 +1024,13 @@ export class Runtime {
       } catch (error) {
         console.warn(`[persona] tenant=${this.tenantId} could not put away project suggestions: ${(error as Error).message}`);
       }
+      // EPIC-14 S35: an account connected to its team before asking came gets it on for the helpers it already runs, once.
+      try {
+        const switched = switchOnTeamAskForConnected(personasFor(this), this.subscribers);
+        if (switched.length) console.log(`[persona] tenant=${this.tenantId} asking the team switched on for ${switched.join(",")}`);
+      } catch (error) {
+        console.warn(`[persona] tenant=${this.tenantId} could not switch on asking the team: ${(error as Error).message}`);
+      }
     }
     // EPIC-14 S30: once a day, which helpers are switched on, their cadence and next wake (ids and
     // times only), so the week's tally can check that each one runs on its schedule.
@@ -1033,7 +1041,7 @@ export class Runtime {
         const store = personasFor(this);
         const on = personas.filter((persona) => personaEnabled(store, persona)).map((persona) => {
           const cadence = personaSchedule(store, persona);
-          const next = nextPersonaWakeAt(cadence, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, cadence)));
+          const next = nextPersonaWakeAt(cadence, now, store.hasRunForPeriod(persona.id, personaPeriodKey(withAskRevision(store, persona), now, cadence)));
           const every = cadence.every === "days" ? `days${cadence.days}` : cadence.every;
           return `${persona.id}:${every}:${next.toISOString().slice(0, 16)}Z`;
         });
@@ -1071,6 +1079,8 @@ export class Runtime {
       },
       aiAllowanceBlock: () => this.featureBlock("personas"),
       totalMonthUsd: zenodLimits().personas.monthUsd,
+      // EPIC-14 S35: the Team connection's ask seam, read only, when this account has one.
+      teamAsk: teamAskFor(this.subscribers),
     }, trigger);
     if (run) {
       // EPIC-14 S30: what the run posted, by kind (counts only), for the week's helper tally.
@@ -1083,6 +1093,11 @@ export class Runtime {
       console.log(`[persona] tenant=${this.tenantId} ${persona.id} ${run.trigger} ${run.status}: steps=${run.steps} calls=${run.modelCalls} tokens=${run.inputTokens}/${run.outputTokens} usd=${run.costUsd.toFixed(5)} suggestions=${posted.suggestion} findings=${posted.finding} questions=${posted.question}`);
     }
     return run;
+  }
+
+  /** EPIC-14 S35: true when this account has a Team connection its helpers could ask. */
+  teamAskAvailable(): boolean {
+    return this.subscribers !== null && teamAskSubscription(this.subscribers) !== null;
   }
 
   private quickIndexRun: Promise<QuickIndexUpdate | null> | null = null;

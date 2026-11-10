@@ -107,4 +107,24 @@ describe("MemoryPersonas catalog", () => {
     expect(calls.at(-1)).toMatchObject({ url: "/api/console/personas/open-loops", body: { cadence: { every: "days", days: 3 } } })
     expect(screen.getByLabelText("Days between Open loops finder runs")).toBeTruthy()
   })
+
+  // EPIC-14 S35: asking the Team desk shows only with a Team connection, off by default.
+  it("switches asking the team on for a helper that can ask, only when the team is connected", async () => {
+    const asking = { ...LOOPS, askTeam: false }
+    const calls = mockFetch((_url, init) =>
+      init?.method === "POST" ? { ...list({ ...asking, askTeam: true }), teamConnected: true } : { ...list(asking, RECAP), teamConnected: true }
+    )
+    render(<MemoryPersonas />)
+    const box = (await screen.findByRole("checkbox", { name: /Ask your team how things connect/ })) as HTMLInputElement
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1)
+    expect(box.checked).toBe(false)
+    fireEvent.click(box)
+    await waitFor(() => expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true))
+    expect(calls.at(-1)).toMatchObject({ url: "/api/console/personas/open-loops", method: "POST", body: { askTeam: true } })
+    cleanup()
+    mockFetch(() => list(asking))
+    render(<MemoryPersonas />)
+    expect(await screen.findByText("Open loops finder")).toBeTruthy()
+    expect(screen.queryByRole("checkbox")).toBeNull()
+  })
 })

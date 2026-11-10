@@ -7,6 +7,7 @@ import { readInboxCount, setInboxCount } from "@/lib/inbox"
 import {
   readPersonas,
   runPersonaNow,
+  setPersonaAskTeam,
   setPersonaCadence,
   setPersonaEnabled,
   type Persona,
@@ -138,18 +139,22 @@ function Cadence({
 
 function PersonaCard({
   persona,
+  teamConnected,
   onList,
 }: {
   persona: Persona
+  teamConnected: boolean
   onList: (list: PersonaList) => void
 }) {
-  const [busy, setBusy] = React.useState<"toggle" | "run" | "cadence" | null>(
+  const [busy, setBusy] = React.useState<
+    "toggle" | "run" | "cadence" | "ask" | null
+  >(
     null
   )
   const [error, setError] = React.useState<string | null>(null)
 
   async function change(
-    kind: "toggle" | "cadence",
+    kind: "toggle" | "cadence" | "ask",
     call: () => Promise<PersonaList>
   ) {
     setBusy(kind)
@@ -216,6 +221,23 @@ function PersonaCard({
           ))}
         </ul>
       </div>
+      {/* EPIC-14 S35: one read-only question to the Team desk a run, off by default. */}
+      {teamConnected && typeof persona.askTeam === "boolean" ? (
+        <label className="zr-askteam">
+          <input
+            type="checkbox"
+            checked={persona.askTeam}
+            disabled={busy !== null}
+            onChange={() =>
+              change("ask", () =>
+                setPersonaAskTeam(persona.id, !persona.askTeam)
+              )
+            }
+          />
+          Ask your team how things connect: one question a run, read only. It
+          never picks or starts work.
+        </label>
+      ) : null}
       {/* EPIC-22 E22-2: talk something over with this persona in the chat, on or off. */}
       <div className="zi-row">
         <button
@@ -314,6 +336,7 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
                   <PersonaCard
                     key={persona.id}
                     persona={persona}
+                    teamConnected={state.list.teamConnected === true}
                     onList={onList}
                   />
                 ))}

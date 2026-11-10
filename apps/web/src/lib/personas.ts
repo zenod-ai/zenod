@@ -41,6 +41,8 @@ export type Persona = {
   /** Its pre-loaded skills: the only things it can do. */
   skills: PersonaSkill[]
   enabled: boolean
+  /** S35: null when it cannot ask the Team desk; else whether that is switched on (off by default). */
+  askTeam?: boolean | null
   limits: { maxSteps: number; maxRunUsd: number; maxMonthUsd: number }
   budget: {
     personaUsd: number
@@ -58,6 +60,8 @@ export type PersonaList = {
   budget: { spentUsd: number; capUsd: number }
   /** Every skill a persona can be given. */
   skills: PersonaSkill[]
+  /** S35: the account has a Team connection its helpers could ask. */
+  teamConnected?: boolean
 }
 
 const BASE = "/api/console/personas"
@@ -72,6 +76,11 @@ export const setPersonaCadence = (id: string, cadence: PersonaCadence) =>
   api<PersonaList>(`${BASE}/${encodeURIComponent(id)}`, {
     method: "POST",
     body: { cadence },
+  })
+export const setPersonaAskTeam = (id: string, askTeam: boolean) =>
+  api<PersonaList>(`${BASE}/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: { askTeam },
   })
 export const runPersonaNow = (id: string) =>
   api<PersonaList & { run: PersonaRun | null }>(
