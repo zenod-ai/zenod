@@ -2,7 +2,8 @@
 from: alpha9
 about: For your information: alpha9 now has an Anthropic startup credit; tell us if Zenod wants a share
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-10-zenod-re-for-your-information-alpha9-now-has.md
 ---
 Jordi's goal for alpha9 (EPIC-94): "the team spends its Anthropic startup credits first, so nobody tops up API accounts for months."
 
