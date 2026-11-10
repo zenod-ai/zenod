@@ -18,3 +18,15 @@ export async function submitTesterApplication(
   throw new Error(typeof payload.error === "string" ? payload.error : "Could not send your application. Please try again.");
 }
 
+// EPIC-26 T1 round 2: the tester code travels in one link to cloud.zenod.dev/join.
+const JOIN_URL = "https://cloud.zenod.dev/join";
+
+/** The tester code in this page's address, if it looks like one. */
+export function inviteCodeFromSearch(search: string | undefined): string | null {
+  const code = new URLSearchParams(search ?? "").get("code")?.trim() ?? "";
+  return /^[A-Za-z0-9_-]{3,40}$/.test(code) ? code : null;
+}
+
+export function joinUrl(code: string): string {
+  return `${JOIN_URL}?code=${encodeURIComponent(code)}`;
+}

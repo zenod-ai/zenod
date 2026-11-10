@@ -192,6 +192,8 @@ body:has(.pp) {
 /* Testers (ZAL-A13): the offer in two columns, three steps, then the apply form. */
 .pp-testers main { max-width: var(--pp-max); margin: 0 auto; padding: 0 var(--pp-edge); }
 .pp-testers-hero { padding: clamp(2rem, 6vw, 5rem) 0 0; max-width: 52rem; }
+.pp-testers-code { margin: 0 0 1rem; padding: 1.25rem 1.5rem; border-left: 3px solid var(--pp-accent); background: var(--pp-stage); max-width: 38rem; }
+.pp-testers-code p { margin: 0 0 1rem; font: 400 1rem/1.55 var(--pp-sans); }
 /* EPIC-26 T1: the three things a tester gets, each beside its real screen. */
 .pp-testers-get { margin-top: clamp(3rem, 7vw, 6rem); }
 .pp-testers-get > h2 { margin-bottom: clamp(1.5rem, 3vw, 2.5rem); }

@@ -14,15 +14,27 @@ import {
   completeCustomerCheckout,
   createCustomerCheckout,
   createCustomerPortalSession,
+  findActivePromotionCode,
   applyCustomerInvoiceEvent,
   applyCustomerSubscriptionEvent,
   invoiceSubscriptionId,
   loadCustomerBillingConfig,
   newCheckoutPolicyForProduct,
   resolveCheckoutTier,
+  type CheckoutInvite,
   type CustomerStripeClient,
   type CustomerProductConfig,
 } from "./customerBilling.js";
+import {
+  JOIN_PATH,
+  WELCOME_PATH,
+  joinPage,
+  joinPath,
+  joinProblemPage,
+  joinReturnPath,
+  normalizeInviteCode,
+  welcomePage,
+} from "./testerInvite.js";
 import {
   CustomerIdentityStore,
   GoogleOidcIdentityProvider,
@@ -298,6 +310,11 @@ function mcpConsentReturnPath(value: string | undefined): string | null {
   }
 }
 
+/** Where a sign-in may return to: an MCP consent request, or a tester invite link (EPIC-26 T1). */
+function signInReturnPath(value: string | undefined): string | null {
+  return mcpConsentReturnPath(value) ?? joinReturnPath(value);
+}
+
 const MCP_SIGNIN_COOKIE = "zenod_mcp_signin";
 
 function mcpSignInCookieOptions(env: NodeJS.ProcessEnv) {
@@ -564,7 +581,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (mode === "link_identity" && !session) return c.json({ error: "unauthorized" }, 401);
     if (session) principalForSession(session);
     const requestedHost = trustedReturnHost(c.req.header("x-forwarded-host") || c.req.header("host"));
-    const returnTo = mode === "signin" ? mcpConsentReturnPath(c.req.query("return_to")) : null;
+    const returnTo = mode === "signin" ? signInReturnPath(c.req.query("return_to")) : null;
     const browserNonce = returnTo ? randomBytes(32).toString("base64url") : undefined;
     if (browserNonce) setCookie(c, MCP_SIGNIN_COOKIE, browserNonce, { ...mcpSignInCookieOptions(env), maxAge: 600 });
     const flow = randomBytes(24).toString("base64url");
@@ -612,7 +629,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const actual = Buffer.from(getCookie(c, MCP_SIGNIN_COOKIE) ?? "");
       if (!expected.length || expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
         opsAlert("signin", "other_browser", { provider });
-        return c.text("This sign-in was started in another browser or has expired. Reopen the connection from your agent.", 400);
+        return c.text(
+          joinReturnPath(state.rt)
+            ? "This sign-in was started in another browser or has expired. Open your invite link again in this browser."
+            : "This sign-in was started in another browser or has expired. Reopen the connection from your agent.",
+          400,
+        );
       }
       deleteCookie(c, MCP_SIGNIN_COOKIE, mcpSignInCookieOptions(env));
     }
@@ -692,8 +714,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const principal = identities.resolveOrCreate(identityInput);
       issueCustomerSession(c, principal, env);
       const destination = signedReturnDestination(state.rh, env, product);
-      const returnTo = mcpConsentReturnPath(state.rt);
-      if (returnTo) return c.redirect(new URL(returnTo, destination).toString(), 302);
+      const consentReturn = mcpConsentReturnPath(state.rt);
+      if (consentReturn) return c.redirect(new URL(consentReturn, destination).toString(), 302);
+      // EPIC-26 T1: an invite link goes on to checkout on this host, keeping the sign-up marker.
+      const inviteReturn = joinReturnPath(state.rt);
+      if (inviteReturn) {
+        const invite = new URL(inviteReturn, "https://local.invalid");
+        const path = joinPath(
+          normalizeInviteCode(invite.searchParams.get("code")),
+          isNewCustomer && product.product === "zenod",
+        );
+        return c.redirect(new URL(path, `${customerDestination(env, product.defaultDomain)}/`).toString(), 302);
+      }
       // ZAL-A13: a first sign-in is a completed sign-up. The page it lands on
       // tells the alpha9 counter once (no cookie, nothing about the person).
       return c.redirect(isNewCustomer && product.product === "zenod" ? withSignupMarker(destination) : destination, 302);
@@ -2166,7 +2198,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signup is paused — Zenod</title><style>:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#fafafa;font:16px system-ui}.card{max-width:420px;padding:28px;background:#141414;border:1px solid #303030;border-radius:12px}h1{font-size:24px}p{color:#aaa}a{color:#fafafa}a.button{display:block;margin-top:16px;padding:12px;background:#fafafa;color:#111;text-align:center;text-decoration:none;border-radius:8px}</style></head><body><main class="card"><h1>Signup is paused for a moment</h1><p>We are not taking new subscriptions right now. Nothing was charged. Please try again a little later.</p><p>Questions? Write to <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p><a class="button" href="/">Back to Zenod</a></main></body></html>`;
   }
 
-  async function startCheckout(c: Context<{ Bindings: HttpBindings }>, tierInput: unknown) {
+  async function startCheckout(
+    c: Context<{ Bindings: HttpBindings }>,
+    tierInput: unknown,
+    invite?: { code: string | null; signedUp: boolean },
+  ) {
     const owner = readCustomerSession(c, env);
     if (!owner) return c.json({ error: "sign in before subscribing" }, 401);
     const principal = principalForSession(owner);
@@ -2192,14 +2228,33 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if ("error" in resolved) return c.json({ error: resolved.error }, 400);
     const accountId = existing?.account_id ?? customerAccountIdForUser(principal);
     identities.bindAccount(principal.user_id, accountId);
-    const session = await createCustomerCheckout(stripe, accounts, billing, {
+    const checkoutOwner = {
       user_id: principal.user_id,
       display_name: principal.display_name,
       account_id: accountId,
       github_id: principal.github_id,
       github_login: principal.github_login,
       email: principal.email,
-    }, resolved, product);
+    };
+    let session: Stripe.Checkout.Session;
+    if (invite && product.product === "zenod") {
+      // EPIC-26 T1: apply the invite's code up front. An unknown or used-up code, or one
+      // Stripe will not apply to this checkout, falls back to the open code field.
+      const promotionCodeId = invite.code ? await findActivePromotionCode(stripe, invite.code) : null;
+      const checkoutInvite: CheckoutInvite = { promotionCodeId, welcome: true, signedUp: invite.signedUp };
+      try {
+        session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product, checkoutInvite);
+      } catch (error) {
+        if (!promotionCodeId) throw error;
+        console.error("invite checkout with code failed, retrying without it:", error instanceof Error ? error.name : "Error");
+        session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product, {
+          ...checkoutInvite,
+          promotionCodeId: null,
+        });
+      }
+    } else {
+      session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product);
+    }
     return c.json({ id: session.id, url: session.url, product: product.product, tier: resolved.tier });
   }
 
@@ -2208,6 +2263,39 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (response.status !== 200) return response;
     const payload = (await response.clone().json()) as { url: string };
     return c.redirect(payload.url, 303);
+  });
+
+  // EPIC-26 T1: the tester invite link. Signed out, it shows what Zenod is and sign-in;
+  // signed in, it goes straight to Stripe Checkout with the code applied.
+  app.get(JOIN_PATH, async (c) => {
+    if (product.product !== "zenod") return c.notFound();
+    const code = normalizeInviteCode(c.req.query("code"));
+    const owner = readCustomerSession(c, env);
+    if (!owner) {
+      const providers = (["google", "github"] as const).filter((provider) => identityProviders[provider]);
+      return c.html(joinPage(code, [...providers]), 200, { "Cache-Control": "no-store" });
+    }
+    const existing = accounts.resolveForUser(owner.user_id);
+    if (existing?.subscription_status === "active" || existing?.subscription_status === "past_due") {
+      return c.redirect(`${customerDestination(env, product.defaultDomain)}/app`, 303);
+    }
+    const response = await startCheckout(c, "monthly", { code, signedUp: c.req.query("signed_up") === "1" });
+    if (response.status === 200) {
+      const payload = (await response.clone().json()) as { url: string };
+      return c.redirect(payload.url, 303);
+    }
+    if ((response.headers.get("content-type") ?? "").startsWith("text/html")) return response;
+    return c.html(
+      joinProblemPage("We could not open checkout just now. Please open your invite link again in a little while."),
+      response.status as 400 | 401 | 409 | 503,
+      { "Cache-Control": "no-store" },
+    );
+  });
+
+  app.get(WELCOME_PATH, (c) => {
+    if (product.product !== "zenod") return c.notFound();
+    if (!readCustomerSession(c, env)) return c.redirect("/app", 303);
+    return c.html(welcomePage(c.req.query("signed_up") === "1"), 200, { "Cache-Control": "no-store" });
   });
 
   app.post("/create-checkout-session", async (c) => {
@@ -2258,6 +2346,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       ? session.subscription
       : session.subscription?.id;
     await reconcileBillingEntitlement(accounts.get(session.id), subscriptionId);
+    if (product.product === "zenod" && c.req.query("welcome") === "1") {
+      const signedUp = c.req.query("signed_up") === "1" ? "?signed_up=1" : "";
+      return c.redirect(`${customerDestination(env, product.defaultDomain)}${WELCOME_PATH}${signedUp}`, 303);
+    }
     return c.redirect(`${customerDestination(env, product.defaultDomain)}/app`, 303);
   });
 
