@@ -35,15 +35,15 @@ Closed: 2026-11-10 by Jordi (closed on the console's review list)
 ## Current State
 
 Owner: Delivery Manager (Zenod launch)
-Status: active (V6 reopened by Jordi 2026-11-10)
-Last attempted: 2026-11-10 V4 (with V5, run_3f9aba7d): read-only check that agent_team's back-fill and card-answer forwarding (E42-S42) landed in Jordi's Zenod once each
-Result: yes. All 70 notes agent_team sent (30 older Chat notes, 30 card answers, 1 EpicSocial, 7 earlier, 2 agent test notes) plus 1 since are in his memory exactly once, with the right Source app line and their own capture time; his Zenod holds 103 voice notes since 2 Nov (32 WhatsApp + 71 forwarded), none missing or doubled. The two test notes are Log evidence only, on no page, so no vault change. Once V4 is confirmed every Done means is met (E21-1 and E21-3 by V1, E21-2 by V2 and V4) and the Outcome can be written.
-Evidence: [e21-v4-2026-11-10.md](evidence/e21-v4-2026-11-10.md), private page http://vps3.taild81fbb.ts.net:8921/e21-v2/ (updated in place)
-Waiting on: nobody; V4's card is on the review list
+Status: active (V6 in review)
+Last attempted: 2026-11-10 V6 (run_2aeaac10): counted Jordi's EpicTeam voice notes (Chat, card answers, calls) against his Zenod Log by source id, and set up a page that refreshes the count daily
+Result: 90% landed in the last 7 days (103 of 114), 75% since 2 Nov (110 of 147). Chat 50 of 50 and card answers 60 of 60 landed once each, with no empty transcript and no failed or waiting job. Calls: 0 of 37 since 2 Nov, because EpicTeam never forwards calls (agent_team side, root L-7; desk note agent_team 66fe92bef). The page http://vps3.taild81fbb.ts.net:8921/v6-voice-note-count/ refreshes daily (VPS3 timer zenod-voice-note-count, script from origin/main, PR #1610 ce6ef831).
+Evidence: [e21-v6-2026-11-10.md](evidence/e21-v6-2026-11-10.md) · [card](cards/V6.md) · live count http://vps3.taild81fbb.ts.net:8921/v6-voice-note-count/
+Waiting on: Jordi: V6 card on the review list; agent_team: calls forwarding (desk note 66fe92bef)
 Approved work: none
-Next action: V4 in review; on his confirm, tick E21-1 and E21-3, write the Outcome and close the epic
-Source revision: main (docs only; no code changed)
-Verified at: 2026-11-10T02:40Z
+Next action: V6 in review; on his confirm, close V6; when agent_team forwards calls, the daily count shows them by itself
+Source revision: main ce6ef831 (scripts/voice-note-count only, no app code)
+Verified at: 2026-11-10T23:46Z
 
 ## Non-Goals
 
@@ -61,7 +61,7 @@ Steps: each is independently testable and closes only with evidence.
 | V3 | Ticket worker | run_22db4b08-7edb-43ea-a9f8-4be865ee859c | EpicTeam Chat forwards its voice notes: follow-up of V1 | done (no confirm: same work as V2, folded into V2's card) | V2 | agent_team E42-S39 | main | see V2 | 2026-11-09 | none |
 | V4 | Ticket worker | run_3f9aba7d-ae07-4e96-b7ce-be16ff726677 (agent_team built E42-S42, desk note 45c3b1f7, taken bda1685) | Card voice answers and older Chat notes reach Zenod: agent_team forwards card answers (`fill`) and back-fills the notes keyed on the vn id; Zenod verifies each landed once (E21-2, goal) | done (approved by Jordi 2026-11-10) | agent_team shipped E42-S42 (console 6549192, live 2026-11-10T00:50Z) | agent_team E42-S42 | main | [evidence](evidence/e21-v4-2026-11-10.md) · [card](cards/E21-V4.md) · [private page](http://vps3.taild81fbb.ts.net:8921/e21-v2/): 70 of 70 back-filled and forwarded notes once each (+1 since, 71 of 71), right `Source app:` and own capture time; 103 voice notes since 11-02 = 32 WhatsApp + 71 forwarded, none missing or doubled; test notes vn_8a891947 and vn_e59dac3f only in the immutable Log, on no page | 2026-11-10 | followups: none; confirm: yes — only Jordi can say whether his own notes are where he expects them in his memory |
 | V5 | Ticket worker | run_3f9aba7d-ae07-4e96-b7ce-be16ff726677 | Card answers and older Chat notes reach Zenod: follow-up of V2 | done (no confirm: same work as V4, on V4's card) | V4 | agent_team E42-S42 | main | see V4 | 2026-11-10 | none |
-| V6 | Ticket worker | run_2aeaac10-229e-4f2c-a93f-79ae3a30f907 — claimed 2026-11-10T23:23Z, lease until 2026-11-11T01:23Z | Count how many of Jordi's EpicTeam voice notes (Chat, card answers, calls) landed in Zenod, show the count on a page, and close any gap toward 90% or more | active | none | agent_team E42-S39, E42-S42 | main | none | 2026-11-10 | dispatch |
+| V6 | Ticket worker | run_2aeaac10-229e-4f2c-a93f-79ae3a30f907 | Count how many of Jordi's EpicTeam voice notes (Chat, card answers, calls) landed in Zenod, show the count on a page, and close any gap toward 90% or more | review | none | [#1610](https://github.com/zenod-ai/zenod/pull/1610) `ce6ef831`, agent_team E42-S39, E42-S42 | main | [evidence](evidence/e21-v6-2026-11-10.md) · [card](cards/V6.md) · [live count](http://vps3.taild81fbb.ts.net:8921/v6-voice-note-count/): last 7 days 103 of 114 (90%), since 2 Nov 110 of 147 (75%); Chat 50/50, cards 60/60, calls 0/37 (desk note agent_team 66fe92bef) | 2026-11-10 | followups: start EpicTeam calls reach Zenod — agent_team's side, desk note 66fe92bef asks them to forward call transcripts keyed on the call id; confirm: yes — only Jordi can say whether the count answers his question and whether calls must reach Zenod |
 
 ## Decisions
 
@@ -76,6 +76,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-10 | accepted | V4 verified agent_team's E42-S42 back-fill read only: 71 of 71 forwarded notes once each, right tag and date; test notes vn_8a891947 and vn_e59dac3f left as immutable Log evidence (on no page, so no vault commit) | V5 folded into V4's card; card `completes: goal` | [evidence](evidence/e21-v4-2026-11-10.md) | Jordi's verdict on V4 |
 | 2026-11-10 | accepted | desk notes about the voice-note back-fill closed and answered | agent_team took both gaps (95f3ee0) and V4 verified their back-fill (97864d7) | 95f3ee0, 97864d7 | never |
 | 2026-11-10 | reopened | Jordi in Jordi's voice note 2026-11-10 23:08Z (Zenod Log/2026-11-10.md#^e-449504): "Zenod will have a pretty damn good feel for what's going on in Epic Team. If he gets like 90% of the voice notes"; the wake asks to confirm every voice note he leaves in EpicTeam (Chat, cards, calls) lands in Zenod and to show the count (root L-37) | V6 ready, epic active again | his note | V6 result |
+| 2026-11-10 | accepted | V6 counted read only, matched by source id (sha256 of the EpicTeam note id): Chat and card answers 110 of 110, calls 0 of 37; the calls gap is agent_team's (root L-7), sent as desk note 66fe92bef, nothing built across the seam | daily count page on VPS3 (#1610) | [evidence](evidence/e21-v6-2026-11-10.md) | agent_team answers on calls |
 
 ## Operating Learnings
 
