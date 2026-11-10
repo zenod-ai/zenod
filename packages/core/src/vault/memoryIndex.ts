@@ -98,6 +98,10 @@ const GENERIC_WORDS = new Set([
   // about…", "what did I ask for…", "the tweet saying…", "from my laptop or somewhere else?".
   "ever", "once", "mention", "mentioned", "talk", "talked", "talking", "told", "says", "saying", "ask", "asked", "asking",
   "wanted", "thought", "stuff", "kind", "sort", "maybe", "else", "more", "they", "anymore",
+  // A place or person left open, not a subject (E12-S35): "from my laptop or somewhere else?" is about the
+  // laptop, and "somewhere" alone pulled in his pages about places to live.
+  "somewhere", "anywhere", "everywhere", "nowhere", "elsewhere", "someone", "anyone", "everyone", "somebody", "anybody",
+  "everybody", "nothing", "algo", "alguien", "nada", "nadie", "otro", "otra", "otros", "otras",
 ]);
 
 /**
@@ -890,10 +894,19 @@ export class MemoryIndex {
         topicTerms = terms;
       }
     }
+    // A day asked as a whole ("what did I send on November 6?", E12-S35) is a period of one day: with
+    // several notes it lists them, not the newest one and the pages it was filed into. A day with one
+    // note, or a question for one note ("yesterday's vn"), keeps the note and its pages.
+    const period = intent.window.kind === "range" || (intent.window.kind === "day" && !intent.one && pool.length > 1);
+    if (intent.window.kind === "day" && period) {
+      // The notes that say the most first: a quick test message tells less about the day than a long note.
+      const said = new Map(pool.map((row) => [row.rowid, spokenWords(row.body).split(/\s+/).length]));
+      pool = [...pool].sort((a, b) => (fit.get(b.rowid) ?? 0) - (fit.get(a.rowid) ?? 0) || said.get(b.rowid)! - said.get(a.rowid)!);
+    }
     const percentOf = (value: number) => Math.max(1, Math.min(100, Math.round(value * 100)));
     const hits: MemoryIndexHit[] = [];
     // The latest note halves each older one; in a period every note counts, so they fall gently.
-    const decay = intent.window.kind === "range" ? 0.95 : 0.5;
+    const decay = period ? 0.95 : 0.5;
     const held = new Map<string, number>();
     pool.slice(0, limit).forEach((note, k) => {
       const notePercent = percentOf((fit.get(note.rowid) ?? 0) * decay ** k);
@@ -907,7 +920,7 @@ export class MemoryIndex {
       });
       // The pages it was filed into follow the latest note only: older notes stay one line each.
       // A period lists its notes alone: the period is the answer, not one note's topics.
-      if (k > 0 || intent.window.kind === "range") return;
+      if (k > 0 || period) return;
       const said = contentWords(note.body);
       // A question with a topic ("what did I say about explainer videos today") keeps only the
       // note's pages that are about it: the others were filed from other parts of the note.

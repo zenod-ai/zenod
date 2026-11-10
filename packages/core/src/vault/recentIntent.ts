@@ -18,6 +18,11 @@ export interface RecentIntent {
   voice: boolean;
   /** What is left once the time and note words are gone: "the boat" in "what did I say about the boat today". */
   topic: string;
+  /**
+   * The question asks for one note ("yesterday's vn"), not everything sent then ("what did I send on
+   * November 6?", E12-S35): a day asked as a whole lists its notes, not the newest one and its pages.
+   */
+  one: boolean;
 }
 
 const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -28,6 +33,8 @@ const word = (re: RegExp) => new RegExp(`(?<![\\p{L}\\p{N}])${re.source}(?![\\p{
 const VOICE_RE = word(/(?:voice ?notes?|voice ?messages?|voice ?memos?|vns?|audios?|recordings?|notas? de voz|mensajes? de voz)/);
 const NOTE_RE = word(/(?:notes?|messages?|captures?|entries|entry|notas?|mensajes?)/);
 const SAID_RE = word(/(?:say|said|told|tell you|sent|send|record(?:ed)?|talk(?:ed)?|talking|discuss(?:ed)?|mention(?:ed)?|spoke|speak|topics?|themes?|dije|dicho|grabe|grabé|envie|envié|mande|mandé|hable|hablé|hablado)/);
+const ONE_NOTE_RE = word(/(?:voice ?note|voice ?message|voice ?memo|vn|audio|recording|note|message|capture|entry|nota de voz|nota|mensaje de voz|mensaje|grabacion|grabación)/);
+const DAY_BEFORE_RE = word(/(?:(?:the )?day before yesterday|anteayer|antier|antes de ayer)/);
 const YESTERDAY_RE = word(/(?:yesterday|ayer)/);
 const TODAY_RE = word(/(?:today|tonight|this morning|this afternoon|this evening|earlier today|hoy|esta manana|esta mañana|esta tarde|esta noche)/);
 const LATEST_RE = word(/(?:last|latest|most recent|newest|recent|just now|ultimo|última|ultima|último|ultimos|últimos|reciente|recientes)/);
@@ -50,6 +57,10 @@ const INTENT_WORDS = new Set([
   "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "st", "nd", "rd", "th",
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "semana", "semanas", "mes", "meses", "dias", "días",
   "hable", "hablé", "hablado", "temas", "tema", "principales", "pasada", "pasado", "ultimas", "últimas", "estos", "los", "las",
+  // E12-S35: "the day before yesterday", "3 days ago", "hace 3 días", "el día 6", "1ro de noviembre".
+  "before", "ago", "hace", "anteayer", "antier", "antes", "dia", "día",
+  "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre", "octubre", "noviembre", "diciembre",
+  "lunes", "martes", "miercoles", "miércoles", "jueves", "viernes", "sabado", "sábado", "domingo", "mandaste", "envié", "grabé",
 ]);
 
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -60,6 +71,8 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const WEEKDAYS_ES = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+/** "6th", "1st", Spanish "1ro" and "1º" (NFKC reads it "1o"), "1er". */
+const ORDINAL = "st|nd|rd|th|ro|o|er";
 const MONTH_RE = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)";
 
 function monthIndex(name: string): number {
@@ -68,7 +81,10 @@ function monthIndex(name: string): number {
   return en >= 0 ? en : MONTHS_ES.indexOf(key);
 }
 
-/** A named day: "November 6", "6 Nov", "2026-11-06", "on Friday" (the latest such day before today). */
+/**
+ * A named day: "November 6", "6 de noviembre", "1ro de noviembre", "2026-11-06", "3 days ago", "hace 3 días",
+ * "on the 6th", "el día 6", "on Friday", "el viernes" (the latest such day before today).
+ */
 function namedDay(text: string, now: number): string | null {
   const iso = /(?<![\p{N}])(\d{4}) (\d{2}) (\d{2})(?![\p{N}])/u.exec(text);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
@@ -79,10 +95,24 @@ function namedDay(text: string, now: number): string | null {
     const ms = Date.UTC(year, month, day);
     return dayOf(ms > now ? Date.UTC(year - 1, month, day) : ms);
   };
-  const monthFirst = new RegExp(`(?<![\\p{L}])${MONTH_RE} (\\d{1,2})(?:st|nd|rd|th)?(?![\\p{N}])`, "u").exec(text);
+  const monthFirst = new RegExp(`(?<![\\p{L}])${MONTH_RE} (\\d{1,2})(?:${ORDINAL})?(?![\\p{N}])`, "u").exec(text);
   if (monthFirst) return at(monthIndex(monthFirst[1]!), Number(monthFirst[2]));
-  const dayFirst = new RegExp(`(?<![\\p{N}])(\\d{1,2})(?:st|nd|rd|th)? (?:of |de )?${MONTH_RE}(?![\\p{L}])`, "u").exec(text);
+  const dayFirst = new RegExp(`(?<![\\p{N}])(\\d{1,2})(?:${ORDINAL})? (?:of |de )?${MONTH_RE}(?![\\p{L}])`, "u").exec(text);
   if (dayFirst) return at(monthIndex(dayFirst[2]!), Number(dayFirst[1]));
+  // "3 days ago", "hace 3 días".
+  const ago = new RegExp(`(?:(\\d{1,2}|${Object.keys(NUMBER_WORDS).join("|")}) days? ago|hace (\\d{1,2}|${Object.keys(NUMBER_WORDS).join("|")}) d[ií]as)(?![\\p{L}])`, "u").exec(text);
+  if (ago) {
+    const n = ago[1] ?? ago[2]!;
+    return dayOf(now - (/^\d+$/.test(n) ? Number(n) : NUMBER_WORDS[n]!) * DAY_MS);
+  }
+  // A day of this month without its name: "on the 6th", "el día 6" (last month's when later than today).
+  const bare = new RegExp(`(?:on the (\\d{1,2})(?:${ORDINAL})|(?:el )?d[ií]a (\\d{1,2}))(?![\\p{N}\\p{L}])`, "u").exec(text);
+  if (bare) {
+    const day = Number(bare[1] ?? bare[2]);
+    const today = new Date(now);
+    const month = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), day) > now ? today.getUTCMonth() - 1 : today.getUTCMonth();
+    if (day >= 1 && day <= 31) return dayOf(Date.UTC(today.getUTCFullYear(), month, day));
+  }
   const weekday = new RegExp(`(?<![\\p{L}])(?:on |last |el |este )?(${[...WEEKDAYS, ...WEEKDAYS_ES].join("|")})(?![\\p{L}])`, "u").exec(text.normalize("NFD").replace(/\p{M}+/gu, ""));
   if (weekday) {
     const target = Math.max(WEEKDAYS.indexOf(weekday[1]!), WEEKDAYS_ES.indexOf(weekday[1]!));
@@ -112,21 +142,23 @@ export function recentIntent(question: string, now: number = Date.now()): Recent
   const text = ` ${normalize(question)} `;
   const voice = VOICE_RE.test(text);
   const names = voice || NOTE_RE.test(text) || SAID_RE.test(text);
-  const yesterday = YESTERDAY_RE.test(text);
+  const dayBefore = DAY_BEFORE_RE.test(text);
+  const yesterday = !dayBefore && YESTERDAY_RE.test(text);
   const today = TODAY_RE.test(text);
   const range = namedRange(text, now);
   const day = range ? null : namedDay(text, now);
   // "last week", "last time", "last year" name a period or an occasion, not the latest note.
   const latest = LATEST_RE.test(text.replace(/ (?:last|past|previous|these|ultimos|últimos|ultimas|últimas) (?:\d{1,2} |two |three |four |five |six |seven |ten |fourteen |thirty |few |couple of )?(?:weeks?|weekend|months?|years?|time|night|days?|summer|winter|spring|autumn|fall|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?= )/g, " "));
-  if (!names || !(yesterday || today || latest || range || day)) return null;
+  if (!names || !(dayBefore || yesterday || today || latest || range || day)) return null;
   // "my last vn" and "yesterday's vn" are about the note; "last time we spoke about notes" is not a note word next to a time word.
-  const window: RecentWindow = yesterday ? { kind: "day", date: dayOf(now - DAY_MS) }
+  const window: RecentWindow = dayBefore ? { kind: "day", date: dayOf(now - 2 * DAY_MS) }
+    : yesterday ? { kind: "day", date: dayOf(now - DAY_MS) }
     : today ? { kind: "day", date: dayOf(now) }
     : range ? { kind: "range", ...range }
     : day ? { kind: "day", date: day }
     : { kind: "latest" };
-  const topic = normalize(question).split(" ").filter((word) => word && !INTENT_WORDS.has(word) && !/^\d+$/.test(word)).join(" ");
-  return { window, voice, topic };
+  const topic = normalize(question).split(" ").filter((word) => word && !INTENT_WORDS.has(word) && !new RegExp(`^\\d+(?:${ORDINAL})?$`).test(word)).join(" ");
+  return { window, voice, topic, one: ONE_NOTE_RE.test(text) };
 }
 
 /** A Log entry that is a voice note: recorded as one, or an older entry whose words say so. */
