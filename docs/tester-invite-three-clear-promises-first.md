@@ -27,16 +27,16 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 ## Current State
 
-Owner: run_dcd204c7 (T1)
+Owner: run_94349079 (T1 round 2)
 Status: active
-Last attempted: 2026-11-10T04:45Z T1: zenod.dev/testers leads with the three promises, live on ce1181e (PR #1581); first invite written, its tester code not made (agents lack the root line)
-Result: E26-1 met on production, in review; E26-2 invite text ready with {CODE} placeholder, not sent
-Evidence: [e26-t1](evidence/e26-t1-2026-11-10.md), [page](http://vps3.taild81fbb.ts.net:8921/e26-t1/), card docs/cards/E26-T1.md
-Waiting on: Jordi, T1 card verdict; E23-A1 (who the first tester is); proposed ask: a narrow root line so agents make tester codes (in the T1 evidence, for the Delivery manager to post)
+Last attempted: 2026-11-10T11:55Z T1 round 2: the invite is one link with the code inside (cloud.zenod.dev/join?code=…): sign-in, checkout with the code applied, a You're in page; live on 51c0fe51; diagram and screens on desktop and phone
+Result: E26-1 met on production; E26-2 invite text is one line, the three things and the one link, with {CODE} until a code exists; no welcome email (Zenod has no mailer); checkout with the code not seen live yet; T1 in review
+Evidence: [funnel and screens](http://vps3.taild81fbb.ts.net:8921/e26-t1/), [e26-t1-r2](evidence/e26-t1-r2-2026-11-10.md), card docs/cards/E26-T1.md
+Waiting on: Jordi, T1 card verdict; E26-A2 (tester-code command, Mac list); E23-A1 (who the first tester is)
 Approved work: none
-Next action: post the tester-code ask; on E23-A1's name, issue that person's code and hand Jordi the filled invite
-Source revision: ce1181e
-Verified at: 2026-11-10T04:45Z (health sha ce1181ec, live page read)
+Next action: on E26-A2 and E23-A1, issue that person's code, hand Jordi the filled invite and watch the sign-up live (proves checkout with the code)
+Source revision: 51c0fe51
+Verified at: 2026-11-10T11:42Z (health sha 51c0fe51, live join and testers pages screenshotted)
 
 ## Waiting on
 
@@ -53,7 +53,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T1 | Ticket worker | run_94349079-03e3-472e-a05c-d33608694772 — claimed 2026-11-10T11:40Z, lease until 2026-11-10T13:40Z | E26-1, E26-2: the three promises on the tester page and the invite, and the first invite ready to send | active | none | [#1581](https://github.com/zenod-ai/zenod/pull/1581) merged ce1181e | main | [e26-t1](evidence/e26-t1-2026-11-10.md), [page](http://vps3.taild81fbb.ts.net:8921/e26-t1/): zenod.dev/testers leads with the three promises, live on ce1181e (deployed 2026-11-10T04:38Z); invite for WhatsApp or email written in [invite-dm](epic7/invite-dm.md), Reddit DM updated too; tester code not made: agents' VPS1 root list has no issue line | 2026-11-10T04:45Z | followups: start tester-code ask — agents cannot make the code the invite needs (root line on VPS1); start EPIC-23 U2 on E23-A1's name — issue that person's code, hand Jordi the filled invite; confirm: yes — Jordi reads the live page and the invite and says if the three promises land |
+| T1 | Ticket worker | run_94349079-03e3-472e-a05c-d33608694772 (round 2 finish; round 2 build run_9ca8cb40) | E26-1, E26-2: the three promises on the tester page and the invite; round 2 (Jordi 2026-11-10 "you make a click and you go through the funnel"): one invite link with the code inside, sign-in, checkout with the code applied, a you're-in step | review | none | [#1581](https://github.com/zenod-ai/zenod/pull/1581) merged ce1181e; [#1593](https://github.com/zenod-ai/zenod/pull/1593) merged ffa1659b; invite text 5559c414 | main | [live funnel and screens](http://vps3.taild81fbb.ts.net:8921/e26-t1/), [e26-t1-r2](evidence/e26-t1-r2-2026-11-10.md): cloud.zenod.dev/join?code=… live on 51c0fe51 (health read 2026-11-10T11:40Z): invite page, Google or GitHub sign-in, Stripe Checkout with the code prefilled (€0, no card), You're in page; diagram and desktop and phone screens; no welcome email (Zenod has no mailer, Stripe sends no receipt at €0); checkout step not seen live (no agent Stripe key or sign-in), proven by tests | 2026-11-10T11:55Z | followups: start welcome email after checkout — Zenod has no sender today, a mail to testers is ask-tier; start lighter tester checkout — prefill their email and check if the billing address can go at €0; started E26-A2 (tester-code command, on Jordi's Mac list); confirm: yes — Jordi opens the link and the screens and says if this is the funnel he meant |
 | E26-S1 | Ticket worker | unassigned | Tester funnel: a code, one link to sign up and pay, a welcome email: The invite ends in one link: the tester gets a code, picks an email, signs up and pays at checkout using the code (a Stripe coupon), then gets an email saying they are provisioned, with their WhatsApp number and next steps. | done (no confirm: same work as T1 round 2, which builds it) | none | none | main | none | 2026-11-10 | covered by T1 round 2 |
 
 ## Decisions

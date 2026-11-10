@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{margin:0;background:#f6f2e9;color:#18211c;font:400 17px/1.45 Newsreader,Georgia,serif;width:1600px;padding:56px 64px}
+h1{font-weight:400;font-size:40px;letter-spacing:-.02em;margin:0 0 6px}.sub{font:400 17px "Instrument Sans",system-ui,sans-serif;color:#4a554e;margin:0 0 34px}
+.row{display:grid;grid-template-columns:150px repeat(6,1fr);gap:12px;align-items:stretch;margin-bottom:22px}
+.lab{font:600 14px "Instrument Sans",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.08em;padding-top:14px}
+.lab small{display:block;font-weight:400;text-transform:none;letter-spacing:0;color:#4a554e;font-size:14px;margin-top:4px}
+.box{border:1px solid #18211c;background:#fbf8f1;padding:14px 14px 12px;position:relative;border-radius:3px}
+.box h3{margin:0 0 6px;font:600 15px "Instrument Sans",system-ui,sans-serif}.box p{margin:0;font-size:15.5px}
+.box .click{margin-top:8px;font:500 13px "Instrument Sans",system-ui,sans-serif;color:#1f4d3a}
+.bad{border-color:#9a3b22;background:#f8ebe3}.bad .flag{color:#9a3b22}
+.flag{margin-top:8px;font:500 13px "Instrument Sans",system-ui,sans-serif}
+.good{border:2px solid #1f4d3a}.good .flag{color:#1f4d3a}
+.box:not(:last-child)::after{content:"→";position:absolute;right:-12px;top:42%;font:16px system-ui;color:#4a554e}
+.gone{border-style:dashed;opacity:.55;background:transparent}
+.foot{display:flex;gap:28px;font:400 14px "Instrument Sans",system-ui,sans-serif;color:#4a554e;margin-top:10px}
+.sw{display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;border:1px solid #18211c}
+</style></head><body>
+<h1>The tester funnel, before and now</h1>
+<p class="sub">What a tester sees and clicks at each step, from the invite to their first voice note.</p>
+<div class="row"><div class="lab">Before<small>the invite told them where to go</small></div>
+<div class="box bad"><h3>1 · Invite</h3><p>A message with cloud.zenod.dev and a code to copy.</p><div class="flag">✗ the code travels apart</div></div>
+<div class="box"><h3>2 · Sign in</h3><p>Google or GitHub.</p><div class="click">clicks: Continue with Google</div></div>
+<div class="box bad"><h3>3 · Plan page</h3><p>"Subscribe for €9/month + VAT".</p><div class="flag">✗ a price before the free part</div></div>
+<div class="box bad"><h3>4 · Stripe Checkout</h3><p>Find "Add promotion code", type the code by hand. Then €0.</p><div class="flag">✗ easy to miss, typo = €9</div></div>
+<div class="box bad"><h3>5 · Account made</h3><p>Lands straight in the vault chooser. No email.</p><div class="flag">✗ no "you're in"</div></div>
+<div class="box"><h3>6 · WhatsApp</h3><p>Settings › WhatsApp & Telegram, type number, send the code.</p><div class="click">clicks: Settings, Link</div></div>
+</div>
+<div class="row"><div class="lab">Now<small>one link, code inside</small></div>
+<div class="box good"><h3>1 · Invite</h3><p>Three promises and one link: cloud.zenod.dev/join?code=…</p><div class="flag">✓ one click</div></div>
+<div class="box good"><h3>2 · Invite page + sign in</h3><p>What Zenod is, the three things, "your code is in this link".</p><div class="click">clicks: Continue with Google</div></div>
+<div class="box gone"><h3>3 · Plan page</h3><p>Skipped.</p></div>
+<div class="box good bad"><h3>3 · Stripe Checkout</h3><p>Code already applied, €0, no card. Still asks email, billing address and a terms tick.</p><div class="flag">✗ email and address asked again</div></div>
+<div class="box good"><h3>4 · "You're in."</h3><p>Account ready, two next steps with buttons. Email: none yet.</p><div class="flag">✗ no welcome email, no sender</div></div>
+<div class="box"><h3>5 · Notes + WhatsApp</h3><p>Pick Drive or GitHub. Link WhatsApp straight from the button.</p><div class="click">clicks: Link WhatsApp</div></div>
+</div>
+<div class="foot"><span><span class="sw" style="background:#f8ebe3;border-color:#9a3b22"></span>breaks or asks too much</span><span><span class="sw" style="border:2px solid #1f4d3a"></span>changed in this round</span><span><span class="sw" style="border-style:dashed"></span>removed from the path</span></div>
+</body></html>

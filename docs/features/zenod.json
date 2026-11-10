@@ -97,6 +97,16 @@
      ],
      "since": "2026-11-09",
      "draft": true
+    },
+    {
+     "id": "tester-invite-link",
+     "title": "Join with one invite link",
+     "text": "A tester's invite is one link with their code inside. They sign in with Google or GitHub, checkout opens with the code applied at €0 and no card, and a You're in page shows the two next steps.",
+     "rows": [
+      "E26-T1"
+     ],
+     "since": "2026-11-10",
+     "draft": true
     }
    ]
   },
