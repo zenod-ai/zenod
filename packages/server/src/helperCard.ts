@@ -71,6 +71,12 @@ export function pictureTitle(picture: HelperCardPicture): string {
   }
 }
 
+/** The picture in one line, as the helper's note keeps it: `Boiler, new link, Home`. */
+export function pictureWords(picture: HelperCardPicture): string {
+  const words = { link: "new link", unlink: "link off", move: "moves under", rename: "new name", "own-place": "own place" }[picture.change];
+  return [picture.from, words, picture.to ?? "top of your memory"].join(", ");
+}
+
 /**
  * Plain words for what a person reads: a model's "memory 24" or "memories 3 and 7" (its own numbering
  * of what it read) becomes how the person knows that memory, so a card never points at a number.

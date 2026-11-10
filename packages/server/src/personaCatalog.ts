@@ -3,7 +3,7 @@ import type { InboxLink } from "./inboxStore.js";
 import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill } from "./personaRunner.js";
 import { hasWorkCode, isProjectWork } from "./helperScope.js";
 import { createClarifier } from "./clarifier.js";
-import { cleanHelperCard, HELPER_CARD_ASK, HELPER_CARD_WORDS, namedCard, namedMemories, pictureTitle, type HelperCard } from "./helperCard.js";
+import { cleanHelperCard, HELPER_CARD_ASK, HELPER_CARD_WORDS, namedCard, namedMemories, pictureTitle, pictureWords, type HelperCard } from "./helperCard.js";
 
 /**
  * The built-in personas (EPIC-14 S4): a catalog the user switches on one by one. Only Weekly recap
@@ -402,7 +402,7 @@ function postSuggestionCard(ctx: PersonaContext, entries: MemoryEntry[], suggest
 
 /** The suggestion in the helper's own note: the change, why yes, why not, and the team's answer. */
 const suggestionLines = (suggestion: Offered | null, lead: string) => suggestion
-  ? [`- ${lead}${suggestion.action}`, ...(suggestion.why ? [`- Why: ${suggestion.why}`] : []), ...(suggestion.card ? [`- Why not: ${suggestion.card.no}`] : []), ...(suggestion.team ? ["", suggestion.team] : [])]
+  ? [`- ${lead}${suggestion.action}`, ...(suggestion.card?.picture ? [`- Picture: ${pictureWords(suggestion.card.picture)}`] : []), ...(suggestion.why ? [`- Why: ${suggestion.why}`] : []), ...(suggestion.card ? [`- Why not: ${suggestion.card.no}`] : []), ...(suggestion.team ? ["", suggestion.team] : [])]
   : [];
 const suggestionNote = (suggestion: Offered | null) => (suggestion ? ["", "## Suggested", "", ...suggestionLines(suggestion, "")] : []);
 

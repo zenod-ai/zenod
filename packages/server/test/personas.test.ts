@@ -677,6 +677,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     });
     expect(card.card!.yes).not.toMatch(/memory 1/i);
     expect(written[0]!.files[0]!.content).toContain("- Why not: Boiler already sits under Home, so the link may add little.");
+    expect(written[0]!.files[0]!.content).toContain("- Picture: Boiler, new link, Home");
     // The model is asked for the picture and both reasons, in plain words.
     expect(stub.calls[0]!.prompt).toContain('"picture"');
     expect(stub.calls[0]!.prompt).toContain('"no"');
