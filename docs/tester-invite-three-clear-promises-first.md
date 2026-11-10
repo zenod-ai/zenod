@@ -14,7 +14,7 @@ Integration policy: main-direct
 
 Tester page and invite say plainly what a tester gets: a WhatsApp number to drop voice notes; a literal copy of their memory in their own account; a knowledge graph with MCP so any AI reads and writes it. Make the first invite ready for Jordi to send to someone he knows.
 
-Goal sentence: The tester page and invite say plainly what a tester gets, and the first invite is ready for Jordi to send.
+Goal sentence: The tester page and invite say plainly what testers get, and the first invite is ready to send.
 
 ## Serves
 
