@@ -224,6 +224,18 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
     expect(searchText).not.toContain("· tree:"); // E9-5j: lineage is structured output only
   });
 
+  it("warms the index before the first search, which then finds the same hits with nothing left to refresh (E24-M7)", async () => {
+    const { engine } = await engineWithIndex("t1", {});
+    const warmed = await engine.warmMemorySearch!();
+    expect(warmed!.rows).toBeGreaterThan(0);
+    const timed = await engine.searchTimed!("Porto quotes");
+    expect(timed.tier).toBe("index");
+    expect(timed.hits[0]).toMatchObject({ path: QUOTES, treePath: "Working memory › Boat repair › 2023 Porto quotes" });
+    expect(timed.index!.rows).toBe(warmed!.rows);
+    const { engine: cold } = await engineWithIndex("t1", {});
+    expect((await cold.searchTimed!("Porto quotes")).hits.map((hit) => hit.path)).toEqual(timed.hits.map((hit) => hit.path));
+  });
+
   it("refuses to serve another tenant's index file", async () => {
     const { engine, indexPath, vault } = await engineWithIndex("t1", {});
     await engine.search("Porto");

@@ -741,7 +741,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return (await timedSearch(query)).hits;
   }
 
-  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number } }> {
+  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs: number } }> {
     const started = performance.now();
     const ms = () => Math.round((performance.now() - started) * 10) / 10;
     const index = openMemoryIndex();
@@ -751,7 +751,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (hits.length > 0) {
           const elapsed = ms();
           const { rows, bytes } = index.stats();
-          return { tier: "index", ms: elapsed, index: { rows, bytes }, hits: hits.map((hit) => {
+          return { tier: "index", ms: elapsed, index: { rows, bytes, refreshMs: index.lastFreshMs }, hits: hits.map((hit) => {
             const [base, anchor] = hit.path.split("#^");
             return {
               snippet: hit.snippet || hit.title,
@@ -4118,6 +4118,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
       assertVault(repo);
       await syncForRead();
       return timedSearch(query);
+    },
+    warmMemorySearch: async () => {
+      if (!repo) return null;
+      const started = performance.now();
+      const index = openMemoryIndex();
+      if (!index) return null;
+      await index.refresh();
+      index.warm();
+      await loadMemoryTree(vaultPath);
+      return { ms: Math.round(performance.now() - started), rows: index.stats().rows };
     },
     memoryGraph: async (request = {}) => {
       assertVault(repo);

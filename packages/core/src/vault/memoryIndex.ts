@@ -457,6 +457,8 @@ export class MemoryIndex {
   private dirty = true;
   /** Bumped by every markDirty: a sync clears `dirty` only if none came in while it read the vault. */
   private dirtyGen = 0;
+  /** Time the last search spent bringing the index up to date first (E24-M7: logged per search). */
+  lastFreshMs = 0;
   private eagerTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private lastCheck = Number.NEGATIVE_INFINITY;
@@ -537,7 +539,7 @@ export class MemoryIndex {
   }
 
   /** Build the per-version caches a search reads (privacy, graph, links, spoken words) ahead of it. */
-  private warm(): void {
+  warm(): void {
     if (this.closed) return;
     this.privacy();
     this.memoryGraph();
@@ -1303,6 +1305,11 @@ export class MemoryIndex {
   }
 
   private async fresh(): Promise<void> {
+    const started = performance.now();
+    try { await this.freshNow(); } finally { this.lastFreshMs = Math.round(performance.now() - started); }
+  }
+
+  private async freshNow(): Promise<void> {
     if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
     // A sync already under way (a background refresh) clears `dirty` before it commits: wait for
     // it, so a search reads the same rows it would have after running the sync itself.
