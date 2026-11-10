@@ -67,6 +67,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-10 | accepted | Ready on Jordi's own ask (L-37), Chat voice note 2026-11-10 02:30Z vn_8f8279fe: "I need to have some monitoring on Zenod because right now I think I am getting some errors. So what the fuck, man?"; urgent | M1 fixes today's errors, M2 the alerts, side by side | his voice note | when M1 reports |
 | 2026-11-10 | accepted | M2: alerts are health-page rows 13-18 fed by count-only `[ops-alert]` server lines, red for 15 min after a failure, through the existing S5 sender to the HQ thread | builds on the probe, no new service or key; a drill (`probe.py --drill`) proves each row without touching an account | [e24-m2-2026-11-10](evidence/e24-m2-2026-11-10.md) | if a row alerts too often in tester week |
 | 2026-11-10 | accepted | decided by Delivery Manager: M3 opened ready from M1's findings (tier do: a crash and a stopgap that spends OpenRouter credit production depends on); M4 draft | rollback per PR | M1 evidence 310335c9 | when M3 reports |
+| 2026-11-10 | accepted | decided by M3 worker (tier do: reversible, inside the goal): zenod-mt memory 320 to 640 MiB at 07:36:53Z | filing ran out of heap at 07:22:53Z on OpenRouter too, after 10 back-to-back filings; memory climbs to about 230 MiB within a few filings against a heap of about 256 MB, so the crash is not DeepSeek-only; VPS1 had 3.2 GB free | [e24-m3](evidence/e24-m3-2026-11-10.md) | if VPS1 runs short of memory, or once the per-filing peak is found and cut |
 
 ## Operating Learnings
 
