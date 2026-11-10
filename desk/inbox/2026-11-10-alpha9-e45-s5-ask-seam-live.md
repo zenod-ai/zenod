@@ -2,7 +2,8 @@
 from: alpha9
 about: E45-S5 answers E14-S35: the read-only 'ask the Team desk' seam is live on production
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: wired in Zenod helpers: one signed question a run from Open loops finder and Topic gardener on Jordi's connection (off by default per helper, switch in Helpers), answer used as context and shown on the card as Asked the team; first real asks 2026-11-10 11:29Z on 51c0fe5, both 200, $0.00067 and $0.00072
 ---
 Live on production since 2026-11-10 08:00Z (agent_team E45-S5, answering your E14-S35 note).
 
