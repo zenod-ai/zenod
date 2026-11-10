@@ -34,7 +34,7 @@ HOME = os.path.expanduser("~")
 STATE = os.environ.get("S30_STATE", f"{HOME}/zenod-eval/s30")
 PAGE = os.environ.get("S30_PAGE", f"{HOME}/zenod-evidence-pages/e14-s30-private/index.html")
 VAULT = os.environ.get("S30_VAULT", "/var/lib/vps3-scratch/t3agent/github/obsidian-brain")
-REPO_URL = os.environ.get("S30_REPO_URL", "git@github.com:zenod-ai/zenod.git")
+REPO_URL = os.environ.get("S30_REPO_URL", "https://github.com/zenod-ai/zenod.git")
 RUN_ID = "run_a14a66e8-7c20-4a1b-8d02-f829acdab8ee"
 HELPERS = {
     "weekly-recap": "Weekly recap", "open-loops": "Open loops finder", "people-follow-ups": "People and follow-ups",
