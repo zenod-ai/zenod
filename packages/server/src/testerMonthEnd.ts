@@ -8,6 +8,11 @@
 //   existing "your notes stay in your vault, to start again open …" notice) and can pay or come back;
 //   one who comes back before that end is extended again.
 //
+// Round 2 (Jordi, 2026-11-10: "what do you mean it renews by itself????"): a tester is never charged
+// by itself. When an extension fails or does not leave the next invoice at €0, the job ends that free
+// month instead (the same gentle end, so no renewal bill is made) and alerts; if the tester keeps using
+// Zenod, the next pass tries the extension again.
+//
 // The team is alerted only for exceptions: an extension or end that failed (or did not leave the next
 // invoice at €0), a tester whose renewal already went past due, and a tester extended while over the
 // usage cap. One `[ops-alert] tester <reason>` line each, read by the health page (row 20).
@@ -25,6 +30,8 @@ export const TESTER_ACTIVE_DAYS = 14;
 export const TESTER_DECIDE_DAYS = 6;
 /** Marks a subscription this rule set to end, so a comeback can undo it. */
 export const ENDED_INACTIVE = "ended_inactive";
+/** Marks a subscription ended because its free month could not be confirmed: never bill a tester. */
+export const ENDED_SAFE = "ended_not_free";
 const RUN_MS = 6 * 60 * 60 * 1000;
 const FIRST_RUN_MS = 60 * 1000;
 const DAY_MS = 86_400_000;
@@ -67,7 +74,8 @@ export function decideMonthEnd(input: {
   const active = lastUsedMs !== null && nowMs - lastUsedMs <= TESTER_ACTIVE_DAYS * DAY_MS;
   if (sub.cancel_at_period_end) {
     // Ended by this rule and back in use before the end: keep them on.
-    if (sub.metadata?.zenod_tester_month_end === ENDED_INACTIVE && active) return { action: "resume", reason: "came_back" };
+    const mark = sub.metadata?.zenod_tester_month_end;
+    if ((mark === ENDED_INACTIVE || mark === ENDED_SAFE) && active) return { action: "resume", reason: "came_back" };
     return { action: "none", reason: "ending" };
   }
   if (sub.current_period_end * 1000 - nowMs > TESTER_DECIDE_DAYS * DAY_MS) return { action: "none", reason: "not_due" };
@@ -179,6 +187,19 @@ export class TesterMonthEnd {
     }
   }
 
+  /** Never bill a tester: set the subscription to end at its period end. False when Stripe refused that too. */
+  private async endInstead(subscriptionId: string): Promise<boolean> {
+    try {
+      await this.options.stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: true,
+        metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_SAFE },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async one(account: MonthEndAccount): Promise<MonthEndResult> {
     const { stripe } = this.options;
     const subscriptionId = account.subscriptionId;
@@ -194,30 +215,28 @@ export class TesterMonthEnd {
       overCap: due ? await account.overCap().catch(() => false) : false,
     });
     const result: MonthEndResult = { ...decision, subscriptionId };
-    if (decision.action === "extend") {
-      await stripe.subscriptions.update(subscriptionId, {
-        discounts: [{ coupon: TESTER_EXTENSION_COUPON_ID }],
-        proration_behavior: "none",
-        metadata: { zenod_tester: "1", zenod_tester_month_end: "extended" },
-      });
-      result.nextInvoiceCentsAfter = await this.nextInvoiceCents(subscriptionId);
+    if (decision.action === "extend" || decision.action === "resume") {
+      try {
+        await stripe.subscriptions.update(subscriptionId, {
+          ...(decision.action === "resume" ? { cancel_at_period_end: false } : {}),
+          discounts: [{ coupon: TESTER_EXTENSION_COUPON_ID }],
+          proration_behavior: "none",
+          metadata: { zenod_tester: "1", zenod_tester_month_end: "extended" },
+        });
+        result.nextInvoiceCentsAfter = await this.nextInvoiceCents(subscriptionId);
+      } catch {
+        result.nextInvoiceCentsAfter = null;
+      }
       if (result.nextInvoiceCentsAfter !== 0) {
-        return { ...result, action: "failed", exception: "extension_not_free" };
+        // Not confirmed free: end the month instead, so no renewal bill is made.
+        const ended = await this.endInstead(subscriptionId);
+        return { ...result, action: "failed", exception: ended ? "not_free_ended_instead" : "not_free_end_failed" };
       }
     } else if (decision.action === "end") {
       await stripe.subscriptions.update(subscriptionId, {
         cancel_at_period_end: true,
         metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_INACTIVE },
       });
-    } else if (decision.action === "resume") {
-      await stripe.subscriptions.update(subscriptionId, {
-        cancel_at_period_end: false,
-        discounts: [{ coupon: TESTER_EXTENSION_COUPON_ID }],
-        proration_behavior: "none",
-        metadata: { zenod_tester: "1", zenod_tester_month_end: "extended" },
-      });
-      result.nextInvoiceCentsAfter = await this.nextInvoiceCents(subscriptionId);
-      if (result.nextInvoiceCentsAfter !== 0) return { ...result, action: "failed", exception: "extension_not_free" };
     }
     return result;
   }

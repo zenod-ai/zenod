@@ -101,7 +101,7 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
     "",
     link,
     "",
-    "Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for.",
+    "Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. Your free month continues while you use Zenod, and nothing is ever charged unless you choose to pay.",
     "Then pick Google Drive or GitHub for your notes, link your WhatsApp, and send your first voice note.",
     "",
     `The code works once, for one account, until ${expires}.`,
@@ -116,7 +116,7 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
 <p>Hi,</p>
 <p>Thanks for applying to test Zenod. You're in: here is your personal link, with your code already inside.</p>
 <p style="margin:1.75rem 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f4d3a;color:#f6f2e9;text-decoration:none;padding:.8rem 1.2rem;border-radius:3px;font-family:Helvetica,Arial,sans-serif">Start testing Zenod</a></p>
-<p>Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for.</p>
+<p>Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. Your free month continues while you use Zenod, and nothing is ever charged unless you choose to pay.</p>
 <p>Then pick Google Drive or GitHub for your notes, link your WhatsApp, and send your first voice note.</p>
 <p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#4a554e">The code works once, for one account, until ${escapeHtml(expires)}. If the button does not open, copy this link: ${escapeHtml(link)}</p>
 <p>Questions or something broke? Just reply to this email.</p>

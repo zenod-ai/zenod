@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   decideMonthEnd,
   ENDED_INACTIVE,
+  ENDED_SAFE,
   isTesterSubscription,
   lastUsedFromTenantData,
   TESTER_EXTENSION_COUPON_ID,
@@ -62,6 +63,9 @@ describe("the tester month-end rule", () => {
   it("keeps on a tester who comes back before the end", () => {
     const ending = sub({ cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_INACTIVE } });
     expect(decide(ending, NOW - DAY).action).toBe("resume");
+    const endedSafe = sub({ cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_SAFE } });
+    expect(decide(endedSafe, NOW - DAY).action).toBe("resume");
+    expect(decide(endedSafe, NOW - 20 * DAY).action).toBe("none");
     // a subscription the user cancelled themselves stays cancelled
     expect(decide(sub({ cancel_at_period_end: true }), NOW - DAY).action).toBe("none");
   });
@@ -74,7 +78,10 @@ describe("the tester month-end rule", () => {
   });
 });
 
-function fakeStripe(subs: Record<string, Stripe.Subscription>, options: { failUpdate?: boolean } = {}) {
+function fakeStripe(
+  subs: Record<string, Stripe.Subscription>,
+  options: { failUpdate?: boolean; failDiscount?: boolean; neverFree?: boolean } = {},
+) {
   const updates: Array<{ id: string; params: Stripe.SubscriptionUpdateParams }> = [];
   const stripe: MonthEndStripe = {
     subscriptions: {
@@ -82,6 +89,7 @@ function fakeStripe(subs: Record<string, Stripe.Subscription>, options: { failUp
       update: async (id, params) => {
         if (options.failUpdate) throw Object.assign(new Error("no permission"), { type: "StripePermissionError", statusCode: 403 });
         if (!subs[id]) throw Object.assign(new Error("missing"), { statusCode: 404 });
+        if (options.failDiscount && params.discounts) throw Object.assign(new Error("coupon"), { type: "StripeInvalidRequestError" });
         updates.push({ id, params });
         const current = subs[id]!;
         subs[id] = {
@@ -99,7 +107,7 @@ function fakeStripe(subs: Record<string, Stripe.Subscription>, options: { failUp
       createPreview: async (params) => {
         const s = subs[params.subscription!]!;
         const free = (s.discounts as unknown as Array<{ coupon: { id: string } }>).some((d) => d.coupon.id === TESTER_EXTENSION_COUPON_ID);
-        return { total: free ? 0 : 900 } as Stripe.UpcomingInvoice;
+        return { total: free && !options.neverFree ? 0 : 900 } as Stripe.UpcomingInvoice;
       },
     },
   };
@@ -160,7 +168,7 @@ describe("TesterMonthEnd.runOnce", () => {
     });
     const alerts: string[] = [];
     expect((await refused.runOnce())[0]!.action).toBe("failed");
-    expect(alerts).toEqual(["no_subscription_write", "stripe_failed StripePermissionError"]);
+    expect(alerts).toEqual(["no_subscription_write", "not_free_end_failed"]);
 
     alerts.length = 0;
     const capped = new TesterMonthEnd({
@@ -173,6 +181,41 @@ describe("TesterMonthEnd.runOnce", () => {
     });
     expect((await capped.runOnce())[0]!.action).toBe("extend");
     expect(alerts).toEqual(["extended_over_cap"]);
+  });
+});
+
+describe("a tester is never billed by itself", () => {
+  const job = (stripe: MonthEndStripe, alerts: string[]) =>
+    new TesterMonthEnd({
+      stripe,
+      accounts: () => [{ subscriptionId: "sub_a", tenantId: "t_a", overCap: async () => false }],
+      lastUsed: () => NOW - DAY,
+      now: () => NOW,
+      alert: (reason) => alerts.push(reason),
+      log: () => {},
+    });
+
+  for (const [what, options] of [
+    ["the extension is refused", { failDiscount: true }],
+    ["the next bill is still not free", { neverFree: true }],
+  ] as const) {
+    it(`ends the free month instead when ${what}`, async () => {
+      const subs = { sub_a: sub({ id: "sub_a" }) };
+      const alerts: string[] = [];
+      const [result] = await job(fakeStripe(subs, options).stripe, alerts).runOnce();
+      expect(result!.action).toBe("failed");
+      expect(subs.sub_a.cancel_at_period_end).toBe(true);
+      expect(subs.sub_a.metadata.zenod_tester_month_end).toBe(ENDED_SAFE);
+      expect(alerts).toEqual(["not_free_ended_instead"]);
+    });
+  }
+
+  it("tries the extension again on the next pass, and keeps the tester on once it works", async () => {
+    const subs = { sub_a: sub({ id: "sub_a" }) };
+    await job(fakeStripe(subs, { failDiscount: true }).stripe, []).runOnce();
+    const [again] = await job(fakeStripe(subs).stripe, []).runOnce();
+    expect([again!.action, again!.nextInvoiceCentsAfter]).toEqual(["resume", 0]);
+    expect(subs.sub_a.cancel_at_period_end).toBe(false);
   });
 });
 
