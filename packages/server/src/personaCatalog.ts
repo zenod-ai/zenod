@@ -467,6 +467,91 @@ export const IDEAS_DIGEST: PersonaDefinition = modelPersona({
   },
 });
 
+const TRY_DAYS = 3;
+/** How many of its own earlier days it reads back, so it never offers the same thing twice in a row. */
+const TRY_LOOK_BACK = 5;
+
+/** S38: the one thing to try from its reply, or null. */
+export function parseThingToTry(reply: Record<string, unknown> | null): { title: string; why: string; sources: number[] } | null {
+  const raw = reply?.try && typeof reply.try === "object" ? (reply.try as Record<string, unknown>) : null;
+  const title = str(raw?.title);
+  if (!title) return null;
+  return { title, why: str(raw?.why, 500), sources: nums(raw?.sources) };
+}
+
+const TRY_SYSTEM = [
+  "You are Something to try, a quiet helper that reads what a person has been talking about in their own notes, mostly their voice notes, once a day.",
+  "Pick the one thing they have been talking about most in these notes, and suggest ONE small, concrete thing they could try in the next day or two because of it: an experiment, a habit, a way to think about it, a conversation to have, a tool, a place, a book.",
+  "Tie it plainly to what they said, so they see where it comes from. Be gentle: an idea to try, never a claim that it solves anything.",
+  "You are not a project manager. Never suggest a task, a ticket, a release, a deploy, or work for a team or an agent. A project can be what they talk about; the thing to try is for the person.",
+  "Use only what the notes say. Never invent facts, names or dates. Plain words a friend would use.",
+].join(" ");
+
+/**
+ * S38 (Jordi, 2026-11-10: "a guy that gives me suggestions for things to try... maybe it's like once
+ * a day, and it's about something that I've been leaving voice notes about"): once a day it reads the
+ * last 3 days of what the person said, voice notes first, and posts one thing to try with the notes it
+ * came from. One cheap model call a day; off until switched on.
+ */
+export const SOMETHING_TO_TRY: PersonaDefinition = {
+  id: "something-to-try",
+  name: "Something to try",
+  purpose: "One small thing to try each day, drawn from what you have been talking about.",
+  brief: "Once a day it reads what you said in the last 3 days, your voice notes first, and posts one small thing you could try because of it, with the notes it comes from. It never gives you project work.",
+  schedule: { every: "night" },
+  skills: ["read", "write-own-folder", "post-inbox"],
+  defaultEnabled: false,
+  // One cheap call a day, plus reading its own last few days back.
+  limits: { maxSteps: 12, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
+
+  async fingerprint(ctx) {
+    const entries = await ctx.recentMemories({ days: TRY_DAYS, limit: RECAP_MAX_MEMORIES });
+    return entries.length ? `${entries.length}:${entries[0]!.evidenceRef}` : null;
+  },
+
+  async run(ctx) {
+    const all = await ctx.recentMemories({ days: TRY_DAYS, limit: RECAP_MAX_MEMORIES });
+    const voice = all.filter((entry) => entry.contentType === "voice_note" || entry.contentType === "audio" || /^(Voice note|Audio) "/.test(entry.title));
+    const entries = voice.length >= 2 ? voice : all;
+    if (!entries.length) return { summary: "Nothing said in the last 3 days, nothing to try" };
+    // What it offered on its last days, so it does not repeat itself.
+    const earlier: string[] = [];
+    const today = Date.parse(`${ctx.today}T00:00:00Z`);
+    for (let back = 1; back <= TRY_LOOK_BACK; back += 1) {
+      const day = new Date(today - back * 24 * 3_600_000).toISOString().slice(0, 10);
+      try {
+        const note = await ctx.read(`Personas/something-to-try/${day}.md`);
+        const line = /^## Try\n\n(.+)$/m.exec(note.body);
+        if (line) earlier.push(line[1]!.trim());
+      } catch {
+        // no note that day
+      }
+    }
+    const prompt = [
+      `These are the notes the person saved in the last ${TRY_DAYS} days, newest first:`,
+      "",
+      ...memoryLines(entries),
+      ...(earlier.length ? ["", "What you suggested on earlier days. Suggest something different:", ...earlier.map((line) => `- ${line}`)] : []),
+      "",
+      'Reply with JSON only: {"try": {"title": "the thing to try, one sentence that starts with a verb", "why": "one or two sentences on what they said that it comes from", "sources": [numbers]}} or {"try": null} when nothing they said calls for it',
+    ].join("\n");
+    const raw = parseThingToTry(parseJsonReply(await ctx.think({ system: TRY_SYSTEM, prompt })));
+    const leftOut = raw !== null && isProjectWork(raw.title);
+    const thing = leftOut ? null : raw;
+    const sources = (thing?.sources ?? []).map((n) => entries[n - 1]).filter((entry): entry is MemoryEntry => entry !== undefined);
+    ctx.writeNote(`${ctx.today}.md`, personaNote("something-to-try", "Something to try", ctx.today, entries.length, thing
+      ? ["## Try", "", thing.title, "", ...(thing.why ? [thing.why, ""] : []), ...(sources.length ? ["## From", "", ...sources.map((entry) => `- [[${entry.evidenceRef.replace(/\.md(?=#)/, "")}|${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}]]`)] : [])]
+      : [leftOut ? "- Nothing to try today: the idea was project work, left out." : "- Nothing to try today."]));
+    if (!thing) return { summary: `Read ${entries.length} notes, nothing to try${leftOut ? "; left out one idea about project work" : ""}` };
+    ctx.postFinding({
+      title: thing.title,
+      ...(thing.why ? { body: thing.why } : {}),
+      links: [...sourceLinks(entries, thing.sources), { label: "Its notes", path: `Personas/something-to-try/${ctx.today}.md` }],
+    });
+    return { summary: `Read ${entries.length} notes and posted one thing to try` };
+  },
+};
+
 const HEALTH_DAYS = 28;
 /** S27: from this many pages under no place, Health suggests filing them. */
 const HEALTH_LOOSE_PAGES = 3;
@@ -535,7 +620,7 @@ export const MEMORY_HEALTH: PersonaDefinition = {
 export const CLARIFIER: PersonaDefinition = createClarifier({ memoryOnly: MEMORY_ONLY, memoryTitle, memoryWords, parseJsonReply });
 
 /** Every persona the runner knows, in catalog order. Only Weekly recap is on by default. */
-export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, MEMORY_HEALTH, CLARIFIER];
+export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, SOMETHING_TO_TRY, MEMORY_HEALTH, CLARIFIER];
 
 export function personaById(id: string): PersonaDefinition | null {
   return BUILT_IN_PERSONAS.find((persona) => persona.id === id) ?? null;

@@ -290,6 +290,8 @@ export function personasFor(runtime: { readonly dataDir: string }): PersonaStore
     // EPIC-23 E23-A2: the weekly recap is off for new accounts (testers start with memory only); accounts
     // that used helpers before the change keep it on.
     store.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE);
+    // EPIC-14 S38: Something to try comes switched on for those same accounts (the owner's), off for testers.
+    store.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE);
     stores.set(runtime.dataDir, store);
   }
   return store;
