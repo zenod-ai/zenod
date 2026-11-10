@@ -30,8 +30,8 @@ T4's private ledger, `/root/.local/state/zenod-testers/live-codes.tsv`, mode 060
 
 ## `--check` alerts (one line each, `ALERT <tester>: ...`)
 
-- subscription `past_due` / `unpaid` / `canceled` (or the local account suspended/canceled)
-- renewal within 5 days (`--renewal-days`) and the next invoice is not €0: apply the monthly extension (T2.1 / T4 `extend`)
+- subscription `past_due` / `unpaid` / `canceled` (or the local account suspended/canceled), except a free month the month-end job ended on purpose (EPIC-26 S5, Stripe metadata `zenod_tester_month_end=ended_inactive`)
+- renewal within 5 days (`--renewal-days`) and the next invoice is not €0: the month-end job in zenod-mt (EPIC-26 S5) decides 6 days before renewal, so this means it failed; apply the monthly extension by hand (T2.1 / T4 `extend`)
 - AI or Phylax usage at ≥ 80% (`--cap-pct`) of the cap
 - failed captures, cap hits or failed billing notices in the last 24 h (`--window-hours`)
 - a Stripe read failure (exit 2)

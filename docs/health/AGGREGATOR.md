@@ -66,12 +66,13 @@ HQ alert thread well inside 15 minutes, and each clears by itself once `ALERT_MI
 | 16 failed sign-ins | a Google or GitHub sign-in came back and failed (expired, other browser, signup closed, provider error) | `[ops-alert] signin` |
 | 17 app errors | a 5xx on cloud.zenod.dev or zenod.dev, or the app reported a script error, an unhandled rejection or a failed API call | Traefik access log, `[ops-alert] app` from `POST /api/public/client-error` |
 | 18 helper runs that fail | a helper run failed, could not save its notes, or could not start | `[ops-alert] helper` |
+| 20 a tester month end that needs a person | the month-end job (EPIC-26 S5) could not extend or end a tester, an extension left the next invoice above €0, a tester's renewal went past due, or an active tester was extended while over the usage cap | `[ops-alert] tester` (`stripe_failed`, `extension_not_free`, `renewal_past_due`, `extended_over_cap`, `accounts_unreadable`) |
 
 `[ops-alert] <kind> <reason> key=value…` lines come from `packages/server/src/opsAlert.ts`: fixed words, counts,
 minutes, error class names and route templates only (no message text, emails, ids or tokens). The probe keeps 24 h
 of these events in its VPS1 cache (`raw.vps1.zenod_log.ops`, `[time, kind, reason]`), so a redeploy does not lose them.
 
-**Drill (a staged fault, nobody's account touched):** `python3 probe.py --drill save|reply|answer|signin|app|helper`
+**Drill (a staged fault, nobody's account touched):** `python3 probe.py --drill save|reply|answer|signin|app|helper|tester`
 appends one line to `~/.local/state/zenod-health-remote/drill.jsonl` on VPS1; the next run reads it like a log line
 with reason `drill_staged`, the row turns red with `[drill: staged fault]`, the HQ thread gets one alert, and the row
 clears and sends one RECOVERED 15 min later. Tests: `AlertRows` in `test_aggregate.py`, `Folds` in `test_probe.py`,
@@ -112,7 +113,7 @@ never sampled, so it does not bend the daily spend. Tests: `Credit` in `test_agg
 
 Component ids: `site`, `cloud`, `database`, `phylax`, `agent_runner`, `memory_index`, `deploy`, `watchdog`,
 `readiness`, `tester_watch`, `ingress`, `host`, and the EPIC-24 M2 alert rows `alert_saves`, `alert_replies`,
-`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`, and `credit` (row 19).
+`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`, `credit` (row 19) and `alert_testers` (row 20).
 
 **Last errors survive redeploys.** Docker stdout resets when a container is redeployed, so `last_error`,
 `errors` and `last_activity` come from a history file on VPS3 (`~/.local/state/zenod-health/history.json`,

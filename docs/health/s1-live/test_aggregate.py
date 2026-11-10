@@ -78,7 +78,7 @@ class StatusRules(unittest.TestCase):
         s = status(raw())
         self.assertEqual(s.pop("agent_runner"), "grey")
         self.assertEqual(set(s.values()), {"green"}, s)
-        self.assertEqual(len(A.components(raw())), 19)   # 12 parts + 6 EPIC-24 M2 alert rows + E26-S8 AI credit
+        self.assertEqual(len(A.components(raw())), 20)   # 12 parts + 6 EPIC-24 M2 alert rows + E26-S8 AI credit + E26-S5 testers
 
     def test_cloud_down_is_red(self):
         d = raw(); d["cloud"] = {"status": 503, "secs": 1, "json": {}}
@@ -450,12 +450,14 @@ class AlertRows(unittest.TestCase):
 
     def test_all_green_when_nothing_failed(self):
         d = self.doc()
-        for cid in ("alert_saves", "alert_replies", "alert_answers", "alert_signins", "alert_app", "alert_helpers"):
+        for cid in ("alert_saves", "alert_replies", "alert_answers", "alert_signins", "alert_app", "alert_helpers",
+                    "alert_testers"):
             self.assertEqual(d[cid]["status"], "green", cid)
 
     def test_each_kind_turns_its_own_row_red_then_clears(self):
         for kind, cid in (("save", "alert_saves"), ("answer", "alert_answers"), ("signin", "alert_signins"),
-                          ("app", "alert_app"), ("helper", "alert_helpers")):
+                          ("app", "alert_app"), ("helper", "alert_helpers"),
+                          ("tester", "alert_testers")):
             fresh = self.doc([("2026-11-03T11:57:00Z", kind, "x_failed")])
             self.assertEqual(fresh[cid]["status"], "red", cid)
             self.assertIn("1 ", fresh[cid]["problem"])

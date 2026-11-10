@@ -220,6 +220,15 @@ class Alerts(unittest.TestCase):
         # Preview unreadable inside the window: alert (cannot prove the extension).
         self.assertTrue(tw.alerts_for(self.row(stripe={"renews_at_ms": NOW + DAY, "next_invoice_cents": None}), NOW, 5, 80))
 
+    def test_planned_end_is_quiet(self):
+        # EPIC-26 S5: the month-end job ended an inactive tester's free month on purpose.
+        ended = self.row(local_status="canceled", stripe={"status": "canceled", "month_end": "ended_inactive"})
+        self.assertEqual(tw.alerts_for(ended, NOW, 5, 80), [])
+        self.assertEqual(len(tw.alerts_for(self.row(local_status="canceled", stripe={"status": "canceled"}), NOW, 5, 80)), 2)
+        ending = self.row(stripe={"renews_at_ms": NOW + 3 * DAY, "next_invoice_cents": 900, "cancel_at_period_end": True,
+                                  "month_end": "ended_inactive"})
+        self.assertEqual(tw.alerts_for(ending, NOW, 5, 80), [])
+
     def test_caps_and_failures(self):
         a = tw.alerts_for(self.row(usage={"ai_pct": 80.0, "phylax_pct": 79.9},
                                    errors={"failed_captures_window": 2, "cap_hits_window": 1}), NOW, 5, 80)

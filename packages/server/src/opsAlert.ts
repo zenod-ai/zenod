@@ -3,7 +3,7 @@
 // Format: `[ops-alert] <kind> <reason> [key=value ...]`. Kinds and reasons are fixed words; values are
 // counts, minutes, error class names and route templates only: never message text, emails, ids or tokens.
 
-export type OpsAlertKind = "save" | "answer" | "signin" | "app" | "helper";
+export type OpsAlertKind = "save" | "answer" | "signin" | "app" | "helper" | "tester";
 
 const WORD = /[^A-Za-z0-9_.:/-]/g;
 

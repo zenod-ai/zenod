@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Newsreader;font-weight:400;src:url(fonts/newsreader-400.ttf)}
+@font-face{font-family:Newsreader;font-weight:500;src:url(fonts/newsreader-500.ttf)}
+@font-face{font-family:"Instrument Sans";font-weight:400;src:url(fonts/instrument-sans-400.ttf)}
+@font-face{font-family:"Instrument Sans";font-weight:600;src:url(fonts/instrument-sans-600.ttf)}
+body{margin:0;width:1600px;height:900px;background:#f6f2e9;color:#18211c;font-family:Newsreader,serif;position:relative;overflow:hidden}
+.mark{position:absolute;left:64px;top:52px;font:500 40px Newsreader}
+.bgz{position:absolute;right:-60px;bottom:-200px;font:500 900px Newsreader;color:#18211c;opacity:.035}
+h1{position:absolute;left:64px;top:120px;margin:0;font:400 58px/1.05 Newsreader;letter-spacing:-.015em;max-width:1480px}
+.sub{position:absolute;left:66px;top:268px;font:400 26px "Instrument Sans";color:#4a554e}
+.start{position:absolute;left:64px;top:390px;width:330px;border:1.5px solid #18211c;padding:26px 28px;background:#f6f2e9}
+.k{font:600 15px "Instrument Sans";letter-spacing:.08em;text-transform:uppercase;color:#8d948c;margin-bottom:10px}
+.t{font:500 32px/1.15 Newsreader}
+.s{font:400 20px/1.45 "Instrument Sans";color:#4a554e;margin-top:10px}
+.box{position:absolute;left:560px;width:920px;border:1.5px solid #18211c;padding:24px 30px;background:#f6f2e9}
+.yes{top:330px;border-color:#1f4d3a;background:#cfe0d4}
+.no{top:590px}
+.q{position:absolute;font:400 20px "Instrument Sans";color:#4a554e;background:#f6f2e9;padding:0 10px}
+svg{position:absolute;left:0;top:0}
+.foot{position:absolute;left:66px;bottom:44px;font:400 19px "Instrument Sans";color:#8d948c}
+</style></head><body>
+<div class="bgz">Z</div><div class="mark">Z</div>
+<h1>A tester's free month now ends or renews by itself</h1>
+<div class="sub">Six days before renewal, Zenod looks at one thing: did they use it in the last two weeks?</div>
+<svg width="1600" height="900"><g fill="none" stroke="#18211c" stroke-width="1.5">
+<path d="M455 500 C 500 500, 500 420, 560 420"/><path d="M455 500 C 500 500, 500 680, 560 680"/><path d="M394 500 H455"/></g>
+<g fill="#18211c"><path d="M560 420 l-10 -5 v10z"/><path d="M560 680 l-10 -5 v10z"/></g></svg>
+<div class="start"><div class="k">Each tester</div><div class="t">Six days before the month ends</div><div class="s">Checked every six hours on the live server</div></div>
+<div class="q" style="left:470px;top:372px">yes</div><div class="q" style="left:476px;top:700px">no</div>
+<div class="box yes"><div class="k" style="color:#1f4d3a">Used Zenod in the last 14 days</div><div class="t">The next month is free too</div><div class="s">€0 renewal, no card asked for. Tried on Stripe test mode: renewed at €0, nothing charged.</div></div>
+<div class="box no"><div class="k">Not used in 14 days</div><div class="t">The free month ends gently</div><div class="s">No bill is made and nothing is charged. Their notes stay in their own Drive or GitHub, and they can come back or pay €9 a month.</div></div>
+<div class="foot">The team only hears about exceptions: a Stripe error, a missed renewal, or a tester over the usage cap.</div>
+</body></html>

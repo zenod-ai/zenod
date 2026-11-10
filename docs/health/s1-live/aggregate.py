@@ -432,7 +432,7 @@ def components(d: dict) -> list[dict]:
         source="df and disk-guard journal on VPS1; observatory from VPS3", tests="infra-vps tests/test_disk_guard.py",
         link="https://health.alpha9.io/")
 
-    # 13-18 EPIC-24 M2: what a person would notice. Each row is red while such a failure happened in the last
+    # 13-19 EPIC-24 M2 (19: EPIC-26 S5): what a person would notice. Each row is red while such a failure happened in the last
     # ALERT_MIN minutes (or, for replies, a WhatsApp message has waited that long), so it reaches the HQ alert thread
     # on the next run (every 5 min) and clears by itself once ALERT_MIN minutes pass without one.
     ops = zl.get("ops") or []
@@ -534,6 +534,12 @@ def components(d: dict) -> list[dict]:
         source="GET /api/health (background, credit.openrouter) from VPS3; credit refusals (402) in the zenod-mt "
                "and phylax container logs; daily spend from the balance samples this page keeps",
         tests="test_aggregate.py Credit; packages/server/test/backgroundRoute.test.ts")
+    # 20 EPIC-26 S5: tester month ends run by themselves; only an exception needs a person.
+    alert_row("20", "alert_testers", "Alerts: a tester month end that needs a person", ("tester",),
+              "tester month-end exceptions",
+              "VPS1 · zenod-mt: the tester month-end job (extend if used in 14 days, else end gently)",
+              "zenod-mt container log ([ops-alert] tester)",
+              "packages/server/test/testerMonthEnd.test.ts; test_aggregate.py AlertRows")
     return R
 
 

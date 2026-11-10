@@ -68,6 +68,7 @@ import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFoun
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
+import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
@@ -1367,6 +1368,33 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     mountPublicCounts(app, counts);
     counts.start();
   }
+  // EPIC-26 S5: each tester's free month extends (used in the last 14 days) or ends gently by itself.
+  let testerMonthEnd: TesterMonthEnd | null = null;
+  const monthEndStripe = customer.stripe as unknown as Partial<MonthEndStripe> | null;
+  if (
+    agent.name === "zenod" &&
+    env.ZENOD_TESTER_MONTH_END !== "0" &&
+    typeof monthEndStripe?.subscriptions?.update === "function" &&
+    typeof monthEndStripe?.invoices?.createPreview === "function"
+  ) {
+    testerMonthEnd = new TesterMonthEnd({
+      stripe: monthEndStripe as MonthEndStripe,
+      accounts: () =>
+        customer.accounts.list().flatMap((account) =>
+          account.stripe_subscription_id && account.subscription_status !== "checkout_pending"
+            ? [{
+                subscriptionId: account.stripe_subscription_id,
+                tenantId: account.tenant_id ?? null,
+                overCap: async () => {
+                  const usage = await customer.usageForAccount(account);
+                  return usage.state === "paused" || (usage.percentageUsed ?? 0) >= 100;
+                },
+              }]
+            : []),
+      lastUsed: (tenantId) => lastUsedFromTenantData(storage.dataDir, tenantId),
+    });
+    testerMonthEnd.start();
+  }
   // EPIC-24 M2: the cloud app reports its own errors (class, route, status only) for the health page.
   if (agent.name === "zenod") mountClientErrorReports(app, { clientAddress });
   // Consent needs the original browser session; the API bridge below deliberately
@@ -1557,6 +1585,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => {
           }),
           Promise.resolve().then(() => testerFlow?.stop()),
+          Promise.resolve().then(() => testerMonthEnd?.stop()),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => subscriberApi.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),

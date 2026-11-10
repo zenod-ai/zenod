@@ -1,0 +1,138 @@
+{
+  "ok": true,
+  "mode": "Stripe sandbox (test mode)",
+  "log": [
+    {
+      "at": "2026-11-10T18:27:09.364Z",
+      "what": "sandbox price",
+      "price": "price_1UaJlB76yJ3p1J6XSe3To8Qk",
+      "amount": 900,
+      "currency": "eur"
+    },
+    {
+      "at": "2026-11-10T18:27:11.207Z",
+      "what": "tester signed up with the tester coupon, no card",
+      "tester": "A_active",
+      "subscription": "sub_1UaJlC76yJ3p1J6X9QUIuvF8",
+      "status": "active",
+      "renews": "2026-12-10T18:27:09.000Z",
+      "firstInvoiceTotal": 0
+    },
+    {
+      "at": "2026-11-10T18:27:13.068Z",
+      "what": "tester signed up with the tester coupon, no card",
+      "tester": "B_inactive",
+      "subscription": "sub_1UaJlD76yJ3p1J6X4Cy1ryl2",
+      "status": "active",
+      "renews": "2026-12-10T18:27:09.000Z",
+      "firstInvoiceTotal": 0
+    },
+    {
+      "at": "2026-12-07T18:27:09.000Z",
+      "what": "clocks moved to 3 days before renewal"
+    },
+    {
+      "at": "2026-11-10T18:27:23.090Z",
+      "what": "job log",
+      "line": "[tester-month-end] Stripe key may change subscriptions: yes"
+    },
+    {
+      "at": "2026-11-10T18:27:25.526Z",
+      "what": "job log",
+      "line": "[tester-month-end] checked 2 tester(s): extended 1, ended 1, resumed 0, failed 0, nothing due 0"
+    },
+    {
+      "at": "2026-11-10T18:27:25.526Z",
+      "what": "month-end job ran",
+      "results": [
+        {
+          "subscription": "sub_1UaJlC76yJ3p1J6X9QUIuvF8",
+          "action": "extend",
+          "reason": "active",
+          "nextInvoiceCentsAfter": 0
+        },
+        {
+          "subscription": "sub_1UaJlD76yJ3p1J6X4Cy1ryl2",
+          "action": "end",
+          "reason": "inactive"
+        }
+      ],
+      "alerts": []
+    },
+    {
+      "at": "2026-11-10T18:27:26.265Z",
+      "what": "job log",
+      "line": "[tester-month-end] checked 2 tester(s): extended 0, ended 0, resumed 0, failed 0, nothing due 2"
+    },
+    {
+      "at": "2026-11-10T18:27:26.265Z",
+      "what": "job ran again (changes nothing)",
+      "results": [
+        "already_free",
+        "ending"
+      ],
+      "alerts": []
+    },
+    {
+      "at": "2026-12-11T18:27:09.000Z",
+      "what": "clocks moved to 1 day after renewal"
+    },
+    {
+      "at": "2026-11-10T18:27:35.412Z",
+      "what": "what Stripe did",
+      "summary": {
+        "A_active": {
+          "subscription": "sub_1UaJlC76yJ3p1J6X9QUIuvF8",
+          "status": "active",
+          "cancel_at_period_end": false,
+          "ended_at": null,
+          "renews": "2027-01-10T18:27:09.000Z",
+          "month_end_tag": "extended",
+          "invoices": [
+            {
+              "id": "in_1UaJlV76yJ3p1J6X1oFNweJC",
+              "reason": "subscription_cycle",
+              "total": 0,
+              "amount_paid": 0,
+              "status": "paid"
+            },
+            {
+              "id": "in_1UaJlC76yJ3p1J6XUMXB2oqa",
+              "reason": "subscription_create",
+              "total": 0,
+              "amount_paid": 0,
+              "status": "paid"
+            }
+          ],
+          "charges": 0,
+          "cards_on_file": 0,
+          "euros_charged": 0
+        },
+        "B_inactive": {
+          "subscription": "sub_1UaJlD76yJ3p1J6X4Cy1ryl2",
+          "status": "canceled",
+          "cancel_at_period_end": true,
+          "ended_at": "2026-12-10T18:27:09.000Z",
+          "renews": null,
+          "month_end_tag": "ended_inactive",
+          "invoices": [
+            {
+              "id": "in_1UaJlE76yJ3p1J6XIgqnT25L",
+              "reason": "subscription_create",
+              "total": 0,
+              "amount_paid": 0,
+              "status": "paid"
+            }
+          ],
+          "charges": 0,
+          "cards_on_file": 0,
+          "euros_charged": 0
+        }
+      }
+    },
+    {
+      "at": "2026-11-10T18:27:36.987Z",
+      "what": "sandbox cleaned up (test clocks deleted with their customers; price and product archived)"
+    }
+  ]
+}

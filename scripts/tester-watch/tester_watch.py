@@ -147,7 +147,11 @@ def alerts_for(row: dict, now_ms: int, renewal_days: float, cap_pct: float) -> l
     out = []
     st = row.get("stripe") or {}
     status = st.get("status") or row.get("local_status")
-    if status in BAD_STRIPE or row.get("local_status") == "past_due":
+    # EPIC-26 S5: a free month the month-end job ended on purpose (not used in 14 days) is not an alert.
+    planned_end = st.get("month_end") == "ended_inactive" and status == "canceled"
+    if planned_end:
+        pass
+    elif status in BAD_STRIPE or row.get("local_status") == "past_due":
         out.append(f"subscription {status}")
     if st.get("error"):
         out.append(f"stripe read failed: {st['error']}")
@@ -170,7 +174,7 @@ def alerts_for(row: dict, now_ms: int, renewal_days: float, cap_pct: float) -> l
         out.append(f"{e['cap_hits_window']} cap hit(s) in the last {e['window_hours']} h")
     if e.get("notice_failures_window"):
         out.append(f"{e['notice_failures_window']} billing notice failure(s) in the last {e['window_hours']} h")
-    if row.get("account_id") and row.get("local_status") in ("canceled", "suspended"):
+    if row.get("account_id") and row.get("local_status") in ("canceled", "suspended") and not planned_end:
         out.append(f"account {row['local_status']}")
     return out
 
@@ -279,6 +283,8 @@ def stripe_view(stripe, sid: str) -> dict:
     view = {
         "status": s.get("status"),
         "cancel_at_period_end": bool(s.get("cancel_at_period_end")),
+        # EPIC-26 S5: "ended_inactive" when the month-end job ended an inactive tester's free month on purpose
+        "month_end": (s.get("metadata") or {}).get("zenod_tester_month_end"),
         "renews_at_ms": renew_s * 1000 if renew_s else None,
         "renews_at": iso(renew_s * 1000) if renew_s else None,
         "card_on_file": card,
