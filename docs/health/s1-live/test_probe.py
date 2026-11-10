@@ -117,6 +117,7 @@ class Folds(unittest.TestCase):
             "[ops-alert] save stuck n=1 oldest_min=17": ("save", "stuck"),
             "[ops-alert] answer ask_brain_timeout secs=120": ("answer", "ask_brain_timeout"),
             "[ops-alert] helper run_failed helper=weekly-recap": ("helper", "run_failed"),
+            "[ops-alert] tester stripe_failed error=StripePermissionError": ("tester", "stripe_failed"),
             "[task-job] 3f2a failed (media_ingest): Error: my private words": ("save", "media_ingest_failed"),
             "[task-job] 3f2a failed (chat): Error: what did I say": ("answer", "chat_failed"),
             "[task-job] chat lane failed: x": ("answer", "chat_failed"),

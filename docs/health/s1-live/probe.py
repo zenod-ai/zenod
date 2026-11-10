@@ -217,7 +217,7 @@ def tail_new(path: str, mark: dict | None, cat: tuple = ("sudo", "-n", "cat")) -
 # EPIC-24 M2: the log lines that mean a person hit a failure, as (kind, reason). `[ops-alert]` lines come from
 # packages/server/src/opsAlert.ts; the others are older lines the server already wrote. Fixed words only.
 OPS_PATTERNS = (
-    (re.compile(r"\[ops-alert\] (save|answer|signin|app|helper) ([A-Za-z0-9_.:/-]+)"), None),
+    (re.compile(r"\[ops-alert\] (save|answer|signin|app|helper|tester) ([A-Za-z0-9_.:/-]+)"), None),
     (re.compile(r"\[task-job\] \S+ failed \((store|media_ingest|enrich_memory)\):"), "save"),
     (re.compile(r"\[task-job\] \S+ failed \((chat|task)\):"), "answer"),
     (re.compile(r"\[task-job\] (chat) lane failed"), "answer"),
@@ -257,7 +257,7 @@ def drill_events(since: dt.datetime) -> list[list[str]]:
             except ValueError:
                 continue
             t = parse_ts(j.get("at"))
-            if t and t >= since and j.get("kind") in ("save", "answer", "signin", "app", "helper", "reply", "credit"):
+            if t and t >= since and j.get("kind") in ("save", "answer", "signin", "app", "helper", "reply", "credit", "tester"):
                 out.append([iso(t), j["kind"], "drill_" + re.sub(r"[^a-z0-9_]", "", str(j.get("reason") or "staged"))[:30]])
     except OSError:
         pass
@@ -775,7 +775,7 @@ def main() -> None:
     ap.add_argument("--from-json", help="a saved raw probe (or a v1 document's raw); no state unless --state")
     ap.add_argument("--state", help="history file (default ~/.local/state/zenod-health/history.json)")
     ap.add_argument("--no-alert", action="store_true", help="do not send red components to the HQ alert queue (S5)")
-    ap.add_argument("--drill", choices=("save", "reply", "answer", "signin", "app", "helper", "credit"),
+    ap.add_argument("--drill", choices=("save", "reply", "answer", "signin", "app", "helper", "credit", "tester"),
                     help="EPIC-24 M2: stage one fault of this kind on VPS1 (its row turns red on the next run, "
                          "alerts once, and clears 15 min later); nobody's account is touched")
     a = ap.parse_args()
