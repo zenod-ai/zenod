@@ -68,6 +68,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-10 | accepted | Planned from Jordi's voice note (WhatsApp 2026-11-10 03:54Z, Zenod Log 2026-11-10 ^e-ecf0b8); ready on his ask (L-37); works with EPIC-23 ask E23-A1 (he names the first tester) | T1 makes the page and invite plain and ready; sending stays his | his voice note | when T1 is in review |
 | 2026-11-10 | accepted | E26-S1 ready on Jordi's ask (L-37, Team desk: "📎 Also in this note (vn_c837c0f6): workflow for the campaign; user registration with a code; single link for authentica") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-10 | accepted | E26-S2 ready on Jordi's ask (L-37, Team desk: "📎 Also in this note (vn_8bd5796f): Clarify the flow for testers; Change to live testing with internet users; Issue one-") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
+| 2026-11-10 | revised | Jordi relaunched T1 (vn_d263e8de): "we're a little bit in circles on this. Can you kind of close the circle for me?... who creates the invite?... are they going through Stripe? Yes or no?... Paint the full picture" | answered by one page from E26-S2 (in flight, run_7b98678e): invites created automatically on acceptance, batches without hand work, Stripe promotion code per person and Stripe checkout, exists vs to build; T1 returns to review pointing at that page, no second build | his voice note | when E26-S2 reports |
 
 ## Operating Learnings
 
