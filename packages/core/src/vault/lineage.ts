@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { basenameOf } from "./files.js";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { basenameOf, listMarkdownFiles } from "./files.js";
 import { CITATION_RE } from "./pages.js";
 import { buildTreeIndex, GROUP_HEADINGS, readTree, type MemoryKind, type ParsedTree } from "./tree.js";
 
@@ -69,8 +70,56 @@ function evidenceRefs(body: string): string[] {
   return refs;
 }
 
-/** One tree scan per call; lineage and node queries are answered from it. */
+/**
+ * Every Markdown file's path, mtime and size, hashed: the tree and everything it reads lazily
+ * (page bodies for evidence and citers) depend only on these files (E24-M7). `racy` (as in Git's
+ * index): a file changed so close to now that a same-size rewrite could keep its coarse mtime.
+ */
+async function vaultFingerprint(vaultPath: string): Promise<{ hash: string; racy: boolean }> {
+  const takenAt = Date.now();
+  const files = await listMarkdownFiles(vaultPath);
+  const infos = await Promise.all(files.map((path) => stat(join(vaultPath, path)).catch(() => null)));
+  const hash = createHash("sha1");
+  let newest = Number.NEGATIVE_INFINITY;
+  files.forEach((path, i) => {
+    const info = infos[i];
+    if (info && info.mtimeMs > newest) newest = info.mtimeMs;
+    hash.update(`${path}\0${info?.mtimeMs ?? -1}\0${info?.size ?? -1}\n`);
+  });
+  return { hash: hash.digest("hex"), racy: newest >= takenAt - RACY_MS };
+}
+
+/** Many times a file system's timestamp tick (Linux: a few ms). */
+const RACY_MS = 100;
+const MAX_CACHED_TREES = 8;
+/** Pages read at once when mapping Log entries to the pages citing them. */
+const CITER_READ_CONCURRENCY = 16;
+const treeCache = new Map<string, { fingerprint: string; racy: boolean; tree: Promise<MemoryTreeIndex> }>();
+
+/**
+ * The vault's tree, rebuilt only when a Markdown file was added, removed or changed (E24-M7):
+ * building it reads and parses every page one by one, and search_memory asked for it on every
+ * call. Same vault files, same tree object, so callers see exactly what a fresh build returns.
+ */
 export async function loadMemoryTree(vaultPath: string): Promise<MemoryTreeIndex> {
+  const key = resolve(vaultPath);
+  const { hash, racy } = await vaultFingerprint(vaultPath);
+  const cached = treeCache.get(key);
+  if (cached && cached.fingerprint === hash && !cached.racy) {
+    treeCache.delete(key); treeCache.set(key, cached);
+    return cached.tree;
+  }
+  const tree = buildMemoryTree(vaultPath);
+  treeCache.delete(key);
+  treeCache.set(key, { fingerprint: hash, racy, tree });
+  if (treeCache.size > MAX_CACHED_TREES) treeCache.delete(treeCache.keys().next().value!);
+  // A failed build is not kept: the next call tries again.
+  tree.catch(() => { if (treeCache.get(key)?.tree === tree) treeCache.delete(key); });
+  return tree;
+}
+
+/** One tree scan per call; lineage and node queries are answered from it. */
+async function buildMemoryTree(vaultPath: string): Promise<MemoryTreeIndex> {
   const index = await buildTreeIndex(vaultPath);
   const evidence = new Map<string, Promise<string[]>>();
   const evidenceOf = (path: string) => {
@@ -110,16 +159,23 @@ export async function loadMemoryTree(vaultPath: string): Promise<MemoryTreeIndex
   async function placedCitersOf(evidenceRef: string): Promise<string[]> {
     citers ??= (async () => {
       const map = new Map<string, string[]>();
-      for (const path of index.fields.keys()) {
-        if (!index.lineage(path).ok) continue;
-        const body = await readFile(join(vaultPath, path), "utf8").catch(() => "");
-        for (const match of body.matchAll(CITATION_RE)) {
-          const ref = `Log/${match[1]}.md#^${match[2]}`;
-          const list = map.get(ref) ?? [];
-          if (!list.includes(path)) list.push(path);
-          map.set(ref, list);
+      const placed = [...index.fields.keys()].filter((path) => index.lineage(path).ok);
+      // A few pages at a time (E24-M7: one by one was slow). Read order does not matter: each list
+      // is sorted below by depth, then path.
+      let next = 0;
+      const worker = async () => {
+        for (let i = next++; i < placed.length; i = next++) {
+          const path = placed[i]!;
+          const body = await readFile(join(vaultPath, path), "utf8").catch(() => "");
+          for (const match of body.matchAll(CITATION_RE)) {
+            const ref = `Log/${match[1]}.md#^${match[2]}`;
+            const list = map.get(ref) ?? [];
+            if (!list.includes(path)) list.push(path);
+            map.set(ref, list);
+          }
         }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(CITER_READ_CONCURRENCY, placed.length) }, worker));
       // The deepest page is the most specific place the capture was filed.
       const depth = (path: string) => { const found = index.lineage(path); return found.ok ? found.steps.length : 0; };
       for (const list of map.values()) list.sort((a, b) => depth(b) - depth(a) || a.localeCompare(b));

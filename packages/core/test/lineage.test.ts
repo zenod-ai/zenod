@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -117,5 +117,38 @@ describe("memory tree lineage (E9-3a)", () => {
     const root = await tree.nodeView("Projects/Boat repair.md");
     expect(root.parent).toEqual({ path: null, title: "Working memory", memory: "working" });
     expect(root.children.map((child) => child.path)).toEqual(["Projects/Boat repair/2023 Porto quotes.md"]);
+  });
+});
+
+describe("the tree is kept while the vault is unchanged (E24-M7)", () => {
+  it("reuses one tree for unchanged files and builds a new one after any page changes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-lineage-cache-"));
+    try {
+      const past = new Date(Date.now() - 60_000);
+      for (const [path, content] of Object.entries(FILES)) {
+        await mkdir(dirname(join(dir, path)), { recursive: true });
+        await writeFile(join(dir, path), content);
+        await utimes(join(dir, path), past, past);
+      }
+      const first = await loadMemoryTree(dir);
+      expect(await loadMemoryTree(dir)).toBe(first);
+
+      // Same size, new parent: the mtime tells it apart.
+      const moved = FILES["Notes/Oakmere.md"]!.replace("[[Projects/Cabin decision]]", "[[Projects/Boat repair]]    ");
+      await writeFile(join(dir, "Notes/Oakmere.md"), moved);
+      const later = new Date(Date.now() - 30_000);
+      await utimes(join(dir, "Notes/Oakmere.md"), later, later);
+      const second = await loadMemoryTree(dir);
+      expect(second).not.toBe(first);
+      expect(titles((await second.lineageOf("Notes/Oakmere.md")).lineage)).toEqual(["Working memory", "Boat repair", "Oakmere"]);
+      expect(await loadMemoryTree(dir)).toBe(second);
+
+      // A file changed this instant could change again within the same timestamp tick: never reused.
+      await writeFile(join(dir, "Notes/Legacy page.md"), FILES["Notes/Legacy page.md"]!);
+      const racy = await loadMemoryTree(dir);
+      expect(await loadMemoryTree(dir)).not.toBe(racy);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

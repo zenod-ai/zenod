@@ -272,3 +272,39 @@ describe("agent reports are not the person's memories (E12-S15)", { timeout: 20_
     }
   });
 });
+
+describe("the index refreshes in the background after a write (E24-M7)", { timeout: 20_000 }, () => {
+  it("re-reads a changed vault before the next search asks, with the same hits as a search-time refresh", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const eager = MemoryIndex.open({ path: join(dirname(vault), "eager.sqlite"), vaultPath: vault, tenantId: "tenant-a", eagerRefresh: true });
+    open.push(eager);
+    const lazy = indexFor(vault, join(dirname(vault), "lazy.sqlite"));
+    await eager.search("porto");
+    await lazy.search("porto");
+    await writeFile(join(vault, "Notes/Quokka.md"), "---\ntitle: Quokka plan\n---\n# Quokka plan\n\nQuokkaword trip in March.\n");
+    eager.markDirty();
+    lazy.markDirty();
+    // The background refresh lands on its own: the row is there before any search runs.
+    await expect.poll(() => eager.stats().rows, { timeout: 5_000 }).toBeGreaterThan(lazy.stats().rows);
+    const strip = (hits: Awaited<ReturnType<MemoryIndex["search"]>>) => hits.map(({ path, score, matchPercent, treePath }) => ({ path, score, matchPercent, treePath }));
+    expect(strip(await eager.search("quokkaword"))).toEqual(strip(await lazy.search("quokkaword")));
+    expect((await eager.search("quokkaword"))[0]?.path).toBe("Notes/Quokka.md");
+  });
+
+  it("a search during a background refresh waits for it instead of reading the rows before it", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = MemoryIndex.open({ path: join(dirname(vault), "eager.sqlite"), vaultPath: vault, tenantId: "tenant-a", eagerRefresh: true });
+    open.push(index);
+    await index.search("porto");
+    await writeFile(join(vault, "Notes/Wombat.md"), "---\ntitle: Wombat\n---\nWombatword notes.\n");
+    index.markDirty();
+    let landed = false;
+    const background = index.refresh().then(() => { landed = true; }); // as the timer would
+    // Wait until the refresh has read the vault (dirty cleared) but not yet written its rows.
+    while ((index as unknown as { dirty: boolean }).dirty) await new Promise((resolve) => setImmediate(resolve));
+    expect(landed).toBe(false);
+    const hits = await index.search("wombatword");
+    await background;
+    expect(hits[0]?.path).toBe("Notes/Wombat.md");
+  });
+});

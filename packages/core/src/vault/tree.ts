@@ -231,17 +231,27 @@ export interface TreeIndex {
   children(path: string): string[];
 }
 
+/** Pages read at once when building the tree index. */
+const TREE_READ_CONCURRENCY = 16;
+
 export async function buildTreeIndex(vaultPath: string, snapshot?: VaultSnapshot): Promise<TreeIndex> {
   const snap = snapshot ?? (await scanVault(vaultPath));
   const tree = await readTree(vaultPath);
   const fields = new Map<string, PageTreeFields & { title: string }>();
-  for (const file of snap.files) {
-    if (!isTreePage(file)) continue;
-    const raw = await readFile(join(vaultPath, file), "utf8");
-    const { frontmatter } = parseNote(raw);
-    const title = typeof frontmatter?.title === "string" && frontmatter.title.trim() ? frontmatter.title.trim() : basenameOf(file);
-    fields.set(file, { ...pageTreeFields(frontmatter), title });
-  }
+  // Read a few pages at a time (E24-M7: one by one took most of a search), kept in file order.
+  const pages = snap.files.filter(isTreePage);
+  const parsed: Array<PageTreeFields & { title: string }> = new Array(pages.length);
+  let next = 0;
+  const worker = async () => {
+    for (let i = next++; i < pages.length; i = next++) {
+      const raw = await readFile(join(vaultPath, pages[i]!), "utf8");
+      const { frontmatter } = parseNote(raw);
+      const title = typeof frontmatter?.title === "string" && frontmatter.title.trim() ? frontmatter.title.trim() : basenameOf(pages[i]!);
+      parsed[i] = { ...pageTreeFields(frontmatter), title };
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(TREE_READ_CONCURRENCY, pages.length) }, worker));
+  pages.forEach((file, i) => fields.set(file, parsed[i]!));
   return createTreeIndex(tree, fields, snap.linkTargets);
 }
 

@@ -537,12 +537,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
   const location = options.location ?? {};
   const now = options.now ?? (() => new Date());
   // Tier-0 index (E9-5a), opened on first search. Any write or pull through the queue
-  // marks it dirty; the next search re-reads only the files that changed.
+  // marks it dirty; it re-reads only the files that changed, in the background right away
+  // (E24-M7), and a search waits for that refresh rather than read the rows before it.
   let memoryIndex: MemoryIndex | null | undefined = repo && options.memoryIndex ? undefined : null;
   const openMemoryIndex = (): MemoryIndex | null => {
     if (memoryIndex !== undefined) return memoryIndex;
     try {
-      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath });
+      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath, eagerRefresh: true });
     } catch (error) {
       if (error instanceof MemoryIndexTenantError) throw error;
       console.warn(`[memory-index] unavailable, using the scan search: ${error instanceof Error ? error.message : String(error)}`);
@@ -777,7 +778,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { hits, tier: "scan", ms: ms() };
   }
 
-  async function syncForRead(): Promise<void> {
+  async function syncForRead(options: { wait?: boolean } = {}): Promise<void> {
     if (!repo) return; // vaultless: nothing to pull
     if (now().getTime() - lastSyncMs < readSyncTtl) return;
     // Never block an interactive turn on a best-effort freshness pull. If a
@@ -786,11 +787,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // background filing stall replies for minutes (#96). lastSyncMs is left
     // untouched so the next idle read retries the pull.
     if (queue.busy) return;
-    await queue.run(async () => {
+    const pull = queue.run(async () => {
       if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
       await (repo.pullForFiling ? repo.pullForFiling() : repo.pull()).catch(() => {});
       lastSyncMs = now().getTime();
     }, "interactive", { lockWaitMs: 0 }).catch(error => { if (!(error instanceof VaultWriteBusyError)) throw error; });
+    // A search serves the local clone now and lets the pull land behind it (E24-M7): the pull
+    // took 1-2 s on production once a minute, and the index re-reads what it changed next time.
+    if (options.wait === false) { pull.catch(() => {}); return; }
+    await pull;
   }
 
   function estimateTokens(text: string): number {
@@ -4110,12 +4115,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       llm.describeImage(imageData, mimeType, prompt),
     search: async (query: string): Promise<Hit[]> => {
       assertVault(repo);
-      await syncForRead();
+      await syncForRead({ wait: false });
       return rankedSearch(query);
     },
     searchTimed: async (query: string) => {
       assertVault(repo);
-      await syncForRead();
+      await syncForRead({ wait: false });
       return timedSearch(query);
     },
     memoryGraph: async (request = {}) => {
@@ -4180,7 +4185,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     writePersonaNotes,
     memoryTree: async () => {
       assertVault(repo);
-      await syncForRead();
+      await syncForRead({ wait: false });
       return loadMemoryTree(vaultPath);
     },
     memoryTreeOutline: async (options?: { listUnplaced?: boolean }) => {
