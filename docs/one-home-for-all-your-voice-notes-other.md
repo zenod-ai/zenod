@@ -33,7 +33,7 @@ Status: active
 Last attempted: 2026-11-10 V4 (with V5, run_3f9aba7d): read-only check that agent_team's back-fill and card-answer forwarding (E42-S42) landed in Jordi's Zenod once each
 Result: yes. All 70 notes agent_team sent (30 older Chat notes, 30 card answers, 1 EpicSocial, 7 earlier, 2 agent test notes) plus 1 since are in his memory exactly once, with the right Source app line and their own capture time; his Zenod holds 103 voice notes since 2 Nov (32 WhatsApp + 71 forwarded), none missing or doubled. The two test notes are Log evidence only, on no page, so no vault change. Once V4 is confirmed every Done means is met (E21-1 and E21-3 by V1, E21-2 by V2 and V4) and the Outcome can be written.
 Evidence: [e21-v4-2026-11-10.md](evidence/e21-v4-2026-11-10.md), private page http://vps3.taild81fbb.ts.net:8921/e21-v2/ (updated in place)
-Waiting on: Jordi on V4's review card
+Waiting on: nobody; V4's card is on the review list
 Approved work: none
 Next action: V4 in review; on his confirm, tick E21-1 and E21-3, write the Outcome and close the epic
 Source revision: main (docs only; no code changed)
