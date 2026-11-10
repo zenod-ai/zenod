@@ -33,6 +33,7 @@ import {
   type PersonaRunnerDeps,
 } from "../src/personaRunner.js";
 import { closePersonasFor, PersonaStore, personasFor } from "../src/personaStore.js";
+import type { TeamAsk } from "../src/teamAsk.js";
 
 /**
  * EPIC-14 S4: the persona runner on stub model replies and a made-up demo vault (no real notes).
@@ -705,6 +706,111 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
       expect(() => inbox.reopenSuggestion(memory.id)).toThrow(/only a suggestion put away/);
       // Cards posted after the helpers kept to the memory are not touched.
       expect(putAwayProjectSuggestions(inbox, helpers, "2026-11-10T01:00:00Z")).toBe(0);
+    });
+  });
+
+  // S35: Jordi, closing S27: "The memory guy can ask ... questions to the team desk to see how things are connecting ... but not pick directly."
+  describe("a helper may ask the Team desk one question a run, read only (S35)", () => {
+    const QUESTION_REPLY = JSON.stringify({
+      loops: [{ title: "Decide on the flat", sources: [1] }],
+      suggestion: { title: "Link the flat notes", why: "Both are about the flat.", action: "Link Dentist to Home.", sources: [1] },
+      teamQuestion: "Which of my plans does the flat decision connect to?",
+    });
+    const SECOND_REPLY = JSON.stringify({
+      loops: [{ title: "Decide on the flat", sources: [1] }],
+      suggestion: { title: "Link the flat notes", why: "Both are about the flat.", action: "Link Dentist to Home.", sources: [1] },
+      usedTeamAnswer: true,
+    });
+    function twoReplies(first: string, second: string) {
+      const calls: Array<{ system: string; prompt: string }> = [];
+      const model: PersonaModel = {
+        async complete(input) {
+          calls.push(input);
+          return { text: calls.length === 1 ? first : second, inputTokens: 1000, outputTokens: 80, costUsd: 0.0004 };
+        },
+      };
+      return { calls, model };
+    }
+    function fakeTeam(answer: () => Promise<{ answer: string; refs: string[]; model: string; costUsd: number }>) {
+      const asked: Array<{ question: string; helper: string; run: string }> = [];
+      const team: TeamAsk = { async ask(input) { asked.push(input); return answer(); } };
+      return { asked, team };
+    }
+
+    it("is off by default: no question asked for, no call to the team", async () => {
+      const stub = stubModel(QUESTION_REPLY);
+      const { asked, team } = fakeTeam(async () => ({ answer: "x", refs: [], model: "none", costUsd: 0 }));
+      const { deps: d } = deps({ model: () => stub.model, outline: OUTLINE, teamAsk: team });
+      const run = await runPersona(OPEN_LOOPS, d, "manual");
+      expect(run).toMatchObject({ status: "done", modelCalls: 1 });
+      expect(stub.calls[0]!.prompt).not.toContain("teamQuestion");
+      expect(asked).toHaveLength(0);
+      expect(personaView(OPEN_LOOPS, d.store, new Date("2026-11-08T12:00:00Z")).askTeam).toBe(false);
+      expect(personaView(WEEKLY_RECAP, d.store, new Date("2026-11-08T12:00:00Z")).askTeam).toBeNull();
+    });
+
+    it("switched on: asks once, uses the answer in a second call and says so on the card, cost counted", async () => {
+      const stub = twoReplies(QUESTION_REPLY, SECOND_REPLY);
+      const { asked, team } = fakeTeam(async () => ({ answer: "It connects to the milestone House decision, which is stuck.", refs: ["House decision"], model: "gpt-4o-mini", costUsd: 0.0007 }));
+      const { deps: d, inbox, store, written } = deps({ model: () => stub.model, outline: OUTLINE, teamAsk: team });
+      store.setAskTeam("open-loops", true, false);
+      const run = await runPersona(OPEN_LOOPS, d, "manual");
+      expect(run).toMatchObject({ status: "done", modelCalls: 2, summary: "Read 2 memories, found 1 open loops and suggested one change; asked the team one question and used the answer" });
+      expect(run!.costUsd).toBeCloseTo(0.0015, 6);
+      expect(run!.steps).toBeLessThanOrEqual(OPEN_LOOPS.limits.maxSteps);
+      expect(asked).toEqual([{ question: "Which of my plans does the flat decision connect to?", helper: "open-loops", run: run!.id }]);
+      expect(stub.calls[0]!.prompt).toContain('"teamQuestion"');
+      expect(stub.calls[1]!.prompt).toContain("Answer: It connects to the milestone House decision, which is stuck. (about: House decision)");
+      expect(stub.calls[1]!.prompt).not.toContain('"teamQuestion"');
+      const card = inbox.list()[0]!;
+      expect(card.kind).toBe("suggestion");
+      expect(card.body).toContain("Asked the team: Which of my plans does the flat decision connect to? They said: It connects to the milestone House decision");
+      expect(written[0]!.files[0]!.content).toContain("Asked the team:");
+    });
+
+    it("a refusal or a slow team never fails the run: it goes on without the answer", async () => {
+      const stub = stubModel(QUESTION_REPLY);
+      const { team } = fakeTeam(async () => { throw new Error("daily_cap"); });
+      const { deps: d, inbox, store } = deps({ model: () => stub.model, outline: OUTLINE, teamAsk: team });
+      store.setAskTeam("open-loops", true, false);
+      const run = await runPersona(OPEN_LOOPS, d, "manual");
+      expect(run).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 2 memories, found 1 open loops and suggested one change; the team gave no answer" });
+      expect(inbox.list()[0]!.body).not.toContain("Asked the team");
+    });
+
+    it("an answer the helper did not use stays off the card; a second question in one run is refused", async () => {
+      const stub = twoReplies(QUESTION_REPLY, JSON.stringify({ ...JSON.parse(SECOND_REPLY), usedTeamAnswer: false }));
+      const { asked, team } = fakeTeam(async () => ({ answer: "Nothing connects.", refs: [], model: "none", costUsd: 0 }));
+      const greedy: PersonaDefinition = {
+        ...OPEN_LOOPS,
+        async run(ctx) {
+          const first = await ctx.askTeam("Which plan does the flat connect to?");
+          const second = await ctx.askTeam("And the garden?");
+          return { summary: `${first ? "first" : "none"} ${second ? "second" : "none"}` };
+        },
+      };
+      const { deps: d, inbox, store } = deps({ model: () => stub.model, outline: OUTLINE, teamAsk: team });
+      store.setAskTeam("open-loops", true, false);
+      await runPersona(OPEN_LOOPS, d, "manual");
+      expect(inbox.list()[0]!.body).toBe("Both are about the flat.");
+      expect((await runPersona(greedy, d, "manual"))!.summary).toBe("first none");
+      expect(asked).toHaveLength(2);
+    });
+
+    it("switching it on wakes the helper once more, never switches it on, and only helpers that can ask may", async () => {
+      let now = new Date("2026-11-10T12:00:00Z");
+      const { deps: d, store } = deps({ now: () => now });
+      store.setEnabled("open-loops", true);
+      store.start("open-loops", "schedule", "x");
+      now = new Date("2026-11-10T12:05:00Z");
+      expect(duePersonas([OPEN_LOOPS], store, now)).toHaveLength(0);
+      store.setAskTeam("open-loops", true, false);
+      expect(duePersonas([OPEN_LOOPS], store, now).map((p) => p.id)).toEqual(["open-loops"]);
+      store.setAskTeam("people-follow-ups", true, false);
+      expect(store.enabled("people-follow-ups")).toBe(false);
+      expect(d.store.askTeam("people-follow-ups")).toBe(true);
+      store.setAskTeam("people-follow-ups", false, false);
+      expect(store.askTeam("people-follow-ups")).toBe(false);
     });
   });
 });

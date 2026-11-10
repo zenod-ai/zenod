@@ -5,6 +5,7 @@ import { zenodLimits } from "./limits.js";
 import { inTreeSweepWindow, treeSweepWeekStart, TREE_SWEEP_WINDOW_START_HOUR_UTC } from "./treeSweepSchedule.js";
 import { opsAlert } from "./opsAlert.js";
 import { isTeamRecord } from "./helperScope.js";
+import { TeamAskError, type TeamAsk } from "./teamAsk.js";
 
 /**
  * The persona runner (EPIC-14 S4). A persona is a small agent that wakes on the user's memory on a
@@ -100,6 +101,11 @@ export interface PersonaDefinition {
    */
   revisedAt?: string;
   /**
+   * S35: it can ask the Team desk one question a run, once the user switches that on for it (off by
+   * default) and has a Team connection.
+   */
+  asksTeam?: boolean;
+  /**
    * The no-model wake check: what this wake would look at, as a short string. A scheduled wake whose
    * fingerprint equals the last real run's is skipped with no model call. Null: nothing to look at.
    */
@@ -188,6 +194,14 @@ export interface PersonaContext extends PersonaReadContext {
    * Change, Not now and Your feedback. Nothing changes unless the user presses Do it. One step.
    */
   postSuggestion(input: { title: string; body?: string; action: string; links?: InboxLink[] }): InboxItem;
+  /** S35: true when this run may ask the Team desk its one question. */
+  readonly canAskTeam: boolean;
+  /**
+   * S35: one question in words to the Team desk, read only: how something connects to the person's
+   * projects and plans. At most one a run; its cost counts in the run. Null when it may not ask or
+   * the team gave no answer (the run goes on without it). One step.
+   */
+  askTeam(question: string): Promise<{ question: string; answer: string; refs: string[] } | null>;
 }
 
 /** The memory a persona reads (the tenant's engine). */
@@ -223,6 +237,8 @@ export interface PersonaRunnerDeps {
   now?: () => Date;
   /** USD per month for all personas together. */
   totalMonthUsd?: number;
+  /** S35: the tenant's Team connection, when it has one. */
+  teamAsk?: TeamAsk | null;
 }
 
 /** $1 of the tenant's $3 monthly AI allowance (E7-A2), for all personas together (limits.ts). */
@@ -266,6 +282,15 @@ const DAY_MS = 24 * 3_600_000;
 /** The start (midnight UTC) of the N-day period holding `t`, counted from 1970-01-01. */
 function everyDaysStart(t: number, days: number): number {
   return Math.floor(t / DAY_MS / days) * days * DAY_MS;
+}
+
+/**
+ * S35: switching asking the Team desk on counts as a revision, so the helper wakes once more at
+ * once and its next run is not skipped as "nothing new".
+ */
+export function withAskRevision(store: PersonaStore, persona: PersonaDefinition): PersonaDefinition {
+  const since = persona.asksTeam ? store.askTeamSince(persona.id) : null;
+  return since && (!persona.revisedAt || since > persona.revisedAt) ? { ...persona, revisedAt: since } : persona;
 }
 
 /** Never ran, or last ran before its latest revision: wakes at once, at any hour. */
@@ -320,10 +345,11 @@ export function personaBudget(store: PersonaStore, persona: PersonaDefinition, n
  * failure: the run is logged as failed instead.
  */
 export async function runPersona(
-  persona: PersonaDefinition,
+  definition: PersonaDefinition,
   deps: PersonaRunnerDeps,
   trigger: PersonaTrigger,
 ): Promise<PersonaRun | null> {
+  const persona = withAskRevision(deps.store, definition);
   const now = deps.now ?? (() => new Date());
   const started = now();
   const periodKey = trigger === "schedule" ? personaPeriodKey(persona, started, personaSchedule(deps.store, persona)) : null;
@@ -420,12 +446,34 @@ export async function runPersona(
     return item;
   };
   let suggestions = 0;
+  let asked = false;
+  const canAskTeam = Boolean(persona.asksTeam && deps.teamAsk && deps.store.askTeam(persona.id));
   const beforePost = () => {
     if (tally.inboxItemIds.length >= PERSONA_MAX_POSTS_PER_RUN) throw new PersonaCapError("posts", `Stopped at ${PERSONA_MAX_POSTS_PER_RUN} inbox posts`);
     step();
   };
   const ctx: PersonaContext = {
     ...read,
+    canAskTeam,
+    async askTeam(question) {
+      const words = question.replace(/\s+/g, " ").trim();
+      if (!canAskTeam || asked || !words || !deps.teamAsk) return null;
+      asked = true;
+      step();
+      const spent = personaBudget(deps.store, persona, started, deps.totalMonthUsd);
+      if (tally.costUsd >= persona.limits.maxRunUsd || spent.personaUsd + tally.costUsd >= spent.personaCapUsd) return null;
+      try {
+        const reply = await deps.teamAsk.ask({ question: words, helper: persona.id, run: run.id });
+        tally.costUsd += reply.costUsd;
+        console.log(`[persona] ${persona.id} asked the team: ok model=${reply.model} usd=${reply.costUsd.toFixed(5)}`);
+        return { question: words.slice(0, 300), answer: reply.answer, refs: reply.refs };
+      } catch (error) {
+        // A refusal or a slow team is no failure of the helper: it carries on without the answer.
+        const code = error instanceof TeamAskError ? error.code : "error";
+        console.warn(`[persona] ${persona.id} asked the team: ${code}`);
+        return null;
+      }
+    },
     async think(input) {
       step();
       const spent = personaBudget(deps.store, persona, started, deps.totalMonthUsd);
@@ -532,14 +580,15 @@ async function commitNotes(persona: PersonaDefinition, deps: PersonaRunnerDeps, 
  */
 export function duePersonas(personas: readonly PersonaDefinition[], store: PersonaStore, now: Date): PersonaDefinition[] {
   const inWindow = inTreeSweepWindow(now.getTime());
-  return personas.filter((persona) => {
+  return personas.map((persona) => withAskRevision(store, persona)).filter((persona) => {
     if (!personaEnabled(store, persona) || store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, personaSchedule(store, persona)))) return false;
     return inWindow || wantsFirstWake(store, persona);
   });
 }
 
 /** What the settings screen shows for one persona. */
-export function personaView(persona: PersonaDefinition, store: PersonaStore, now: Date, totalMonthUsd = PERSONA_TOTAL_MONTH_USD) {
+export function personaView(definition: PersonaDefinition, store: PersonaStore, now: Date, totalMonthUsd = PERSONA_TOTAL_MONTH_USD) {
+  const persona = withAskRevision(store, definition);
   const enabled = personaEnabled(store, persona);
   const runs = store.runs(persona.id, 5);
   const cadence = personaSchedule(store, persona);
@@ -553,6 +602,8 @@ export function personaView(persona: PersonaDefinition, store: PersonaStore, now
     schedule: personaScheduleLabel(cadence),
     skills: persona.skills.map((id) => ({ id, label: PERSONA_SKILLS[id] })),
     enabled,
+    // S35: null when it cannot ask the Team desk at all; else whether the user switched it on.
+    askTeam: persona.asksTeam ? store.askTeam(persona.id) : null,
     limits: persona.limits,
     budget: personaBudget(store, persona, now, totalMonthUsd),
     nextWakeAt: enabled ? nextPersonaWakeAt(cadence, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, cadence))).toISOString() : null,

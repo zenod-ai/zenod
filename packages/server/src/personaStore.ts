@@ -128,6 +128,34 @@ export class PersonaStore {
     // Round 2: the user's own cadence per persona (JSON, null = its default).
     const columns = this.db.prepare(`PRAGMA table_info(persona_settings)`).all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === "cadence")) this.db.exec(`ALTER TABLE persona_settings ADD COLUMN cadence TEXT`);
+    // EPIC-14 S35: when the user switched asking the Team desk on for this helper (ISO); null: off, the default.
+    if (!columns.some((column) => column.name === "ask_team_at")) this.db.exec(`ALTER TABLE persona_settings ADD COLUMN ask_team_at TEXT`);
+  }
+
+  /** S35: when asking the Team desk was switched on for this helper, or null while it is off. */
+  askTeamSince(personaId: string): string | null {
+    const row = this.db.prepare(`SELECT ask_team_at FROM persona_settings WHERE persona_id=?`).get(personaId) as { ask_team_at: string | null } | undefined;
+    return row?.ask_team_at ?? null;
+  }
+
+  /** When this helper's settings last changed (ISO), or null when the user never changed them. */
+  settingsUpdatedAt(personaId: string): string | null {
+    const row = this.db.prepare(`SELECT updated_at FROM persona_settings WHERE persona_id=?`).get(personaId) as { updated_at: string } | undefined;
+    return row?.updated_at ?? null;
+  }
+
+  askTeam(personaId: string): boolean {
+    return this.askTeamSince(personaId) !== null;
+  }
+
+  /** `defaultEnabled` fills a new row, so switching asking on never switches the helper on. */
+  setAskTeam(personaId: string, on: boolean, defaultEnabled: boolean): void {
+    if (on && this.askTeam(personaId)) return;
+    const at = this.now().toISOString();
+    this.db
+      .prepare(`INSERT INTO persona_settings (persona_id, enabled, updated_at, ask_team_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(persona_id) DO UPDATE SET ask_team_at=excluded.ask_team_at, updated_at=excluded.updated_at`)
+      .run(personaId, defaultEnabled ? 1 : 0, at, on ? at : null);
   }
 
   /** On or off; null when the user never switched it (the persona's default applies). */

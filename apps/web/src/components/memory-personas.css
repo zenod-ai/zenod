@@ -24,4 +24,5 @@
 .zr-skills { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; font-size: 0.86rem; color: var(--zp-muted); }
 .zr-skills ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .zr-skills li { border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.05rem 0.55rem; color: var(--zp-ink); }
+.zr-askteam { display: flex; align-items: baseline; gap: 0.45rem; font-size: 0.86rem; color: var(--zp-muted); }
 .zr-on .zr-skills li { border-color: color-mix(in srgb, var(--zp-accent) 40%, var(--zp-line)); }
