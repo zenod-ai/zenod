@@ -5,6 +5,7 @@ import { talkHash } from "@/lib/memory-chat"
 import { errorMessage } from "@/lib/api"
 import {
   answerInbox,
+  bringBackSuggestion,
   clearInboxExamples,
   dismissInbox,
   doSuggestion,
@@ -680,10 +681,24 @@ function Suggestion({
         <SuggestionJob item={item} job={jobOf(item, jobs)} onChange={onChange} />
       ) : null}
       {item.status === "declined" ? (
-        <p className="zi-done">
-          Put away. Nothing changed.
-          {reason ? "" : ` ${item.from} may suggest it again later.`}
-        </p>
+        <>
+          <p className="zi-done">
+            Put away. Nothing changed.
+            {reason ? "" : ` ${item.from} may suggest it again later.`}
+          </p>
+          {item.example ? null : (
+            <div className="zi-row">
+              <button
+                type="button"
+                className="zp-keep"
+                disabled={busy}
+                onClick={() => void act(() => bringBackSuggestion(item.id))}
+              >
+                Bring it back
+              </button>
+            </div>
+          )}
+        </>
       ) : null}
       {error ? (
         <p className="zi-warn" role="alert">

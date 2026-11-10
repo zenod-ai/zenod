@@ -114,6 +114,9 @@ export const notNowSuggestion = (id: string, reason?: string) =>
     method: "POST",
     body: reason ? { reason } : {},
   })
+/** S27 round 2: Bring it back, on a suggestion put away with Not now. */
+export const bringBackSuggestion = (id: string) =>
+  api<InboxChange>(itemPath(id, "bring-back"), { method: "POST" })
 
 /** S26: a voice note as feedback on a card; what is typed in the box goes before the spoken words. */
 export async function sendVoiceFeedback(

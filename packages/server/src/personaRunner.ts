@@ -4,6 +4,7 @@ import type { PersonaRun, PersonaRunEnd, PersonaStore, PersonaTrigger } from "./
 import { zenodLimits } from "./limits.js";
 import { inTreeSweepWindow, treeSweepWeekStart, TREE_SWEEP_WINDOW_START_HOUR_UTC } from "./treeSweepSchedule.js";
 import { opsAlert } from "./opsAlert.js";
+import { isTeamRecord } from "./helperScope.js";
 
 /**
  * The persona runner (EPIC-14 S4). A persona is a small agent that wakes on the user's memory on a
@@ -381,7 +382,8 @@ export async function runPersona(
       const max = Math.min(limit, 100);
       const after = new Date(started.getTime() - span * 24 * 3_600_000).toISOString();
       // One scan of the window (no model), then an even share per day.
-      const all = await deps.memory.searchEntries({ capturedAfter: after, order: "newest", limit: null });
+      // S27 round 2: what the person said, never the work-tracking records an agent saved about a project.
+      const all = (await deps.memory.searchEntries({ capturedAfter: after, order: "newest", limit: null })).filter((entry) => !isTeamRecord(entry));
       const byDay = new Map<string, MemoryEntry[]>();
       for (const entry of all) {
         const day = entry.capturedAt.slice(0, 10);
@@ -492,6 +494,10 @@ export async function runPersona(
       return end("skipped", "Nothing new since the last run");
     }
     const outcome = await persona.run(ctx);
+    // S27 round 2: each note says what its run cost, so the person sees the spend beside the work.
+    if (notes[0] && tally.modelCalls > 0) {
+      notes[0] = { ...notes[0], content: `${notes[0].content.trimEnd()}\n\n_This run: ${tally.modelCalls} AI ${tally.modelCalls === 1 ? "call" : "calls"}, ${tally.inputTokens} / ${tally.outputTokens} tokens, $${tally.costUsd.toFixed(5)}._\n`.slice(0, MAX_NOTE_CHARS) };
+    }
     tally.revision = await commitNotes(persona, deps, notes, started);
     if (tally.modelCalls > 0) deps.inbox.markFeedbackRead(unread);
     return end("done", outcome.summary);

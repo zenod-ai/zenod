@@ -245,4 +245,19 @@ describe("one chat, and a reply box on every card (EPIC-14 S2 round 3)", () => {
     // The suggestion still waits for Do it, Change or Not now.
     expect(screen.getByRole("button", { name: "Do it" })).toBeTruthy()
   })
+
+  // EPIC-14 S27 round 2: a suggestion put away as project work comes back with one tap.
+  it("a suggestion put away: Bring it back opens it again", async () => {
+    const away: InboxItem = { ...SUGGESTION, status: "declined", needsYou: false, replies: [{ kind: "notnow", text: "out of scope: project work", at: "2026-11-10T05:00:00Z", readAt: null }] }
+    const calls = mockFetch((url) => {
+      if (url === "/api/console/inbox") return { items: [away], needsYou: 0 }
+      if (url === "/api/console/inbox/s1/bring-back") return { item: { ...SUGGESTION, needsYou: true, replies: away.replies }, needsYou: 1 }
+      return { needsYou: 0 }
+    })
+    render(<MemoryInbox />)
+    expect(await screen.findByText("Put away. Nothing changed.")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }))
+    expect(await screen.findByRole("button", { name: "Do it" })).toBeTruthy()
+    expect(calls.find((call) => call.url === "/api/console/inbox/s1/bring-back")).toMatchObject({ method: "POST" })
+  })
 })

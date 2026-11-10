@@ -233,6 +233,20 @@ export function registerInboxRoutes<R extends InboxRuntime>(app: Hono<any>, reso
     }
   });
 
+  // EPIC-14 S27 round 2: Bring it back, on a suggestion put away with Not now.
+  app.post("/api/console/inbox/:id/bring-back", async (c) => {
+    const found = await resolve(c);
+    if ("response" in found) return found.response;
+    const inbox = inboxFor(found.runtime);
+    try {
+      const item = inbox.get(c.req.param("id"));
+      if (!item || item.kind !== "suggestion") throw new InboxError("not_found", "no such suggestion in the inbox");
+      return c.json({ item: view(inbox.reopenSuggestion(item.id)), needsYou: inbox.needsYouCount() });
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
   // EPIC-14 S26: Your feedback as a voice note. The body is the audio; `?typed=` carries what was
   // already typed in the box, which goes before the spoken words. The note is transcribed as Zenod
   // transcribes any voice note and kept as feedback on the card, which the helper reads on its next

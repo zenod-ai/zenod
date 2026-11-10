@@ -21,6 +21,7 @@ import {
   WEEKLY_RECAP,
 } from "../src/personaCatalog.js";
 import { registerPersonaRoutes } from "../src/personaRoutes.js";
+import { isProjectWork, isTeamRecord, OUT_OF_SCOPE_REASON, putAwayProjectSuggestions } from "../src/helperScope.js";
 import {
   duePersonas,
   nextPersonaWakeAt,
@@ -266,20 +267,20 @@ describe("persona runner (EPIC-14 S4)", () => {
   });
 
   it("wakes a persona that is on and never ran at once, then only in the off-peak window, once per period", () => {
-    const store = new PersonaStore(join(dir, "personas.sqlite"), () => new Date("2026-11-08T20:00:00Z"));
-    const noon = new Date("2026-11-08T21:00:00Z");
+    const store = new PersonaStore(join(dir, "personas.sqlite"), () => new Date("2026-11-10T20:00:00Z"));
+    const noon = new Date("2026-11-10T21:00:00Z");
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap"]);
     const run = store.start("weekly-recap", "manual")!;
     store.finish(run.id, { status: "done", steps: 1, modelCalls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0, summary: "", inboxItemIds: [], revision: null, fingerprint: "x" });
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon)).toEqual([]);
-    const night = new Date("2026-11-09T03:00:00Z");
+    const night = new Date("2026-11-11T03:00:00Z");
     expect(duePersonas(BUILT_IN_PERSONAS, store, night).map((p) => p.id)).toEqual(["weekly-recap"]);
     store.start("weekly-recap", "schedule", personaPeriodKey(WEEKLY_RECAP, night));
     expect(duePersonas(BUILT_IN_PERSONAS, store, night)).toEqual([]);
     store.setEnabled("weekly-recap", false);
     expect(duePersonas(BUILT_IN_PERSONAS, store, new Date("2026-11-16T03:00:00Z"))).toEqual([]);
     expect(nextPersonaWakeAt({ every: "week" }, night, true).toISOString()).toBe("2026-11-15T02:00:00.000Z");
-    expect(nextPersonaWakeAt({ every: "night" }, noon, false).toISOString()).toBe("2026-11-09T02:00:00.000Z");
+    expect(nextPersonaWakeAt({ every: "night" }, noon, false).toISOString()).toBe("2026-11-11T02:00:00.000Z");
   });
 
   it("wakes a revised persona once more at once, in its own period, even with nothing new", async () => {
@@ -644,5 +645,66 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     calm.deps.inbox = new InboxStore(join(dir, "calm-inbox.sqlite"));
     expect(await runPersona(MEMORY_HEALTH, calm.deps, "manual")).toMatchObject({ status: "done", summary: "Counted 2 memories, all looks normal" });
     expect(calm.deps.inbox.list()).toHaveLength(0);
+  });
+
+  // S27 round 2: Jordi, 2026-11-10: "His job should be to work on the memory, and the memory is not the repos, it's my memory."
+  describe("the helpers keep to the memory, never project work (S27 round 2)", () => {
+    const record = (n: number, title: string): MemoryEntry => ({ ...entry(n, "2026-11-07", title), source: "mcp", contentType: "text" });
+
+    it("tells a work-tracking record an agent saved from what the person said", () => {
+      expect(isTeamRecord(record(1, "agent_team E84-S17 (2026-11-10, in review): hero journey"))).toBe(true);
+      expect(isTeamRecord(record(2, "deal-funnels: EPIC-1 stamped ready"))).toBe(true);
+      expect(isTeamRecord(record(3, "Jordi to give budget for the trip (open ask E0-A1)"))).toBe(true);
+      // Typed in by the person over MCP with no work code, a voice note, or a WhatsApp message: theirs.
+      expect(isTeamRecord(record(4, "Remember Ana's birthday is on the 12th"))).toBe(false);
+      expect(isTeamRecord({ ...record(5, "EpicTeam card answer E14-S27"), contentType: "voice_note" })).toBe(false);
+      expect(isTeamRecord({ ...entry(6, "2026-11-07", "E14-S27 looks good"), source: "whatsapp" })).toBe(false);
+      expect(isProjectWork("Dispatch the next ticket")).toBe(true);
+      expect(isProjectWork("Move the notes under Launching Epic Social")).toBe(false);
+      expect(isProjectWork("Link the dentist note to Health")).toBe(false);
+    });
+
+    it("leave out agents' project records, say memory only, and drop a suggestion about project work", async () => {
+      const entries = [entry(1, "2026-11-07", "Call mum about Sunday"), record(2, "market-bots E1-S1 (2026-11-10): airdrop angles researched"), entry(3, "2026-11-06", "Dentist next week")];
+      const reply = JSON.stringify({ loops: [{ title: "Call mum about Sunday", sources: [1] }, { title: "Answer ask E0-A1 on the hair project", sources: [2] }], suggestion: { title: "Close the open ask E0-A1", why: "No later memory answers it.", action: "Link the hair_flow EPIC-1 memory to Zenod.", sources: [1] } });
+      const stub = stubModel(reply);
+      const { deps: d, inbox, written } = deps({ model: () => stub.model, outline: OUTLINE, entries });
+      const run = await runPersona(OPEN_LOOPS, d, "manual");
+      expect(run!.summary).toBe("Read 2 memories, found 1 open loops and asked about one; left out one suggestion about project work");
+      expect(stub.calls[0]!.prompt).not.toContain("market-bots");
+      expect(stub.calls[0]!.system).toContain("You are not a project manager");
+      expect(inbox.list().map((item) => item.kind)).toEqual(["question"]);
+      expect(inbox.list()[0]!.title).toBe("Is this still open? Call mum about Sunday");
+      const note = written[0]!.files[0]!.content;
+      expect(note).not.toContain("E0-A1");
+      expect(note).toContain("_This run: 1 AI call, 1200 / 90 tokens, $0.00040._");
+      // Weekly recap's finding about project work is left out too; its recap lines stay.
+      rmSync(join(dir, "inbox.sqlite"), { force: true });
+      rmSync(join(dir, "personas.sqlite"), { force: true });
+      const recap = stubModel(JSON.stringify({ recap: ["You called mum."], finding: { title: "Dispatch the next ticket on EPIC-14", detail: "", sources: [1] } }));
+      const r = deps({ model: () => recap.model, entries });
+      expect(await runPersona(WEEKLY_RECAP, r.deps, "manual")).toMatchObject({ summary: "Read 2 memories and wrote a recap, no finding" });
+      expect(r.inbox.list()).toHaveLength(0);
+    });
+
+    it("put away the earlier project suggestions once, as Not now with a reason, and Bring it back undoes it", () => {
+      const inbox = new InboxStore(join(dir, "scope-inbox.sqlite"), () => new Date("2026-11-10T01:40:00Z"));
+      const project = inbox.post({ kind: "suggestion", from: "Open loops finder", title: "The hair project waits on ask E0-A1", action: "Link the hair_flow EPIC-1 memory to Zenod." });
+      const memory = inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Voice notes deserve their own place", action: "Give the voice-note pages their own place." });
+      const other = inbox.post({ kind: "suggestion", from: "Memory desk", title: "Deploy notes", action: "Link EPIC-2 to EPIC-3." });
+      const helpers = BUILT_IN_PERSONAS.map((p) => p.name);
+      expect(putAwayProjectSuggestions(inbox, helpers)).toBe(1);
+      expect(inbox.get(project.id)).toMatchObject({ status: "declined" });
+      expect(inbox.get(project.id)!.replies[0]).toMatchObject({ kind: "notnow", text: OUT_OF_SCOPE_REASON });
+      expect(inbox.get(memory.id)).toMatchObject({ status: "open" });
+      expect(inbox.get(other.id)).toMatchObject({ status: "open" });
+      // Bring it back: open again, the reason kept, and never put away a second time.
+      expect(inbox.reopenSuggestion(project.id)).toMatchObject({ status: "open" });
+      expect(putAwayProjectSuggestions(inbox, helpers)).toBe(0);
+      expect(inbox.get(project.id)).toMatchObject({ status: "open" });
+      expect(() => inbox.reopenSuggestion(memory.id)).toThrow(/only a suggestion put away/);
+      // Cards posted after the helpers kept to the memory are not touched.
+      expect(putAwayProjectSuggestions(inbox, helpers, "2026-11-10T01:00:00Z")).toBe(0);
+    });
   });
 });

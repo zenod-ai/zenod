@@ -403,6 +403,16 @@ export class InboxStore {
   }
 
   /**
+   * S27 round 2: Bring it back on a suggestion put away with Not now: open again, with its reason
+   * kept, so the helper does not put it away a second time.
+   */
+  reopenSuggestion(id: string): InboxItem {
+    const item = this.require(id, "suggestion");
+    if (item.status !== "declined") throw new InboxError("conflict", "only a suggestion put away can come back");
+    return this.write(item, "open", {}, false);
+  }
+
+  /**
    * The feedback a persona has not read yet, from the cards it posted, oldest first. Example cards
    * never reach a persona.
    */

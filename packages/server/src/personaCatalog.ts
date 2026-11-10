@@ -1,6 +1,7 @@
 import type { MemoryEntry } from "zenod";
 import type { InboxLink } from "./inboxStore.js";
 import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill } from "./personaRunner.js";
+import { hasWorkCode, isProjectWork } from "./helperScope.js";
 
 /**
  * The built-in personas (EPIC-14 S4): a catalog the user switches on one by one. Only Weekly recap
@@ -9,7 +10,20 @@ import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill }
  * memories, makes at most one call on the cheap model (Health of your memory makes none), writes a
  * note into its own folder and leaves at most one card in the inbox. Trying them on real notes is
  * S5.
+ *
+ * S27 round 2 (Jordi, 2026-11-10: "His job should be to work on the memory, and the memory is not
+ * the repos, it's my memory"): every helper keeps to the person's memory, its notes and how they are
+ * kept, and never manages a project. The runner leaves out the work-tracking records agents save
+ * (helperScope.ts); the words below say so to the model; a card or list line about project work is
+ * dropped before it is posted.
  */
+
+/** Said to every helper's model: memory work only, never project management. */
+export const MEMORY_ONLY = [
+  "You work on this person's memory only: their own notes and how they are kept.",
+  "You are not a project manager. Never suggest a next step in a project, a task, a ticket, an epic, a repository, a release or a deploy, and never plan or pick work for a team or an agent.",
+  "Many notes are about their work projects: treat a project only as something the notes are about.",
+].join(" ");
 
 const RECAP_DAYS = 7;
 const RECAP_MAX_MEMORIES = 40;
@@ -55,7 +69,8 @@ function recapPrompt(entries: MemoryEntry[]): string {
 
 const RECAP_SYSTEM = [
   "You are Weekly recap, a quiet helper that reads a person's own memory once a week.",
-  "Write a short recap of the week in their words, then pick ONE finding: a pattern, a loose end, or something they said they would do and have not mentioned since.",
+  MEMORY_ONLY,
+  "Write a short recap of the week in their words, then pick ONE finding about their memory or their own life: a pattern in what they keep coming back to, a loose end in their life, or something they said they would do and have not mentioned since. Never a project's status or next step.",
   "Use only what the memories say. Never invent facts, names or dates. Plain words, no advice beyond the finding.",
 ].join(" ");
 
@@ -97,8 +112,8 @@ export const WEEKLY_RECAP: PersonaDefinition = {
   defaultEnabled: true,
   // One model call a week on the cheap chat model: well under a cent each run.
   limits: { maxSteps: 6, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
-  // Reads what was said, not the voice-note header, spread over all 7 days.
-  revisedAt: "2026-11-08T19:30:00.000Z",
+  // S27 round 2: memory only, never a project's next step.
+  revisedAt: "2026-11-10T04:15:00.000Z",
 
   async fingerprint(ctx) {
     const entries = await ctx.recentMemories({ days: RECAP_DAYS, limit: RECAP_MAX_MEMORIES });
@@ -108,7 +123,9 @@ export const WEEKLY_RECAP: PersonaDefinition = {
 
   async run(ctx) {
     const entries = await ctx.recentMemories({ days: RECAP_DAYS, limit: RECAP_MAX_MEMORIES });
-    const reply = parseRecapReply(await ctx.think({ system: RECAP_SYSTEM, prompt: recapPrompt(entries) }));
+    const raw = parseRecapReply(await ctx.think({ system: RECAP_SYSTEM, prompt: recapPrompt(entries) }));
+    // S27 round 2: a finding about project work is left out; the recap lines stay.
+    const reply = raw.finding && isProjectWork(raw.finding.title, raw.finding.detail) ? { ...raw, finding: null } : raw;
     const notePath = `Personas/weekly-recap/${ctx.today}.md`;
     const sources = (reply.finding?.sources ?? [])
       .map((n) => entries[n - 1])
@@ -198,6 +215,15 @@ export function parseSuggestion(reply: Record<string, unknown> | null): { title:
   return { title, why: str(raw?.why), action, sources: nums(raw?.sources) };
 }
 
+/**
+ * S27 round 2: a suggestion about project work never reaches the inbox: a work code anywhere, or
+ * project-management words in what the person reads first (the change itself names pages, which
+ * may hold any word).
+ */
+export function aboutProjectWork(suggestion: { title: string; why: string; action: string }): boolean {
+  return hasWorkCode(suggestion.action) || isProjectWork(suggestion.title, suggestion.why);
+}
+
 function earlierLines(ctx: PersonaContext): string[] {
   if (!ctx.earlierSuggestions.length) return [];
   return [
@@ -227,8 +253,8 @@ interface ModelPersonaSpec {
   handle(ctx: PersonaContext, entries: MemoryEntry[], reply: Record<string, unknown> | null, notePath: string, suggestion: ReturnType<typeof parseSuggestion>): string;
 }
 
-/** When the helpers learned to suggest (S27): each wakes once more at once, in its own period. */
-const SUGGESTS_SINCE = "2026-11-10T00:45:00.000Z";
+/** When the helpers kept to the memory only (S27 round 2): each wakes once more at once, in its own period. */
+const SUGGESTS_SINCE = "2026-11-10T04:15:00.000Z";
 
 /** A persona that reads a window of memories and the tree, and makes one call on the cheap model. Off until switched on. */
 function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
@@ -261,13 +287,16 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
       ].join("\n");
       const system = [
         `You are ${spec.name}, a quiet helper that reads a person's own memory.`,
+        MEMORY_ONLY,
         spec.system,
         ...(canSuggest ? [`You may also offer ONE change to how their memory is organised: ${spec.suggests}`, DESK_CAN, "Offer a change only when the memories clearly call for it; otherwise suggestion is null."] : []),
         "Use only what the memories say. Never invent facts, names or dates. Plain words.",
       ].join(" ");
       const reply = parseJsonReply(await ctx.think({ system, prompt }));
-      const suggestion = canSuggest ? parseSuggestion(reply) : null;
-      return { summary: spec.handle(ctx, entries, reply, `Personas/${spec.id}/${ctx.today}.md`, suggestion) };
+      const offered = canSuggest ? parseSuggestion(reply) : null;
+      const leftOut = offered !== null && aboutProjectWork(offered);
+      const summary = spec.handle(ctx, entries, reply, `Personas/${spec.id}/${ctx.today}.md`, leftOut ? null : offered);
+      return { summary: leftOut ? `${summary}; left out one suggestion about project work` : summary };
     },
   };
 }
@@ -287,17 +316,17 @@ const suggestionNote = (suggestion: ReturnType<typeof parseSuggestion>) => (sugg
 export const OPEN_LOOPS: PersonaDefinition = modelPersona({
   id: "open-loops",
   name: "Open loops finder",
-  purpose: "Finds things you said you would do and have not closed.",
-  brief: "Every night it reads the last 14 days and lists what still looks open in its own folder. It suggests one change, like linking a loop to the memory that closed it, or asks you about the most important loop.",
+  purpose: "Finds loose ends in your own life that your notes leave open.",
+  brief: "Every night it reads what you said in the last 14 days and lists the loose ends in your own life, like a call to make or a form to send, in its own folder. It suggests one change to your memory, like linking a loose end to the note that closed it, or asks you whether the most important one is still open. It never tracks your projects' work.",
   skills: ["read", "write-own-folder", "post-inbox", "ask", "propose-desk-job"],
   schedule: { every: "night" },
   days: 14,
-  system: "Find things the person said they would do, decide or check that later memories do not show as done.",
-  suggests: "link a memory where they said they would do something to the later memory that shows it done, or to the place it belongs, so the loop is easy to find and close.",
-  ask: '"loops": [{"title": "one short line", "sources": [numbers]}] with at most 5 loops, the most important first, or an empty list',
+  system: "Find loose ends in the person's own life: things they said they would do, decide or check (home, health, money, family, friends, travel, paperwork) that later memories do not show as done. Work on a project is not a loose end here.",
+  suggests: "link the memory where they left a loose end to the later memory that closes it, or to the place it belongs, so the loose end is easy to find and close.",
+  ask: '"loops": [{"title": "one short line", "sources": [numbers]}] with at most 5 loose ends, the most important first, or an empty list',
   handle(ctx, entries, reply, notePath, suggestion) {
-    const loops = list(reply?.loops).map((loop) => ({ title: str(loop.title), sources: nums(loop.sources) })).filter((loop) => loop.title).slice(0, 5);
-    ctx.writeNote(`${ctx.today}.md`, personaNote("open-loops", "Open loops", ctx.today, entries.length, [...(loops.length ? loops.map((loop) => `- ${loop.title}`) : ["- Nothing looks open."]), ...suggestionNote(suggestion)]));
+    const loops = list(reply?.loops).map((loop) => ({ title: str(loop.title), sources: nums(loop.sources) })).filter((loop) => loop.title && !isProjectWork(loop.title)).slice(0, 5);
+    ctx.writeNote(`${ctx.today}.md`, personaNote("open-loops", "Open loops", ctx.today, entries.length, [...(loops.length ? loops.map((loop) => `- ${loop.title}`) : ["- No loose ends in your own life."]), ...suggestionNote(suggestion)]));
     if (suggestion) {
       postSuggestionCard(ctx, entries, suggestion, { label: "All open loops", path: notePath });
       return `Read ${entries.length} memories, found ${loops.length} open loops and suggested one change`;
@@ -316,16 +345,16 @@ export const OPEN_LOOPS: PersonaDefinition = modelPersona({
 export const PEOPLE_FOLLOW_UPS: PersonaDefinition = modelPersona({
   id: "people-follow-ups",
   name: "People and follow-ups",
-  purpose: "Who you talked about lately and what you owe them.",
-  brief: "Every night it reads the last 14 days and keeps a list of the people you mentioned with any follow-up in its own folder. It suggests one change, like linking a follow-up to that person's page, or posts the most pressing follow-up.",
+  purpose: "The people in your notes lately and what you owe them.",
+  brief: "Every night it reads what you said in the last 14 days and keeps a list of the people you mentioned, with any follow-up like a call, a reply or a thank-you, in its own folder. It suggests one change to your memory, like linking a follow-up to that person's page, or posts the most pressing follow-up. Agents and project roles are not people here.",
   skills: ["read", "write-own-folder", "post-inbox", "propose-desk-job"],
   schedule: { every: "night" },
   days: 14,
-  system: "List the people the person mentions and any follow-up they owe or expect from each.",
+  system: "List the real people the person mentions (family, friends, colleagues, people they met) and any personal follow-up they owe or expect from each: a call, a reply, a visit, a thank-you, something to return. AI agents, bots and project roles are not people; a project's work is not a follow-up.",
   suggests: "link the memory with the most pressing follow-up to the page of the person it is about, when that person has a place, or give a person who keeps coming up their own place.",
   ask: '"people": [{"name": "as written", "followUp": "one short line or empty", "sources": [numbers]}] with at most 8 people, the most pressing follow-up first',
   handle(ctx, entries, reply, notePath, suggestion) {
-    const people = list(reply?.people).map((p) => ({ name: str(p.name, 80), followUp: str(p.followUp), sources: nums(p.sources) })).filter((p) => p.name).slice(0, 8);
+    const people = list(reply?.people).map((p) => ({ name: str(p.name, 80), followUp: str(p.followUp), sources: nums(p.sources) })).filter((p) => p.name && !isProjectWork(p.name, p.followUp)).slice(0, 8);
     ctx.writeNote(`${ctx.today}.md`, personaNote("people-follow-ups", "People and follow-ups", ctx.today, entries.length,
       [...(people.length ? people.map((p) => `- ${p.name}${p.followUp ? `: ${p.followUp}` : ""}`) : ["- Nobody mentioned."]), ...suggestionNote(suggestion)]));
     if (suggestion) {
@@ -342,13 +371,13 @@ export const PEOPLE_FOLLOW_UPS: PersonaDefinition = modelPersona({
 export const TOPIC_GARDENER: PersonaDefinition = modelPersona({
   id: "topic-gardener",
   name: "Topic gardener",
-  purpose: "Spots one tidy-up in your topics and offers it as a change you can make.",
-  brief: "Every 3 days it reads the last 30 days and the tree and suggests one tidy-up, like moving a page under the place it belongs to or giving a topic that grew its own place. It changes nothing itself: you press Do it, Change or Not now.",
+  purpose: "Spots one tidy-up in how your memory is kept and offers it as a change you can make.",
+  brief: "Every 3 days it reads what you said in the last 30 days and the tree and suggests one tidy-up of your memory, like a note filed in the wrong place, two notes about the same thing to link, or a place to rename to what you call it. It changes nothing itself: you press Do it, Change or Not now.",
   skills: ["read", "write-own-folder", "propose-desk-job"],
   schedule: { every: "days", days: 3 },
   days: 30,
-  system: "Look at how these memories are filed in the places below.",
-  suggests: "one tidy-up of how memories are filed: a page under the wrong place moved where it belongs, a topic that has grown into two given its own place, a place renamed to what the person calls it, or two pages about the same thing linked.",
+  system: "Look at how these memories are filed in the places below. Your job is how the memory is kept, never what the person should do in a project.",
+  suggests: "one tidy-up of how memories are filed: a note under the wrong place moved where it belongs, two notes about the same thing linked so each shows the other, a topic that has grown into two given its own place, or a place renamed to what the person calls it.",
   ask: '"looked": "one short line on what you checked"',
   handle(ctx, entries, reply, notePath, suggestion) {
     ctx.writeNote(`${ctx.today}.md`, personaNote("topic-gardener", "Topic gardener", ctx.today, entries.length,
@@ -362,16 +391,16 @@ export const TOPIC_GARDENER: PersonaDefinition = modelPersona({
 export const IDEAS_DIGEST: PersonaDefinition = modelPersona({
   id: "ideas-digest",
   name: "Ideas digest",
-  purpose: "Collects the ideas you had into one digest.",
-  brief: "Once a week it reads the last 14 days and gathers your ideas into one digest in its own folder. It suggests giving an idea you keep coming back to its own place, or posts the one you came back to most.",
+  purpose: "Collects the ideas you had into one digest and links the ones that belong together.",
+  brief: "Once a week it reads what you said in the last 14 days and gathers your ideas into one digest in its own folder. It suggests linking two notes of the same idea, or giving an idea you keep coming back to its own place, or posts the one you came back to most. It never turns an idea into project work.",
   skills: ["read", "write-own-folder", "post-inbox", "propose-desk-job"],
   schedule: { every: "week" },
   days: 14,
-  system: "Collect the ideas the person had: plans, what-ifs, things to try or build. Not tasks or facts.",
-  suggests: "give an idea they came back to several times, which already has a page, its own place at the top of the tree, or link two memories of the same idea.",
+  system: "Collect the ideas the person had: what-ifs, things to try, make or explore. Not tasks, facts or a project's next steps.",
+  suggests: "link two memories of the same idea so each shows the other, or give an idea they came back to several times, which already has a page, its own place at the top of the tree.",
   ask: '"ideas": [{"title": "one short line", "sources": [numbers]}] with at most 8 ideas, the one they came back to most first, or an empty list',
   handle(ctx, entries, reply, notePath, suggestion) {
-    const ideas = list(reply?.ideas).map((idea) => ({ title: str(idea.title), sources: nums(idea.sources) })).filter((idea) => idea.title).slice(0, 8);
+    const ideas = list(reply?.ideas).map((idea) => ({ title: str(idea.title), sources: nums(idea.sources) })).filter((idea) => idea.title && !isProjectWork(idea.title)).slice(0, 8);
     ctx.writeNote(`${ctx.today}.md`, personaNote("ideas-digest", "Ideas digest", ctx.today, entries.length, [...(ideas.length ? ideas.map((idea) => `- ${idea.title}`) : ["- No ideas this time."]), ...suggestionNote(suggestion)]));
     if (suggestion) {
       postSuggestionCard(ctx, entries, suggestion, { label: "The digest", path: notePath });
@@ -395,7 +424,7 @@ export const MEMORY_HEALTH: PersonaDefinition = {
   id: "memory-health",
   name: "Health of your memory",
   purpose: "Tells you when saving has gone quiet, memories are nearly empty or pages have no place.",
-  brief: "Once a week it counts what you saved in the last 4 weeks and the pages that are under no place, with no AI call and no cost, writes the numbers in its own folder and posts only when something stands out. It suggests filing the loose pages.",
+  brief: "Once a week it counts what you said in the last 4 weeks and the pages that are under no place, with no AI call and no cost, writes the numbers in its own folder and posts only when something stands out. It suggests filing the loose pages.",
   schedule: { every: "week" },
   skills: ["read", "write-own-folder", "post-inbox", "propose-desk-job"],
   defaultEnabled: false,
