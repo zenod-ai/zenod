@@ -91,9 +91,10 @@
     {
      "id": "become-a-tester",
      "title": "Apply to test Zenod",
-     "text": "Tell us how you would use Zenod on the testers page. The first ten testers, picked by hand, get a free month of Zenod Hosted with no card, extended month by month.",
+     "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: a free month of Zenod Hosted with no card, extended month by month.",
      "rows": [
-      "ZAL-A13"
+      "ZAL-A13",
+      "E26-S2"
      ],
      "since": "2026-11-09",
      "draft": true

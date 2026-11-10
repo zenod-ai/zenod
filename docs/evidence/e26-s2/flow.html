@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{margin:0;background:#f6f2e9;color:#18211c;font:400 17px/1.45 Newsreader,Georgia,serif;width:1600px;padding:52px 64px 44px}
+h1{font-weight:400;font-size:44px;letter-spacing:-.02em;margin:0 0 8px}.sub{font:400 19px "Instrument Sans",system-ui,sans-serif;color:#4a554e;margin:0 0 26px;max-width:1300px}
+.lane{display:grid;grid-template-columns:170px 1fr;gap:16px;margin-bottom:22px}
+.lab{font:600 13px "Instrument Sans",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.08em;padding-top:12px;border-top:2px solid #18211c}
+.lab small{display:block;text-transform:none;letter-spacing:0;font-weight:400;font-size:14px;color:#4a554e;margin-top:4px}
+.row{display:grid;gap:14px}.r5{grid-template-columns:repeat(5,1fr)}.r4{grid-template-columns:repeat(4,1fr)}
+.box{border:1px solid #18211c;background:#fbf8f1;padding:14px 14px 12px;position:relative;border-radius:3px;min-height:205px;display:flex;flex-direction:column}
+.box h3{margin:0 0 6px;font:600 15px "Instrument Sans",system-ui,sans-serif}.box p{margin:0 0 6px;font-size:16px}
+.who{font:500 12px "Instrument Sans",system-ui,sans-serif;color:#4a554e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.url{font:500 13px ui-monospace,Menlo,monospace;color:#1f4d3a;word-break:break-all}
+.stripe{align-self:flex-start;display:inline-block;font:600 12px "Instrument Sans",system-ui,sans-serif;background:#635bff;color:#fff;padding:2px 7px;border-radius:3px;margin-bottom:6px}
+.box:not(:last-child)::after{content:"→";position:absolute;right:-13px;top:44%;font:18px system-ui;color:#4a554e}
+.st{margin-top:auto;font:600 13px "Instrument Sans",system-ui,sans-serif;padding:6px 8px;border-radius:3px}
+.live{background:#1f4d3a;color:#f6f2e9}.built{background:#dfe9e2;color:#1f4d3a;border:1px solid #1f4d3a}.wait{background:#f8ebe3;color:#9a3b22;border:1px solid #9a3b22}.todo{background:transparent;color:#4a554e;border:1px dashed #4a554e}
+.wb{border-color:#9a3b22;border-style:dashed}.tb{border-style:dashed;background:transparent}
+.st small{display:block;font-weight:400;margin-top:2px}
+.foot{display:flex;gap:24px;font:400 14px "Instrument Sans",system-ui,sans-serif;color:#4a554e;margin-top:6px}
+.sw{display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px;border-radius:2px}
+</style></head><body>
+<h1>Testers, the full picture: you share one link, Zenod does the rest</h1>
+<p class="sub">Nobody makes invites by hand. Each accepted application creates its own Stripe code and email. Ten people at once are handled the same way, no tap needed.</p>
+<div class="lane"><div class="lab">Application and invite<small>you post once, then automatic</small></div><div class="row r5">
+<div class="box"><div class="who">You, once</div><h3>1 · Share the link</h3><p>Post the public page anywhere.</p><div class="url">zenod.dev/testers</div><div class="st live">Live</div></div>
+<div class="box"><div class="who">Applicant</div><h3>2 · Apply</h3><p>One question, how they would use Zenod, and their email. Kept privately on the Zenod server.</p><div class="st built">Live today</div></div>
+<div class="box"><div class="who">Zenod, automatic</div><h3>3 · Accepted</h3><p>First 10 in at once. Then a waitlist. You see the list and a stop switch.</p><div class="url">cloud.zenod.dev/admin/testers</div><div class="st built">Live today</div></div>
+<div class="box wb"><div class="who">Zenod, automatic</div><span class="stripe">Stripe</span><h3>4 · Invite created</h3><p>A Stripe promotion code made only for them. Works once, free first month.</p><div class="st wait">Built, waiting<small>on code permission: one Stripe tick or the Mac command</small></div></div>
+<div class="box wb"><div class="who">Zenod, automatic</div><h3>5 · Invite emailed</h3><p>"Your Zenod tester link" with the code inside the link.</p><div class="url">cloud.zenod.dev/join?code=…</div><div class="st wait">Built, waiting<small>on one mail key from you</small></div></div>
+</div></div>
+<div class="lane"><div class="lab">Sign-up<small>the tester clicks, Zenod sets up</small></div><div class="row r4">
+<div class="box"><div class="who">Tester</div><span class="stripe">Stripe</span><h3>6 · Sign in, Stripe Checkout</h3><p>Google or GitHub, then Stripe Checkout with the code applied. €0, no card.</p><div class="st live">Live</div></div>
+<div class="box"><div class="who">Zenod, automatic</div><h3>7 · Account made</h3><p>Stripe confirms, Zenod creates their workspace and shows "You're in" with the two next steps.</p><div class="st live">Live</div></div>
+<div class="box tb"><div class="who">Zenod, automatic</div><h3>8 · Welcome email</h3><p>Their WhatsApp number and next steps by email.</p><div class="st todo">To build<small>after the mail key, same sender</small></div></div>
+<div class="box"><div class="who">Tester</div><h3>9 · First voice note</h3><p>Pick Drive or GitHub, link WhatsApp, send a voice note.</p><div class="st live">Live</div></div>
+</div></div>
+<div class="foot"><span><span class="sw" style="background:#1f4d3a"></span>Live</span><span><span class="sw" style="background:#dfe9e2;border:1px solid #1f4d3a"></span>Live today, new</span><span><span class="sw" style="background:#f8ebe3;border:1px solid #9a3b22"></span>Built, waits on one step from you. Queued, nobody is lost</span><span><span class="sw" style="border:1px dashed #4a554e"></span>To build</span></div>
+</body></html>
