@@ -21,6 +21,9 @@ export interface CustomerStripeClient {
   subscriptions?: {
     retrieve(id: string, params?: Stripe.SubscriptionRetrieveParams): Promise<Stripe.Subscription>;
   };
+  promotionCodes?: {
+    list(params: Stripe.PromotionCodeListParams): Promise<{ data: Stripe.PromotionCode[] }>;
+  };
   webhooks: {
     constructEvent(payload: string | Buffer, signature: string, secret: string): Stripe.Event;
   };
@@ -144,6 +147,33 @@ export const ZENOD_CHECKOUT_SUBMIT_MESSAGE =
   "Have a Zenod code? Add it under \"Add promotion code\". If it covers the full price, your total is €0: " +
   "no card or payment details are needed and you will not be charged.";
 
+/** EPIC-26 T1: the invite link already applied the tester's code; say so above the pay button. */
+export const ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE =
+  "Your Zenod code is already applied. If it covers the full price, your total is €0: " +
+  "no card or payment details are needed and you will not be charged.";
+
+/** EPIC-26 T1: a checkout started from an invite link (cloud.zenod.dev/join?code=…). */
+export interface CheckoutInvite {
+  /** The Stripe promotion code id to apply up front; without it, the code field stays open. */
+  promotionCodeId?: string | null;
+  /** Return to the "you're in" page instead of straight to the app. */
+  welcome?: boolean;
+  /** Carry the first sign-in's sign-up marker to that page (ZAL-A13 counter). */
+  signedUp?: boolean;
+}
+
+/** The active promotion code with exactly this customer-facing code, or null (unknown, used up, or no lookup). */
+export async function findActivePromotionCode(stripe: CustomerStripeClient, code: string): Promise<string | null> {
+  if (!stripe.promotionCodes) return null;
+  try {
+    const found = await stripe.promotionCodes.list({ code, active: true, limit: 1 });
+    return found.data[0]?.id ?? null;
+  } catch (error) {
+    console.error("promotion code lookup failed:", error instanceof Error ? error.name : "Error");
+    return null;
+  }
+}
+
 export async function createCustomerCheckout(
   stripe: CustomerStripeClient,
   accounts: CustomerAccountStore,
@@ -151,6 +181,7 @@ export async function createCustomerCheckout(
   owner: CheckoutOwner,
   checkout: { tier: CheckoutTier; price: string },
   product: CustomerProductConfig = { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" },
+  invite: CheckoutInvite = {},
 ): Promise<Stripe.Checkout.Session> {
   const normalizedOwner = providerNeutralCheckoutOwner(owner);
   const accountId = normalizedOwner.account_id ??
@@ -168,13 +199,22 @@ export async function createCustomerCheckout(
     consent_collection: { terms_of_service: "required" },
     ...(product.product === "zenod"
       ? {
-          allow_promotion_codes: true,
+          // Stripe takes either a prefilled code or the "Add promotion code" field, never both.
+          ...(invite.promotionCodeId
+            ? { discounts: [{ promotion_code: invite.promotionCodeId }] }
+            : { allow_promotion_codes: true }),
           payment_method_collection: "if_required",
-          custom_text: { submit: { message: ZENOD_CHECKOUT_SUBMIT_MESSAGE } },
+          custom_text: {
+            submit: {
+              message: invite.promotionCodeId ? ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE : ZENOD_CHECKOUT_SUBMIT_MESSAGE,
+            },
+          },
         }
       : {}),
     ...(config.automaticTax ? { automatic_tax: { enabled: true } } : {}),
-    success_url: `${config.domain}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${config.domain}/checkout/complete?session_id={CHECKOUT_SESSION_ID}${
+      invite.welcome ? `&welcome=1${invite.signedUp ? "&signed_up=1" : ""}` : ""
+    }`,
     cancel_url: `${config.domain}/pricing?checkout=cancelled`,
   });
   accounts.upsert(session.id, {

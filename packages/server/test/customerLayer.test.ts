@@ -784,6 +784,133 @@ describe("hosted customer layer", () => {
 
   });
 
+  describe("tester invite link (EPIC-26 T1)", () => {
+    let promoLookups: Stripe.PromotionCodeListParams[];
+
+    beforeEach(() => {
+      promoLookups = [];
+      stripe.promotionCodes = {
+        list: vi.fn(async (params: Stripe.PromotionCodeListParams) => {
+          promoLookups.push(params);
+          return { data: params.code === "TESTER1" ? [{ id: "promo_tester1" } as Stripe.PromotionCode] : [] };
+        }),
+      };
+    });
+
+    async function inviteSignIn(app: ReturnType<typeof customerApp>, returnTo: string) {
+      const start = await app.request(`/auth/github/start?return_to=${encodeURIComponent(returnTo)}`, {
+        headers: { "x-forwarded-host": "cloud.zenod.dev" },
+      });
+      expect(start.status).toBe(302);
+      const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+      const nonce = cookiePair(start.headers.get("set-cookie")!, "zenod_mcp_signin");
+      const callback = await app.request(`/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`, {
+        headers: { cookie: nonce },
+      });
+      expect(callback.status).toBe(302);
+      return { location: callback.headers.get("location")!, cookie: cookiePair(callback.headers.get("set-cookie")!, "zenod_customer_session") };
+    }
+
+    it("shows a signed-out visitor what Zenod is and sign-in that keeps the code", async () => {
+      const app = customerApp();
+      const page = await app.request("/join?code=TESTER1");
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain("You're invited to try Zenod.");
+      expect(html).toContain("A WhatsApp number for your voice notes.");
+      expect(html).toContain(`/auth/github/start?return_to=${encodeURIComponent("/join?code=TESTER1")}`);
+      expect(html).toContain("TESTER1");
+      expect(promoLookups).toEqual([]);
+      expect(createdParams).toBeNull();
+
+      const hostile = await (await app.request(`/join?code=${encodeURIComponent("<script>x</script>")}`)).text();
+      expect(hostile).not.toContain("<script>x");
+      expect(hostile).toContain("Have a code? You can add it at checkout.");
+    });
+
+    it("signs a new tester in and goes straight to checkout with the code applied", async () => {
+      const app = customerApp();
+      const { location, cookie } = await inviteSignIn(app, "/join?code=TESTER1");
+      expect(location).toBe(`${DESTINATION}/join?code=TESTER1&signed_up=1`);
+
+      const join = await app.request("/join?code=TESTER1&signed_up=1", { headers: { cookie } });
+      expect(join.status).toBe(303);
+      expect(join.headers.get("location")).toBe(session.url);
+      expect(promoLookups).toEqual([{ code: "TESTER1", active: true, limit: 1 }]);
+      expect(createdParams).toMatchObject({
+        mode: "subscription",
+        client_reference_id: NEW_GITHUB_ACCOUNT_ID,
+        discounts: [{ promotion_code: "promo_tester1" }],
+        payment_method_collection: "if_required",
+        custom_text: { submit: { message: expect.stringMatching(/already applied/) } },
+        success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}&welcome=1&signed_up=1`,
+      });
+      expect(createdParams).not.toHaveProperty("allow_promotion_codes");
+
+      const complete = await app.request(`/checkout/complete?session_id=${session.id}&welcome=1&signed_up=1`, {
+        headers: { cookie },
+      });
+      expect(complete.status).toBe(303);
+      expect(complete.headers.get("location")).toBe(`${DESTINATION}/welcome?signed_up=1`);
+      const welcome = await app.request("/welcome?signed_up=1", { headers: { cookie } });
+      const html = await welcome.text();
+      expect(html).toContain("You're in.");
+      expect(html).toContain('href="/app#vault"');
+      expect(html).toContain('href="/app#settings/channels"');
+      expect(html).toContain("signup.alpha9.io");
+
+      const again = await app.request("/join?code=TESTER1", { headers: { cookie } });
+      expect(again.status).toBe(303);
+      expect(again.headers.get("location")).toBe(`${DESTINATION}/app`);
+    });
+
+    it("keeps the code field open when the code is unknown or Stripe will not apply it", async () => {
+      const app = customerApp();
+      const { cookie } = await inviteSignIn(app, "/join?code=EXPIRED9");
+      const unknown = await app.request("/join?code=EXPIRED9", { headers: { cookie } });
+      expect(unknown.status).toBe(303);
+      expect(createdParams).toMatchObject({ allow_promotion_codes: true });
+      expect(createdParams).not.toHaveProperty("discounts");
+      expect(createdParams?.success_url).toBe(`${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}&welcome=1`);
+
+      const create = stripe.checkout.sessions.create as ReturnType<typeof vi.fn>;
+      create.mockImplementationOnce(async () => {
+        throw new Error("This promotion code cannot be redeemed");
+      });
+      const refused = await app.request("/join?code=TESTER1", { headers: { cookie } });
+      expect(refused.status).toBe(303);
+      expect(createdParams).toMatchObject({ allow_promotion_codes: true });
+      expect(createdParams).not.toHaveProperty("discounts");
+    });
+
+    it("shows a plain page instead of JSON when checkout cannot open, and keeps the normal checkout unchanged", async () => {
+      env.ZENOD_ALLOW_TEST_CHECKOUT = "0";
+      const app = customerApp();
+      const { cookie } = await inviteSignIn(app, "/join?code=TESTER1");
+      const closed = await app.request("/join?code=TESTER1", { headers: { cookie } });
+      expect(closed.status).toBe(503);
+      expect(closed.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(await closed.text()).toContain("Nothing was charged.");
+
+      env.ZENOD_ALLOW_TEST_CHECKOUT = "1";
+      const buy = await app.request("/buy?tier=monthly", { headers: { cookie } });
+      expect(buy.status).toBe(303);
+      expect(createdParams).toMatchObject({
+        allow_promotion_codes: true,
+        success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
+      });
+      expect(promoLookups).toEqual([]);
+    });
+
+    it("refuses return paths that are neither a consent request nor an invite", async () => {
+      const app = customerApp();
+      const start = await app.request(`/auth/github/start?return_to=${encodeURIComponent("https://evil.test/join?code=X")}`);
+      const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+      const callback = await app.request(`/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`);
+      expect(new URL(callback.headers.get("location")!).pathname).toBe("/app");
+    });
+  });
+
   it("shows browsers a signup-paused page and keeps JSON for API clients when checkout is closed", async () => {
     env.ZENOD_ALLOW_TEST_CHECKOUT = "0";
     const app = customerApp();

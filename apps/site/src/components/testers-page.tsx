@@ -6,6 +6,9 @@
 // (Jordi's voice note, 2026-11-10): the three things a tester gets come first,
 // each with a real screen: the WhatsApp number, the word-for-word copy in their
 // own Drive or GitHub, and the linked graph any AI tool reads and writes over MCP.
+// T1 round 2: a tester's code travels in one link. zenod.dev/testers?code=… shows
+// the page with a "Start with your code" button to cloud.zenod.dev/join?code=…,
+// which signs them in and opens Stripe Checkout with the code already applied.
 import * as React from "react";
 
 import log from "@/assets/shots/log.webp";
@@ -15,7 +18,7 @@ import graphLivePhone from "@/assets/shots/graph-live-phone.webp";
 import { WhatsappScene } from "@/components/paper-landing";
 import { countSignup } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
-import { submitTesterApplication, TESTERS_QUESTION } from "@/lib/testers";
+import { inviteCodeFromSearch, joinUrl, submitTesterApplication, TESTERS_QUESTION } from "@/lib/testers";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
@@ -174,6 +177,7 @@ function Promises() {
 
 export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: React.ReactNode }) {
   React.useEffect(() => startScenes(document), []);
+  const code = inviteCodeFromSearch(typeof window === "undefined" ? undefined : window.location?.search);
   return (
     <div className="pp pp-testers">
       {nav}
@@ -185,6 +189,18 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
             testers now, and we pick the first ten by hand from what you tell
             us below. Here is what you get.
           </p>
+          {code ? (
+            <div className="pp-testers-code">
+              <p>
+                You have a tester code. It is already in this button: sign in,
+                and checkout opens with it applied. You pay €0 and no card is
+                asked for.
+              </p>
+              <a className="pp-btn pp-btn-primary" href={joinUrl(code)}>
+                Start with your code
+              </a>
+            </div>
+          ) : null}
         </section>
 
         <Promises />
@@ -215,10 +231,10 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
           <h2 id="steps-title">How it works</h2>
           <ol>
             <li>Apply below. It takes a minute.</li>
-            <li>We read every answer and write to the first ten with a personal code.</li>
+            <li>We read every answer and send the first ten a personal link with their code inside.</li>
             <li>
-              Sign in with Google or GitHub, choose Hosted and enter your code at
-              Stripe checkout. You pay €0 and no card is asked for.
+              Open the link and sign in with Google or GitHub. Checkout opens
+              with your code already applied: you pay €0 and no card is asked for.
             </li>
             <li>
               Pick Google Drive or GitHub for your memory, link your WhatsApp in

@@ -226,6 +226,19 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(testers).not.toMatch(/href="#(how|mcp|start)"/);
   });
 
+  it("carries a tester code from /testers?code= into the one-link funnel (EPIC-26 T1)", () => {
+    vi.stubGlobal("window", { location: { pathname: "/testers", search: "?code=TESTER1" } });
+    const withCode = renderToStaticMarkup(createElement(App)).replace(/\s+/g, " ");
+    expect(withCode).toContain('href="https://cloud.zenod.dev/join?code=TESTER1"');
+    expect(withCode).toContain("Start with your code");
+    vi.stubGlobal("window", { location: { pathname: "/testers", search: "?code=%3Cb%3E" } });
+    const hostile = renderToStaticMarkup(createElement(App));
+    expect(hostile).not.toContain("cloud.zenod.dev/join");
+    const plain = render("/testers").replace(/\s+/g, " ");
+    expect(plain).not.toContain("Start with your code");
+    expect(plain).toContain("a personal link with their code inside");
+  });
+
   it("fixes the walk's sign-up path defects on /pricing and /connect (ZAL-A13)", () => {
     const homeIds = [...render("/").matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]);
     for (const path of ["/pricing", "/connect"]) {
