@@ -107,6 +107,7 @@ Verified at: 2026-11-09T05:10Z (child Current States and ledgers read from main;
 | zenod-our-first-live-test-user-then-five-then-ten | child | [EPIC-23: Zenod: our first live test user, then five, then ten](zenod-our-first-live-test-user-then-five.md) | none | draft | none | fill Goal, Serves and Done means |
 | zenod-errors-now-find-fix-and-monitor-so-we-hear-first | child | [EPIC-24: Zenod errors now: find, fix, and monitor so we hear first](zenod-errors-now-find-fix-and-monitor-so.md) | none | draft | none | fill Goal, Serves and Done means |
 | landing-literals-kept-forever-a-living-graph-your-data-stays-yours | child | [EPIC-25: Landing: literals kept forever, a living graph, your data stays yours](landing-literals-kept-forever-a-living-g.md) | none | draft | none | fill Goal, Serves and Done means |
+| tester-invite-three-clear-promises-first-invite-out | child | [EPIC-26: Tester invite: three clear promises, first invite out](tester-invite-three-clear-promises-first.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
