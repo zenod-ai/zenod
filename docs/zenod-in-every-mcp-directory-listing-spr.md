@@ -34,7 +34,7 @@ Status: active
 Last attempted: 2026-11-09 roll-up from the ledger: R2 connect kit and R3 official MCP Registry done (approved by Jordi) ; R4 self-serve directories active ; R1 customer tool list, R9 GitHub and VS Code re-check (2026-12-07) and R10 findability check blocked ; R5–R8 draft ; child EPIC-11 WebMCP active, its trial token waits on the team sign-in
 Result: Zenod is in the official MCP Registry and the connect kit is live on zenod.dev/connect; Glama still hides Zenod until a signed-in account claims the listing
 Evidence: [P1 plan](epic10/P1-mcp-directory-plan.md), [server.json](epic10/server.json)
-Waiting on: EPIC-7/E7-A15 team sign-in (Glama claim E10-A4, R1 capture, EPIC-11 trial token) ; dates for R9 2026-12-07 and R10
+Waiting on: EPIC-7/E7-A18 (needs Mac agent) team sign-in (Glama claim E10-A4, R1 capture, EPIC-11 trial token) ; dates for R9 2026-12-07 and R10
 Approved work: none
 Next action: finish R4 ; claim Glama once operations@alpha9.io is signed in ; R9 re-check on 2026-12-07
 Source revision: uncommitted scaffold
