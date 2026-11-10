@@ -30,14 +30,14 @@ Goal sentence: Zenod becomes the librarian of your memory, with four clear modes
 
 Owner: L2 run_4b7a90b7-6a50-4887-9c53-d60a47f093af
 Status: active (L3 monitoring; L2 closed by Jordi 2026-11-09)
-Last attempted: 2026-11-09 L3 counted switches: 0 since the L2 roll (the L2 app did not record them); every switch is now recorded (#1568, aa46d5ee) and the tuning script is ready
-Result: the live app is the librarian of your memory: five tabs, one box, Keep, Look up, Talk it over, Job on the memory, labelled and switchable; the mode is right on 71 of 72 of his real messages; memory numbers held
+Last attempted: 2026-11-10 roll-up: L1 and L2 done (the librarian app live: five tabs, one box, four labelled modes, closed by Jordi) ; L3 mode-pick tuning waits for his mode switches (0 so far, recheck 2026-11-12) ; E22-S1 memory canvas and bundle: not built (Jordi, E22-A3) ; E22-S2 research done: Zenod already is markdown files that name their parent and rebuild their index; E22-A5 answered, engine frozen until 2026-11-24 ; E22-S3 looks again on 2026-11-24
+Result: the librarian app is live; the engine is frozen for stability until 24 Nov, with only fixes for breakage or wrong answers
 Evidence: [E22-L2 live](evidence/e22-l2-live-2026-11-09.md) · http://vps3.taild81fbb.ts.net:8921/e22-l2-live/ · [mockup round 2](evidence/e22-l2-2026-11-09.md)
-Waiting on: nobody; L3 waits for 15 switches in the app
+Waiting on: his mode switches (L3) ; the date 2026-11-24 (E22-S3)
 Approved work: E22-A2 (build it as in mockup round 2)
-Next action: L3 next check 2026-11-12T21:00Z: count switches; tune at 15 or more
+Next action: L3 recheck on 2026-11-12; E22-S3 on 2026-11-24
 Source revision: aa46d5ee (production, /api/health 2026-11-09T21:52Z)
-Verified at: 2026-11-09T21:52Z
+Verified at: 2026-11-10T22:30Z
 Monitoring: engine freeze since 2026-11-10 until 2026-11-24 · next check 2026-11-24 (E22-S3)
 
 ## Waiting on
