@@ -84,16 +84,22 @@ export function parseClarifications(reply: Record<string, unknown> | null, memor
   return out;
 }
 
+/** What the memory was, in the card's words: "voice note" for a voice note, else "note". */
+export function memoryKind(title: string): string {
+  return /^(Voice note|Audio|Image|Screenshot|PDF|Document|Link)$/.test(title) ? title.toLowerCase().replace(/^pdf$/, "PDF") : "note";
+}
+
 /**
  * The card it posts, in one place (S36 is rewriting every helper card in plain words; this is the
- * only spot to change). The title carries the memory and its day, because the answer is filed with
- * the title as its first line: "Voice note of 10 Nov: by "the flat", which one did you mean?".
+ * only spot to change). The title carries the memory, its day and the words, because the answer is
+ * filed with the title as its first line: 'In your voice note of 10 Nov you said "the flat": which
+ * flat did you mean?'.
  */
-export function clarifierCard(c: Clarification, memory: string, capturedAt: string): { title: string; body: string; options: InboxOption[] } {
-  const said = `${memory} of ${shortDay(capturedAt)}`;
+export function clarifierCard(c: Clarification, kind: string, capturedAt: string): { title: string; body: string; options: InboxOption[] } {
+  const said = `In your ${kind} of ${shortDay(capturedAt)}`;
   return {
-    title: `${said}: ${c.question}`,
-    body: [c.quote ? `You said: "${c.quote}".` : "", c.why, "Pick one, or answer in your own words. Your answer is saved to your memory like a note."].filter(Boolean).join(" "),
+    title: c.quote ? `${said} you said "${c.quote}": ${c.question}` : `${said}: ${c.question}`,
+    body: [c.why, "Pick one, or answer in your own words."].filter(Boolean).join(" "),
     options: c.options.map((label, index) => ({ id: `m${index + 1}`, label })),
   };
 }
@@ -120,7 +126,7 @@ function prompt(w: ClarifierWords, entries: MemoryEntry[], places: string[], ear
     ...(places.length ? ["", "The places in their memory:", ...places] : []),
     ...(earlier.length ? ["", "You asked these before. Never ask them again:", ...earlier.map((q) => `- ${q.title.slice(0, 200)}${q.answer ? ` (answer: ${q.answer.slice(0, 100)})` : ""}`)] : []),
     "",
-    `Reply with JSON only: {"questions": [{"source": number of the memory, "quote": "the confusing words exactly as said, at most 12 words", "question": "one short question in plain words, naming the confusing words", "options": ["2 or 3 short possible meanings, each from their memories or places"], "why": "one sentence: why it could mean either"}]} with at most ${CLARIFIER_MAX_QUESTIONS} questions, the most confusing first, or {"questions": []} when nothing is confusing.`,
+    `Reply with JSON only: {"questions": [{"source": number of the memory, "quote": "the confusing words exactly as said, at most 12 words", "question": "one short question in plain words, like: which flat did you mean?", "options": ["2 or 3 short possible meanings, each from their memories or places"], "why": "one sentence: why it could mean either"}]} with at most ${CLARIFIER_MAX_QUESTIONS} questions, the most confusing first, or {"questions": []} when nothing is confusing.`,
   ].join("\n");
 }
 
@@ -133,7 +139,7 @@ export function createClarifier(w: ClarifierWords): PersonaDefinition {
   schedule: { every: "night" },
   skills: ["read", "write-own-folder", "ask"],
   defaultEnabled: false,
-  limits: { maxSteps: 7, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
+  limits: { maxSteps: 8, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
 
   async fingerprint(ctx) {
     const entries = await ctx.recentMemories({ days: CLARIFIER_DAYS, limit: CLARIFIER_MAX_MEMORIES });
@@ -154,8 +160,8 @@ export function createClarifier(w: ClarifierWords): PersonaDefinition {
       if (posted.length >= room) break;
       const entry = entries[c.source - 1]!;
       if (posted.some((p) => p.entry.evidenceRef === entry.evidenceRef)) continue;
-      const card = clarifierCard(c, w.memoryTitle(entry), entry.capturedAt);
-      const links: InboxLink[] = [{ label: `${w.memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}`, path: entry.path }];
+      const card = clarifierCard(c, memoryKind(w.memoryTitle(entry)), entry.capturedAt);
+      const links: InboxLink[] = [{ label: `Your ${memoryKind(w.memoryTitle(entry))} of ${shortDay(entry.capturedAt)}`, path: entry.path }];
       ctx.postQuestion({ ...card, links, about: entry.evidenceRef });
       posted.push({ c, entry });
     }

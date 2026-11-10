@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { MemoryEntry, MemoryTreeOutline } from "zenod";
-import { CLARIFIER_ID, clarifierCard, parseClarifications, switchOnClarifierForOwner } from "../src/clarifier.js";
+import { CLARIFIER_ID, clarifierCard, memoryKind, parseClarifications, switchOnClarifierForOwner } from "../src/clarifier.js";
 import { SqliteCredentialVault } from "../src/credentialVault.js";
 import { InboxStore, inboxAnswerContent } from "../src/inboxStore.js";
 import { CLARIFIER } from "../src/personaCatalog.js";
@@ -94,15 +94,16 @@ describe("Clarifier (EPIC-14 S37)", () => {
     const items = inbox.list().filter((item) => item.kind === "question");
     expect(items).toHaveLength(2);
     const flat = items.find((item) => item.title.includes("the flat"))!;
-    expect(flat).toMatchObject({ from: "Clarifier", status: "open", title: "Note 1 of 10 Nov: by \"the flat\", which one did you mean?" });
+    expect(flat).toMatchObject({ from: "Clarifier", status: "open", title: "In your note of 10 Nov you said \"the flat\": by \"the flat\", which one did you mean?" });
     expect(flat.options.map((o) => o.label)).toEqual(["Valencia flat", "Barcelona flat"]);
-    expect(flat.body).toContain("You said: \"the flat\".");
+    expect(flat.body).toBe("You have two flats in your memory. Pick one, or answer in your own words.");
+    expect(flat.links[0]).toEqual({ label: "Your note of 10 Nov", path: "Log/2026-11-10.md" });
     const ana = items.find((item) => item.title.includes("Ana"))!;
     // A repeated meaning is dropped; one with a single meaning is no question.
     expect(ana.options.map((o) => o.label)).toEqual(["Ana the neighbour", "Ana from work"]);
     expect(written[0]!.files[0]!.content).toContain("Asked about");
     // The answer is filed with the question first, so the memory knows what it answers.
-    expect(inboxAnswerContent(flat, "Valencia flat")).toMatch(/^Note 1 of 10 Nov: by "the flat", which one did you mean\?\n\nMy answer: Valencia flat/);
+    expect(inboxAnswerContent(flat, "Valencia flat")).toMatch(/^In your note of 10 Nov you said "the flat": by "the flat", which one did you mean\?\n\nMy answer: Valencia flat/);
   });
 
   it("never asks about the same memory twice and stays quiet while two questions wait", async () => {
@@ -143,7 +144,8 @@ describe("Clarifier (EPIC-14 S37)", () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.options).toEqual(["Marta", "Marta B", "Marta C"]);
     expect(parseClarifications(null, 2)).toEqual([]);
-    expect(clarifierCard(found[0]!, "Voice note", "2026-11-03T10:00:00Z").title).toBe("Voice note of 3 Nov: which Marta?");
+    expect(clarifierCard(found[0]!, memoryKind("Voice note"), "2026-11-03T10:00:00Z").title).toBe("In your voice note of 3 Nov: which Marta?");
+    expect(memoryKind("Lunch with Ana about the garden")).toBe("note");
   });
 
   it("is switched on once for the account that owns the team, never for a tester, and the person's choice stands", () => {
