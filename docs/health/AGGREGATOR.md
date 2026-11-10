@@ -77,6 +77,28 @@ with reason `drill_staged`, the row turns red with `[drill: staged fault]`, the 
 clears and sends one RECOVERED 15 min later. Tests: `AlertRows` in `test_aggregate.py`, `Folds` in `test_probe.py`,
 `packages/server/test/opsAlerts.test.ts`, `apps/web/src/lib/client-errors.test.ts`.
 
+## E26-S8: row 19, AI credit (DeepSeek and OpenRouter)
+
+Background work (filing, desk, helpers) runs on DeepSeek's prepaid balance; chat and voice run on OpenRouter. When
+either runs dry, capture stops for every user, so row 19 turns red **days before**, not only at a fixed line:
+
+| Provider | Balance | Daily spend |
+|---|---|---|
+| DeepSeek | `background.balanceUsd` on cloud.zenod.dev/api/health (read every 15 min) | the drops between the balance samples this page keeps (one per 30 min, 8 days, in the history file), over the last 3 days; a top-up is a rise and is not spend; unknown until 6 h of samples |
+| OpenRouter | `credit.openrouter.remainingUsd` (the platform key's limit left, from `GET /api/v1/key` with the key itself) | the same samples, else the key's `usage_weekly` / 7 |
+
+Red when either has **5 days or less** left at that spend, $2 or less, is out of credit, or refused a call for credit
+(a `402` / "insufficient balance" line for openrouter or deepseek in the zenod-mt or phylax log) in the last 6 h; amber
+at 10 days or $5. The text says who tops up and where: *Jordi tops up at https://platform.deepseek.com/top_up*,
+*Jordi adds credit at https://openrouter.ai/settings/credits or raises the key limit at
+https://openrouter.ai/settings/keys*. The account-wide OpenRouter balance needs a management key, which deliberately
+stays off the servers; a key with no limit reads `unlimited` and then only the 402 rule applies. Red goes to the HQ
+thread through the S5 sender like any row (key `row-19`).
+
+**Drill:** `python3 probe.py --drill credit` stages one `credit` event on VPS1; for the next 15 min the row shows
+DeepSeek at $1.00 with `[drill: staged low balance]`, alerts once, then sends one RECOVERED. The staged balance is
+never sampled, so it does not bend the daily spend. Tests: `Credit` in `test_aggregate.py`.
+
 ## Document (`schema: zenod-health/v1`)
 
 | Field | Meaning |
@@ -90,7 +112,7 @@ clears and sends one RECOVERED 15 min later. Tests: `AlertRows` in `test_aggrega
 
 Component ids: `site`, `cloud`, `database`, `phylax`, `agent_runner`, `memory_index`, `deploy`, `watchdog`,
 `readiness`, `tester_watch`, `ingress`, `host`, and the EPIC-24 M2 alert rows `alert_saves`, `alert_replies`,
-`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`.
+`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`, and `credit` (row 19).
 
 **Last errors survive redeploys.** Docker stdout resets when a container is redeployed, so `last_error`,
 `errors` and `last_activity` come from a history file on VPS3 (`~/.local/state/zenod-health/history.json`,

@@ -502,7 +502,141 @@ def components(d: dict) -> list[dict]:
               "VPS1 · zenod-mt: helpers (scheduled and run now)",
               "zenod-mt container log ([ops-alert] helper)",
               "packages/server/test/opsAlerts.test.ts; test_aggregate.py AlertRows")
+
+    # 19 E26-S8: AI credit. Background work runs on DeepSeek's prepaid balance, chat and voice on OpenRouter; when
+    # either runs dry, capture stops for every user. Red days before that (days left at the current daily spend,
+    # from remember_credit()), not only at a fixed line, and the text names who tops up and where.
+    cr = d["credit"] if "credit" in d else remember_credit(d, {}, ref)["credit"]
+    parts, worst, values = [], "green", {}
+    rank = {"green": 0, "amber": 1, "red": 2}
+    for prov in ("deepseek", "openrouter"):
+        x = cr.get(prov) or {}
+        col_, text = credit_status(prov, x)
+        values[prov] = {k: x.get(k) for k in ("state", "balanceUsd", "perDayUsd", "daysLeft", "refusals")}
+        parts.append(text)
+        if rank[col_] > rank[worst]:
+            worst = col_
+    drill = any(x.get("drill") for x in cr.values())
+    reds = [t for prov, t in zip(("deepseek", "openrouter"), parts)
+            if credit_status(prov, cr.get(prov) or {})[0] != "green"]
+    prob = None
+    if worst != "green":
+        prob = "; ".join(reds) + (" [drill: staged low balance]" if drill else "")
+    row(id="credit", n="19", name="AI credit: DeepSeek and OpenRouter", remote=False,
+        where="DeepSeek prepaid balance (background work) and the platform OpenRouter key (chat, voice), read by "
+              "cloud.zenod.dev/api/health",
+        status=worst, problem=prob,
+        signal="; ".join(parts),
+        signal_value=values,
+        activity=f"balances read {ago((cr.get('deepseek') or {}).get('checkedAt'), ref)}",
+        activity_at=None,
+        error=prob or "none",
+        source="GET /api/health (background, credit.openrouter) from VPS3; credit refusals (402) in the zenod-mt "
+               "and phylax container logs; daily spend from the balance samples this page keeps",
+        tests="test_aggregate.py Credit; packages/server/test/backgroundRoute.test.ts")
     return R
+
+
+CREDIT_RED_DAYS, CREDIT_AMBER_DAYS = 5, 10      # E26-S8: days left at the current daily spend
+CREDIT_RED_USD, CREDIT_AMBER_USD = 2.0, 5.0     # and a floor for when the spend is not known yet
+CREDIT_SPEND_DAYS = 3                           # the daily spend is the drop over the last 3 days
+CREDIT_MIN_HOURS = 6                            # with fewer hours of samples the spend is not known yet
+CREDIT_KEEP_DAYS = 8
+CREDIT_REFUSAL_HOURS = 6
+TOP_UP = {
+    "deepseek": ("DeepSeek", "Jordi tops up at https://platform.deepseek.com/top_up"),
+    "openrouter": ("OpenRouter", "Jordi adds credit at https://openrouter.ai/settings/credits or raises "
+                                 "the key limit at https://openrouter.ai/settings/keys"),
+}
+
+
+def credit_status(prov: str, x: dict) -> tuple[str, str]:
+    """(colour, one line) for one provider's credit summary from remember_credit()."""
+    name, who = TOP_UP[prov]
+    bal, per, days = x.get("balanceUsd"), x.get("perDayUsd"), x.get("daysLeft")
+    state = x.get("state")
+    if x.get("refusals"):
+        return "red", f"{name} refused {x['refusals']} calls for credit in the last {CREDIT_REFUSAL_HOURS} h. {who}"
+    if state in (None, "off"):
+        return "amber", f"{name}: not reported by cloud.zenod.dev/api/health (see row 2)"
+    if state == "empty" or (bal is not None and bal <= 0):
+        return "red", f"{name} is out of credit (${bal if bal is not None else 0:.2f}). {who}"
+    if state == "unlimited":
+        return "green", (f"{name}: the platform key has no limit; spent ${per:.2f} a day" if per is not None else
+                         f"{name}: the platform key has no limit") + "; a credit refusal turns this row red"
+    if bal is None:
+        return "amber", f"{name}: balance could not be read"
+    spend = f"about {days:.1f} days left at ${per:.2f} a day" if days is not None else (
+        "no spend in the last days" if per == 0 else "daily spend not known yet")
+    line = f"{name}: ${bal:.2f} left, {spend}"
+    if (days is not None and days <= CREDIT_RED_DAYS) or bal <= CREDIT_RED_USD:
+        return "red", f"{line}. {who}"
+    if (days is not None and days <= CREDIT_AMBER_DAYS) or bal <= CREDIT_AMBER_USD:
+        return "amber", f"{line}. {who}"
+    return "green", line
+
+
+def spend_per_day(samples: list, ref: dt.datetime) -> float | None:
+    """USD spent a day from [iso, balance] samples, oldest first: the drops over the last CREDIT_SPEND_DAYS
+    (a top-up is a rise and is not spend) over the hours covered. None with under CREDIT_MIN_HOURS of samples."""
+    pts = [(parse_ts(t), b) for t, b in samples if parse_ts(t) and isinstance(b, (int, float))
+           and (ref - parse_ts(t)).total_seconds() <= CREDIT_SPEND_DAYS * 86400]
+    if len(pts) < 2:
+        return None
+    hours = (pts[-1][0] - pts[0][0]).total_seconds() / 3600
+    if hours < CREDIT_MIN_HOURS:
+        return None
+    drop = sum(max(a[1] - b[1], 0) for a, b in zip(pts, pts[1:]))
+    return round(drop / hours * 24, 4)
+
+
+def remember_credit(raw: dict, st: dict, ref: dt.datetime) -> dict:
+    """E26-S8: keep one balance sample per provider per 30 min in the state (8 days) and put a credit summary
+    in raw["credit"]: state, balanceUsd, perDayUsd, daysLeft, refusals (402s in the logs), drill. A staged
+    `credit` drill (probe.py --drill credit) shows DeepSeek at $1.00 for ALERT_MIN minutes and is never sampled.
+    Mutates `st` (the caller's copy), returns a new raw."""
+    j = ((raw.get("cloud") or {}).get("json") or {})
+    bg = j.get("background") or {}
+    orx = ((j.get("credit") or {}).get("openrouter")) or {}
+    keep = st.setdefault("credit", {})
+    v = raw.get("vps1") or {}
+    ops = ((v.get("zenod_log") or {}).get("ops") or []) + ((v.get("phylax_log") or {}).get("ops") or [])
+    refusals = recent_ops(ops, ("credit",), ref, minutes=CREDIT_REFUSAL_HOURS * 60)
+    out = {}
+    for prov, state, bal, at in (("deepseek", bg.get("state"), bg.get("balanceUsd"), bg.get("checkedAt")),
+                                 ("openrouter", orx.get("state"), orx.get("remainingUsd"), orx.get("checkedAt"))):
+        samples = [x for x in keep.get(prov) or [] if parse_ts(x[0]) and
+                   (ref - parse_ts(x[0])).total_seconds() <= CREDIT_KEEP_DAYS * 86400]
+        if isinstance(bal, (int, float)) and state not in ("unknown", "off", "unlimited"):
+            last = parse_ts(samples[-1][0]) if samples else None
+            if not last or (ref - last).total_seconds() >= 1800:
+                samples.append([iso(ref), bal])
+            elif samples:
+                samples[-1][1] = bal if bal < samples[-1][1] else samples[-1][1]
+        keep[prov] = samples
+        per = spend_per_day(samples, ref)
+        if prov == "openrouter" and per is None:
+            w, dly = orx.get("usageWeeklyUsd"), orx.get("usageDailyUsd")
+            per = round(w / 7, 4) if isinstance(w, (int, float)) and w > 0 else (
+                dly if isinstance(dly, (int, float)) else None)
+        x = {"state": state, "balanceUsd": bal if isinstance(bal, (int, float)) else None, "perDayUsd": per,
+             "checkedAt": at, "refusals": sum(1 for _, r in refusals if r.startswith(prov) and not r.startswith("drill_")),
+             "drill": False}
+        if prov == "deepseek" and any(r.startswith("drill_") for _, r in recent_ops(ops, ("credit",), ref)):
+            x.update(state="low", balanceUsd=1.0, drill=True)
+        last = (st.get("creditLast") or {}).get(prov)
+        if state in (None, "unknown") and last and parse_ts(last.get("checkedAt")) and \
+                (ref - parse_ts(last["checkedAt"])).total_seconds() <= 3600:
+            # one run where the cloud app did not answer (row 2 shows that): keep the last reading for an hour
+            x.update(state=last["state"], balanceUsd=last["balanceUsd"], checkedAt=last["checkedAt"])
+        elif state not in (None, "unknown"):
+            st.setdefault("creditLast", {})[prov] = {"state": state, "balanceUsd": x["balanceUsd"], "checkedAt": at}
+        b = x["balanceUsd"]
+        x["daysLeft"] = round(b / per, 1) if b is not None and per else None
+        out[prov] = x
+    new = json.loads(json.dumps(raw))
+    new["credit"] = out
+    return new
 
 
 # --------------------------------------------------------------------------------------------- S4: smoke × probe
@@ -621,6 +755,7 @@ def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
     out, new_t = [], []
     ref = parse_ts(raw["probedAt"])
     raw = remember_chat_replies(raw, st, ref)
+    raw = remember_credit(raw, st, ref)
     for c in components(raw):
         probe_status = c["status"]
         c["status"], c["problem"], smoke = merge_smoke(c["status"], c["problem"], raw.get("smoke"), c["id"], ref)

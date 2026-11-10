@@ -25,8 +25,11 @@ def raw(at=T0):
     return {
         "probedAt": at,
         "site": {"status": 200, "secs": 0.2, "title": "Zenod — memory"},
-        "cloud": {"status": 200, "secs": 0.1, "json": {"status": "ok", "sha": "abc1234def",
-                                                         "eventLoop": {"p99Ms": 20, "utilization": 0.1}}},
+        "cloud": {"status": 200, "secs": 0.1, "json": {
+            "status": "ok", "sha": "abc1234def", "eventLoop": {"p99Ms": 20, "utilization": 0.1},
+            "background": {"provider": "deepseek", "state": "ok", "balanceUsd": 40.0, "checkedAt": at},
+            "credit": {"openrouter": {"state": "ok", "limitUsd": 100, "remainingUsd": 60.0, "usageDailyUsd": 1.0,
+                                      "usageWeeklyUsd": 7.0, "checkedAt": at}}}},
         "phylax": {"status": 200, "secs": 0.1, "json": {
             "status": "ok", "sha": "1707c9f", "channels": {"whatsapp": {"state": "connected",
                                                                         "receivePath": {"status": "ready"}}},
@@ -75,7 +78,7 @@ class StatusRules(unittest.TestCase):
         s = status(raw())
         self.assertEqual(s.pop("agent_runner"), "grey")
         self.assertEqual(set(s.values()), {"green"}, s)
-        self.assertEqual(len(A.components(raw())), 18)   # 12 parts + 6 EPIC-24 M2 alert rows
+        self.assertEqual(len(A.components(raw())), 19)   # 12 parts + 6 EPIC-24 M2 alert rows + E26-S8 AI credit
 
     def test_cloud_down_is_red(self):
         d = raw(); d["cloud"] = {"status": 503, "secs": 1, "json": {}}
@@ -498,6 +501,88 @@ class AlertRows(unittest.TestCase):
             doc, st = A.aggregate(r, st)
             seen += [(t["component"], t["to"]) for t in doc["transitions"] if t["at"] == at and t["alert"]]
         self.assertEqual([x for x in seen if x[0] == "alert_saves"], [("alert_saves", "red"), ("alert_saves", "green")])
+
+
+class Credit(unittest.TestCase):
+    """E26-S8: the AI credit row goes red days before DeepSeek or OpenRouter runs out, names who tops up, and a
+    staged low balance fires once and clears."""
+
+    def run_at(self, at, ds=None, orx=None, ops=(), phylax_ops=(), state=None):
+        r = raw(at)
+        j = r["cloud"]["json"]
+        if ds is not None:
+            j["background"]["balanceUsd"] = ds
+        if orx is not None:
+            j["credit"]["openrouter"].update(orx)
+        r["vps1"]["zenod_log"]["ops"] = [list(x) for x in ops]
+        r["vps1"]["phylax_log"]["ops"] = [list(x) for x in phylax_ops]
+        doc, st = A.aggregate(r, state or {"components": {}, "transitions": [], "since": None})
+        return {c["id"]: c for c in doc["components"]}["credit"], st, doc
+
+    def feed(self, balances, step_h=1.0, start="2026-11-03T00:00:00Z"):
+        """One run per step with these DeepSeek balances; returns the last row and state."""
+        st, t = None, A.parse_ts(start)
+        for b in balances:
+            row, st, _ = self.run_at(A.iso(t), ds=b, state=st)
+            t += A.dt.timedelta(hours=step_h)
+        return row, st, t
+
+    def test_green_with_plenty_left(self):
+        row, _, _ = self.run_at(T0)
+        self.assertEqual(row["status"], "green")
+        self.assertIn("OpenRouter: $60.00 left, about 60.0 days left at $1.00 a day", row["signal"])
+        self.assertIn("DeepSeek: $40.00 left, daily spend not known yet", row["signal"])
+
+    def test_days_left_turns_it_red_above_the_fixed_line(self):
+        # $2 an hour = $48 a day; $30 left is well above $5 yet under a day of spend
+        row, _, _ = self.feed([40, 38, 36, 34, 32, 30, 28, 26])
+        self.assertEqual(row["status"], "red")
+        self.assertIn("DeepSeek: $26.00 left, about 0.5 days left at $48.00 a day", row["problem"])
+        self.assertIn("Jordi tops up at https://platform.deepseek.com/top_up", row["problem"])
+
+    def test_a_top_up_is_not_spend(self):
+        row, _, _ = self.feed([20, 19.9, 19.8, 60, 59.9, 59.8, 59.7, 59.6])
+        self.assertEqual(row["status"], "green")
+        self.assertAlmostEqual(row["signal_value"]["deepseek"]["perDayUsd"], 0.6 / 7 * 24, places=3)
+
+    def test_slow_spend_stays_green_until_the_days_run_low(self):
+        row, _, _ = self.feed([9.4, 9.39, 9.38, 9.37, 9.36, 9.35, 9.34])
+        self.assertEqual(row["status"], "green")          # $0.24 a day: about 39 days
+        row, _, _ = self.run_at(T0, ds=4.0)
+        self.assertEqual(row["status"], "amber")          # spend unknown: the $5 line still warns
+
+    def test_openrouter_key_low_on_days(self):
+        row, _, _ = self.run_at(T0, orx={"remainingUsd": 6.0, "usageWeeklyUsd": 14.0})
+        self.assertEqual(row["status"], "red")
+        self.assertIn("OpenRouter: $6.00 left, about 3.0 days left at $2.00 a day", row["problem"])
+        self.assertIn("https://openrouter.ai/settings/credits", row["problem"])
+
+    def test_a_credit_refusal_in_the_logs_is_red_even_with_an_unlimited_key(self):
+        unl = {"state": "unlimited", "limitUsd": None, "remainingUsd": None}
+        row, _, _ = self.run_at(T0, orx=unl)
+        self.assertEqual(row["status"], "green")
+        row, _, _ = self.run_at(T0, orx=unl, phylax_ops=[("2026-11-03T10:00:00Z", "credit", "openrouter_402")])
+        self.assertEqual(row["status"], "red")
+        self.assertIn("OpenRouter refused 1 calls for credit", row["problem"])
+        row, _, _ = self.run_at(T0, orx=unl, phylax_ops=[("2026-11-03T05:00:00Z", "credit", "openrouter_402")])
+        self.assertEqual(row["status"], "green")         # older than 6 h
+
+    def test_a_staged_low_balance_alerts_once_and_clears(self):
+        st = None
+        seen = []
+        for minute, ops in ((0, ()), (5, [("2026-11-03T12:04:00Z", "credit", "drill_staged")]),
+                            (10, [("2026-11-03T12:04:00Z", "credit", "drill_staged")]),
+                            (25, [("2026-11-03T12:04:00Z", "credit", "drill_staged")])):
+            at = A.iso(A.parse_ts(T0) + A.dt.timedelta(minutes=minute))
+            row, st, doc = self.run_at(at, ops=ops, state=st)
+            seen.append(row["status"])
+        self.assertEqual(seen, ["green", "red", "red", "green"])
+        alerts = [t for t in doc["transitions"] if t["component"] == "credit" and t["alert"]]
+        self.assertEqual([(t["from"], t["to"]) for t in alerts], [("green", "red"), ("red", "green")])
+        self.assertIn("[drill: staged low balance]", alerts[0]["reason"])
+        self.assertIn("DeepSeek: $1.00 left", alerts[0]["reason"])
+        self.assertIn("Jordi tops up", alerts[0]["reason"])
+        self.assertTrue(all(b != 1.0 for _, b in st["credit"]["deepseek"]))   # the staged balance is never sampled
 
 
 if __name__ == "__main__":

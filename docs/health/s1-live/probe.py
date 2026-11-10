@@ -225,6 +225,16 @@ OPS_PATTERNS = (
 )
 
 
+# E26-S8: a provider refusing a call for credit (HTTP 402, "insufficient balance"), in zenod-mt or phylax logs.
+CREDIT_RX = re.compile(r"\b(openrouter|deepseek)\b.*?(\(402\)|\b402\b|insufficient balance|requires at least \$[\d.]+ in "
+                       r"balance|credit_exhausted)", re.I)
+
+
+def credit_event(rest: str) -> tuple[str, str] | None:
+    m = CREDIT_RX.search(rest)
+    return ("credit", m.group(1).lower() + "_402") if m else None
+
+
 def ops_event(rest: str) -> tuple[str, str] | None:
     for rx, kind in OPS_PATTERNS:
         m = rx.match(rest)
@@ -247,7 +257,7 @@ def drill_events(since: dt.datetime) -> list[list[str]]:
             except ValueError:
                 continue
             t = parse_ts(j.get("at"))
-            if t and t >= since and j.get("kind") in ("save", "answer", "signin", "app", "helper", "reply"):
+            if t and t >= since and j.get("kind") in ("save", "answer", "signin", "app", "helper", "reply", "credit"):
                 out.append([iso(t), j["kind"], "drill_" + re.sub(r"[^a-z0-9_]", "", str(j.get("reason") or "staged"))[:30]])
     except OSError:
         pass
@@ -273,9 +283,9 @@ def zenod_fold(z: dict, lines: list[tuple[dt.datetime, str]]) -> None:
         m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)
         if m and (m.group(1) in CAPTURE_KINDS or (m.group(1) is None and "filing_recovery_pending" in rest)):
             z["capturesFailingSince"] = z["capturesFailingSince"] or iso(t)
-        op = ops_event(rest)
-        if op:
-            z.setdefault("ops", []).append([iso(t), op[0], op[1]])
+        for op in (ops_event(rest), credit_event(rest)):
+            if op:
+                z.setdefault("ops", []).append([iso(t), op[0], op[1]])
         m = re.match(r"\[memory-search\] tier-0 index, ([\d.]+) ms \((\d+) rows", rest)
         if m:
             z["lastIndex"] = {"at": iso(t), "ms": float(m.group(1)), "rows": int(m.group(2))}
@@ -297,6 +307,9 @@ def zenod_fold(z: dict, lines: list[tuple[dt.datetime, str]]) -> None:
 def phylax_fold(p: dict, lines: list[tuple[dt.datetime, str]]) -> None:
     for t, rest in lines:
         s = int(t.timestamp())
+        ce = credit_event(rest)
+        if ce:
+            p.setdefault("ops", []).append([iso(t), ce[0], ce[1]])
         if rest.startswith("[whatsapp][diag] markRead"):
             p["lastInbound"] = iso(t)
             p["inboundTimes"] = (p["inboundTimes"] + [iso(t)])[-200:]
@@ -442,10 +455,11 @@ def remote() -> dict:
     pc["inboundTimes"] = [x for x in pc["inboundTimes"] if parse_ts(x) >= week]
     for k in ("lastInbound", "lastReconnect", "lastError"):
         pc[k] = _within(pc[k], week)
+    pc["ops"] = [x for x in pc.get("ops") or [] if parse_ts(x[0]) >= day][-200:]
     out["phylax_log"] = {
         "lastInbound": pc["lastInbound"], "inbound24h": len(pc["inbound"]), "lastReconnect": pc["lastReconnect"],
         "reconnects24h": len(pc["reconn"]), "lastError": pc["lastError"], "errors24h": len(pc["errs"]),
-        "inboundTimes": pc["inboundTimes"]}
+        "inboundTimes": pc["inboundTimes"], "ops": pc["ops"]}
     # a failed read: this run shows what it got (as before), the next run reads the whole 7 days again
     if failed:
         cache.update(zenod=None, phylax=None, logsUntil=None)
@@ -761,7 +775,7 @@ def main() -> None:
     ap.add_argument("--from-json", help="a saved raw probe (or a v1 document's raw); no state unless --state")
     ap.add_argument("--state", help="history file (default ~/.local/state/zenod-health/history.json)")
     ap.add_argument("--no-alert", action="store_true", help="do not send red components to the HQ alert queue (S5)")
-    ap.add_argument("--drill", choices=("save", "reply", "answer", "signin", "app", "helper"),
+    ap.add_argument("--drill", choices=("save", "reply", "answer", "signin", "app", "helper", "credit"),
                     help="EPIC-24 M2: stage one fault of this kind on VPS1 (its row turns red on the next run, "
                          "alerts once, and clears 15 min later); nobody's account is touched")
     a = ap.parse_args()
