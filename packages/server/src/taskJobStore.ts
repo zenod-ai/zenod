@@ -249,6 +249,7 @@ export class TaskJobStore {
       `ALTER TABLE task_jobs ADD COLUMN owner_id TEXT`,
       `ALTER TABLE task_jobs ADD COLUMN claim_token TEXT`,
       `ALTER TABLE task_jobs ADD COLUMN lease_expires_at INTEGER`,
+      `ALTER TABLE task_jobs ADD COLUMN swept_at INTEGER`,
     ];
     for (const migration of migrations) {
       try {
@@ -470,6 +471,27 @@ export class TaskJobStore {
       lease_expires_at=NULL, updated_at=? WHERE tenant_id=? AND status='error'
       AND kind IN ('store','media_ingest','enrich_memory') AND error LIKE '%filing_recovery_pending%'`)
       .run(now, this.tenantId).changes);
+  }
+
+  /** EPIC-24 M3: the unfiled-entry sweep queued this filing job once; it does not queue it again. */
+  markSwept(id: string, now: number = Date.now()): void {
+    this.db.prepare(`UPDATE task_jobs SET swept_at=? WHERE tenant_id=? AND id=?`).run(now, this.tenantId, id);
+  }
+
+  /**
+   * EPIC-24 M3: put an ended filing job back once for the unfiled-entry sweep, marked swept, with a fresh retry
+   * budget and without the chat "filed" notification (a back-fill must not message the person per note).
+   */
+  requeueSwept(id: string, now: number = Date.now()): boolean {
+    return this.db.prepare(`UPDATE task_jobs SET status='queued', attempts=0, error=NULL, owner_id=NULL, claim_token=NULL,
+      lease_expires_at=NULL, swept_at=?, input_json=json_remove(input_json, '$.notifyCaptureCompletion'), updated_at=?
+      WHERE tenant_id=? AND id=? AND kind='enrich_memory' AND status NOT IN ('queued','running') AND swept_at IS NULL`)
+      .run(now, now, this.tenantId, id).changes === 1;
+  }
+
+  wasSwept(id: string): boolean {
+    const row = this.db.prepare(`SELECT swept_at FROM task_jobs WHERE tenant_id=? AND id=?`).get(this.tenantId, id) as { swept_at: number | null } | undefined;
+    return row?.swept_at != null;
   }
 
   nextRunningLeaseExpiry(): number | null {

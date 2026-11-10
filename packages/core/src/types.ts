@@ -523,6 +523,8 @@ export interface BrainEngine {
   recoverUnpublishedHead?(): Promise<UnpublishedHeadRecovery>;
   /** Rebuild the enrichment input of an already-committed evidence entry (fallback when its job record is gone). */
   evidenceEnrichInput?(evidenceRef: string): Promise<EnrichEvidenceInput | null>;
+  /** EPIC-24 M3: enrichment inputs for Log entries since `since` (YYYY-MM-DD) with no filed line, receipt or citing page. */
+  unfiledEvidence?(since: string): Promise<EnrichEvidenceInput[]>;
   /** Describe an image via the vision model and return a plain-text description. */
   describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
   /** Read-only agent loop: synthesized answer with citations. */

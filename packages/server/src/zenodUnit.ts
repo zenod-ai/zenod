@@ -971,6 +971,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   // runtime loads, and a restart loaded none until the tenant's next request, so a night after a
   // production roll ran nothing. Shortly after boot, load every entitled hosted tenant once.
   // ZENOD_WARM_TENANTS=0 turns it off; =1 turns it on in tests.
+  // EPIC-24 M3: ZENOD_REFILE_UNFILED_SINCE=YYYY-MM-DD files once, for the operator's account, every Log entry since
+  // that day that is filed nowhere (operator path: set it, roll, read the `[filing-sweep]` line, unset it).
+  const refileSince = refileUnfiledSinceFromEnv(env);
   if (agent.name === "zenod" && (env.ZENOD_WARM_TENANTS === "1" || (env.NODE_ENV !== "test" && env.ZENOD_WARM_TENANTS !== "0"))) {
     const warm = setTimeout(() => {
       let loaded = 0;
@@ -978,8 +981,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         account.tenant_id && (account.subscription_status === "active" || account.subscription_status === "past_due" || isOperatorTenant(account.tenant_id))
           ? [account.tenant_id] : []))) {
         try {
-          if (!runtimes.get(tenantId)) runtimes.forTenantStorage(tenantId, storage.forTenant({ id: tenantId }));
+          const runtime = runtimes.get(tenantId) ?? runtimes.forTenantStorage(tenantId, storage.forTenant({ id: tenantId }));
           loaded += 1;
+          if (refileSince && isOperatorTenant(tenantId)) scheduleRefileUnfiled(runtime.taskJobQueue, refileSince);
         } catch (error) {
           console.error("[warm] a tenant did not load:", error instanceof Error ? error.message : String(error));
         }
@@ -1528,4 +1532,23 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       if (failures.length > 0) throw new AggregateError(failures, "Unit shutdown failed");
     },
   };
+}
+
+/** EPIC-24 M3: the day the unfiled-entry sweep starts from, or null when unset or not a YYYY-MM-DD date. */
+export function refileUnfiledSinceFromEnv(env: NodeJS.ProcessEnv): string | null {
+  const value = env.ZENOD_REFILE_UNFILED_SINCE?.trim();
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    console.warn("[filing-sweep] ZENOD_REFILE_UNFILED_SINCE is not a YYYY-MM-DD date; not run");
+    return null;
+  }
+  return value;
+}
+
+/** After the start check (30 s) has recovered any interrupted filing, run the sweep once. */
+function scheduleRefileUnfiled(queue: { refileUnfiled(since: string): Promise<unknown> }, since: string, delayMs = 60_000): void {
+  const timer = setTimeout(() => {
+    queue.refileUnfiled(since).catch((error) => console.error("[filing-sweep] failed:", error instanceof Error ? error.message : String(error)));
+  }, delayMs);
+  timer.unref?.();
 }

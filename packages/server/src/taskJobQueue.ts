@@ -229,6 +229,39 @@ export class TaskJobQueue {
       });
   }
 
+  /**
+   * EPIC-24 M3: file once every Log entry since `since` (YYYY-MM-DD) that is filed nowhere (no filed line, no
+   * receipt, no citing page). Read-only on the vault: it only queues filing jobs. An entry whose filing job is
+   * queued or running is left alone; one whose last job ended without filing it is put back once (the same job,
+   * as vault recovery does); one with no job gets one keyed `enrich-sweep:<ref>`. An entry the sweep already
+   * re-queued and that finished is not tried again, so the sweep is safe to run on every start.
+   * Counts only in the log line.
+   */
+  async refileUnfiled(since: string): Promise<RefileUnfiledCounts> {
+    const counts: RefileUnfiledCounts = { found: 0, queued: 0, requeued: 0, active: 0, alreadyTried: 0 };
+    if (this.closed) return counts;
+    const engine = await this.getEngine();
+    if (!engine.unfiledEvidence || !engine.enrichEvidence) return counts;
+    const inputs = await engine.unfiledEvidence(since);
+    counts.found = inputs.length;
+    for (const input of inputs) {
+      if (this.closed) break;
+      const latest = this.store.enrichmentJobsFor(input.evidenceRef)[0] ?? null;
+      if (latest && (latest.status === "queued" || latest.status === "running")) counts.active += 1;
+      else if (latest && this.store.wasSwept(latest.id)) counts.alreadyTried += 1;
+      else if (latest) {
+        if (this.store.requeueSwept(latest.id)) counts.requeued += 1;
+      } else {
+        const job = this.store.enqueue("enrich_memory", { ...input }, `enrich-sweep:${input.evidenceRef}`);
+        this.store.markSwept(job.id);
+        counts.queued += 1;
+      }
+    }
+    console.log(`[filing-sweep] since ${since}: ${JSON.stringify(counts)}`);
+    if (counts.queued || counts.requeued) this.requestDrains();
+    return counts;
+  }
+
   private async drain(kinds: readonly TaskJobKind[]): Promise<void> {
     if (this.leaseTimer) {
       clearTimeout(this.leaseTimer);
@@ -237,7 +270,9 @@ export class TaskJobQueue {
     try {
       this.store.recoverExpiredRunning();
       let job: TaskJob | null;
-      while ((job = this.store.claimNextQueued(Date.now(), kinds))) {
+      // EPIC-24 M3: a closing process takes no new job. Shutdown hard-exits after 8.5 s, so a filing started
+      // now would be cut off half-written and block the replacement's queue (it is recovered, but not lost).
+      while (!this.closed && (job = this.store.claimNextQueued(Date.now(), kinds))) {
         const claimed = job;
         await withFeature(featureForJob(claimed.kind), () => this.process(claimed));
       }
@@ -970,6 +1005,19 @@ function mediaIngestUnavailableReceipt(input: TaskJobInput, rawArtifact: Artifac
 }
 
 /** The feature a job's model calls are counted and capped as (limits.ts). */
+export interface RefileUnfiledCounts {
+  /** Log entries filed nowhere. */
+  found: number;
+  /** New filing jobs queued for entries that had none. */
+  queued: number;
+  /** Earlier filing jobs that had ended without filing, put back once. */
+  requeued: number;
+  /** Entries whose filing job is already queued or running. */
+  active: number;
+  /** Entries the sweep already tried once. */
+  alreadyTried: number;
+}
+
 export function featureForJob(kind: TaskJobKind): UsageFeature {
   if (kind === "chat" || kind === "task") return "chat";
   if (kind === "desk_job" || kind === "work") return "desk";
