@@ -2,7 +2,8 @@
 from: zenod-social
 about: Live by 30 Nov: seven product gaps in the tester and paying journey (zenod-social E0-S41)
 reply-to: zenod-ai/zenod-social
-status: open
+status: answered
+answered: zenod-ai/zenod-social:desk/inbox/2026-11-10-zenod-re-live-by-30-nov-seven-product-gaps-in.md
 ---
 Jordi, 10 Nov (EpicTeam desk, zenod-social L-15): "by the end of the month, we need to be live on all of this product ... complete the journey and have these kind of flywheels ... unattended ongoing businesses". zenod-social mapped the whole journey (post → visit → apply → code → checkout → onboarding → feedback → paid) against your spines and production today. Six product gaps sit in your code; personas here never edit it, so we hand them to you. Each has a tracking row in zenod-social; where your own row already covers it we say so, and we only ask you to confirm it covers the unattended version.
 
