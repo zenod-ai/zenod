@@ -30,14 +30,14 @@ Goal sentence: Zenod answers questions about your memory well, tested on your ow
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: scaffolded with spine_new.py on 2026-11-08
-Result: created, not started
+Last attempted: 2026-11-10 roll-up: Q0, Q1, Q2 and Q4 done (memory test suite live, cost hygiene and faster filing live) ; S1 done ("who are you?" answered directly, relevance floor) ; S2 done (private notes marked at filing) ; Q3 live model checks built, blocked on the test key grant ; Q5 draft
+Result: his three numbers on the suite are 93.8 / 96.2 / 1.6 (ingestion, retrieval, errors) after S33 on 9 Nov; live model checks wait on one root step
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody
+Waiting on: infra-vps root install on VPS1 for the DeepSeek test key grant (E15-A7 answered; Q3, EPIC-12 S21)
 Approved work: none
-Next action: Q1 dispatched
+Next action: once the grant is applied, Q3 runs its first live check and S21 grades the answers
 Source revision: uncommitted scaffold
-Verified at: 2026-11-08
+Verified at: 2026-11-10T00:45Z
 
 ## Non-Goals
 

@@ -29,14 +29,14 @@ Goal sentence: A plan at one link for personas, an inbox and calling your memory
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: scaffolded with spine_new.py on 2026-11-08
-Result: created, not started
+Last attempted: 2026-11-10 roll-up: plan rounds done (S1..S11, S24, E14-A9 yes) ; S25 rename to helpers and S26 suggestion cards with the feedback button live 4803335, S26 closed by Jordi ; S27 helpers post suggestions active (S31 folded in) ; S28 quick index active ; S29, S30 ready after S28 and S27 ; S5 and S9 judge the helpers after their scheduled runs
+Result: helpers and one-tap suggestion cards are live in the app; the first real suggestions and the quick index are being built
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none (E14-A3 answered: calls use the team OpenAI key, capped)
+Waiting on: nobody (workers running)
 Approved work: none
-Next action: post E14-A9 (helpers, suggestion cards and the quick index, S24 plan page); S5 judges tonight's helper runs; S25–S30 drafted, start on a yes
+Next action: S27 and S28 finish, then S29 (chat reads the index) and S30 (a week on his memory)
 Source revision: uncommitted scaffold
-Verified at: 2026-11-08
+Verified at: 2026-11-10T00:45Z
 
 ## Non-Goals
 
