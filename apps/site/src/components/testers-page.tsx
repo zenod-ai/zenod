@@ -1,7 +1,7 @@
 // zenod.dev/testers (ZAL-A13): the testers program in the Paper style. Jordi,
 // 2026-11-08: open the program and the apply form now, first 10 picked by hand.
 // The offer is the one EPIC-7 runs: a personal code for a free month of Hosted
-// at €0 with no card, extended month by month, usage capped. Answers go to a
+// at €0 with no card, renewed free while you use it (EPIC-26 S5), usage capped. Answers go to a
 // private file on the server, never to a repo or a public page. EPIC-26 T1
 // (Jordi's voice note, 2026-11-10): the three things a tester gets come first,
 // each with a real screen: the WhatsApp number, the word-for-word copy in their
@@ -235,9 +235,12 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
               included. No card needed.
             </p>
             <p>
-              We extend it month by month while you test. Usage is capped each
-              month, like every Hosted account.
+              If you used Zenod in the last two weeks, the next month is free
+              too, by itself. If not, the free month just ends: nothing is
+              charged, your notes stay in your own Drive or GitHub, and you can
+              come back or keep going for €9 a month.
             </p>
+            <p>Usage is capped each month, like every Hosted account.</p>
           </div>
         </section>
 
