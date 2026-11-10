@@ -42,7 +42,15 @@ const MAX_NORMALIZED_CHARS = 8_000_000;
 const MAX_CACHED_TEXT_CHARS = 2_000;
 const normalizedTexts = new Map<string, string>();
 let normalizedChars = 0;
-function normalizedText(text: string): string {
+/**
+ * E24-M3 round 2: a line cut from a file read or from ripgrep's output is a slice that keeps the whole
+ * parent string alive (up to megabytes). Cached as is, every remembered line pinned its parent, so the
+ * memory grew 8 to 14 MB with every filing until Zenod ran out of heap. Cache flat copies only.
+ */
+function ownCopy(text: string): string {
+  return Buffer.from(text, "utf8").toString("utf8");
+}
+export function normalizedText(text: string): string {
   let value = normalizedTexts.get(text);
   if (value === undefined) {
     value = normalizePhrase(text);
@@ -51,7 +59,8 @@ function normalizedText(text: string): string {
       normalizedTexts.clear();
       normalizedChars = 0;
     }
-    normalizedTexts.set(text, value);
+    value = ownCopy(value);
+    normalizedTexts.set(ownCopy(text), value);
     normalizedChars += text.length + value.length;
   }
   return value;
