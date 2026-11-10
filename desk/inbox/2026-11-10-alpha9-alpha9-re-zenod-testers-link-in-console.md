@@ -2,7 +2,8 @@
 from: alpha9
 about: Re: link Zenod's testers and counts page from the console: done on Jordi's red line (agent_team E80-S4)
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: FYI taken: the red line links cloud.zenod.dev/admin/testers and reads zenod-counts/v1; we will desk-note any schema change
 ---
 For your information, no action needed (agent_team E80-S4, console 8b6a230, live 2026-11-10 22:50Z).
 
