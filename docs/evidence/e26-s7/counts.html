@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod in numbers</title>
+<style>
+:root{--paper:#f6f1e7;--ink:#1d1b17;--soft:#6b655a;--line:#ddd4c3;--green:#1f5c3d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 "Instrument Sans",-apple-system,"Segoe UI",sans-serif}
+main{max-width:980px;margin:0 auto;padding:56px 32px 48px}
+.mark{font:600 15px/1 "Newsreader",Georgia,serif;letter-spacing:.02em;color:var(--green)}
+h1{font:500 44px/1.1 "Newsreader",Georgia,serif;margin:18px 0 10px}
+p.lede{margin:0 0 36px;color:var(--soft);max-width:640px}
+.row{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--ink);border-bottom:1px solid var(--line)}
+.cell{padding:22px 16px 20px;border-right:1px solid var(--line)}
+.cell:last-child{border-right:0}
+.n{font:500 54px/1 "Newsreader",Georgia,serif}
+.cell.focus .n{color:var(--green)}
+.k{margin-top:10px;font-weight:600}
+.d{margin-top:4px;font-size:13px;color:var(--soft)}
+h2{font:500 22px/1.2 "Newsreader",Georgia,serif;margin:40px 0 10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:right;padding:6px 10px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--soft)}
+footer{margin-top:32px;font-size:13px;color:var(--soft)}
+a{color:var(--green)}
+</style>
+</head>
+<body>
+<main>
+<div class="mark">Z · Zenod</div>
+<h1>Zenod in numbers, counted every day</h1>
+<p class="lede">Read live from <a href="https://cloud.zenod.dev/api/public/counts">cloud.zenod.dev/api/public/counts</a>. Counts only: no names, no emails. Anyone can read it, so the team's pages fill by themselves.</p>
+<div class="row" id="row"></div>
+<h2>Day by day</h2>
+<table id="days"><thead><tr><th>Day</th><th>Applied</th><th>Accepted</th><th>Signed up</th><th>Active testers</th><th>Paying</th></tr></thead><tbody></tbody></table>
+<footer id="foot">Reading…</footer>
+</main>
+<script>
+const KEYS = [["applications","Applied"],["accepted","Accepted"],["signed_up","Signed up"],["active_testers","Active testers"],["paying_customers","Paying"]];
+fetch("https://cloud.zenod.dev/api/public/counts").then(r => r.json()).then(d => {
+  document.getElementById("row").innerHTML = KEYS.map(([k, label], i) =>
+    `<div class="cell${i === 4 ? " focus" : ""}"><div class="n">${d[k]}</div><div class="k">${label}</div><div class="d">${d.definitions[k]}</div></div>`).join("");
+  document.querySelector("#days tbody").innerHTML = d.history.slice().reverse().map(h =>
+    `<tr><td>${h.date}</td>${KEYS.map(([k]) => `<td>${h[k]}</td>`).join("")}</tr>`).join("");
+  document.getElementById("foot").textContent = `Counted ${d.at.replace("T", " ").slice(0, 16)} UTC. A new line each day; the server counts once an hour.`;
+}).catch(() => { document.getElementById("foot").textContent = "The counts could not be read just now."; });
+</script>
+</body>
+</html>
