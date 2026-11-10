@@ -82,7 +82,7 @@ Steps: each is independently testable and closes only with evidence.
 | S28 | Ticket worker | run_35785b6c-3fb4-437c-b547-176b8543e7a4 — claimed 2026-11-09T23:03Z, lease until 2026-11-10T01:03Z | Quick index: places with one-line summary, nicknames, counts, last touched and a "this week" list, updated after each filing and nightly on DeepSeek, shown in Memory › At a glance, cost logged (2 d) | active | E14-A9 yes | none | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-s24/) | 2026-11-09 | dispatched 2026-11-09 |
 | S29 | Ticket worker | unassigned | Chat reads the quick index: Look up, Talk it over, calls and MCP answers resolve "the flat" first, with a correctable "Read as" line; measured on 20 vague questions plus the 72-message set; WhatsApp and Telegram replies unchanged (root L-6) (1.5 d) | ready | S28 | none | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-s24/) | 2026-11-09 | after S28 |
 | S30 | Ticket worker | unassigned | A week of helpers and the index on Jordi's memory: which helper earned its place, with examples (replaces the S5/S9 judgement) (1 d, then a week) | ready | S27, S29 | none | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-s24/) | 2026-11-09 | after S27 and S29 |
-| S31 | Ticket worker | unassigned | helpers post real suggestions, at most one a run: follow-up of S26 | ready | S26 | none | main | Jordi started it when closing S26 2026-11-10 | 2026-11-10 | worker |
+| S31 | Ticket worker | unassigned | helpers post real suggestions, at most one a run: follow-up of S26 | done (no confirm: same work as S27, which builds it) | S26 | none | main | Jordi started it when closing S26 2026-11-10 | 2026-11-10 | covered by S27 |
 
 ## Decisions
 
