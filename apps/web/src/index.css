@@ -480,7 +480,7 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
 .zp .zp-readas-btn { all: unset; cursor: pointer; color: var(--zp-faint); border-bottom: 1px dotted var(--zp-line); }
 .zp .zp-readas-btn:hover, .zp .zp-readas-btn:focus-visible { color: var(--zp-muted); border-bottom-color: var(--zp-muted); }
 .zp-readas-btn b { color: var(--zp-muted); font-weight: 600; }
-.zp-readas-menu { width: min(20rem, 86vw); }
+.zp-readas-menu { width: min(20rem, 86vw); color: var(--zp-ink); line-height: 1.35; }
 .zp .zp-readas-find { margin: 0.2rem 0.4rem 0.35rem; padding: 0.35rem 0.5rem; border: 1px solid var(--zp-line); border-radius: 6px; background: var(--zp-bg); color: inherit; font: inherit; font-size: 0.85rem; }
 .zp-readas-note { font-size: 0.78rem; color: var(--zp-faint); padding: 0.3rem 0.55rem; }
 .zp-readas-saved { color: var(--zp-accent); }
