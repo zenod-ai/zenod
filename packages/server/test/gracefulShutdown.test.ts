@@ -3,6 +3,7 @@ import {
   createGracefulShutdown,
   SHUTDOWN_FORCE_CLOSE_MS,
   SHUTDOWN_HARD_EXIT_MS,
+  shutdownTimings,
   type ShutdownProcess,
   type ShutdownServer,
 } from "../src/gracefulShutdown.js";
@@ -118,5 +119,45 @@ describe("createGracefulShutdown", () => {
     await vi.advanceTimersByTimeAsync(SHUTDOWN_HARD_EXIT_MS);
     expect(server.closeAllConnections).not.toHaveBeenCalled();
     expect(proc.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("closes stores only after the requests in flight are answered", async () => {
+    const server = fakeServer(3_000);
+    const proc = fakeProcess();
+    const closeResources = vi.fn(async () => {});
+    const shutdown = createGracefulShutdown({ server, closeResources, proc, log: vi.fn() });
+
+    shutdown();
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(closeResources).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(closeResources).toHaveBeenCalledTimes(1);
+    expect(proc.exitCode).toBeUndefined();
+  });
+
+  it("a long stop grace (EPIC-24 M6) lets a 30 s answer finish, then closes and never forces", async () => {
+    const timings = shutdownTimings({ ZENOD_STOP_GRACE_MS: "60000" });
+    expect(timings).toEqual({ forceCloseMs: 57_000, hardExitMs: 58_500 });
+    const server = fakeServer(30_000);
+    const proc = fakeProcess();
+    const closeResources = vi.fn(async () => {});
+    const shutdown = createGracefulShutdown({ server, closeResources, proc, log: vi.fn(), ...timings });
+
+    shutdown();
+    await vi.advanceTimersByTimeAsync(SHUTDOWN_HARD_EXIT_MS);
+    expect(server.closeAllConnections).not.toHaveBeenCalled();
+    expect(proc.exit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_000 - SHUTDOWN_HARD_EXIT_MS);
+    expect(closeResources).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(timings.hardExitMs);
+    expect(server.closeAllConnections).not.toHaveBeenCalled();
+    expect(proc.exitCode).toBeUndefined();
+  });
+
+  it("unset, invalid or short stop graces keep the 10 s defaults", () => {
+    const defaults = { forceCloseMs: SHUTDOWN_FORCE_CLOSE_MS, hardExitMs: SHUTDOWN_HARD_EXIT_MS };
+    expect(shutdownTimings({})).toEqual(defaults);
+    expect(shutdownTimings({ ZENOD_STOP_GRACE_MS: "abc" })).toEqual(defaults);
+    expect(shutdownTimings({ ZENOD_STOP_GRACE_MS: "5000" })).toEqual(defaults);
   });
 });
