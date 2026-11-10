@@ -1171,7 +1171,10 @@ export class Runtime {
       askModel: route.model,
       chatModel: route.model,
       classifyModel: route.model,
-      ...(organizerReasoningEffort ? { organizerReasoningEffort } : {}),
+      // DeepSeek thinks unless told not to, and the thinking shares the output allowance: unset, filing ran
+      // out at 8192 tokens after about a minute and fell back on half its calls (E24-M1, production
+      // 2026-11-10). Unset means no thinking here, as personas already send; "low" still asks for it.
+      organizerReasoningEffort: organizerReasoningEffort ?? "none",
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
       user: this.tenantId,
       ...(this.settings.platformLlmActive()

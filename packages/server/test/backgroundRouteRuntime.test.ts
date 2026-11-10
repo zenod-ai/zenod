@@ -83,3 +83,22 @@ it("a persona job set to openrouter stays there while the key exists", async () 
   expect(result.text).toBe("from openrouter");
   expect(hosts).toEqual(["openrouter.ai"]);
 });
+
+it("filing on DeepSeek turns thinking off when the tenant set no effort, so it is not cut off at the output cap (E24-M1)", async () => {
+  // Production 2026-11-10: thinking used all 8192 output tokens of a classify and the filing fell back.
+  const bodies: Array<Record<string, unknown>> = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    bodies.push(body);
+    const content = JSON.stringify({ topics: [], disposition: "evidence_only", confidence: 0.9, summary: "s", tags: [], pages: [], passageReviews: [] });
+    return new Response(JSON.stringify({ id: "offline", object: "chat.completion", created: 0, model: body.model, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }), { headers: { "content-type": "application/json" } });
+  }));
+  const rt = runtime({ DEEPSEEK_API_KEY: "offline-deepseek" });
+  const background = (rt as unknown as { backgroundLlm: (effort?: "none" | "low") => { classify: (input: unknown) => Promise<unknown> } }).backgroundLlm(undefined);
+  await background.classify({ content: "Synthetic proposition.", context: "", pageIndex: [], hints: [], tagVocabulary: [] }).catch(() => {});
+  expect(bodies[0]?.thinking).toEqual({ type: "disabled" });
+  bodies.length = 0;
+  const low = (rt as unknown as { backgroundLlm: (effort?: "none" | "low") => { classify: (input: unknown) => Promise<unknown> } }).backgroundLlm("low");
+  await low.classify({ content: "Synthetic proposition.", context: "", pageIndex: [], hints: [], tagVocabulary: [] }).catch(() => {});
+  expect(bodies[0]).not.toHaveProperty("thinking");
+});

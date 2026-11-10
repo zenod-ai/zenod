@@ -1300,7 +1300,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const common = {
       ideaIds:z.array(z.string()).min(1).max(24),
       sourceIds:z.array(contextIds.length?z.enum(contextIds as [string,...string[]]):z.string()).min(1).max(8), sourceQuote:z.string().min(1).max(1600),
-      factKey:z.string().max(160).nullable(), reason:z.string().max(240).nullable(),
+      factKey:z.string().max(160).nullable(),
+      // A note for the log only, never stored: an over-long one is clipped below, not a rejected batch (E24-M1).
+      reason:z.string().max(2000).nullable().describe("One short sentence, at most 240 characters."),
     };
     const candidateIds=[...new Set((input.addCandidates??[]).map(candidate=>candidate.id))];
     const addBranch=candidateIds.length ? [z.object({...common,kind:z.literal("add"),sourceIds:z.array(z.enum(candidateIds as [string,...string[]])).min(1).max(8),sourceQuote:z.literal("-"),targetId:z.null(),correctionQuote:z.null()})] : [];
@@ -1333,7 +1335,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           "Cover every idea independently, even when ideas share sourceIds. sourcePartial on an idea means source evidence was omitted for budget, so do not claim the entire idea complete; omitted evidence remains pending. Batch ideas on this branch. Compare EACH independently maintainable proposition within every classified idea against the original statements. A coarse idea may require multiple operations, such as LINK_SOURCE for an existing assignment plus ADD for a new condition or procedure. Do not let the dominant existing claim hide new information. Use separate complete source quotes retaining shared qualifications where needed. A single operation may cover explicitly equivalent ideas or inseparable facets of one complete qualified report. Operations sharing ideaIds are atomic as a group: if any is invalid or CLARIFY, none of that group is applied. Do not emit incompatible operations for the same claim or target. Keep the total at most24 operations; clarify rather than silently omit unfinished propositions. Partial context cannot prove a statement absent; clarify when the selected current statements cannot support a safe decision.",
         ].join("\n"), prompt: JSON.stringify(input)});
       this.reportUsage("compose", this.classifyModelId, result.usage, result.providerMetadata);
-      return result.object.operations;
+      return result.object.operations.map(operation => operation.reason && operation.reason.length > 240 ? { ...operation, reason: operation.reason.slice(0, 240) } : operation);
     } catch (error) {
       this.reportUsage("compose", this.classifyModelId, NoObjectGeneratedError.isInstance(error) ? error.usage : undefined, undefined, {status:"failed",errorCode:"reconciliation_unavailable"});
       // Same operator detail as classify: fixed vocabulary, never model text (EPIC-14 S11).
