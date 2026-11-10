@@ -964,6 +964,27 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     });
   }
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  // EPIC-14 S27: a tenant's schedules (helpers, the tree sweep, the quick index) start when its
+  // runtime loads, and a restart loaded none until the tenant's next request, so a night after a
+  // production roll ran nothing. Shortly after boot, load every entitled hosted tenant once.
+  // ZENOD_WARM_TENANTS=0 turns it off; =1 turns it on in tests.
+  if (agent.name === "zenod" && (env.ZENOD_WARM_TENANTS === "1" || (env.NODE_ENV !== "test" && env.ZENOD_WARM_TENANTS !== "0"))) {
+    const warm = setTimeout(() => {
+      let loaded = 0;
+      for (const tenantId of new Set(customer.accounts.list().flatMap((account) =>
+        account.tenant_id && (account.subscription_status === "active" || account.subscription_status === "past_due" || isOperatorTenant(account.tenant_id))
+          ? [account.tenant_id] : []))) {
+        try {
+          if (!runtimes.get(tenantId)) runtimes.forTenantStorage(tenantId, storage.forTenant({ id: tenantId }));
+          loaded += 1;
+        } catch (error) {
+          console.error("[warm] a tenant did not load:", error instanceof Error ? error.message : String(error));
+        }
+      }
+      console.log(`[warm] ${loaded} tenants loaded, their schedules running`);
+    }, Number(env.ZENOD_WARM_TENANTS_MS) || 30_000);
+    warm.unref();
+  }
   // The operator's tenant is the one bound to the customer admin's GitHub login.
   isOperatorTenant = (tenantId) => {
     const admin = options.customerAdmin?.githubLogin.trim().toLowerCase();
