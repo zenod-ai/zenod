@@ -104,6 +104,23 @@ describe("the note the question asks about (E12-S19)", () => {
   });
 });
 
+describe("a place or person left open is not what the question is about (E12-S35)", () => {
+  it("finds the note about the laptop, not the pages about places to live", async () => {
+    const index = await indexOf({
+      ...VAULT,
+      "Notes/Retirement places.md": page("Retirement places", "Somewhere warm by the sea to retire, somewhere quiet with a garden."),
+      "Notes/Beach property.md": page("Beach property", "A house somewhere on the coast of Mexico, somewhere near a town."),
+      "Log/2026-11-04.md": ["# 2026-11-04", "", voice("2026-11-04", "22:00", "e-fffff6",
+        `I want to leave a note on how I am working now. Before I was coding from my laptop, now I code on the server from the phone. ${filler(20)}`)].join("\n"),
+    });
+    const question = "How am I working now, from my laptop or somewhere else?";
+    expect((await index.askedNotes(question, 1))[0]).toMatchObject({ path: "Log/2026-11-04.md#^e-fffff6", share: 1 });
+    const hits = await index.search(question, 5);
+    expect(hits[0]!.path).toBe("Log/2026-11-04.md#^e-fffff6");
+    expect(hits.map((hit) => hit.title)).not.toContain("Retirement places");
+  });
+});
+
 describe("the chat reads the asked note whole and answers it completely (E12-S19, E12-S18)", () => {
   it("reads the asked note whole, even when the ranked list did not reach it", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-asked-engine-"));

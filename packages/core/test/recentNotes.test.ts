@@ -43,6 +43,23 @@ describe("recent-note intent", () => {
     expect(recentIntent("what is the latest on the cabin decision", NOW)).toBeNull();
   });
 
+  it("reads a named day in English and Spanish, and whether one note or the whole day is asked (E12-S35)", () => {
+    const day = (question: string) => recentIntent(question, NOW)?.window;
+    for (const question of ["what did I send on November 6?", "what did I say on 6 Nov", "what did I say on the 6th?", "what did I send 2 days ago?",
+      "what did I say the day before yesterday?", "¿qué mandé el 6 de noviembre?", "qué dije el día 6", "qué grabé anteayer", "¿qué envié hace 2 días?",
+      "what did I say on 2026-11-06"]) {
+      expect(day(question), question).toEqual({ kind: "day", date: "2026-11-06" });
+    }
+    expect(day("qué grabé el 1ro de noviembre")).toEqual({ kind: "day", date: "2026-11-01" });
+    expect(day("qué mandé el viernes")).toEqual({ kind: "day", date: "2026-11-06" });
+    expect(day("what did I say on December 6")).toEqual({ kind: "day", date: "2025-12-06" });
+    expect(recentIntent("what did I say about the boat on the 2nd of November", NOW)).toMatchObject({ window: { date: "2026-11-02" }, topic: "boat" });
+    expect(recentIntent("what did I send on November 6?", NOW)).toMatchObject({ topic: "", one: false });
+    expect(recentIntent("what did I say in my voice notes yesterday?", NOW)).toMatchObject({ one: false });
+    expect(recentIntent("what was in yesterday's vn?", NOW)).toMatchObject({ one: true });
+    expect(recentIntent("¿qué dije en la nota de voz del 6 de noviembre?", NOW)).toMatchObject({ one: true });
+  });
+
   it("knows a voice note by its content type, or by the words of an older entry", () => {
     expect(isVoiceCapture("voice_note", "x", "y")).toBe(true);
     expect(isVoiceCapture("audio/ogg", "x", "y")).toBe(true);
@@ -107,6 +124,28 @@ describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () =>
     expect(travel.find((hit) => hit.title === "Travel")).toMatchObject({ relation: "filed" });
     const today = await index.search("what did I say about explainer videos today", 5);
     expect(today[0]).toMatchObject({ path: LATEST_VOICE_NOTE, relation: "note" });
+  });
+
+  it("lists every note of a day asked as a whole, the ones that say the most first (E12-S35)", async () => {
+    const spoken = (time: string, anchor: string, words: string) => [
+      `## ${time} Voice note "${anchor}.ogg" ingested  ^${anchor}`, "- source: whatsapp", "- verbatim: yes", "- content-type: voice_note", "",
+      `> Voice note "${anchor}.ogg" ingested through Zenod media seam.`, "> Transcribed by demo transcriber.", ">", `> ${words}`, ""].join("\n");
+    const long = (topic: string) => `${topic}. ${"We went over the plan step by step and agreed on what comes next. ".repeat(12)}`;
+    const index = await indexOf({
+      ...LAST_VOICE_NOTE_VAULT,
+      "Log/2026-11-04.md": ["# 2026-11-04", "", spoken("07:00", "e-4a0001", long("A research ask on market entry days")),
+        spoken("07:10", "e-4a0002", long("The landing pages need a visual for every benefit")),
+        spoken("07:20", "e-4a0003", "Are you alive?"), spoken("07:21", "e-4a0004", "Are you alive now?"),
+        spoken("07:30", "e-4a0005", "Short one about the gym."), spoken("07:40", "e-4a0006", "Another quick one about lunch."),
+        "## 07:50 agent report  ^e-4a0007", "- source: agent:watcher", "", "An agent's report.", ""].join("\n"),
+    });
+    const hits = await index.search("what did I send on November 4?", 5);
+    expect(hits.every((hit) => hit.relation === "note")).toBe(true);
+    expect(hits.slice(0, 2).map((hit) => hit.path).sort()).toEqual(["Log/2026-11-04.md#^e-4a0001", "Log/2026-11-04.md#^e-4a0002"]);
+    expect(hits.map((hit) => hit.path)).not.toContain("Log/2026-11-04.md#^e-4a0007");
+    for (let i = 1; i < hits.length; i++) expect(hits[i]!.matchPercent).toBeLessThanOrEqual(hits[i - 1]!.matchPercent);
+    // One note of that day is still the newest one.
+    expect((await index.search("what was in the voice note on November 4?", 5))[0]!.path).toBe("Log/2026-11-04.md#^e-4a0006");
   });
 
   it("keeps only the note's pages about the topic when the question names one", async () => {
