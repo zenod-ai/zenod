@@ -62,6 +62,14 @@ export function looksLikeDeskJob(message: string): boolean {
   });
 }
 
+/**
+ * Whether a message names the memory's own items (topics, pages, notes, the tree, filing). A desk job
+ * is about those; "I meant my preferences in buying a house" names none of them (EPIC-14 S29 round 2).
+ */
+export function mentionsMemoryItems(message: string): boolean {
+  return JOB_OBJECT.test(message) || JOB_COMPLAINT.test(message);
+}
+
 /** The desk's outcome when the model and the rules disagree or only the rules decide: ask, never guess. */
 function deskRoute(message: string, modelJob: string | null, by: SendRoute["by"]): SendRoute | null {
   const rules = looksLikeDeskJob(message);

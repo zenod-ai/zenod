@@ -355,6 +355,29 @@ describe("memory desk routes (EPIC-14 S3)", { timeout: 30_000 }, () => {
     }
   });
 
+  it("a follow-up or a plain question is answered, never handed to the desk (E14-S29 round 2)", async () => {
+    // The 10 Nov chat's shape, made-up words: the model read "I meant …" as a job.
+    const route = { action: "unsure", keep: null, question: null, job: "I meant my preferences in buying gardening", by: "model" } as const;
+    const deskJob = vi.fn(async () => DONE);
+    const routeSend = vi.fn(async () => route);
+    const t = await setup({ deskJob, routeSend: routeSend as unknown as BrainEngine["routeSend"] });
+    try {
+      const sent = await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "I meant my preferences in buying gardening", previous: "What are my preferences?" });
+      const lines = (await sent.text()).trim().split("\n").map((line) => JSON.parse(line));
+      expect(lines[0]).toMatchObject({ type: "route", route: { action: "answer", question: "What are my preferences? I mean: my preferences in buying gardening" } });
+      expect(lines.map((line) => line.type)).not.toContain("desk");
+      expect(routeSend).not.toHaveBeenCalled();
+
+      const plain = await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "What did I decide about the boat engine" });
+      const first = JSON.parse((await plain.text()).trim().split("\n")[0]!);
+      expect(first).toMatchObject({ type: "route", route: { action: "answer", question: "What did I decide about the boat engine" } });
+      expect(deskJob).not.toHaveBeenCalled();
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(10)).toHaveLength(0);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("a WhatsApp message that reads like a job is kept as always and only shows in the inbox as run it?", async () => {
     const deskJob = vi.fn(async () => DONE);
     const t = await setup({ deskJob });

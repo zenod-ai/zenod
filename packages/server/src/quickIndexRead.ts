@@ -40,6 +40,14 @@ const PLAIN_TITLES = new Set([
 const THING = "(?:thing|things|stuff|idea|project|plan|business|deal|story|issue|one|bit|topic|matter|cosa|tema|asunto|rollo)";
 const WORD_STOP = new Set(["the", "that", "this", "my", "our", "your", "his", "her", "their", "new", "old", "big", "little", "other", "same", "whole", "last", "next", "first"]);
 
+/** The starts of words in a one-word name's family, five letters or more: "housing" gives housing and house. */
+export function familyForms(title: string): string[] {
+  const forms = new Set([title]);
+  if (title.endsWith("ing")) forms.add(`${title.slice(0, -3)}e`);
+  if (/[^s]s$/.test(title)) forms.add(title.slice(0, -1));
+  return [...forms].filter((form) => form.length >= 5);
+}
+
 type Candidate = { start: number; end: number; reading: ReadAs; score: number; weight: number };
 
 function boundaryRe(phrase: string): RegExp {
@@ -113,6 +121,19 @@ export function readAs(message: string, index: ReadAsIndex | null): ReadAs[] {
         const tail = possessive ? new RegExp(`^'s(?: [\\p{L}-]+)? ${THING}\\b`, "u").exec(folded.slice(at.end))?.[0] ?? "" : "";
         add(at.start, at.end + tail.length, place.path, tail ? "name" : "title", tail ? 150 : 100);
       }
+    }
+  }
+  // "household" or "houses" for Housing (EPIC-14 S29 round 2): a word of the same family as a place's
+  // one-word name (the name, or its "-ing" made "-e": housing, house) reads as that place, when the
+  // person keeps adding to it. The weakest reading: the person's own names and corrections come first.
+  for (const place of index.places) {
+    const title = foldPhrase(place.title);
+    if (place.memories < WORD_MIN_MEMORIES || !/^\p{L}{5,}$/u.test(title) || PLAIN_TITLES.has(title) || blocked.has(title) || corrected.has(title)) continue;
+    const forms = familyForms(title);
+    for (const match of folded.matchAll(/\p{L}+/gu)) {
+      const word = match[0];
+      if (word === title || blocked.has(word) || corrected.has(word) || !forms.some((form) => word.startsWith(form))) continue;
+      add(match.index ?? 0, (match.index ?? 0) + word.length, place.path, "word", 40);
     }
   }
   // "that cello thing", "the Ruzafa stuff": the word before the vague noun, found in one place's name.

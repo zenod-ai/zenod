@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Answer, BrainEngine, SourceRef } from "zenod";
 // Subpath, not the "zenod" entry: customerLayer.ts (and so this module) is bundled into Phylax.
 import { askNonAnswer } from "zenod/answer-protocol";
-import { ruleSendRoute, type SendRoute } from "zenod/send-route";
+import { mentionsMemoryItems, ruleSendRoute, type SendRoute } from "zenod/send-route";
 import type { TaskJobInput } from "./taskJobStore.js";
 import { memoryAppPath, rankMemories, type RankedMemories, type RankedMemory } from "./rankedMemory.js";
 import { readAsNote, readAsQuery, shownReadings, type ReadAs } from "./quickIndexRead.js";
@@ -30,6 +30,12 @@ const MEMORY_CHAT_POOL = 20;
 const MEMORY_CHAT_CONTEXT = 16;
 /** EPIC-14 S29: the question's own top matches that keep their places when the quick index adds its readings. */
 const READ_AS_KEEP = 8;
+/**
+ * A plain match this strong keeps its place ahead of the readings (EPIC-14 S29 round 2): "my
+ * preferences in buying household" matched travel bag preferences at 20 %, which pushed the
+ * housing pages the reading found out of what the answer read.
+ */
+const READ_AS_STRONG_PERCENT = 50;
 /**
  * The app chat's relevance floor (E15-S1): a memory under this match is not shown. Picked on Jordi's
  * 45 real questions: the lowest right source shown read 19 %, so 15 % keeps every one of them and
@@ -213,13 +219,17 @@ export async function rankWithReadings(engine: BrainEngine, question: string, re
     rankMemories(engine, question, pool),
     query === question ? null : rankMemories(engine, query, pool),
   ]);
-  const keep = Math.min(READ_AS_KEEP, plain.results.length);
+  // The question's own strong matches keep their places; weaker ones take turns with the readings'
+  // search, the readings first when no plain match is strong.
+  const strong = plain.results.slice(0, READ_AS_KEEP).findIndex((memory) => memory.matchPercent < READ_AS_STRONG_PERCENT);
+  const keep = read ? (strong < 0 ? Math.min(READ_AS_KEEP, plain.results.length) : strong) : Math.min(READ_AS_KEEP, plain.results.length);
   const results: RankedMemory[] = plain.results.slice(0, keep);
   const has = (path: string) => results.some((memory) => memory.path === path);
   const rest = plain.results.slice(keep);
   const extra = read?.results ?? [];
   for (let i = 0; i < Math.max(rest.length, extra.length); i++) {
-    for (const memory of [rest[i], extra[i]]) if (memory && !has(memory.path)) results.push(memory);
+    const turn = keep === 0 ? [extra[i], rest[i]] : [rest[i], extra[i]];
+    for (const memory of turn) if (memory && !has(memory.path)) results.push(memory);
   }
   const missing = readings.filter((reading) => !results.slice(0, reach).some((memory) => memory.path === reading.path));
   if (missing.length) {
@@ -378,6 +388,44 @@ export async function routeSendMessage(engine: BrainEngine, message: string): Pr
     console.warn(`[memory-send] route fell back to rules: ${error instanceof Error ? error.message : String(error)}`);
     return ruleSendRoute(message);
   }
+}
+
+/**
+ * "I meant my preferences in buying a house": the person corrects what they just asked. Spoken
+ * fillers before it ("no,", "sorry,", "actually") are part of it.
+ */
+const FOLLOW_UP = /^(?:(?:no|nope|sorry|ok|okay|well|actually|hmm|i mean,?|perd[oó]n|vale|bueno)[,.!]?\s+)*(?:i meant|i mean|what i meant|what i mean|i was asking about|i'?m asking about|i was talking about|i'?m talking about|not that|me refer[ií]a|me refiero|quiero decir|quise decir|lo que quer[ií]a decir|hablo de|hablaba de)(?![\p{L}\p{N}])/iu;
+
+/** Whether a message corrects the question before it (EPIC-14 S29 round 2). */
+export function isFollowUp(message: string): boolean {
+  return FOLLOW_UP.test(message.trim().replace(/^[¿¡"'“(]+/, ""));
+}
+
+/** The longest question a follow-up carries from the turn before. */
+const FOLLOW_UP_PREVIOUS_CHARS = 500;
+
+/**
+ * The web app's Send, after the shared decision (EPIC-14 S29 round 2, from Jordi's failed chat of
+ * 10 Nov): a follow-up ("I meant …") is the question before it, corrected, and is answered; it is
+ * never kept, never a job and never a talk. A job the model alone saw, in words that name none of
+ * the memory's topics, pages or notes, is not a job either: the plain rules' reading stands, so a
+ * plain question is answered instead of asking "keep it, or do it as a job?". App only: WhatsApp
+ * and Telegram keep the shared decision unchanged (root L-6).
+ */
+export function appSendRoute(route: SendRoute, message: string, previous?: string | null): SendRoute {
+  const text = message.trim();
+  if (isFollowUp(text)) {
+    // "I meant" is not what is asked: its words would only find notes that say "meant".
+    const meant = text.replace(/^[¿¡"'“(]+/, "").replace(FOLLOW_UP, "").replace(/^[\s,:.-]+/, "").trim() || text;
+    const before = (previous ?? "").trim().slice(0, FOLLOW_UP_PREVIOUS_CHARS);
+    const question = before && before !== meant ? `${before} I mean: ${meant}` : meant;
+    return { action: "answer", keep: null, question, by: route.by };
+  }
+  if (route.action === "unsure" && !mentionsMemoryItems(text)) {
+    const rules = ruleSendRoute(text);
+    if (rules.action !== "unsure" && rules.action !== "job") return rules;
+  }
+  return route;
 }
 
 export type MemoryKeepInput =

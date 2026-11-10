@@ -267,6 +267,6 @@ export {
   type FilingConfidence, type PlacementCorrection, type PlacementCorrectionResult, type PlacementReview, type PlacementReviewItem,
 } from "./engine/placementReview.js";
 export { FILED_CONFIDENCE_RE, placementConfidence } from "./engine/treePlacement.js";
-export { guardSendRoute, isQuestionClause, looksLikeDeskJob, looksLikeTalk, parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendAction, type SendRoute } from "./llm/sendRoute.js";
+export { guardSendRoute, isQuestionClause, looksLikeDeskJob, looksLikeTalk, mentionsMemoryItems, parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendAction, type SendRoute } from "./llm/sendRoute.js";
 export { memoryTalkPrompt, talkCitations, TALK_HISTORY_TURNS, type TalkMemory, type TalkPersona, type TalkTurn } from "./llm/memoryTalk.js";
 export { checkMemoryChatAnswer, memoryChatAboutNotes, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, quoteFound, MEMORY_CHAT_NO_ANSWER, type MemoryChatAboutScope, type MemoryChatCheck, type MemoryChatContext, type MemoryChatUnchecked } from "./llm/memoryChatAnswer.js";
