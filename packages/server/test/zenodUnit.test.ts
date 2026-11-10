@@ -307,6 +307,8 @@ describe("Zenod chassis unit", () => {
         sha: "unknown",
         // EPIC-14 S10 round 4: the DeepSeek background route is reported, off without its key.
         background: { provider: "off", state: "off" },
+        // EPIC-26 S8: the platform OpenRouter key's credit, off without the key.
+        credit: { openrouter: { state: "off" } },
       });
 
       const protectedApi = await unit.app.request("/api/settings");

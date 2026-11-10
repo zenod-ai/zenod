@@ -96,3 +96,27 @@ it("keeps each call's feature and provider wall time on the ledger (S11)", () =>
     store.close();
   }
 });
+
+it("EPIC-26 S8: reads what is left on the platform OpenRouter key and its daily spend, never the key", async () => {
+  const { OpenRouterKeyMonitor, openRouterKeyHealth } = await import("../src/backgroundRoute.js");
+  expect(openRouterKeyHealth()).toEqual({ state: "off" });
+  const key = (data: Record<string, unknown>) => ({ body: { data } });
+  const { fetch, seen } = balanceFetch([
+    key({ limit: 50, limit_remaining: 31.5, usage_daily: 1.25, usage_weekly: 9.1, usage_monthly: 18.5 }),
+    key({ limit: 50, limit_remaining: 4.2, usage_daily: 2 }),
+    key({ limit: 50, limit_remaining: 0 }),
+    key({ limit: null, limit_remaining: null, usage_daily: 3 }),
+    { status: 401 },
+  ]);
+  const monitor = new OpenRouterKeyMonitor("offline-or-key", { fetch, now: () => Date.UTC(2026, 10, 10) });
+  expect(await monitor.check()).toEqual({
+    state: "ok", limitUsd: 50, remainingUsd: 31.5, usageDailyUsd: 1.25, usageWeeklyUsd: 9.1, usageMonthlyUsd: 18.5,
+    checkedAt: "2026-11-10T00:00:00.000Z",
+  });
+  expect((await monitor.check()).state).toBe("low");
+  expect((await monitor.check()).state).toBe("empty");
+  expect(await monitor.check()).toMatchObject({ state: "unlimited", limitUsd: null, usageDailyUsd: 3 });
+  expect(await monitor.check()).toEqual({ state: "unknown", checkedAt: "2026-11-10T00:00:00.000Z" });
+  expect(seen[0]).toEqual({ url: "https://openrouter.ai/api/v1/key", auth: "Bearer offline-or-key" });
+  expect(JSON.stringify(monitor.status())).not.toContain("offline-or-key");
+});
