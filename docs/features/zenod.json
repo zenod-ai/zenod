@@ -152,6 +152,16 @@
      ],
      "since": "2026-11-09",
      "draft": true
+    },
+    {
+     "id": "helpers-suggest",
+     "title": "Let a helper find one change your memory needs",
+     "text": "Open loops finder, People and follow-ups, Topic gardener, Ideas digest and Health of your memory read your recent notes and your tree on their own schedule and leave at most one suggestion a run, like moving a page where it belongs or linking two notes. Each is a change the memory desk can make and undo. A helper reads why you said not now and your feedback before its next run, and never offers the same change twice.",
+     "rows": [
+      "E14-S27"
+     ],
+     "since": "2026-11-10",
+     "draft": true
     }
    ]
   }
