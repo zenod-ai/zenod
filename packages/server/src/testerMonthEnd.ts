@@ -10,7 +10,7 @@
 //
 // The team is alerted only for exceptions: an extension or end that failed (or did not leave the next
 // invoice at €0), a tester whose renewal already went past due, and a tester extended while over the
-// usage cap. One `[ops-alert] tester <reason>` line each, read by the health page (row 19).
+// usage cap. One `[ops-alert] tester <reason>` line each, read by the health page (row 20).
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
