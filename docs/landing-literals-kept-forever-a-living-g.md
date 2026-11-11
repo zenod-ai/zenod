@@ -27,16 +27,16 @@ Goal sentence: zenod.dev shows early, in moving pictures, that your words are ke
 
 ## Current State
 
-Owner: run_f9669997-5116-45b6-b964-5ff1802e78b2 (G1)
+Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-10 G1 built five animated moves right after the hero on zenod.dev: words kept forever in your own Drive or GitHub; a cloud of thoughts with weighted links; helpers that add new memories; Zenod the librarian; one memory every AI reads and writes (WhatsApp in; Claude, ChatGPT, Codex, Gemini CLI, Cursor, VS Code, any MCP tool)
-Result: live on zenod.dev since 2026-11-10 05:22Z (production 1f1ebae, merge f8ff11d, PR #1582); every claim checked against production, Codex's OAuth connect included; E25-1 met pending Jordi's look
+Last attempted: 2026-11-11 roll-up: G1 done, approved by Jordi 2026-11-10 (the five animated moves live on zenod.dev) ; G2 active, waiting for Jordi to say yes to the live page ; E25-S1 active, iteration 2 running (run_36734018): one social kit page with the earlier Z, clean type and the tagline Own, organize, compound your memory. (his E25-A2 answer 3, banners only) ; E25-S1-M1 ready, the Mac-agent ticket that refreshes the social profiles from that kit
+Result: the landing story is live on zenod.dev; the social kit is being rebuilt in one place after Jordi preferred the earlier Z and found typos in the last kit
 Evidence: https://zenod.dev/#how-zenod-works ; [evidence](evidence/e25-g1-2026-11-10.md) ; [card](cards/E25-G1.md)
-Waiting on: nobody (G1's card is in Jordi's review, E25-2)
+Waiting on: nobody (E25-S1 worker running; G2 is Jordi's look at the live page)
 Approved work: none
-Next action: Jordi opens zenod.dev and says yes or what to change; on his yes write the Outcome
+Next action: E25-S1 kit page to Jordi's review; then E25-S1-M1 on his Mac refreshes the profiles
 Source revision: 1f1ebae
-Verified at: 2026-11-10T05:24Z (live bundle carries the new headings; desktop and phone captured)
+Verified at: 2026-11-11T06:00Z (ledger read)
 
 ## Non-Goals
 
@@ -56,6 +56,38 @@ Steps: each is independently testable and closes only with evidence.
 | G1 | Ticket worker | run_f9669997-5116-45b6-b964-5ff1802e78b2 | E25-1: the animated landing sections on zenod.dev, live | done (approved by Jordi 2026-11-10) | none | [#1582](https://github.com/zenod-ai/zenod/pull/1582) merged f8ff11d | main | live https://zenod.dev/#how-zenod-works on 1f1ebae since 2026-11-10 05:22Z ([evidence](evidence/e25-g1-2026-11-10.md), [card](cards/E25-G1.md)) | 2026-11-10T05:24Z | followups: none; confirm: yes — only Jordi can say whether the page now lands the ideas from his voice note (E25-2) |
 | G2 | Ticket worker | run_f9669997 (with G1) | E25-2: Jordi says yes to the live page (his verdict on G1's review card) | active | G1 | none | main | none | 2026-11-10 | closes when Jordi closes G1's card |
 | E25-S1 | Ticket worker | run_36734018-1e72-4481-9165-5518074f7646 — claimed 2026-11-11T05:21Z, lease until 2026-11-11T07:21Z | New Zenod social kit: a bolder Z, a readable banner, a cooler tagline: Redo the Zenod social kit: the Z icon is too thin top and bottom (make it as strong as our better marks); the banner text is barely readable at X size; a cooler tagline than 'Hire a librarian for your memory'; same kit for X, YouTube, Instagram, LinkedIn. | active (iteration 2, relaunched by Jordi 2026-11-11: I actually prefer the before, but give me the before in the social kit for it, the previous kit you gave me had bad banner typo bad logo typo, this is a mac desktop task to refresh socials with unified social kit URL, let's standardize so all have it in one place, to create all future assets and it…) | none | PR #1620 merged bfef1a08 | main | [evidence](evidence/e25-s1-2026-11-11.md) ; [page](http://vps3.taild81fbb.ts.net:8921/e25-s1/) ; [card](cards/E25-S1.md) | 2026-11-11T04:05Z staging reports bfef1a08 and serves the new Z; production 3831b06; round 2: six taglines in Jordi's pattern on the evidence page | the bolder Z is on production 7f36574 (promote 2026-11-11T04:04Z); tagline waits on E25-A2. followups: start the tagline on banners and site once E25-A2 is answered; confirm: yes — only Jordi can judge the new Z |
+| E25-S1-M1 | Mac agent | Claude on Jordi's Mac (never a server worker) | Refresh the Zenod profiles from the one social kit: the earlier Z as picture and the tagline banner on X @ZenodMemory, YouTube @ZenodMemory, LinkedIn zenodmemory and Instagram @zenodmemory (Jordi 2026-11-11 on E25-S1: "this is a mac desktop task to refresh socials with unified social kit URL") | ready | E25-S1 kit live | main (ticket in this spine) | main | [ticket](http://vps3.taild81fbb.ts.net:9196/t/E25-S1-M1/) ; [kit](http://vps3.taild81fbb.ts.net:8921/zenod-social-kit/) | 2026-11-11 | label: needs Mac agent; Jordi runs it from the [Mac list](http://vps3.taild81fbb.ts.net:9196/mac/); its Done or Stuck report files here |
+
+### Laptop ticket E25-S1-M1
+
+Title: Refresh the Zenod profiles from the one social kit
+Task: Open the Zenod social kit page and put its profile picture and banner on each Zenod profile below that exists, in Jordi's Chrome. The kit page is the only source: download each file from its button, never from anywhere else.
+Minutes: 20
+Order: 40
+Profile: alpha9.io
+Sites:
+- http://vps3.taild81fbb.ts.net:8921/zenod-social-kit/
+- https://x.com/ZenodMemory
+- https://studio.youtube.com/
+- https://www.linkedin.com/company/zenodmemory/admin/
+- https://www.instagram.com/zenodmemory/
+Details:
+- Kit: http://vps3.taild81fbb.ts.net:8921/zenod-social-kit/
+- X @ZenodMemory: Edit profile, header = Header 1500 x 500, photo = Profile picture 400 x 400
+- YouTube @ZenodMemory: YouTube Studio, Customization, Branding: banner = Banner 2560 x 1440, picture = Profile picture 800 x 800 (the channel sits under Jordi's jordi@alpha9.io Google login; if no Zenod channel shows there, skip it and say so)
+- LinkedIn page zenodmemory: Edit page, logo = Logo 400 x 400, cover = Cover 1128 x 191
+- Instagram @zenodmemory: Edit profile, picture = Profile picture 1080 x 1080 (Instagram has no banner)
+- TikTok @zenodmemory is not made yet: skip it
+- When a site crops: keep the whole Z inside the circle, and keep every word of the banner visible
+Done looks like:
+- Each listed profile shows the Z picture on paper and, where the platform has one, the banner reading Own, organize, compound your memory.
+- The report lists each profile address with done or skipped and why.
+By hand:
+- The file picker for each upload: download the files from the kit first, then tell Jordi which file goes where.
+- Any sign-in, code or confirmation the site asks for.
+Never also:
+- Never change a name, handle, bio or link, never post, follow or message.
+- Never touch any other account in this Chrome.
 
 ## Decisions
 
