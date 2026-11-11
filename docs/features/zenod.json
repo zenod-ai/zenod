@@ -205,6 +205,26 @@
      ],
      "since": "2026-11-10",
      "draft": true
+    },
+    {
+     "id": "something-to-try",
+     "title": "Get one small thing to try each day",
+     "text": "Switch on Something to try and once a day it reads what you said in the last few days, your voice notes first, and leaves one small thing you could try because of it in your inbox, with the notes it comes from. It never gives you project work, and it reads your feedback before its next run.",
+     "rows": [
+      "E14-S38"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "clarifier",
+     "title": "Get asked when a note could mean two things",
+     "text": "Switch on the Clarifier and each night it reads what you said in the last three days. When a note could mean two people, places or things, it asks you in your inbox which one you meant, with a button for each meaning or room for your own words. Your answer is saved to your memory like any note. At most two questions a night, never the same note twice, and never in a chat.",
+     "rows": [
+      "E14-S37"
+     ],
+     "since": "2026-11-11",
+     "draft": true
     }
    ]
   }
