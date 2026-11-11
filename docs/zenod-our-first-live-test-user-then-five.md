@@ -31,14 +31,14 @@ Goal sentence: One real test user on Zenod and stable as soon as possible, then 
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-09 23:45Z U1 walked the new-user path on production and listed every blocker on one page; 3 fixed, ask E23-A1 proposed
-Result: 11 blockers, 3 fixed today (dead sign-in link restarted, tester renewal alerts reach HQ, invite text), 3 need Jordi, 1 needs infra-vps, 4 close at the first sign-up
-Evidence: [e23-u1](evidence/e23-u1-2026-11-09.md), page http://vps3.taild81fbb.ts.net:8921/e23-u1/
+Last attempted: 2026-11-11 00:13Z U5 ready check for full promotion on production: Jordi as tester zero, the standard question set, the tester path and helpers at launch
+Result: not ready yet, two blockers, both asked already: a stranger gets no tester code (E26-A3) and no email with the link (E26-A6). Green: Jordi's memories go in from WhatsApp, EpicTeam and MCP, get filed and read back; the same questions run on every change against the run before (93.8 / 100 / 1.6 on his notes); testers now start with helpers off (E23-A2), live 7d40f51
+Evidence: [e23-u5](evidence/e23-u5-2026-11-10.md), page http://vps3.taild81fbb.ts.net:8921/e23-u5/ ; earlier [e23-u1](evidence/e23-u1-2026-11-09.md), page http://vps3.taild81fbb.ts.net:8921/e23-u1/
 Waiting on: nobody
 Approved work: none
-Next action: post E23-A1; on a first name, agents issue that person's tester code and hand Jordi the filled invite (U2), then watch the sign-up live; the rehearsal sign-in (E7-A15, fresh link) runs in parallel if Jordi signs in
+Next action: once E26-A3 (Stripe code permission) and E26-A6 (mail key) are done from the Mac list, Zenod is ready for full promotion (U5): tell the social desk, then watch the first stranger sign up live; E23-A1 (a named first tester) can run in parallel
 Source revision: main (see git log)
-Verified at: 2026-11-09T23:45Z (cloud health ok aa46d5e, Phylax connected, readiness ready=true, tester-watch no alerts)
+Verified at: 2026-11-11T00:13Z (cloud health ok 7d40f51, helper roster after the roll, tester-watch no alerts, memory tests 29872f6)
 
 ## Waiting on
 
@@ -60,7 +60,7 @@ Steps: each is independently testable and closes only with evidence.
 | U2 | Ticket worker | unassigned | E23-2: pick and onboard the first test user from the applications, then watch the first 7 days | done (no confirm: replaced by EPIC-26 E26-S2, the live public flow Jordi asked for in E23-A1) | U1 | none | main | none | 2026-11-10 | covered by E26-S2 |
 | U3 | Ticket worker | unassigned | E23-3, E23-4: five, then ten testers | draft | U2 | none | main | none | 2026-11-10 | after U2 |
 | U4 | Ticket worker | run_b87fdf63-fc99-4576-88df-9f871a385785 | Tester renewal due, past_due and Stripe read alerts reach the HQ alert thread (health row 10 read testers without Stripe) | done (no confirm: plumbing on our own monitoring, nothing new to open) | U1 | main-direct (docs/health/s1-live) | main | probe reads Stripe at most hourly, keeps those alerts between reads; a tester alert turns row 10 red with its line; installed on VPS3, first Stripe read 2026-11-09T23:36:59Z, row green; test_aggregate 37 OK | 2026-11-09T23:37Z | followups: none |
-| U5 | Ticket worker | run_b362a0d4-0481-4c9f-808d-b9090bc6cdc2 — claimed 2026-11-10T23:17Z, lease until 2026-11-11T01:17Z | Ready check for full promotion: is Jordi tester zero and working on production (new memories go in, memories read back right), and does the same standard question set run on every change with a before and after comparison; one page that says green or names each blocker. Day zero of the 30-day challenge is today | active | none | none | main | none | 2026-11-10 | dispatch; also confirm testers start with helpers off (E23-A2) |
+| U5 | Ticket worker | run_b362a0d4-0481-4c9f-808d-b9090bc6cdc2 | Ready check for full promotion: is Jordi tester zero and working on production (new memories go in, memories read back right), and does the same standard question set run on every change with a before and after comparison; one page that says green or names each blocker. Day zero of the 30-day challenge is today | review | none | [#1607](https://github.com/zenod-ai/zenod/pull/1607) merged 7d40f51, live 2026-11-11T00:08Z | main | [e23-u5](evidence/e23-u5-2026-11-10.md), page http://vps3.taild81fbb.ts.net:8921/e23-u5/, card docs/cards/U5.md | 2026-11-11T00:13Z | verdict: not yet. Jordi as tester zero works (memories in, filed, read back) and the same question set runs on every change; blockers are E26-A3 (Stripe code permission) and E26-A6 (mail key), both already asked; testers now start with helpers off (E23-A2), his stay on. followups: start Ask finds a memory that is only in the log — search finds it but ask does not, waits on the engine freeze to 24 Nov unless Jordi calls it breakage; park A memory is searchable within a minute of being saved — today it takes a few minutes, not a promotion blocker; DeepSeek filing replies failing the format check already with EPIC-24; confirm: yes — only Jordi can say whether this answers "are we ready or not" |
 
 ## Decisions
 
