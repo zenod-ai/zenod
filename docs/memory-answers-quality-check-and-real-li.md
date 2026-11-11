@@ -30,14 +30,14 @@ Goal sentence: Zenod answers questions about your memory well, tested on your ow
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-10 roll-up: Q0, Q1, Q2 and Q4 done (memory test suite live, cost hygiene and faster filing live) ; S1 done ("who are you?" answered directly, relevance floor) ; S2 done (private notes marked at filing) ; Q3 in review (first live DeepSeek runs: right facts 17-18 of 20, errors 14% from filing format failures) ; Q5 draft
-Result: his three numbers on the suite are 93.8 / 96.2 / 1.6 (ingestion, retrieval, errors) after S33 on 9 Nov; live model checks wait on one root step
+Last attempted: 2026-11-11 roll-up: Q0 done (cheap test model plan, fed his E15-A5 and E15-A6 answers) ; Q1 done (first check of his real questions, its fixes started elsewhere) ; Q2 done (memory test suite and dashboard live, approved 8 Nov) ; Q3 done (live DeepSeek checks in the suite, approved 10 Nov) ; Q4 done (cost hygiene and faster filing, approved 9 Nov) ; E15-S1 done ("who are you?" answered directly, approved 9 Nov) ; E15-S2 done (private notes marked at filing, approved 9 Nov) ; E15-S3 done without a card (his failed chat is fixed by EPIC-14 S29, approved 10 Nov) ; Q6 done without a card (filing format failures are fixed by EPIC-24 M8) ; Q5 draft (one capped key per app, waits for Jordi to start it)
+Result: every row but one is closed: the memory test suite runs live model checks on his notes, his three numbers stand at 93.8 / 96.2 / 1.6 (ingestion, retrieval, errors), and the remaining filing format failures are EPIC-24 M8's work
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody (Q3 card in review)
+Waiting on: nobody (no open ask; Q5 is a draft Jordi starts when he wants it)
 Approved work: none
-Next action: Jordi judges the Q3 card (live checks on his notes); the DeepSeek filing format failures go to EPIC-24
+Next action: none due here: EPIC-24 M8 fixes the filing format failures; Q5 starts only when Jordi starts it from the goal
 Source revision: uncommitted scaffold
-Verified at: 2026-11-10T00:45Z
+Verified at: 2026-11-11T04:40Z
 
 ## Non-Goals
 

@@ -29,14 +29,14 @@ Goal sentence: A plan at one link for personas, an inbox and calling your memory
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-10 roll-up: plan rounds done (S1..S11, S24, E14-A9 yes) ; S25 rename to helpers and S26 suggestion cards with the feedback button live 4803335, S26 closed by Jordi ; S27 helpers post suggestions, round 2 memory only live 0fdd18c, in review (S31 and E14-S1 folded in) ; S33, S34 drafted ; S28 quick index active ; S29, S30 ready after S28 and S27 ; S5 and S9 judge the helpers after their scheduled runs
-Result: helpers and one-tap suggestion cards are live in the app; the first real suggestions and the quick index are being built
+Last attempted: 2026-11-11 roll-up: plan rounds P1 and S1 to S11 done ; S24 to S29 done (helpers, one-tap suggestion cards, the quick index and the chat reading it, all approved 10 Nov) ; S35 done (helpers ask the team desk how things connect, approved 10 Nov) ; S37 done (a helper asks him one clarifying question as a card, approved 11 Nov) ; S38 done (a daily something-to-try card, approved 11 Nov) ; S30 active (a week of helpers on his memory, counting 10 to 17 Nov, four helpers switched on and running) ; S36 ready (helper cards in his own words, a new link shown as a picture) ; S41 blocked (a gentle therapist helper, waits on his allowance answer E14-A11) ; S23 and S34 draft ; S31, S32, S33, S39, S40 and E14-S1 folded into the rows that built them
+Result: helpers, suggestion cards, the quick index, the clarifying-question card and the daily idea card are live and approved; the helper week is counting and S36 is next to build
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody (workers running)
+Waiting on: Jordi on E14-A11 (raise his own Zenod allowance from 3 to 10 dollars a month; unblocks S41 and keeps his helpers running past 13 Nov)
 Approved work: none
-Next action: S27 and S28 finish, then S29 (chat reads the index) and S30 (a week on his memory)
+Next action: dispatch S36 (helper cards in his language); S30 judges the helper week on 2026-11-17; S41 starts when Jordi answers E14-A11
 Source revision: uncommitted scaffold
-Verified at: 2026-11-10T00:45Z
+Verified at: 2026-11-11T04:40Z
 
 ## Non-Goals
 
