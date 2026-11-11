@@ -1,5 +1,11 @@
 # Runbook: extend a tester's free month (EPIC-7)
 
+> **Since 2026-11-11 (EPIC-26 S5 round 3, Jordi's E26-A7 answer):** no free month is extended by itself and nobody
+> extends every tester. Each tester gets one free month; six days before it ends, zenod-mt sets it to end and alerts the
+> team (`[ops-alert] tester free_time_ending` with that tester's usage). Extending is the team's call, one tester and one
+> month at a time: the **One more free month** button on [cloud.zenod.dev/admin/testers](https://cloud.zenod.dev/admin/testers#free-time).
+> The steps below stay as the fallback; `stripe-testers.mjs extend` now marks what it extends so the job leaves it alone.
+
 Who runs it: the EPIC-7 Delivery Manager, every month while the testers are testing (from [T10](../EPIC-7-REAL-USER-TEST.md)). Proof that it works: [T2.1 evidence](../evidence/epic7-t2-1-2026-11-01.md).
 
 **Tool (T4):** `stripe-testers.mjs extend` does every step below for all testers, including recovering a lapse. See [epic7-tester-codes.md](epic7-tester-codes.md) §5. The manual commands below remain the fallback.

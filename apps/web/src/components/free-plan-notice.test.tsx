@@ -33,7 +33,7 @@ describe("HostedFreePlanBanner (EPIC-7 T5 welcome)", () => {
     expect(document.body.textContent).toMatch(
       /No card or payment details are needed, and you will not be charged/
     )
-    expect(document.body.textContent).toMatch(/we extend it month by month/)
+    expect(document.body.textContent).toMatch(/unless we add another month/)
   })
 
   it.each([

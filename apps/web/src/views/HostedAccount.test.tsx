@@ -351,7 +351,7 @@ describe("Hosted account free-plan wording (EPIC-7 T5)", () => {
     expect(text).toMatch(/No card or payment details are needed/)
     expect(text).toMatch(/you will not be charged/)
     expect(text).toMatch(/runs until .*2026/)
-    expect(text).toMatch(/we extend it month by month/)
+    expect(text).toMatch(/unless we add another month/)
     expect(text).not.toMatch(/tester/i)
   })
 

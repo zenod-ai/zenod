@@ -29,9 +29,9 @@ export function FreePlanNotice({
             month: "long",
             year: "numeric",
           })}
-          . While you're using Zenod and telling us how it goes, we extend it
-          month by month. If it ever ends, we'll tell you before your access
-          stops, and nothing is charged unless you add a card yourself.
+          . It ends then unless we add another month while the test goes on.
+          If we do, this date moves. Nothing is charged unless you choose to
+          pay.
         </p>
       ) : (
         <p className="text-muted-foreground">It has no end date.</p>

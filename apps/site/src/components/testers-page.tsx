@@ -1,7 +1,8 @@
 // zenod.dev/testers (ZAL-A13): the testers program in the Paper style. Jordi,
 // 2026-11-08: open the program and the apply form now, first 10 picked by hand.
 // The offer is the one EPIC-7 runs: a personal code for a free month of Hosted
-// at €0 with no card, continued free while you use it and never charged by itself (EPIC-26 S5), usage capped. Answers go to a
+// at €0 with no card that ends by itself; more free months only when we add them, one at a time, never
+// automatically, and never charged by itself (EPIC-26 S5 round 3, Jordi's E26-A7 answer), usage capped. Answers go to a
 // private file on the server, never to a repo or a public page. EPIC-26 T1
 // (Jordi's voice note, 2026-11-10): the three things a tester gets come first,
 // each with a real screen: the WhatsApp number, the word-for-word copy in their
@@ -235,16 +236,21 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
               included. No card needed.
             </p>
             <p>
-              Your free month continues while you use Zenod: if you used it in
-              the last two weeks, the next month is free too. Nothing is ever
-              charged unless you choose to pay.
+              The free month ends by itself. If the test is going well, we may
+              add more free months, one at a time. That is our choice, never
+              automatic. Your Zenod app shows how many free days you have left.
             </p>
             <p>
-              If you stop using it, the free month just ends. Your notes stay
-              in your own Drive or GitHub, and you can come back or choose to
-              keep going for €9 a month.
+              Nothing is ever charged unless you choose to pay. When your free
+              time ends, your notes stay in your own Drive or GitHub, and you
+              can keep going for €9 a month.
             </p>
-            <p>Usage is capped each month, like every Hosted account.</p>
+            <p>
+              Usage is capped each month, like every Hosted account. If you
+              reach the cap, Zenod tells you on WhatsApp. Answers pause,
+              everything you send is still kept, and it all starts again on
+              the 1st.
+            </p>
           </div>
         </section>
 

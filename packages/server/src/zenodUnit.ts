@@ -1354,6 +1354,38 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
   });
   app.route("/", customer.app);
+  // EPIC-26 S5 round 3: a tester's free month ends at its end unless the team gives one more month.
+  let testerMonthEnd: TesterMonthEnd | null = null;
+  const monthEndStripe = customer.stripe as unknown as Partial<MonthEndStripe> | null;
+  if (
+    agent.name === "zenod" &&
+    env.ZENOD_TESTER_MONTH_END !== "0" &&
+    typeof monthEndStripe?.subscriptions?.update === "function" &&
+    typeof monthEndStripe?.invoices?.createPreview === "function"
+  ) {
+    testerMonthEnd = new TesterMonthEnd({
+      stripe: monthEndStripe as MonthEndStripe,
+      accounts: () =>
+        customer.accounts.list().flatMap((account) =>
+          account.stripe_subscription_id && account.subscription_status !== "checkout_pending"
+            ? [{
+                subscriptionId: account.stripe_subscription_id,
+                tenantId: account.tenant_id ?? null,
+                who: account.stripe_email || account.github_email || account.github_login || account.tenant_slug || "a tester",
+                usage: async () => {
+                  const usage = await customer.usageForAccount(account);
+                  return {
+                    spendUsd: usage.monthSpendUsd ?? null,
+                    allowanceUsd: usage.allowanceUsd ?? null,
+                    percentUsed: usage.percentageUsed,
+                  };
+                },
+              }]
+            : []),
+      lastUsed: (tenantId) => lastUsedFromTenantData(storage.dataDir, tenantId),
+    });
+    testerMonthEnd.start();
+  }
   // EPIC-26 S2: after an application, acceptance, a code and the email with the personal link.
   let testerFlow: TesterFlow | null = null;
   if (agent.name === "zenod") {
@@ -1374,39 +1406,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ...(options.customerAdmin ? { isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)) } : {}),
       opsToken: env.ZENOD_TESTER_OPS_TOKEN,
       // S7 round 2: the counts and every application with its email, on the operator's page only.
-      admin: { counts: () => counts.refresh(), applications: () => readApplications(storage.dataDir), marks },
+      admin: { counts: () => counts.refresh(), applications: () => readApplications(storage.dataDir), marks, freeTime: () => testerMonthEnd },
     });
     testerFlow.start();
     mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
     mountPublicCounts(app, counts);
     counts.start();
-  }
-  // EPIC-26 S5: each tester's free month extends (used in the last 14 days) or ends gently by itself.
-  let testerMonthEnd: TesterMonthEnd | null = null;
-  const monthEndStripe = customer.stripe as unknown as Partial<MonthEndStripe> | null;
-  if (
-    agent.name === "zenod" &&
-    env.ZENOD_TESTER_MONTH_END !== "0" &&
-    typeof monthEndStripe?.subscriptions?.update === "function" &&
-    typeof monthEndStripe?.invoices?.createPreview === "function"
-  ) {
-    testerMonthEnd = new TesterMonthEnd({
-      stripe: monthEndStripe as MonthEndStripe,
-      accounts: () =>
-        customer.accounts.list().flatMap((account) =>
-          account.stripe_subscription_id && account.subscription_status !== "checkout_pending"
-            ? [{
-                subscriptionId: account.stripe_subscription_id,
-                tenantId: account.tenant_id ?? null,
-                overCap: async () => {
-                  const usage = await customer.usageForAccount(account);
-                  return usage.state === "paused" || (usage.percentageUsed ?? 0) >= 100;
-                },
-              }]
-            : []),
-      lastUsed: (tenantId) => lastUsedFromTenantData(storage.dataDir, tenantId),
-    });
-    testerMonthEnd.start();
   }
   // EPIC-24 M2: the cloud app reports its own errors (class, route, status only) for the health page.
   if (agent.name === "zenod") mountClientErrorReports(app, { clientAddress });

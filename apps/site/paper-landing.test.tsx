@@ -208,7 +208,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(field("use")).toContain('required=""');
     expect(field("contact")).toContain('required=""');
     expect(field("website")).toMatch(/tabindex="-1"/i);
-    for (const line of ["A free month of Zenod Hosted", "No card needed.", "Your free month continues while you use Zenod", "the next month is free", "Nothing is ever charged unless you choose to pay", "the free month just ends", "Usage is capped", "first ten", "a few weeks", "send us a line"])
+    for (const line of ["A free month of Zenod Hosted", "No card needed.", "The free month ends by itself", "one at a time", "never automatic", "Nothing is ever charged unless you choose to pay", "Usage is capped", "everything you send is still kept", "first ten", "a few weeks", "send us a line"])
       expect(testers).toContain(line);
     // EPIC-26 T1: the three things a tester gets come first, in this order.
     const promises = [
