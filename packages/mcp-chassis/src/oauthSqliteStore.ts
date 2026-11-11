@@ -184,6 +184,20 @@ export class SqliteOAuthStore implements OAuthStore {
     };
   }
 
+  /**
+   * The first OAuth sign-in to one tenant (Zenod EPIC-26 S15, the quick start): the client's
+   * self-declared name and when its first token was made, or null when none signed in.
+   */
+  firstSignInForTenant(tenantId: string): { clientName: string; createdAt: number } | null {
+    const row = this.db
+      .prepare(
+        `SELECT client_name, created_at FROM oauth_tokens
+         WHERE json_extract(tenant, '$.id') = ? ORDER BY created_at ASC LIMIT 1`,
+      )
+      .get(tenantId) as { client_name: string; created_at: number } | undefined;
+    return row ? { clientName: row.client_name, createdAt: Number(row.created_at) } : null;
+  }
+
   getByRefreshToken(refreshToken: string): OAuthServerToken | null {
     const row = this.db
       .prepare(

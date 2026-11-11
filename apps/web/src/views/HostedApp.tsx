@@ -13,6 +13,7 @@ import {
 import { ZenodLogo } from "@/components/zenod-logo"
 import { HostedFreePlanBanner, HostedPlanLine } from "@/components/free-plan-notice"
 import { HostedEndOfTestOffer } from "@/components/end-of-test-offer"
+import { QuickStartCard, QuickStartPill, QuickStartRestore } from "@/components/quick-start"
 import { UsageByFeaturePanel } from "@/components/usage-by-feature"
 import { Button } from "@/components/ui/button"
 import {
@@ -201,7 +202,10 @@ export function HostedApp({
             <p className="zl-tagline">the librarian of your memory</p>
           </div>
         </div>
-        <HostedPlanLine />
+        <div className="flex flex-wrap items-center gap-2">
+          <QuickStartPill onOpen={() => { go({ section: "chat" }); window.scrollTo?.({ top: 0 }) }} />
+          <HostedPlanLine />
+        </div>
       </header>
       <HostedEndOfTestOffer />
 
@@ -235,6 +239,10 @@ export function HostedApp({
         </TabsList>
         {/* The chat stays mounted: a talk or an answer is still there after a look at Memory. */}
         <TabsContent value="chat" forceMount className="mt-4 data-[state=inactive]:hidden">
+          {/* EPIC-26 S15: the tester quick start, above Chat until hidden or done. */}
+          <div className="mb-4 empty:hidden">
+            <QuickStartCard go={go} />
+          </div>
           <MemoryChat />
         </TabsContent>
         <TabsContent value="inbox" className="mt-4">
@@ -299,6 +307,7 @@ export function HostedApp({
             <div className="flex flex-col gap-6">
               <HostedAccountLink />
               <div className="flex flex-wrap items-center gap-2">
+                <QuickStartRestore go={go} />
                 <ThemeToggle />
                 <Button asChild variant="outline" size="sm">
                   <a href={PUBLIC_LANDING_URL}>

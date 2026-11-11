@@ -3,6 +3,7 @@ import { personaById, BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { helpersBuilding, parsePersonaSchedule, PERSONA_MAX_EVERY_DAYS, PERSONA_MIN_EVERY_DAYS, PERSONA_SKILLS, PERSONA_TOTAL_MONTH_USD, personaEnabled, personaView, type PersonaDefinition } from "./personaRunner.js";
 import { personasFor, type PersonaRun } from "./personaStore.js";
 import { opsAlert } from "./opsAlert.js";
+import { markQuickStart } from "./quickStart.js";
 
 /**
  * The personas' settings routes (EPIC-14 S4): the catalog with each persona's skills, last runs and
@@ -64,6 +65,8 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     const store = personasFor(found.runtime);
     if (body.cadence !== undefined) store.setCadence(persona.id, cadence, persona.defaultEnabled);
     if (typeof body.enabled === "boolean") store.setEnabled(persona.id, body.enabled);
+    // EPIC-26 S15: the quick start's step 5, kept even if the helper is switched off again.
+    if (body.enabled === true) markQuickStart(found.runtime.dataDir, "helper", { helperName: persona.name });
     if (typeof body.askTeam === "boolean") store.setAskTeam(persona.id, body.askTeam, persona.defaultEnabled);
     return c.json(list(found.runtime));
   });

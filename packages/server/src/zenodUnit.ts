@@ -68,6 +68,7 @@ import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFoun
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
 import { setHelpersBuilding } from "./personaRunner.js";
+import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./quickStart.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, testerMail, type TesterFlow } from "./testerFlow.js";
 import { MailGrantStore, googleMailClientFromEnv, mailSenderFromEnv } from "./mailGrant.js";
 import { mountMailSenderRoutes } from "./mailSenderPage.js";
@@ -297,6 +298,29 @@ export function clientAddress(c: { req: { header(name: string): string | undefin
   return incoming?.socket?.remoteAddress ?? "unknown";
 }
 
+/**
+ * EPIC-26 S15: the quick start's step 4 from Claude or Codex. A read tool (search, get, cloud, ask)
+ * that brings a memory back ticks it for this tenant; the tool's own result is passed on untouched.
+ */
+function quickStartReads(server: McpServer, dataDir: string): McpServer {
+  return new Proxy(server, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property !== "registerTool" || typeof value !== "function") {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (name: string, config: unknown, handler: unknown) => {
+        if (!QUICK_START_READ_TOOLS.has(name) || typeof handler !== "function") return value.call(target, name, config, handler);
+        return value.call(target, name, config, async (...input: unknown[]) => {
+          const result = await (handler as (...args: unknown[]) => unknown)(...input);
+          if (toolFoundSomething(name, result)) markQuickStart(dataDir, "found");
+          return result;
+        });
+      };
+    },
+  });
+}
+
 function registerZenodTools(
   server: McpServer,
   runtime: Runtime,
@@ -305,6 +329,7 @@ function registerZenodTools(
 ): void {
   const { settings } = runtime;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
+  const tracked = quickStartReads(server, runtime.dataDir);
   buildMcpServer(
     () => runtime.getEngine(),
     settings.googleDriveOAuthAuthority().mode === "hosted-managed"
@@ -352,7 +377,7 @@ function registerZenodTools(
       },
       get: (id) => runtime.ingestStore.get(id),
     },
-    server,
+    tracked,
     chatInterceptor,
     () => settings.githubConnectionConfigured(),
     () => {
@@ -903,6 +928,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       tenantStore,
       // EPIC-23 U7: codes Zenod made itself; the tester flow is created further down.
       testerCoupon: (code, accountId) => testerFlow?.redeem(code, accountId) ?? null,
+      // EPIC-26 S15: the quick start's step 2, from the chassis' OAuth sign-ins to this tenant.
+      quickStartAssistantSignIn: (tenantId) => {
+        const signIn = oauthStore.firstSignInForTenant(tenantId);
+        return signIn ? { clientName: signIn.clientName, at: signIn.createdAt } : null;
+      },
       driveVaultOAuth: {
         authorizationUrl: googleDriveOAuthUrl,
         exchangeCode: exchangeGoogleDriveOAuthCode,

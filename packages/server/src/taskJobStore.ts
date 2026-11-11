@@ -563,6 +563,26 @@ export class TaskJobStore {
     return rows.map(rowToJob);
   }
 
+  /**
+   * EPIC-26 S15: when this tenant's first capture came in (ms), for the quick start. `channel:
+   * "whatsapp"` counts captures keyed to the WhatsApp channel; `done` only finished ones.
+   */
+  firstCaptureAt(filter: { channel?: "whatsapp"; done?: boolean } = {}): number | null {
+    const clauses = [
+      "tenant_id=?",
+      "kind IN ('store', 'media_ingest')",
+      "COALESCE(json_extract(input_json, '$.source'), '') <> 'selftest'",
+    ];
+    if (filter.channel === "whatsapp") {
+      clauses.push("(idempotency_key LIKE '%:whatsapp:%' OR json_extract(input_json, '$.source') = 'whatsapp')");
+    }
+    if (filter.done) clauses.push("status='done'");
+    const row = this.db
+      .prepare(`SELECT MIN(created_at) AS at FROM task_jobs WHERE ${clauses.join(" AND ")}`)
+      .get(this.tenantId) as { at: number | null } | undefined;
+    return row?.at ?? null;
+  }
+
   update(id: string, patch: TaskJobPatch, now: number = Date.now()): void {
     this.applyPatch(id, patch, now);
   }
