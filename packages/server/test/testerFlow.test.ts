@@ -289,3 +289,61 @@ describe("tester flow routes", () => {
     expect(() => readFileSync(join(dataDir, TESTER_FLOW_FILE))).toThrow();
   });
 });
+
+describe("free time on the operator page (E26-S5 round 3)", () => {
+  const DAY = 86_400_000;
+  function withFreeTime(admin = true) {
+    const { flow } = flowWith({ mint: null });
+    const extended: string[] = [];
+    const freeTime = {
+      overview: async () => [
+        { subscriptionId: "sub_A1", who: "tester@gmail.com", status: "active", periodEndMs: Date.parse("2026-12-10T00:00:00Z"), state: "free" as const,
+          usage: { spendUsd: 1.2, allowanceUsd: 3, percentUsed: 40 }, lastUsedMs: Date.now() - 2 * DAY },
+        { subscriptionId: "sub_B2", who: "other@gmail.com", status: "active", periodEndMs: Date.parse("2026-12-20T00:00:00Z"), state: "extended" as const,
+          usage: null, lastUsedMs: null },
+      ],
+      extendByUs: async (id: string) => {
+        extended.push(id);
+        return id === "sub_A1" ? { ok: true as const, freeUntilMs: Date.parse("2027-01-10T00:00:00Z") } : { ok: false as const, reason: "not_a_tester" as const };
+      },
+    };
+    const app = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterFlowRoutes(app, flow, { isAdmin: () => admin, admin: { freeTime: () => freeTime } });
+    return { app, extended };
+  }
+  const post = (app: Hono<{ Bindings: HttpBindings }>, body: string, site = "same-origin") =>
+    app.request("/admin/testers/extend", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": site },
+      body,
+    });
+
+  it("shows each tester's free time, usage and the one-more-month button, and says no month renews by itself", async () => {
+    const { app } = withFreeTime();
+    const page = await (await app.request("/admin/testers")).text();
+    expect(page).toContain("no free month renews by itself");
+    expect(page).toContain("Free until 10 December 2026. It ends then unless you give one more month.");
+    expect(page).toContain("$1.20 of $3 (40%)");
+    expect(page).toContain("2 days ago");
+    expect(page).toContain("You gave one more month: free until 20 January 2027.");
+    expect(page).toContain('name="subscription" value="sub_A1"');
+    expect(page).not.toContain('value="sub_B2"');
+    expect(page).toContain("stop when a tester's AI use reaches $3");
+  });
+
+  it("gives one more month on the button, same origin and admin only", async () => {
+    const { app, extended } = withFreeTime();
+    const ok = await post(app, "subscription=sub_A1");
+    expect(ok.status).toBe(303);
+    expect(ok.headers.get("location")).toBe("/admin/testers?extended=ok&until=10%20January%202027#free-time");
+    const after = await (await app.request("/admin/testers?extended=ok&until=10%20January%202027")).text();
+    expect(after).toContain("One more free month given: free until 10 January 2027. Nothing is charged.");
+    expect((await post(app, "subscription=sub_B2")).headers.get("location")).toBe("/admin/testers?extended=not_a_tester#free-time");
+    expect((await post(app, "subscription=sub_A1", "cross-site")).status).toBe(404);
+    expect((await post(app, "subscription=bogus")).headers.get("location")).toContain("not_a_tester");
+    expect(extended).toEqual(["sub_A1", "sub_B2"]);
+    const outsider = withFreeTime(false);
+    expect((await post(outsider.app, "subscription=sub_A1")).status).toBe(404);
+    expect(outsider.extended).toEqual([]);
+  });
+});

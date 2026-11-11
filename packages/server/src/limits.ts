@@ -36,7 +36,9 @@ export interface ZenodLimits {
 export const DEFAULT_LIMITS: ZenodLimits = {
   warnPercent: 80,
   reserveUsd: 0.5,
-  filingOverdraftUsd: 3,
+  // E26-S5 round 3 (Jordi, E26-A7: "not more than $5 a month"): $3 allowance + $2 = at most $5 of model
+  // cost per account a month, filing included.
+  filingOverdraftUsd: 2,
   personas: { monthUsd: 1 },
   desk: { monthUsd: 0.5, jobsPerDay: 20 },
   calls: { monthUsd: 1, callUsd: 0.5, callMaxMinutes: 10, allAccountsMonthUsd: 10 },

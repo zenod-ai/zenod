@@ -6,12 +6,15 @@ import type Stripe from "stripe";
 import { describe, expect, it } from "vitest";
 import {
   decideMonthEnd,
-  ENDED_INACTIVE,
+  ENDED_FREE_TIME,
   ENDED_SAFE,
+  EXTENDED_BY_US,
   isTesterSubscription,
   lastUsedFromTenantData,
+  oneMonthAfter,
   TESTER_EXTENSION_COUPON_ID,
   TesterMonthEnd,
+  type MonthEndAccount,
   type MonthEndStripe,
 } from "../src/testerMonthEnd.js";
 
@@ -31,50 +34,46 @@ function sub(overrides: Partial<Stripe.Subscription> & { renewsInDays?: number }
   } as unknown as Stripe.Subscription;
 }
 
-const decide = (s: Stripe.Subscription, lastUsedMs: number | null, nextInvoiceCents: number | null = 900, overCap = false) =>
-  decideMonthEnd({ sub: s, nowMs: NOW, lastUsedMs, nextInvoiceCents, overCap });
+const extendedMark = (s: Stripe.Subscription) =>
+  ({ zenod_tester: "1", zenod_tester_month_end: EXTENDED_BY_US, zenod_tester_extended_for: String(s.current_period_end) });
 
-describe("the tester month-end rule", () => {
+const decide = (s: Stripe.Subscription, nextInvoiceCents: number | null = 900) => decideMonthEnd({ sub: s, nowMs: NOW, nextInvoiceCents });
+
+describe("the tester month-end rule (round 3: no free month renews by itself)", () => {
   it("knows a tester by the tester coupons or the tag", () => {
     expect(isTesterSubscription(sub())).toBe(true);
     expect(isTesterSubscription(sub({ discounts: [], metadata: { zenod_tester: "1" } }))).toBe(true);
     expect(isTesterSubscription(sub({ discounts: [] }))).toBe(false);
   });
 
-  it("extends a tester who used Zenod in the last 14 days", () => {
-    expect(decide(sub(), NOW - 13 * DAY).action).toBe("extend");
+  it("ends every free month we did not extend, and alerts the team, however much the tester uses Zenod", () => {
+    expect(decide(sub())).toEqual({ action: "end", reason: "free_time_over", exception: "free_time_ending" });
+    // even when the next invoice would already be €0 by some other coupon
+    expect(decide(sub(), 0).action).toBe("end");
   });
 
-  it("ends a tester gently who did not", () => {
-    expect(decide(sub(), NOW - 15 * DAY)).toEqual({ action: "end", reason: "inactive" });
-    expect(decide(sub(), null)).toEqual({ action: "end", reason: "inactive" });
+  it("waits until six days before the end", () => {
+    expect(decide(sub({ renewsInDays: 7 })).action).toBe("none");
+    expect(decide(sub({ renewsInDays: 6 })).action).toBe("end");
   });
 
-  it("waits until six days before renewal", () => {
-    expect(decide(sub({ renewsInDays: 7 }), null).action).toBe("none");
-    expect(decide(sub({ renewsInDays: 6 }), null).action).toBe("end");
+  it("leaves a month we extended alone while its next invoice is €0, and ends it when not", () => {
+    const s = sub();
+    s.metadata = extendedMark(s);
+    expect(decide(s, 0)).toEqual({ action: "none", reason: "extended_by_us" });
+    expect(decide(s, 900)).toEqual({ action: "end", reason: "extension_not_free", exception: "not_free_ended_instead" });
   });
 
-  it("does nothing when the next month is already free or the end is already set", () => {
-    expect(decide(sub(), NOW - DAY, 0)).toEqual({ action: "none", reason: "already_free" });
-    expect(decide(sub({ cancel_at_period_end: true }), null)).toEqual({ action: "none", reason: "ending" });
+  it("an extension covers one month only: the next period ends unless we extend again", () => {
+    const s = sub();
+    s.metadata = { ...extendedMark(s), zenod_tester_extended_for: String(s.current_period_end - 30 * 86_400) };
+    expect(decide(s, 0).action).toBe("end");
   });
 
-  it("keeps on a tester who comes back before the end", () => {
-    const ending = sub({ cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_INACTIVE } });
-    expect(decide(ending, NOW - DAY).action).toBe("resume");
-    const endedSafe = sub({ cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_SAFE } });
-    expect(decide(endedSafe, NOW - DAY).action).toBe("resume");
-    expect(decide(endedSafe, NOW - 20 * DAY).action).toBe("none");
-    // a subscription the user cancelled themselves stays cancelled
-    expect(decide(sub({ cancel_at_period_end: true }), NOW - DAY).action).toBe("none");
-  });
-
-  it("alerts only for exceptions", () => {
-    expect(decide(sub(), NOW - DAY).exception).toBeUndefined();
-    expect(decide(sub(), null).exception).toBeUndefined();
-    expect(decide(sub(), NOW - DAY, 900, true)).toEqual({ action: "extend", reason: "active", exception: "extended_over_cap" });
-    expect(decide(sub({ status: "past_due" }), NOW - DAY).exception).toBe("renewal_past_due");
+  it("never brings back an ending month by itself, and reports an unpaid renewal", () => {
+    const ending = sub({ cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_FREE_TIME } });
+    expect(decide(ending)).toEqual({ action: "none", reason: "ending" });
+    expect(decide(sub({ status: "past_due" })).exception).toBe("renewal_past_due");
   });
 });
 
@@ -114,108 +113,115 @@ function fakeStripe(
   return { stripe, updates };
 }
 
-describe("TesterMonthEnd.runOnce", () => {
-  const account = (subscriptionId: string, tenantId: string, overCap = false) => ({
-    subscriptionId,
-    tenantId,
-    overCap: async () => overCap,
-  });
+const account = (subscriptionId: string, tenantId: string): MonthEndAccount => ({
+  subscriptionId,
+  tenantId,
+  who: `${tenantId}@example.com`,
+  usage: async () => ({ spendUsd: 1.234, allowanceUsd: 3, percentUsed: 41 }),
+});
 
-  it("extends the active tester, ends the inactive one, and alerts for nothing", async () => {
-    const subs = { sub_a: sub({ id: "sub_a" }), sub_b: sub({ id: "sub_b" }), sub_c: sub({ id: "sub_c", discounts: [] }) };
+function job(stripe: MonthEndStripe, ids: string[], alerts: Array<[string, Record<string, string | number> | undefined]> = []) {
+  return new TesterMonthEnd({
+    stripe,
+    accounts: () => ids.map((id) => account(id, `t_${id}`)),
+    lastUsed: () => NOW - 2 * DAY,
+    now: () => NOW,
+    alert: (reason, fields) => alerts.push([reason, fields]),
+    log: () => {},
+  });
+}
+
+describe("TesterMonthEnd.runOnce", () => {
+  it("ends the free month of an active tester and tells the team with their usage", async () => {
+    const subs = { sub_a: sub({ id: "sub_a" }), sub_c: sub({ id: "sub_c", discounts: [] }) };
     const { stripe, updates } = fakeStripe(subs);
-    const alerts: string[] = [];
-    const job = new TesterMonthEnd({
-      stripe,
-      accounts: () => [account("sub_a", "t_a"), account("sub_b", "t_b"), account("sub_c", "t_c"), account("sub_a", "t_a")],
-      lastUsed: (tenant) => (tenant === "t_a" ? NOW - DAY : NOW - 30 * DAY),
-      now: () => NOW,
-      alert: (reason) => alerts.push(reason),
-      log: () => {},
-    });
-    const results = await job.runOnce();
+    const alerts: Array<[string, Record<string, string | number> | undefined]> = [];
+    const results = await job(stripe, ["sub_a", "sub_c", "sub_a"], alerts).runOnce();
     expect(results.map((r) => [r.subscriptionId, r.action, r.reason])).toEqual([
-      ["sub_a", "extend", "active"],
-      ["sub_b", "end", "inactive"],
+      ["sub_a", "end", "free_time_over"],
       ["sub_c", "none", "not_a_tester"],
     ]);
-    expect(results[0]!.nextInvoiceCentsAfter).toBe(0);
     expect(updates).toEqual([
-      {
-        id: "sub_a",
-        params: {
-          discounts: [{ coupon: TESTER_EXTENSION_COUPON_ID }],
-          proration_behavior: "none",
-          metadata: { zenod_tester: "1", zenod_tester_month_end: "extended" },
-        },
-      },
-      { id: "sub_b", params: { cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_INACTIVE } } },
+      { id: "sub_a", params: { cancel_at_period_end: true, metadata: { zenod_tester: "1", zenod_tester_month_end: ENDED_FREE_TIME } } },
     ]);
-    expect(alerts).toEqual([]);
-    // a second pass changes nothing
-    expect((await job.runOnce()).map((r) => r.reason)).toEqual(["already_free", "ending", "not_a_tester"]);
-    expect(updates).toHaveLength(2);
+    expect(alerts).toEqual([
+      ["free_time_ending", { days_left: 3, ai_usd: "1.23", cap_usd: 3, ai_pct: 41, last_used_days: 2 }],
+    ]);
+    // the next pass changes nothing and does not alert again
+    expect((await job(stripe, ["sub_a"], alerts).runOnce()).map((r) => r.reason)).toEqual(["ending"]);
+    expect(updates).toHaveLength(1);
+    expect(alerts).toHaveLength(1);
   });
 
-  it("alerts when Stripe refuses, and for a tester over the cap", async () => {
-    const refused = new TesterMonthEnd({
-      stripe: fakeStripe({ sub_a: sub({ id: "sub_a" }) }, { failUpdate: true }).stripe,
-      accounts: () => [account("sub_a", "t_a")],
-      lastUsed: () => NOW - DAY,
-      now: () => NOW,
-      alert: (reason, fields) => alerts.push(`${reason} ${fields?.error ?? ""}`.trim()),
-      log: () => {},
-    });
-    const alerts: string[] = [];
-    expect((await refused.runOnce())[0]!.action).toBe("failed");
-    expect(alerts).toEqual(["no_subscription_write", "not_free_end_failed"]);
-
-    alerts.length = 0;
-    const capped = new TesterMonthEnd({
-      stripe: fakeStripe({ sub_a: sub({ id: "sub_a" }) }).stripe,
-      accounts: () => [account("sub_a", "t_a", true)],
-      lastUsed: () => NOW - DAY,
-      now: () => NOW,
-      alert: (reason) => alerts.push(reason),
-      log: () => {},
-    });
-    expect((await capped.runOnce())[0]!.action).toBe("extend");
-    expect(alerts).toEqual(["extended_over_cap"]);
+  it("alerts when Stripe refuses to end it", async () => {
+    const alerts: Array<[string, Record<string, string | number> | undefined]> = [];
+    const [result] = await job(fakeStripe({ sub_a: sub({ id: "sub_a" }) }, { failUpdate: true }).stripe, ["sub_a"], alerts).runOnce();
+    expect(result!.action).toBe("failed");
+    expect(alerts.map(([r]) => r)).toEqual(["no_subscription_write", "end_failed"]);
   });
 });
 
-describe("a tester is never billed by itself", () => {
-  const job = (stripe: MonthEndStripe, alerts: string[]) =>
-    new TesterMonthEnd({
-      stripe,
-      accounts: () => [{ subscriptionId: "sub_a", tenantId: "t_a", overCap: async () => false }],
-      lastUsed: () => NOW - DAY,
-      now: () => NOW,
-      alert: (reason) => alerts.push(reason),
-      log: () => {},
-    });
+describe("the team gives one more free month", () => {
+  it("extends one tester, takes back the end, and the job then leaves that month alone", async () => {
+    const subs = { sub_a: sub({ id: "sub_a" }) };
+    const { stripe } = fakeStripe(subs);
+    const alerts: Array<[string, Record<string, string | number> | undefined]> = [];
+    const monthEnd = job(stripe, ["sub_a"], alerts);
+    await monthEnd.runOnce();
+    expect(subs.sub_a.cancel_at_period_end).toBe(true);
+
+    const given = await monthEnd.extendByUs("sub_a");
+    expect(given).toEqual({ ok: true, freeUntilMs: oneMonthAfter(subs.sub_a.current_period_end * 1000) });
+    expect(subs.sub_a.cancel_at_period_end).toBe(false);
+    expect(subs.sub_a.metadata).toMatchObject(extendedMark(subs.sub_a));
+
+    expect((await monthEnd.runOnce()).map((r) => r.reason)).toEqual(["extended_by_us"]);
+    expect(subs.sub_a.cancel_at_period_end).toBe(false);
+  });
+
+  it("refuses an account that is not a tester or has ended", async () => {
+    const { stripe } = fakeStripe({ sub_c: sub({ id: "sub_c", discounts: [] }), sub_e: sub({ id: "sub_e", status: "canceled" }) });
+    const monthEnd = job(stripe, []);
+    expect(await monthEnd.extendByUs("sub_c")).toEqual({ ok: false, reason: "not_a_tester" });
+    expect(await monthEnd.extendByUs("sub_e")).toEqual({ ok: false, reason: "not_running" });
+  });
 
   for (const [what, options] of [
     ["the extension is refused", { failDiscount: true }],
     ["the next bill is still not free", { neverFree: true }],
   ] as const) {
-    it(`ends the free month instead when ${what}`, async () => {
-      const subs = { sub_a: sub({ id: "sub_a" }) };
-      const alerts: string[] = [];
-      const [result] = await job(fakeStripe(subs, options).stripe, alerts).runOnce();
-      expect(result!.action).toBe("failed");
+    it(`never bills: ends the free month instead when ${what}`, async () => {
+      const subs = { sub_a: sub({ id: "sub_a", renewsInDays: 20 }) };
+      const alerts: Array<[string, Record<string, string | number> | undefined]> = [];
+      const result = await job(fakeStripe(subs, options).stripe, ["sub_a"], alerts).extendByUs("sub_a");
+      expect(result).toEqual({ ok: false, reason: "not_free_ended_instead" });
       expect(subs.sub_a.cancel_at_period_end).toBe(true);
       expect(subs.sub_a.metadata.zenod_tester_month_end).toBe(ENDED_SAFE);
-      expect(alerts).toEqual(["not_free_ended_instead"]);
+      expect(alerts.map(([r]) => r)).toEqual(["not_free_ended_instead"]);
     });
   }
 
-  it("tries the extension again on the next pass, and keeps the tester on once it works", async () => {
-    const subs = { sub_a: sub({ id: "sub_a" }) };
-    await job(fakeStripe(subs, { failDiscount: true }).stripe, []).runOnce();
-    const [again] = await job(fakeStripe(subs).stripe, []).runOnce();
-    expect([again!.action, again!.nextInvoiceCentsAfter]).toEqual(["resume", 0]);
-    expect(subs.sub_a.cancel_at_period_end).toBe(false);
+  it("lists each tester's free time for the operator's page", async () => {
+    const extended = sub({ id: "sub_b", renewsInDays: 10 });
+    extended.metadata = extendedMark(extended);
+    const { stripe } = fakeStripe({
+      sub_a: sub({ id: "sub_a", renewsInDays: 20 }),
+      sub_b: extended,
+      sub_c: sub({ id: "sub_c", discounts: [] }),
+      sub_d: sub({ id: "sub_d", cancel_at_period_end: true }),
+    });
+    const rows = await job(stripe, ["sub_a", "sub_b", "sub_c", "sub_d"]).overview();
+    expect(rows.map((r) => [r.subscriptionId, r.state, r.who])).toEqual([
+      ["sub_d", "ending", "t_sub_d@example.com"],
+      ["sub_b", "extended", "t_sub_b@example.com"],
+      ["sub_a", "free", "t_sub_a@example.com"],
+    ]);
+    expect(rows[0]!.usage).toEqual({ spendUsd: 1.234, allowanceUsd: 3, percentUsed: 41 });
+  });
+
+  it("one month after keeps the day, or the month's last day", () => {
+    expect(new Date(oneMonthAfter(Date.parse("2026-11-10T18:00:00Z"))).toISOString()).toBe("2026-12-10T18:00:00.000Z");
+    expect(new Date(oneMonthAfter(Date.parse("2027-01-31T00:00:00Z"))).toISOString()).toBe("2027-02-28T00:00:00.000Z");
   });
 });
 

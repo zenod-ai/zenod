@@ -82,8 +82,8 @@ describe("near and at the cap, per feature", () => {
   it("filing never stops at the allowance, only far past it", () => {
     expect(decide("filing", 2.5).state).toBe("near");
     expect(decide("filing", 3.2).state).toBe("near");
-    expect(decide("filing", 5.99).state).toBe("near");
-    const stopped = decide("filing", 6);
+    expect(decide("filing", 4.99).state).toBe("near");
+    const stopped = decide("filing", 5);
     expect(stopped).toMatchObject({ state: "paused", reason: "allowance" });
     expect(stopped.message).toContain("kept as you sent them");
   });
@@ -118,7 +118,7 @@ describe("near and at the cap, per feature", () => {
     expect(view).toMatchObject({ allowanceUsd: 3, percentageUsed: 53, reserveUsd: 0.5 });
     expect(view.spentUsd).toBeCloseTo(1.6);
     const byId = Object.fromEntries(view.features.map((feature) => [feature.id, feature]));
-    expect(byId.filing).toMatchObject({ spentUsd: 1.2, shareUsd: null, stopsAtUsd: 6, state: "ok" });
+    expect(byId.filing).toMatchObject({ spentUsd: 1.2, shareUsd: null, stopsAtUsd: 5, state: "ok" });
     expect(byId.chat).toMatchObject({ stopsAtUsd: 3 });
     expect(byId.personas).toMatchObject({ shareUsd: 1, stopsAtUsd: 2.5 });
     expect(byId.calls!.costs).toMatch(/cents a minute/);

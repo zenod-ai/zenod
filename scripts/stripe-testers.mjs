@@ -10,7 +10,9 @@
 //   setup                  create or reuse the tester coupon and the extension coupon
 //   issue <label>          one single-use promotion code, expiring after 14 days;
 //                          label -> code is appended to a private ledger (0600), never a repo
-//   extend [--days N]      put the extension coupon on every tester subscription renewing
+//   extend [--days N]      (by hand only; the usual way is one tester at a time on
+//                          cloud.zenod.dev/admin/testers, EPIC-26 S5 round 3)
+//                          put the extension coupon on every tester subscription renewing
 //                          within N days (default 7) whose next invoice is not €0, and recover
 //                          a past_due tester (extend + void its open renewal invoice); dry run
 //                          unless --apply
@@ -287,9 +289,13 @@ export async function extend(stripe, { days = DEFAULT_EXTEND_DAYS, apply = false
       continue;
     }
     if (before.total !== 0) {
+      // EPIC-26 S5 round 3: an extension is the team's call; this mark makes zenod-mt's month-end job
+      // leave the extended month alone (the usual way is the button on cloud.zenod.dev/admin/testers).
       await stripe("POST", `subscriptions/${sub.id}`, {
         "discounts[0][coupon]": EXTENSION_COUPON.id,
         proration_behavior: "none",
+        "metadata[zenod_tester_month_end]": "extended_by_us",
+        "metadata[zenod_tester_extended_for]": String(sub.current_period_end),
         ...tag,
       });
     } else if (untagged) {

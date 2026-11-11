@@ -26,6 +26,7 @@ import type { HttpBindings } from "@hono/node-server";
 import { bodyLimit } from "hono/body-limit";
 import type { PublicCountsDocument } from "./publicCounts.js";
 import type { TesterMarks } from "./testerMarks.js";
+import { oneMonthAfter, type ExtendResult, type FreeTimeRow } from "./testerMonthEnd.js";
 import { mailerFromEnv, resendMailer, type SendMail, type ZenodMail } from "./zenodMail.js";
 
 export const TESTER_FLOW_FILE = "tester-flow.json";
@@ -101,7 +102,7 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
     "",
     link,
     "",
-    "Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. Your free month continues while you use Zenod, and nothing is ever charged unless you choose to pay.",
+    "Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. You get one free month. If the test is going well, we may add more, one month at a time. Nothing is ever charged unless you choose to pay.",
     "Then pick Google Drive or GitHub for your notes, link your WhatsApp, and send your first voice note.",
     "",
     `The code works once, for one account, until ${expires}.`,
@@ -116,7 +117,7 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
 <p>Hi,</p>
 <p>Thanks for applying to test Zenod. You're in: here is your personal link, with your code already inside.</p>
 <p style="margin:1.75rem 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f4d3a;color:#f6f2e9;text-decoration:none;padding:.8rem 1.2rem;border-radius:3px;font-family:Helvetica,Arial,sans-serif">Start testing Zenod</a></p>
-<p>Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. Your free month continues while you use Zenod, and nothing is ever charged unless you choose to pay.</p>
+<p>Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. You get one free month. If the test is going well, we may add more, one month at a time. Nothing is ever charged unless you choose to pay.</p>
 <p>Then pick Google Drive or GitHub for your notes, link your WhatsApp, and send your first voice note.</p>
 <p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#4a554e">The code works once, for one account, until ${escapeHtml(expires)}. If the button does not open, copy this link: ${escapeHtml(link)}</p>
 <p>Questions or something broke? Just reply to this email.</p>
@@ -382,6 +383,8 @@ export interface TesterAdminExtras {
   applications?: () => Array<{ at?: unknown; contact?: unknown; use?: unknown }>;
   /** Our own tests (testerMarks.ts). */
   marks?: TesterMarks;
+  /** E26-S5 round 3: each tester's free time and the team's "one more free month" (testerMonthEnd.ts). */
+  freeTime?: () => { overview(): Promise<FreeTimeRow[]>; extendByUs(subscriptionId: string): Promise<ExtendResult> } | null;
 }
 
 const COUNT_LABELS: Array<[string, string]> = [
@@ -482,7 +485,49 @@ function applicationsSection(flow: TesterFlow, extras: TesterAdminExtras): strin
 <table><thead><tr><th>Applied (UTC)</th><th>Email</th><th>How they would use Zenod</th><th>Real or test</th><th>Place</th></tr></thead><tbody>${body || `<tr><td colspan="5">No applications yet.</td></tr>`}</tbody></table>`;
 }
 
-function adminPage(flow: TesterFlow, extras: TesterAdminExtras = {}): string {
+const day = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+const EXTEND_NOTICE: Record<string, string> = {
+  not_a_tester: "That account is not a tester, so nothing was changed.",
+  not_running: "That tester's subscription has already ended or is unpaid, so nothing was changed. Look at it in Stripe.",
+  not_free_ended_instead: "Stripe did not confirm the next month at €0, so the free month was set to end instead and nothing will be charged. The team was alerted.",
+  stripe_failed: "Stripe could not be reached, so nothing was changed. Try again in a minute.",
+};
+
+function freeTimeRow(row: FreeTimeRow, nowMs: number): string {
+  const until = day(row.periodEndMs);
+  const where = {
+    free: `Free until ${until}. It ends then unless you give one more month.`,
+    extended: `You gave one more month: free until ${day(oneMonthAfter(row.periodEndMs))}.`,
+    ending: `Ends on ${until}.`,
+    ended: "Ended.",
+    not_free: "Renewal unpaid: look at it in Stripe now.",
+  }[row.state];
+  const u = row.usage;
+  const ai = u?.spendUsd != null
+    ? `$${u.spendUsd.toFixed(2)}${u.allowanceUsd != null ? ` of $${u.allowanceUsd}` : ""}${u.percentUsed != null ? ` (${u.percentUsed}%)` : ""}`
+    : "–";
+  const last = row.lastUsedMs === null ? "not yet"
+    : Math.floor((nowMs - row.lastUsedMs) / 86_400_000) <= 0 ? "today"
+    : `${Math.floor((nowMs - row.lastUsedMs) / 86_400_000)} days ago`;
+  const action = row.state === "free" || row.state === "ending"
+    ? `<form method="post" action="/admin/testers/extend" style="display:inline"><input type="hidden" name="subscription" value="${escapeHtml(row.subscriptionId)}"><button class="btn go" type="submit">One more free month</button></form>`
+    : row.state === "extended" ? `<span class="muted">Given. Press again next month if the test goes on.</span>` : "";
+  return `<tr><td>${escapeHtml(row.who)}</td><td>${where}</td><td>${ai}</td><td>${last}</td><td>${action}</td></tr>`;
+}
+
+function freeTimeSection(rows: FreeTimeRow[] | null, notice: string): string {
+  if (rows === null) return "";
+  const nowMs = Date.now();
+  const body = rows.map((row) => freeTimeRow(row, nowMs)).join("");
+  return `<h2 id="free-time">Free time</h2>
+${notice ? `<p class="where">${escapeHtml(notice)}</p>` : ""}
+<p>Each tester gets one free month. It ends by itself at the end of that month: no free month renews by itself, and nothing is ever charged. Six days before the end, Zenod sets the free month to end and alerts the team with that tester's usage. To keep a tester on, press One more free month. It covers one month, and you can press it again next month.</p>
+<p class="muted">Usage cap, the same for every Hosted account: answers stop when a tester's AI use reaches $3 in a month. Notes keep being saved, and sorting them stops by $5 at most. Everything starts again on the 1st.</p>
+<table><thead><tr><th>Tester</th><th>Free time</th><th>AI this month</th><th>Last used</th><th></th></tr></thead><tbody>${body || `<tr><td colspan="5">No tester has signed up yet.</td></tr>`}</tbody></table>`;
+}
+
+function adminPage(flow: TesterFlow, extras: TesterAdminExtras = {}, freeRows: FreeTimeRow[] | null = null, notice = ""): string {
   const snap = flow.snapshot();
   const accepted = snap.testers.filter((t) => t.status === "accepted").length;
   const state = snap.accepting
@@ -501,6 +546,7 @@ function adminPage(flow: TesterFlow, extras: TesterAdminExtras = {}): string {
 </div>
 ${countsSection(extras)}
 ${applicationsSection(flow, extras)}
+${freeTimeSection(freeRows, notice)}
 <h2>Acceptance</h2>
 <p>${state}</p>
 <form method="post" action="/admin/testers/switch">${button}</form>
@@ -535,9 +581,27 @@ export function mountTesterFlowRoutes(app: Hono<{ Bindings: HttpBindings }>, flo
 
   const isAdmin = options.isAdmin;
   if (!isAdmin) return;
-  app.get("/admin/testers", (c) => {
+  app.get("/admin/testers", async (c) => {
     if (!isAdmin(c)) return c.text("Not Found", 404);
-    return c.html(adminPage(flow, options.admin), 200, { "Cache-Control": "no-store" });
+    const freeTime = options.admin?.freeTime?.() ?? null;
+    const rows = freeTime ? await freeTime.overview().catch(() => []) : null;
+    const done = c.req.query("extended");
+    const notice = done === "ok"
+      ? `One more free month given${c.req.query("until") ? `: free until ${c.req.query("until")}` : ""}. Nothing is charged.`
+      : done ? EXTEND_NOTICE[done] ?? "" : "";
+    return c.html(adminPage(flow, options.admin, rows, notice), 200, { "Cache-Control": "no-store" });
+  });
+  app.post("/admin/testers/extend", async (c) => {
+    const freeTime = options.admin?.freeTime?.() ?? null;
+    if (!isAdmin(c) || !sameOrigin(c) || !freeTime) return c.text("Not Found", 404);
+    const form = await c.req.parseBody().catch(() => ({} as Record<string, unknown>));
+    const subscription = typeof form.subscription === "string" ? form.subscription.trim() : "";
+    if (!/^sub_[A-Za-z0-9]{1,80}$/.test(subscription)) return c.redirect("/admin/testers?extended=not_a_tester#free-time", 303);
+    const result = await freeTime.extendByUs(subscription);
+    const query = result.ok
+      ? `extended=ok&until=${encodeURIComponent(day(result.freeUntilMs))}`
+      : `extended=${result.reason}`;
+    return c.redirect(`/admin/testers?${query}#free-time`, 303);
   });
   app.post("/admin/testers/mark", async (c) => {
     if (!isAdmin(c) || !sameOrigin(c) || !options.admin?.marks) return c.text("Not Found", 404);

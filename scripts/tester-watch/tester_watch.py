@@ -147,8 +147,9 @@ def alerts_for(row: dict, now_ms: int, renewal_days: float, cap_pct: float) -> l
     out = []
     st = row.get("stripe") or {}
     status = st.get("status") or row.get("local_status")
-    # EPIC-26 S5: a free month the month-end job ended on purpose (not used in 14 days) is not an alert.
-    planned_end = st.get("month_end") == "ended_inactive" and status == "canceled"
+    # EPIC-26 S5: a free month the month-end job ended on purpose is not an alert: round 3 ends every
+    # month the team did not extend ("ended_free_time"); "ended_inactive" is the round 1-2 mark.
+    planned_end = st.get("month_end") in ("ended_inactive", "ended_free_time") and status == "canceled"
     if planned_end:
         pass
     elif status in BAD_STRIPE or row.get("local_status") == "past_due":
