@@ -30,7 +30,7 @@ Goal sentence: The errors Jordi is hitting are fixed today, and the team hears o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-11 Delivery Manager run_285a0f57: M13 readied on Jordi's ask vn_1ac62a8c and started (worker run_82d2344f: probe his 23:34Z and one-hour notes' audio against their transcripts, fix a cut, guard transcribe.ts) ; 2026-11-10 stamped ready on Jordi's ask and planned; M1 and M2 dispatched
+Last attempted: 2026-11-11 M13 done (no confirm), worker run_82d2344f, integrated by the Delivery Manager: Zenod held both of Jordi's 10 Nov notes whole (23:34Z note 1,103 words in vault commit 3291cc0, one-hour note 9,623 words); the cut he saw was on alpha9's Team desk at about 3,000 characters (told them, agent_team b1cb63e64); the transcriber now re-runs a note in 10-minute pieces when it comes back short, #1640 7b2df5a, ci green, staging only until infra-vps/EPIC-2-A50 ; 2026-11-10 stamped ready on Jordi's ask and planned; M1 and M2 dispatched
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
