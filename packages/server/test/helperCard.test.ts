@@ -2,11 +2,20 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cleanHelperCard, namedMemories, pictureTitle } from "../src/helperCard.js";
+import { cleanHelperCard, namedMemories, pictureTitle, words } from "../src/helperCard.js";
 import { InboxStore } from "../src/inboxStore.js";
 
 // EPIC-14 S36: the one shape of a helper's card (a picture of the change, why yes, why not).
 describe("helper card (S36)", () => {
+  it("never cuts a reason mid-word: the last full sentence that fits, else the last whole word and an ellipsis (seen live)", () => {
+    const yes = "You keep coming back to whether your voice notes are actually landing in one place, and you said you're not sure they reach the memory. Saying the topic and audience at the top of each note gives you a simple way to check later whether it arrived.";
+    expect(words(yes, 240)).toBe("You keep coming back to whether your voice notes are actually landing in one place, and you said you're not sure they reach the memory.");
+    expect(words("Zenod's role in centralized voice-note storage across multiple phones and apps", 60)).toBe("Zenod's role in centralized voice-note storage across…");
+    expect(words("Short and whole.", 60)).toBe("Short and whole.");
+    expect(words("x".repeat(70), 60)).toBe(`${"x".repeat(59)}…`);
+    expect(cleanHelperCard({ yes, no: "It adds a few seconds.", picture: null })!.yes).not.toMatch(/whether it a$/);
+  });
+
   it("keeps a card only with both reasons, and a picture only with two different ideas", () => {
     expect(cleanHelperCard({ yes: "Both are about the flat." })).toBeNull();
     expect(cleanHelperCard({ yes: " Both are\nabout the flat. ", no: "It may add little.", picture: { change: "link", from: "Boiler", to: "boiler" } }))
