@@ -37,7 +37,7 @@ Evidence: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t
 Waiting on: nobody
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: once signed in, the T7 rehearsal, then T8 go or no-go and the invites
-Monitoring: Drive OAuth readiness proof since 2026-11-01 until 2026-11-28 · next check 2026-11-21 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
+Monitoring: Drive OAuth readiness proof renewed 2026-11-11 (E26-A5, look at 03:48:45Z) until 2027-02-09 · next check 2027-02-02 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
 Source revision: see git log
 Verified at: 2026-11-10T07:00Z (ledger read; health ok on 1f1ebae)
 
