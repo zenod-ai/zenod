@@ -100,6 +100,7 @@ import { memoryGlance, MemoryGlanceCache } from "./memoryGlance.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
 import { transcribeAudio } from "./transcribe.js";
 import { registerPersonaRoutes } from "./personaRoutes.js";
+import { answerFoundSomething, assistantLabel, captureFacts, helperFacts, markQuickStart, quickStartView, setQuickStartHidden } from "./quickStart.js";
 import { registerMemoryCallRoutes } from "./memoryCallRoutes.js";
 import { CALL_BASE_ENV, callKey, callMeterFor, callsFor, openAiMinter, OPENAI_BASE_URL, platformMeter } from "./memoryCall.js";
 import { inboxFor } from "./inboxStore.js";
@@ -139,6 +140,11 @@ export interface CustomerLayerOptions {
    * Its errors never fail a checkout.
    */
   onCheckoutWelcome?: (account: CustomerAccount, email: string | null) => Promise<void> | void;
+  /**
+   * EPIC-26 S15: whether Claude, Codex or another assistant signed in to this tenant over OAuth (the
+   * chassis keeps those sign-ins), with its self-declared name and when. The quick start's step 2.
+   */
+  quickStartAssistantSignIn?: (tenantId: string) => { clientName: string; at: number } | null;
   /** Product-owned sidecar lifecycle; it must durably record desired state before returning. */
   onEntitlementChanged?: (
     account: CustomerAccount,
@@ -1460,6 +1466,43 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     return c.json({ saves: recentSaves(runtime.taskJobStore, limit) });
   });
 
+  // EPIC-26 S15: the tester quick start, five steps that tick off by themselves from what this
+  // tenant's own stores already hold (quickStart.ts), and hide / show again.
+  app.get("/api/console/quick-start", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      const signIn = options.quickStartAssistantSignIn?.(account.tenant_id) ?? null;
+      const tokenUse = mcpTokens.list(account.account_id)
+        .filter((record) => record.lastUsedAt !== null)
+        .sort((a, b) => (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0))[0];
+      const assistant = signIn
+        ? { name: assistantLabel(signIn.clientName), at: signIn.at }
+        : tokenUse ? { name: assistantLabel(tokenUse.label), at: tokenUse.lastUsedAt } : null;
+      return c.json(quickStartView(runtime.dataDir, { ...captureFacts(runtime.taskJobStore), assistant, ...helperFacts(runtime) }));
+    } catch (error) {
+      console.warn(`[quick-start] unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "quick start unavailable" }, 503);
+    }
+  });
+
+  app.post("/api/console/quick-start/hide", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const body = await c.req.json<{ hidden?: unknown }>().catch(() => ({}) as { hidden?: unknown });
+    if (typeof body.hidden !== "boolean") return c.json({ error: "invalid", message: "hidden must be true or false" }, 400);
+    setQuickStartHidden(runtime.dataDir, body.hidden);
+    return c.json({ hidden: body.hidden });
+  });
+
   // EPIC-9 E9-2e: the signed-in customer's memory tree (Tree.md + page parents),
   // read-only from their own vault. Same account-only tenant resolution as above.
   const memoryTrees = new ConsoleMemoryTreeCache();
@@ -1618,7 +1661,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
     try {
-      return c.json(await rankMemories(await runtime.getEngine(), query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT)));
+      const ranked = await rankMemories(await runtime.getEngine(), query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT));
+      if (ranked.results.length > 0) markQuickStart(runtime.dataDir, "found");
+      return c.json(ranked);
     } catch (error) {
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ query, tier: "scan", ms: null, results: [] });
       console.warn(`[memory-search] console search unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -1745,6 +1790,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           appChat: true,
           readAs: (words) => runtime.readAs(words),
         });
+        if (answerFoundSomething(answer)) markQuickStart(runtime.dataDir, "found");
         await send({ type: "answer", answer });
       } catch (error) {
         const failure = memoryChatFailure(tenantId, error);
@@ -1816,7 +1862,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
             appChat: true,
             readAs: (words) => runtime.readAs(words),
           });
-          await send({ type: "answer", answer });
+          if (answerFoundSomething(answer)) markQuickStart(runtime.dataDir, "found");
+        await send({ type: "answer", answer });
         }
         await send({ type: "done" });
       } catch (error) {
@@ -1862,7 +1909,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if ("response" in start) return start.response;
     const { question, runtime, tenantId, release } = start;
     try {
-      return c.json(await answerFromMemory(await runtime.getEngine(), question, { appChat: true, readAs: (words) => runtime.readAs(words) }));
+      const answer = await answerFromMemory(await runtime.getEngine(), question, { appChat: true, readAs: (words) => runtime.readAs(words) });
+      if (answerFoundSomething(answer)) markQuickStart(runtime.dataDir, "found");
+      return c.json(answer);
     } catch (error) {
       const failure = memoryChatFailure(tenantId, error);
       return c.json(failure.body, failure.status);
