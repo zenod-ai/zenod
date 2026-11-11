@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseLogCaptures } from "./captureOrigin.js";
@@ -10,7 +10,7 @@ import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { pageTreeFields, parseTree, TREE_PATH } from "./tree.js";
 import { extractCitations, extractPageLinks } from "./pages.js";
-import { isVoiceCapture, recentIntent, type RecentIntent } from "./recentIntent.js";
+import { isVoiceCapture, recentIntent, zoneDayOf, zoneDayStartMs, type RecentIntent } from "./recentIntent.js";
 import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphNote, type MemoryGraphRawEdge, type MemoryGraphView } from "./memoryGraph.js";
 import { buildWeightedLinks, CLOUD_DEFAULT_THRESHOLD, expandCloud, isNote, nodeIdOf, type CloudNode, type NodeTie } from "./memoryWeights.js";
 
@@ -35,6 +35,7 @@ const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
 const LOG_FILE_RE = /^Log\/(\d{4}-\d{2}-\d{2})\.md$/;
+const dayAfter = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 const LOG_ENTRY_DATE_RE = /^Log\/(\d{4}-\d{2}-\d{2})\.md#/;
 /** Re-check the vault on disk at least this often even when no write marked the index dirty. */
 const STALE_AFTER_MS = 60_000;
@@ -154,6 +155,11 @@ export interface MemoryIndexOptions {
   /** Alias groups: any member in a query also searches the others. None built in (root L-7). */
   aliases?: readonly (readonly string[])[];
   now?: () => number;
+  /**
+   * The person's time zone (E12-S38): "today" and "yesterday" are their days, and a day's notes are
+   * the ones captured between its local midnights. Unknown (null) reads days in UTC.
+   */
+  timeZone?: () => string | null | undefined;
   /**
    * Path retrieval in the ranked list (E18-W1): a clear best page brings in the memories its strong
    * paths reach (multiplied strength at or above `threshold`), at most `joins` of them.
@@ -619,7 +625,7 @@ export class MemoryIndex {
   private async searchHits(query: string, limit: number): Promise<MemoryIndexHit[]> {
     await this.fresh();
     // "What was in my last voice note?" is answered by time and the graph, not by its words (E12-S3c).
-    const intent = recentIntent(query, this.now());
+    const intent = recentIntent(query, this.now(), this.options.timeZone?.());
     if (intent) {
       const recent = this.recentSearch(intent, limit);
       if (recent.length > 0) return recent;
@@ -888,6 +894,44 @@ export class MemoryIndex {
   }
 
   /**
+   * The notes captured from the start of day `first` to the end of day `last` in the person's time
+   * zone (E12-S38). Log files are named by their UTC day, so a Mexico City day is the evening of
+   * one file and the start of the next: the entries' clocks (UTC) decide at the two edges. In UTC
+   * the days are the files.
+   */
+  private notesBetween<T extends { path: string; file: string }>(pool: T[], first: string, last: string): T[] {
+    const zone = this.options.timeZone?.();
+    const start = zoneDayStartMs(first, zone);
+    const end = zoneDayStartMs(dayAfter(last), zone);
+    if (start === Date.parse(`${first}T00:00:00Z`) && end === Date.parse(`${dayAfter(last)}T00:00:00Z`)) {
+      return pool.filter((row) => row.file >= `Log/${first}.md` && row.file <= `Log/${last}.md`);
+    }
+    const [from, to] = [`Log/${zoneDayOf(start, null)}.md`, `Log/${zoneDayOf(end - 1, null)}.md`];
+    const clocks = new Map<string, Map<string, string>>();
+    return pool.filter((row) => {
+      if (row.file < from || row.file > to) return false;
+      let clock = clocks.get(row.file);
+      if (!clock) clocks.set(row.file, clock = this.logClocks(row.file));
+      const time = clock.get(row.path.split("#^")[1] ?? "");
+      // An entry without a clock keeps its file's day.
+      if (!time) return row.file >= `Log/${first}.md` && row.file <= `Log/${last}.md`;
+      const at = Date.parse(`${row.file.slice(4, 14)}T${time}:00Z`);
+      return at >= start && at < end;
+    });
+  }
+
+  /** Each entry's `## HH:MM` clock in one Log file, by anchor; empty when the file cannot be read. */
+  private logClocks(file: string): Map<string, string> {
+    const out = new Map<string, string>();
+    try {
+      for (const match of readFileSync(join(this.options.vaultPath, file), "utf8").matchAll(/^## (\d{2}:\d{2}) .*?\^(e-[0-9a-f]{6})\s*$/gm)) out.set(match[2]!, match[1]!);
+    } catch {
+      // A file gone since the index read it: its entries keep their file's day.
+    }
+    return out;
+  }
+
+  /**
    * A recent-note question (recentIntent.ts): the person's latest notes (voice notes when it
    * asks for one), newest first, then the pages the latest one was filed into or links to and
    * their tree parents. A note's percent is its fit (1 without a topic, else how much of the
@@ -906,14 +950,10 @@ export class MemoryIndex {
     if (pool.length === 0) return [];
     // Newest first: a Log file is named by its day and its entries are appended in time order.
     pool.sort((a, b) => b.file.localeCompare(a.file) || b.rowid - a.rowid);
-    if (intent.window.kind === "day") {
-      const day = `Log/${intent.window.date}.md`;
-      pool = pool.filter((row) => row.file === day);
-      if (pool.length === 0) return [];
-    } else if (intent.window.kind === "range") {
-      // A period (E12-S1b round 2): every note from its first day to its last, newest first.
-      const [from, to] = [`Log/${intent.window.from}.md`, `Log/${intent.window.to}.md`];
-      pool = pool.filter((row) => row.file >= from && row.file <= to);
+    if (intent.window.kind === "day" || intent.window.kind === "range") {
+      // A day, or a period (E12-S1b round 2): every note from its first day to its last, newest first.
+      const [first, last] = intent.window.kind === "day" ? [intent.window.date, intent.window.date] : [intent.window.from, intent.window.to];
+      pool = this.notesBetween(pool, first, last);
       if (pool.length === 0) return [];
     }
     pool = pool.slice(0, 200);
@@ -1184,7 +1224,7 @@ export class MemoryIndex {
     const out = new Map<string, number>();
     if (paths.length === 0) return out;
     await this.fresh();
-    const intent = recentIntent(query, this.now());
+    const intent = recentIntent(query, this.now(), this.options.timeZone?.());
     if (intent) {
       for (const hit of this.recentSearch(intent, MAX_HITS)) {
         for (const path of paths) if (!out.has(path) && (hit.path === path || hit.path.split("#")[0] === path)) out.set(path, hit.matchPercent);

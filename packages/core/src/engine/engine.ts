@@ -7,7 +7,7 @@ import { parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendRoute } from "
 import { memoryTalkPrompt, talkCitations, type TalkMemory, type TalkPersona, type TalkTurn } from "../llm/memoryTalk.js";
 import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_WHOLE_CONTEXT_CHARS, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
 import { captureOrigin, isPersonSource, outsideOpsRollup } from "../vault/captureOrigin.js";
-import { recentIntent } from "../vault/recentIntent.js";
+import { recentIntent, zoneOffsetMs } from "../vault/recentIntent.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
@@ -225,6 +225,12 @@ function channelName(surface: Surface): string {
   }
 }
 
+/** E12-S38: a moment on the person's clock, "2026-11-10 19:15 America/Mexico_City" (UTC without a zone). */
+function zonedMinute(ms: number, timeZone: string | null | undefined): string {
+  const local = new Date(ms + zoneOffsetMs(ms, timeZone));
+  return `${local.toISOString().slice(0, 16).replace("T", " ")} ${timeZone || "UTC"}`;
+}
+
 function formatChatTimestamp(d: Date): string {
   return `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
@@ -397,6 +403,11 @@ export interface EngineOptions {
   /** Override for tests. */
   now?: () => Date;
   /**
+   * The person's time zone, IANA ("America/Mexico_City"), E12-S38: memory answers read "today" and
+   * "yesterday" as their days and tell the model their clock. Unknown (null) is UTC.
+   */
+  timeZone?: () => string | null | undefined;
+  /**
    * Max staleness the read path tolerates before pulling from origin.
    * Writes always pull; without this, reads could serve a stale snapshot
    * indefinitely. 0 = pull on every read (tests).
@@ -544,7 +555,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     if (memoryIndex !== undefined) return memoryIndex;
     try {
       // E12-S36: the index reads "yesterday" on the engine's clock, the same day the answer is told it is.
-      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath, eagerRefresh: true, now: () => now().getTime() });
+      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath, eagerRefresh: true, now: () => now().getTime(), ...(options.timeZone ? { timeZone: options.timeZone } : {}) });
     } catch (error) {
       if (error instanceof MemoryIndexTenantError) throw error;
       console.warn(`[memory-index] unavailable, using the scan search: ${error instanceof Error ? error.message : String(error)}`);
@@ -3000,7 +3011,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     assertVault(repo);
     await syncForRead();
     const today = now();
-    const timed = recentIntent(question, today.getTime());
+    // E12-S38: the person's days and clock, not UTC's, once their time zone is known.
+    const zone = options.timeZone?.() ?? null;
+    const timed = recentIntent(question, today.getTime(), zone);
     const all: Array<{ n: number; path: string; title: string; snippet?: string }> = [...memories];
     // E12-S19: the person's notes that hold the question in one passage are read whole, wherever they rank.
     let asked: string[] = [];
@@ -3035,8 +3048,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
             const day = /^Log\/(\d{4}-\d{2}-\d{2})\.md$/.exec(file)?.[1];
             const clock = /^## (\d{2}:\d{2})/.exec(body)?.[1];
             const type = /^- content-type: (\S+)/m.exec(body)?.[1]?.replace(/_/g, " ");
-            const at = captured && !Number.isNaN(Date.parse(captured)) ? new Date(captured).toISOString().slice(0, 16).replace("T", " ") : day ? `${day}${clock ? ` ${clock}` : ""}` : null;
-            if (at) when = `${at} UTC${type ? `, ${type}` : ""}`;
+            const moment = captured && !Number.isNaN(Date.parse(captured)) ? Date.parse(captured) : day && clock ? Date.parse(`${day}T${clock}:00Z`) : null;
+            const at = moment !== null ? zonedMinute(moment, zone) : day ? `${day} UTC` : null;
+            if (at) when = `${at}${type ? `, ${type}` : ""}`;
             filed = [...body.matchAll(/^- filed: \[\[([^\]|#]+)/gm)].map((m) => m[1]!.split("/").pop()!).filter((title, k, list) => list.indexOf(title) === k);
             // E12-S16: the model is told what each note is: what the person said or sent, or an agent's note.
             const source = /^- source: (\S+)/m.exec(body)?.[1] ?? null;
@@ -3066,8 +3080,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     });
     const shown = context.map(({ n, path, title }) => ({ n, path, title, url: links.get(n)?.url ?? "", provider: links.get(n)?.provider ?? "github" }));
     if (context.length === 0) return { checked: false, reason: "no_answer", text: "", cited: [], context: shown };
-    const day = today.toISOString().slice(0, 10);
-    const { system, prompt } = memoryChatPrompt(question, context, `${day} (${today.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })}), now ${today.toISOString().slice(11, 16)} UTC`);
+    const [day, clock, zoneName] = zonedMinute(today.getTime(), zone).split(" ") as [string, string, string];
+    const weekday = new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+    const { system, prompt } = memoryChatPrompt(question, context, `${day} (${weekday}), now ${clock} ${zoneName}`);
     reportTokenCost("ask", [system, prompt]);
     const filter = memoryChatStreamFilter((text) => onText?.(text));
     const output = await llm.streamMemoryChat({ system, prompt }, (delta) => filter.push(delta));

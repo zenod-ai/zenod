@@ -70,6 +70,7 @@ export { seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type Seed
 export { heat as treeHeat, jaccard, matchRootIds, newRootId } from "./engine/treeIdentity.js";
 export { quickIndexBase, oneLine, sayableAlias, QUICK_INDEX_WEEK_DAYS, type QuickIndexBase, type QuickIndexPlace, type QuickIndexCapture } from "./vault/quickIndex.js";
 export { memoryTreeOutline, pageCaptureDate, type MemoryTreeOutline, type MemoryTreeOutlineNode, type MemoryTreeCapture } from "./vault/treeOutline.js";
+export { validTimeZone } from "./vault/recentIntent.js";
 export { idfOf, matchPercent, monotonic, withMatchPercent, type MatchInput } from "./vault/matchPercent.js";
 export {
   MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, MEMORY_GRAPH_LIT_MAX, MEMORY_GRAPH_MAX_LIMIT, MEMORY_GRAPH_TREE_TITLE,

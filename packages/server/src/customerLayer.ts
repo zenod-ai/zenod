@@ -1648,7 +1648,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const session = readCustomerSession(c, env);
     if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
     // E16-B1: the one Send button posts `message`; the older ask route posts `question`.
-    const body = await c.req.json<{ question?: unknown; message?: unknown; previous?: unknown }>().catch(() => ({}) as { question?: unknown; message?: unknown; previous?: unknown });
+    const body = await c.req.json<{ question?: unknown; message?: unknown; previous?: unknown; timeZone?: unknown }>().catch(() => ({}) as { question?: unknown; message?: unknown; previous?: unknown; timeZone?: unknown });
     // EPIC-14 S29 round 2: the question asked just before in this chat, so "I meant …" corrects it.
     const previous = typeof body.previous === "string" ? body.previous.trim().slice(0, MEMORY_CHAT_MAX_QUESTION_CHARS) : "";
     // EPIC-22 E22-2: a talk also carries its persona and earlier turns; a talk opened from a card has no message.
@@ -1662,6 +1662,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!account?.tenant_id) return { response: c.json({ error: "no_account" }, 404) };
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
+    // E12-S38: the browser's time zone, so "today" and "yesterday" are the person's days.
+    runtime.noteTimeZone?.(body.timeZone);
     const block = runtime.aiAllowanceBlock();
     if (block) {
       // Answers stopped at the allowance, capture did not (EPIC-14 S10): the words are kept as a note.
