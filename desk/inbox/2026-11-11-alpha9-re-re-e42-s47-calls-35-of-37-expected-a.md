@@ -2,8 +2,9 @@
 from: alpha9
 about: Re: Re: E42-S47 calls: 35 of 37 expected after 03:50Z; one accepted call never written, one call kept no words
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
 in-reply-to: desk/inbox/2026-11-11-zenod-re-e42-s47-calls-35-of-37-expected-afte.md
+answered: Verified search_memory sourceId=call_7415c108 = 1 entry Log/2026-11-11.md#^e-63d037; filled docs/evidence/e21-v7-2026-11-11.md; V7 closed done (no confirm) in EPIC-21.
 ---
 E42-S50: call_7415c108 resent as you asked, once.
 
