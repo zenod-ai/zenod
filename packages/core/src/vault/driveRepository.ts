@@ -256,6 +256,36 @@ function samePrecondition(file: DriveVaultFile, mutation: Partial<JournalMutatio
   return Boolean(mutation.expectedVersion || mutation.expectedModifiedTime || mutation.expectedChecksum);
 }
 
+/**
+ * Drive bumps a file's version by itself seconds after a write, with no
+ * content or modifiedTime change (seen live, T7-F1). A recorded version still
+ * binds when the current one is equal or newer; callers also require the same
+ * checksum and modifiedTime, so a newer version means metadata only.
+ */
+function sameOrMetadataNewerVersion(recorded: string | undefined, current: string | undefined): boolean {
+  if (recorded === current) return true;
+  if (!recorded || !current || !/^\d+$/.test(recorded) || !/^\d+$/.test(current)) return false;
+  return BigInt(current) > BigInt(recorded);
+}
+
+/** Drive returns parents as an unordered set; compare membership, not order. */
+function sameParents(left: string[] | undefined, right: string[] | undefined): boolean {
+  const a = [...(left ?? [])].sort();
+  const b = [...(right ?? [])].sort();
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/**
+ * Drive returns appProperties as an unordered map: two reads of the same,
+ * unchanged file can list the keys in a different order (seen live on
+ * production, T7-F1). Compare entries, never serialized key order.
+ */
+function sameStringMap(left: Record<string, string> | undefined, right: Record<string, string> | undefined): boolean {
+  const a = Object.entries(left ?? {});
+  const b = right ?? {};
+  return a.length === Object.keys(b).length && a.every(([key, value]) => Object.hasOwn(b, key) && b[key] === value);
+}
+
 function driveUrl(fileId: string, anchor?: string): string {
   const base = `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
   return anchor ? `${base}#${encodeURIComponent(anchor)}` : base;
@@ -1471,8 +1501,8 @@ export class DriveVaultRepository implements VaultRepository {
 
   private async isMetadataOnlyAdvance(before: DriveVaultFile, after: DriveVaultFile): Promise<boolean> {
     if (before.id !== after.id || before.name !== after.name || before.mimeType !== after.mimeType
-      || JSON.stringify(before.parents) !== JSON.stringify(after.parents)
-      || JSON.stringify(before.appProperties ?? {}) !== JSON.stringify(after.appProperties ?? {})) return false;
+      || !sameParents(before.parents, after.parents)
+      || !sameStringMap(before.appProperties, after.appProperties)) return false;
     if (before.version === after.version && before.modifiedTime === after.modifiedTime) return true;
     if (!before.version || !after.version || !/^\d+$/.test(before.version) || !/^\d+$/.test(after.version)
       || BigInt(after.version) < BigInt(before.version) || !before.md5Checksum
@@ -1866,7 +1896,7 @@ export class DriveVaultRepository implements VaultRepository {
         const base = isManifest ? this.manifestEntry(this.manifestFile, sha256(Buffer.from(JSON.stringify(this.manifest, null, 2))))
           : isBundle ? this.manifest.bundle : this.manifest.files[mutation.path];
         if (!base || mutation.fileId !== base.fileId || mutation.expectedChecksum !== base.checksum
-          || mutation.expectedVersion !== base.version || mutation.expectedModifiedTime !== base.modifiedTime) {
+          || !sameOrMetadataNewerVersion(mutation.expectedVersion, base.version) || mutation.expectedModifiedTime !== base.modifiedTime) {
           throw new Error(`Drive transaction target is not bound to base authority at ${mutation.path} (${journal.transactionId}/${journal.state}, base ${journal.baseRevisionId}, current ${this.manifest.revisionId})`);
         }
       }
@@ -2078,6 +2108,10 @@ export class DriveVaultRepository implements VaultRepository {
         continue;
       }
       await this.validateExecutableJournal(file, journal);
+      if (journal.state === "failed" && await this.resumeFalseTerminalFailure(file, journal)) {
+        await this.validateExecutableJournal(file, journal);
+        await this.validateRecoveryManifest(journal);
+      }
       if (journal.state === "committed" || journal.state === "failed") continue;
       const conflicts = journal.mutations.filter((mutation) => mutation.state === "conflict");
       if (conflicts.length) {
@@ -2146,6 +2180,49 @@ export class DriveVaultRepository implements VaultRepository {
       await this.applyJournal(journal, file, this.manifest);
       await rm(this.localJournalPath(journal.transactionId), { force: true });
     }
+  }
+
+  /**
+   * T7-F1: before the appProperties key-order fix, a correct Drive update was
+   * misread as an interleaving write and its transaction closed "failed" with
+   * no foreign revision found, after the bundle (or manifest) already held
+   * the new bytes. Bundle and manifest then disagreed for good ("Drive Git
+   * bundle checksum mismatch") and every open, retry or reconnect failed.
+   * Reopen such a journal for normal recovery only when Drive proves the
+   * failed write is exactly ours and nobody else wrote that file.
+   */
+  private async resumeFalseTerminalFailure(file: DriveVaultFile, journal: DriveJournal): Promise<boolean> {
+    const failed = journal.mutations.filter((mutation) => mutation.state === "failed");
+    const mutation = failed.length === 1 ? failed[0]! : null;
+    if (!mutation || mutation.kind !== "update" || mutation.conflictRevisions?.length || !mutation.fileId
+      || !mutation.contentBase64 || !mutation.checksum || !mutation.baselineRevisionIds?.length) return false;
+    if (journal.mutations.some((entry) => entry !== mutation && entry.state !== "applied" && entry.state !== "pending")) return false;
+    const finalized = this.manifest.revisionId === journal.transactionId && this.manifest.commitSha === journal.targetCommitSha;
+    if (!finalized && this.manifest.revisionId !== journal.baseRevisionId) return false;
+    const desired = Buffer.from(mutation.contentBase64, "base64");
+    if (sha256(desired) !== mutation.checksum) return false;
+    const current = await this.options.client.getFile(mutation.fileId).catch(() => null);
+    if (!current || current.mimeType === FOLDER_MIME || current.name !== posix.basename(mutation.path)
+      || (mutation.mimeType && current.mimeType !== mutation.mimeType) || current.parents?.length !== 1) return false;
+    const isManifest = mutation.path === `${CONTROL_FOLDER}/${MANIFEST_NAME}`;
+    const isBundle = mutation.path === `${GIT_FOLDER}/${BUNDLE_NAME}`;
+    if (isManifest && (current.id !== this.manifestFile.id || current.parents[0] !== this.controlFolderId)) return false;
+    if (isBundle && (current.id !== this.manifest.bundle.fileId || current.parents[0] !== this.gitFolderId)) return false;
+    const desiredMd5 = createHash("md5").update(desired).digest("hex");
+    if (current.md5Checksum && current.md5Checksum !== desiredMd5) return false;
+    if (sha256(await this.options.client.download(current.id)) !== mutation.checksum) return false;
+    const revisions = await this.options.client.listRevisions(current.id);
+    const baseline = new Set(mutation.baselineRevisionIds);
+    if (mutation.baselineRevisionIds.some((id) => !revisions.some((revision) => revision.id === id))) return false;
+    if (!revisions.filter((revision) => !baseline.has(revision.id)).every((revision) => revision.md5Checksum === desiredMd5)) return false;
+    mutation.state = "applied";
+    mutation.resultingFile = current;
+    delete mutation.conflictRevisions;
+    journal.state = "recovering";
+    journal.updatedAt = this.now().toISOString();
+    await this.writeLocalJournal(journal);
+    await this.updateRemoteJournal(file, journal);
+    return true;
   }
 
   private async verifyFinalizedTransaction(journal: DriveJournal, journalFile: DriveVaultFile): Promise<DriveVaultFile[]> {
