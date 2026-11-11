@@ -128,6 +128,17 @@
      ],
      "since": "2026-11-11",
      "draft": true
+    },
+    {
+     "id": "tester-link-on-screen",
+     "title": "Get your tester link the moment you apply",
+     "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside. Open it, sign in, and checkout shows 0 euros with no card. Helpers are still being built, so they stay off while Zenod works as your memory.",
+     "rows": [
+      "U7",
+      "E26-S14"
+     ],
+     "since": "2026-11-11",
+     "draft": true
     }
    ]
   },
