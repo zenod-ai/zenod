@@ -457,6 +457,8 @@ const MAX_BRIEFING_LOG_FILES = 20;
 const MAX_BRIEFING_ATTACHMENTS = 40;
 const MAX_BRIEFING_SUMMARY_CHARS = 240;
 const MAX_ASK_CONTEXT_REFS = 10;
+/** E23-U6: at most this many agent or self-test Log entries join ask's search list, after the person's own hits. */
+const ASK_AGENT_LOG_HITS = 3;
 const ASK_NO_TOOL_RETRY_INSTRUCTION = "Your previous reply made no tool call, so it could not be verified and was discarded. Call search_vault now (or read_note on a page from the map), then answer only from what you read.";
 const ASK_HOST_READ_INSTRUCTION = "Your earlier reply read no source, so Zenod searched the question itself and read the page shown under HOST-READ SOURCE. Treat it as the read result: answer from it by submitting its answerSupports. Read other pages only if it leaves the question unresolved; if it does not answer the question, say so.";
 const ASK_HOST_EXCERPT_CHARS = 700;
@@ -749,17 +751,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * Tier-0 BM25 index first (E9-5a: $0, milliseconds, lineage on every hit); the
    * two-pass scan stays the fallback when the index is absent, fails or finds nothing.
    */
-  async function rankedSearch(query: string): Promise<Hit[]> {
-    return (await timedSearch(query)).hits;
+  async function rankedSearch(query: string, searchOptions: { agentLogs?: number } = {}): Promise<Hit[]> {
+    return (await timedSearch(query, searchOptions)).hits;
   }
 
-  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs: number } }> {
+  async function timedSearch(query: string, searchOptions: { agentLogs?: number } = {}): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs: number } }> {
     const started = performance.now();
     const ms = () => Math.round((performance.now() - started) * 10) / 10;
     const index = openMemoryIndex();
     if (index) {
       try {
-        const hits = await index.search(query);
+        const hits = await index.search(query, undefined, searchOptions);
         if (hits.length > 0) {
           const elapsed = ms();
           const { rows, bytes } = index.stats();
@@ -904,7 +906,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false, onReadBusy?: () => void): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false, onReadBusy?: () => void, searchOptions: { agentLogs?: number } = {}): VaultReadTools {
     // Parallel tools in one turn share only the in-flight revision probe. They
     // must not mistake each other's brief lock for a background filing writer.
     let revisionProbe: Promise<VaultRevision> | undefined;
@@ -948,7 +950,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }));
       },
       searchVault: async (query: string) => {
-        const hits = await rankedSearch(query);
+        const hits = await rankedSearch(query, searchOptions);
         if (hits.length === 0) return "no results";
         const context = onSearchHits ? await onSearchHits(hits) : "";
         return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n"), context].filter(Boolean).join("\n\n");
@@ -2935,7 +2937,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
       estimatedTokens: estimateTokens(scopedBriefingText),
     };
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
-    const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch);
+    // E23-U6: ask also sees the few Log entries the person's search list leaves out as agent work
+    // (a self-test, an agent's note), the way search_memory finds them; chat stays as before (L-6).
+    const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch, { agentLogs: ASK_AGENT_LOG_HITS });
     const pinnedSupports = pinnedPassages.map(passage => ({ ref: passage.identity, ...session.registerPinned(passage) }));
     // EPIC-9 E9-3b: the answer carries the tree path of each source it relies on, in the
     // structured `lineage` field only (E9-5j: the text is as before). Any tree error leaves the answer as before.
@@ -3433,6 +3437,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     pinnedSpans: Array<{ path: string; text: string }> = [],
     pinnedSources: Answer["sources"] = [],
     entrySearch?: AskOptions["entrySearch"],
+    searchOptions: { agentLogs?: number } = {},
   ) {
     const supportRegistry = new AnswerSupportRegistry();
     // Search discovers candidate paths. Only an actual note/fact read may
@@ -3457,7 +3462,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       } catch {
         return "Automatic source read unavailable; discovery alone is not supporting evidence.";
       }
-    }, true, () => { readBusy = true; });
+    }, true, () => { readBusy = true; }, searchOptions);
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];

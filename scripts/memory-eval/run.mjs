@@ -7,7 +7,8 @@
 //
 // Suites: filing (notes -> expected branch), graph (expected strong and absent links), retrieval and answers
 // (questions -> expected memories and facts), recall (questions about the notes just filed) and agent
-// (MCP store_memory, then get_memory and search_memory find it).
+// (MCP store_memory, then get_memory and search_memory find it; an item with `ask` then asks ask_brain in plain words,
+// and its own search must list the entry, E23-U6: a self-test entry kept only in the Log).
 //
 // Models are a free deterministic stand-in (organiser.mjs) by default, so it runs on every change at no cost.
 // --model live (E15-Q3) uses real DeepSeek calls through production's client instead, cached and capped (live.mjs).
@@ -367,10 +368,10 @@ async function agentSuite(mods, ctx, items) {
   await client.connect(clientSide);
   const rows = [];
   for (const item of items) {
-    const row = { id: item.id, stored: false, got: false, found: false, rank: null, ms: null, error: null };
+    const row = { id: item.id, stored: false, got: false, found: false, rank: null, ms: null, error: null, ...(item.ask ? { asked: null } : {}) };
     const started = performance.now();
     try {
-      const put = await withLimit(client.callTool({ name: "store_memory", arguments: { content: item.store } }), FILING_LIMIT_MS, "store_memory");
+      const put = await withLimit(client.callTool({ name: "store_memory", arguments: { content: item.store, ...(item.source ? { source: item.source } : {}) } }), FILING_LIMIT_MS, "store_memory");
       if (put.isError) throw new Error(`store_memory: ${put.content?.[0]?.text ?? "error"}`);
       const ref = put.structuredContent?.evidenceRef;
       row.stored = Boolean(ref);
@@ -387,6 +388,14 @@ async function agentSuite(mods, ctx, items) {
         || JSON.stringify(h).includes(item.expect[0]));
       row.found = idx >= 0;
       row.rank = idx >= 0 ? (idx % 5) + 1 : null;
+      // The stand-in's answer step runs ask's own search (organiser.mjs); a live model is not asked here.
+      if (item.ask && ctx.model instanceof StandInModel) {
+        ctx.model.lastAskSearch = null;
+        const t1 = performance.now();
+        await withLimit(client.callTool({ name: "ask_brain", arguments: { question: item.ask } }), QUESTION_LIMIT_MS, "ask_brain");
+        row.askMs = Math.round(performance.now() - t1);
+        row.asked = Boolean(ref && String(ctx.model.lastAskSearch ?? "").includes(`#^${anchorOf(ref)}`));
+      }
     } catch (e) { row.error = e instanceof Error ? e.message : String(e); }
     row.totalMs = Math.round(performance.now() - started);
     rows.push(row);
@@ -401,14 +410,15 @@ function headline({ filing = [], questions = [], agent = { rows: [] }, graph = n
   const agentRows = agent.rows ?? [];
   const ingestN = filing.length + agentRows.length;
   const ingestOk = filing.filter((r) => r.ok).length + agentRows.filter((r) => r.stored && r.got).length;
-  const retrievalRows = [...questions, ...agentRows.map((r) => ({ hit: r.found, rank: r.rank, ms: r.ms }))];
+  const retrievalRows = [...questions, ...agentRows.map((r) => ({ hit: r.found, rank: r.rank, ms: r.ms })),
+    ...agentRows.filter((r) => r.asked != null).map((r) => ({ hit: r.asked, rank: r.asked ? 1 : null, ms: r.askMs }))];
   const hits = retrievalRows.filter((r) => r.hit).length;
   const mrr = retrievalRows.length ? retrievalRows.reduce((s, r) => s + (r.rank ? 1 / r.rank : 0), 0) / retrievalRows.length : null;
   // Error rate: every memory filed, question asked and agent store-and-find pair is one operation.
   const memOps = filing.flatMap((r) => r.memories.map((m) => ({ fail: Boolean(r.error) || r.ms > FILING_LIMIT_MS || !(m.stored && m.written && m.placed && m.linked) })));
   // Live tier: a question also fails when the model's answer leaves out the facts it needed.
   const qOps = questions.map((q) => ({ fail: Boolean(q.error) || (q.ms ?? 0) > QUESTION_LIMIT_MS || q.facts === false || q.answered === false }));
-  const aOps = agentRows.map((r) => ({ fail: Boolean(r.error) || !r.stored || !r.got || !r.found }));
+  const aOps = agentRows.map((r) => ({ fail: Boolean(r.error) || !r.stored || !r.got || !r.found || r.asked === false }));
   const ops = [...memOps, ...qOps, ...aOps];
   const factsRows = questions.filter((q) => q.facts !== null);
   const answerRows = questions.filter((q) => q.answered != null);
