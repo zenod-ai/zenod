@@ -19,6 +19,13 @@ override). Each line is `label<TAB or comma>token[,token...]`; a token is a prom
 promo_ id), account id, tenant id, user id or email; a `label ...` header line is skipped. JSON is accepted too ({"label": "CODE"} or [{"label":..,"code":..}]). With no
 file every account with a tenant is shown (--all forces that).
 
+EPIC-7 T7-F2: testers who apply on zenod.dev/testers are read from Zenod's own tester flow, the private
+`tester-flow.json` on the zenod-mt data volume (packages/server/src/testerFlow.ts, the list behind
+cloud.zenod.dev/admin/testers), and shown after the ledger's testers, tagged `apply` (`apply, test` for
+our own test applications: tester-marks.json plus the same rule as testerMarks.ts). They match an
+account by their one-time code (the Stripe promotion code on the subscription), by the account that
+redeemed a Zenod-made code, or by email. Waitlisted applicants show as `waitlist`.
+
   tester-watch                 table
   tester-watch --json          JSON (one object per tester)
   tester-watch --check         daily T10 hook: prints `ALERT ...` lines; exit 1 on any alert,
@@ -54,6 +61,9 @@ DEFAULTS = {
 # default ~/.local/state/zenod-testers of the user who issues codes on VPS1: root, per docs/runbooks/epic7-tester-codes.md).
 LEDGER_DIR = os.environ.get("ZENOD_TESTERS_LEDGER_DIR", "/root/.local/state/zenod-testers")
 DEFAULT_TESTERS = os.path.join(LEDGER_DIR, "live-codes.tsv")
+# T7-F2: Zenod's own tester list and marks on the zenod-mt data volume (testerFlow.ts, testerMarks.ts).
+TESTER_FLOW_FILE = "tester-flow.json"
+TESTER_MARKS_FILE = "tester-marks.json"
 DAY_MS = 86_400_000
 SAVE_TOOLS = ("store_memory", "ingest_memory")
 CAPTURE_KINDS = ("store", "media_ingest")
@@ -108,9 +118,49 @@ def parse_testers(text: str) -> list[dict]:
     return out
 
 
+TEST_DOMAINS = {"alpha9.io", "zenod.dev", "zenod.ai", "example.com", "example.org", "example.net"}
+TEST_TLDS = re.compile(r"\.(test|invalid|example|localhost)$", re.I)
+
+
+def looks_like_our_test(contact: str, use: str = "", team_emails: set[str] | frozenset = frozenset()) -> bool:
+    """Same rule as packages/server/src/testerMarks.ts looksLikeOurTest."""
+    key = contact.strip().lower().removeprefix("mailto:")
+    if key in team_emails or re.search(r"\btest\b|\+test", contact, re.I) or re.search(r"\bTEST\b", use):
+        return True
+    domain = key.rsplit("@", 1)[1] if "@" in key else ""
+    return bool(domain) and (domain in TEST_DOMAINS or bool(TEST_TLDS.search(domain)))
+
+
+def parse_flow(text: str, marks: dict | None = None, team_emails: set[str] | frozenset = frozenset()) -> list[dict]:
+    """T7-F2: Zenod's tester-flow.json (testerFlow.ts TesterFlowState) -> tester entries, oldest first."""
+    try:
+        data = json.loads(text) if text.strip() else {}
+    except ValueError:
+        return []
+    marks = marks or {}
+    out = []
+    for t in sorted((data.get("testers") or []), key=lambda x: x.get("appliedAt") or ""):
+        email = str(t.get("email") or "").strip()
+        if not email:
+            continue
+        mark = marks.get(email.lower())
+        test = mark == "test" if mark in ("test", "real") else looks_like_our_test(email, "", team_emails)
+        out.append({
+            "label": email,
+            "tokens": [x for x in (t.get("code"), email, t.get("redeemedBy")) if x],
+            "source": "apply",
+            "flow": {"status": t.get("status"), "applied_at": t.get("appliedAt"), "code": t.get("code"),
+                     "code_source": t.get("codeSource") or ("local" if t.get("code") else None),
+                     "redeemed_by": t.get("redeemedBy"), "emailed_at": t.get("emailedAt"),
+                     "shown_at": t.get("shownAt"), "waiting": t.get("waiting") or None, "test": test},
+        })
+    return out
+
+
 def match_tester(tokens: list[str], row: dict) -> bool:
     keys = {str(v).lower() for v in (row.get("account_id"), row.get("tenant_id"), row.get("user_id"),
-                                     row.get("email"), (row.get("stripe") or {}).get("promotion_code"),
+                                     row.get("email"), *(row.get("alt_emails") or []),
+                                     (row.get("stripe") or {}).get("promotion_code"),
                                      (row.get("stripe") or {}).get("promotion_code_id")) if v}
     return any(t.lower() in keys for t in tokens)
 
@@ -398,10 +448,26 @@ def log_events(container: str, since_hours: float) -> list[str]:
             if "notice failed for account" in line or "[llm.allowance.exceeded]" in line]
 
 
+def read_flow(zdata: Path, env: dict[str, str]) -> list[dict] | None:
+    """T7-F2: the zenod.dev/testers applicants from Zenod's own store; None when there is none yet."""
+    path = zdata / TESTER_FLOW_FILE
+    if not path.exists():
+        return None
+    try:
+        marks = json.loads((zdata / TESTER_MARKS_FILE).read_text()).get("marks") or {}
+    except (OSError, ValueError):
+        marks = {}
+    team = {x.strip().lower() for x in env.get("ZENOD_TEAM_EMAILS", "").split(",") if x.strip()}
+    return parse_flow(path.read_text(), {str(k).lower(): v for k, v in marks.items()}, team)
+
+
 # ---------------------------------------------------------------- collect
 
 def collect(zdata: Path, pdata: Path, env: dict[str, str], stripe, testers: list[dict] | None,
-            now_ms: int, window_hours: float, logs: list[str]) -> tuple[list[dict], list[str]]:
+            now_ms: int, window_hours: float, logs: list[str],
+            flow: list[dict] | None = None) -> tuple[list[dict], list[str]]:
+    """testers: the private ledger (None = none); flow: zenod.dev/testers applicants (T7-F2, None = none).
+    With neither, every live account with a tenant is shown."""
     window_ms = int(window_hours * 3_600_000)
     problems: list[str] = []
     accounts = json.loads((zdata / "customer-accounts.json").read_text())
@@ -438,6 +504,7 @@ def collect(zdata: Path, pdata: Path, env: dict[str, str], stripe, testers: list
             "provider": first.get("provider") or ("github" if a.get("github_id") else None),
             "google_id": google.get("provider_subject") if google else None,
             "email": first.get("email") or a.get("stripe_email") or a.get("github_email"),
+            "alt_emails": [x for x in {*(i.get("email") for i in idents), a.get("stripe_email"), a.get("github_email")} if x],
             "signed_up": first.get("created_at"), "checkout_at": a.get("checkout_completed_at"),
             "local_status": a.get("subscription_status"), "comped": acc_id in comped,
             "stripe": None,
@@ -470,14 +537,31 @@ def collect(zdata: Path, pdata: Path, env: dict[str, str], stripe, testers: list
         }
         rows.append(row)
 
-    if testers is not None:
+    if testers is not None or flow:
         picked = []
-        for t in testers:
+        for t in [*(testers or []), *(flow or [])]:
             hit = next((r for r in rows if match_tester(t["tokens"], r)), None)
+            fl = t.get("flow")
+            if hit and fl:
+                twin = next((p for p in picked if p.get("account_id") == hit["account_id"]), None)
+                if twin is not None:  # already listed from the ledger: note where it came from, no second row
+                    twin["flow"], twin["source"] = fl, "ledger+apply"
+                    continue
+            extra = {"source": t.get("source", "ledger"), **({"flow": fl} if fl else {})}
             if hit:
-                picked.append({**hit, "label": t["label"], "is_label_from_file": True})
+                picked.append({**hit, "label": t["label"], "is_label_from_file": True, **extra})
+            elif fl and fl.get("status") != "accepted":
+                picked.append({"label": t["label"], "is_label_from_file": True, "account_id": None,
+                               "signup": fl.get("status") or "unknown", **extra})
+            elif fl and fl.get("code_source") != "stripe":
+                # A code Zenod made itself is checked by Zenod (testerFlow.ts redeem), not Stripe.
+                state = {"code": fl.get("code"), "source": "local", "redeemed": bool(fl.get("redeemed_by"))} \
+                    if fl.get("code") else {"error": fl.get("waiting") or "no code yet"}
+                picked.append({"label": t["label"], "is_label_from_file": True, "account_id": None,
+                               "signup": "not signed up", "code": state, **extra})
             else:
-                info = {"label": t["label"], "is_label_from_file": True, "account_id": None, "signup": "not signed up"}
+                info = {"label": t["label"], "is_label_from_file": True, "account_id": None, "signup": "not signed up",
+                        **extra}
                 code = next((x for x in t["tokens"] if "@" not in x and not x.startswith(("user-", "usr_"))), None)
                 if code and stripe is not None:
                     try:
@@ -504,10 +588,17 @@ def redact(rows: list[dict]) -> list[dict]:
     out = json.loads(json.dumps(rows))
     for r in out:
         r["email"] = mask_email(r.get("email"))
+        r["alt_emails"] = [mask_email(x) for x in r.get("alt_emails") or []]
+        fl = r.get("flow") or {}
+        for k in ("code", "redeemed_by"):
+            if fl.get(k):
+                fl[k] = mask_id(fl[k], 2) if k == "code" else mask_id(fl[k], 9, 4)
         r["google_id"] = mask_id(r.get("google_id"))
         for k in ("account_id", "tenant_id", "user_id"):
             r[k] = mask_id(r.get(k), 9, 4)
-        if r.get("label") and r["label"] != "comped":
+        if r.get("label") and "@" in r["label"]:
+            r["label"] = mask_email(r["label"])  # zenod.dev/testers applicants are labelled by email
+        elif r.get("label") and r["label"] != "comped":
             # Labels from the private testers file may be names: keep 2 chars only.
             r["label"] = mask_id(r["label"], 2) if r.get("is_label_from_file") or not r.get("account_id") \
                 else mask_id(r["label"], 9, 4)
@@ -525,6 +616,16 @@ def short(t: str | None) -> str:
     return t[:16].replace("T", " ") if t else "-"
 
 
+def tag(r: dict) -> str:
+    src = r.get("source") or ""
+    if "apply" not in src:
+        return r["label"]
+    bits = [src.replace("ledger+apply", "ledger, apply")]
+    if (r.get("flow") or {}).get("test"):
+        bits.append("test")
+    return f"{r['label']} ({', '.join(bits)})"
+
+
 def table(rows: list[dict], now_ms: int) -> str:
     head = ["tester", "identity", "checkout", "stripe", "renews", "next inv", "discount", "card",
             "whatsapp", "last Saved", "7d saves", "AI $ mtd", "units", "errors 7d"]
@@ -532,9 +633,15 @@ def table(rows: list[dict], now_ms: int) -> str:
     for r in rows:
         if not r.get("account_id"):
             c = r.get("code") or {}
-            state = c.get("error") or (f"code active={c.get('active')} used={c.get('times_redeemed')}"
-                                       f" exp={short(c.get('expires_at'))}" if c else "code not checked")
-            lines.append([r["label"], "-", "not signed up", state] + ["-"] * 10)
+            if c.get("source") == "local":
+                state = f"Zenod code, redeemed={'yes' if c.get('redeemed') else 'no'}"
+            else:
+                state = c.get("error") or (f"code active={c.get('active')} used={c.get('times_redeemed')}"
+                                           f" exp={short(c.get('expires_at'))}" if c else "code not checked")
+            signup = r.get("signup") or "not signed up"
+            if signup != "not signed up":
+                state = f"applied {short((r.get('flow') or {}).get('applied_at'))}"
+            lines.append([tag(r), "-", signup, state] + ["-"] * 10)
             continue
         st = r.get("stripe") or {}
         u, s, e, w = r["usage"], r["saves"], r["errors"], r["whatsapp"]
@@ -544,7 +651,7 @@ def table(rows: list[dict], now_ms: int) -> str:
         units = "-" if u["phylax_units_used"] is None else f"{u['phylax_units_used']}"
         units += f" ({u['phylax_pct']}%)" if u["phylax_pct"] is not None else ""
         lines.append([
-            r["label"], f"{r.get('provider') or '-'} {r.get('email') or ''}".strip(), short(r.get("checkout_at")),
+            tag(r), f"{r.get('provider') or '-'} {r.get('email') or ''}".strip(), short(r.get("checkout_at")),
             st.get("status") or ("comped, no Stripe" if r.get("comped") else (st.get("error") or r.get("local_status"))),
             short(st.get("renews_at")), "-" if nxt is None else f"{nxt / 100:.2f}",
             short(st["discount_end"]) if (st.get("discount_end") or "x")[0].isdigit() else st.get("discount_end") or "-",
@@ -590,9 +697,12 @@ def main(argv=None) -> int:
             print(f"ALERT testers file not found: {a.testers}")
             return 2
         else:
-            note = f"no testers file at {path}: showing every account with a tenant"
+            note = f"no testers file at {path}"
+    flow = None if a.all else read_flow(zdata, env)
+    if note:
+        note += ": showing the zenod.dev/testers applicants" if flow else ": showing every account with a tenant"
     try:
-        rows, problems = collect(zdata, pdata, env, stripe, testers, now_ms, a.window_hours, logs)
+        rows, problems = collect(zdata, pdata, env, stripe, testers, now_ms, a.window_hours, logs, flow)
     except Exception as e:  # noqa: BLE001
         print(f"ALERT tester-watch failed: {e}")
         return 2
