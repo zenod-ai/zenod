@@ -341,6 +341,18 @@ export class TaskJobStore {
            ON CONFLICT DO NOTHING`,
         )
         .run(id, this.tenantId, normalizedKey, kind, JSON.stringify(input), now, now);
+      // EPIC-21 V7: a store job that ended without writing (error, or interrupted past its retries) runs again when
+      // the caller resends it under the same key, as long as it carries a sourceId: capture finds an entry already
+      // written under that sourceId and returns it, so the retry never writes the Log entry twice. Without this a
+      // transient failure (a .git/config lock on 2026-11-11) kept the dead receipt for that key forever.
+      this.db
+        .prepare(
+          `UPDATE task_jobs SET status='queued', attempts=0, error=NULL, owner_id=NULL, claim_token=NULL,
+             lease_expires_at=NULL, updated_at=?
+           WHERE tenant_id=? AND idempotency_key=? AND kind='store' AND status IN ('error','interrupted')
+             AND COALESCE(json_extract(input_json, '$.sourceId'), '') <> ''`,
+        )
+        .run(now, this.tenantId, normalizedKey);
       const existing = this.db
         .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND idempotency_key=?`)
         .get(this.tenantId, normalizedKey) as Row | undefined;

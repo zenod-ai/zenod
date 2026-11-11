@@ -40,6 +40,22 @@ const PUSH_RETRIES = 3;
  * every turn, one commit per memory, push with pull-rebase retry ×3.
  * Never force-push, never amend, never rewrite history.
  */
+/**
+ * EPIC-21 V7: `git config` and `git remote set-url` write .git/config through config.lock; two git calls on one clone
+ * at the same moment fail with "could not lock config file" (a store_memory job lost that race on 2026-11-11). The
+ * write is idempotent, so wait briefly and try again.
+ */
+export async function retryConfigLock<T>(write: () => Promise<T>, attempts = 5, waitMs = 150): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await write();
+    } catch (err) {
+      if (attempt >= attempts || !/could not lock config file/i.test(String((err as Error)?.message ?? err))) throw err;
+      await new Promise((resolve) => setTimeout(resolve, waitMs * attempt));
+    }
+  }
+}
+
 export class VaultRepo implements VaultRepository {
   readonly provider = "github" as const;
 
@@ -72,11 +88,11 @@ export class VaultRepo implements VaultRepository {
     }
 
     const git = simpleGit(options.workdir);
-    await git.addConfig("user.name", options.authorName ?? "zenod-bot");
-    await git.addConfig("user.email", options.authorEmail ?? "bot@zenod.dev");
+    await retryConfigLock(() => git.addConfig("user.name", options.authorName ?? "zenod-bot"));
+    await retryConfigLock(() => git.addConfig("user.email", options.authorEmail ?? "bot@zenod.dev"));
     if (remoteUrl && isClone) {
       // keep the remote in sync with current settings (e.g. rotated token)
-      await git.remote(["set-url", "origin", remoteUrl]);
+      await retryConfigLock(() => git.remote(["set-url", "origin", remoteUrl]));
     }
     const branch = (await git.raw(["symbolic-ref", "--short", "HEAD"])).trim();
     return new VaultRepo(options.workdir, git, branch, options.repo, options.tokenProvider);
@@ -86,7 +102,8 @@ export class VaultRepo implements VaultRepository {
   private async ensureFreshRemote(): Promise<void> {
     if (!this.tokenProvider || !this.repo) return;
     const token = await this.tokenProvider();
-    await this.git.remote(["set-url", "origin", remoteUrlFor(this.repo, token)]);
+    const repo = this.repo;
+    await retryConfigLock(() => this.git.remote(["set-url", "origin", remoteUrlFor(repo, token)]));
   }
 
   async pull(): Promise<void> {

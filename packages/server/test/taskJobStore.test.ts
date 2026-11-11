@@ -132,6 +132,28 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(store.get(job.id)!.attempts).toBe(0);
   });
 
+  it("re-runs a failed store job with a sourceId when it is resent under the same key (EPIC-21 V7)", () => {
+    const path = tmpDb();
+    const store = new TaskJobStore(path, "tenant-alpha");
+    const failed = store.enqueue("store", { content: "call words", sourceId: "call_7415c108" }, "call_7415c108");
+    store.update(failed.id, { status: "error", error: "error: could not lock config file .git/config: File exists" });
+    const noSource = store.enqueue("store", { content: "no source id" }, "plain-key");
+    store.update(noSource.id, { status: "error", error: "boom" });
+
+    const resent = store.enqueue("store", { content: "ignored retry payload", sourceId: "call_7415c108" }, "call_7415c108");
+    expect(resent.id).toBe(failed.id);
+    expect(resent.status).toBe("queued");
+    expect(resent.error).toBeNull();
+    expect(resent.input.content).toBe("call words");
+    // without a sourceId nothing guards against a second Log entry, so the failed receipt stays
+    expect(store.enqueue("store", { content: "no source id" }, "plain-key").status).toBe("error");
+    // a finished job is never re-run
+    store.update(failed.id, { status: "done", result: { evidenceRef: "Log/x.md#^e-1", pagesTouched: [] } as never });
+    expect(store.enqueue("store", { content: "x", sourceId: "call_7415c108" }, "call_7415c108").status).toBe("done");
+    expect(store.recent()).toHaveLength(2);
+    store.close();
+  });
+
   it("returns the original durable store job for a repeated tenant idempotency key", () => {
     const path = tmpDb();
     let store = new TaskJobStore(path, "tenant-alpha");

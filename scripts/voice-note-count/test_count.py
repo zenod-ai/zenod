@@ -43,6 +43,8 @@ console = {
     "calls": [
         ["call_1", "alpha9", "2026-11-09T13:00:00Z", 120, True],
         ["call_2", "alpha9", "2026-11-09T13:05:00Z", 3, False],
+        ["call_46755499", "zenod-social", "2026-11-02T13:05:00Z", 900, False],
+        ["call_3", "alpha9", "2026-11-09T14:05:00Z", 60, True, "skipped", "no_words"],
     ],
 }
 r = count.compute(console, landed, dt.datetime(2026, 11, 10, 12, tzinfo=count.UTC))
@@ -50,11 +52,11 @@ assert r["week"]["card"] == {"left": 1, "landed": 1, "waiting": 0, "failed": 0, 
 assert r["week"]["chat"]["failed"] == 1 and r["week"]["chat"]["landed"] == 0
 assert r["week"]["call"] == {"left": 1, "landed": 1, "waiting": 0, "failed": 0, "never_sent": 0}, r["week"]["call"]
 assert r["all"]["all"] == {"left": 3, "landed": 2}, r["all"]["all"]
-assert r["skipped"] == {"discarded": 1, "empty": 0, "unfinished": 0, "test": 1, "short call": 1}, r["skipped"]
+assert r["skipped"] == {"discarded": 1, "empty": 0, "unfinished": 0, "test": 1, "short call": 1, "no words": 2}, r["skipped"]
 g = count.gaps(r)
 assert any("1 failed" in x for x in g) and not any(x.startswith("Calls") for x in g), g
 page = count.render(r, [])
-assert "67%" in page and "vn_" not in page
+assert "67%" in page and "vn_" not in page and "2 calls that kept none of your words" in page
 r0 = count.compute(console, {h: "EpicTeam card answer"}, dt.datetime(2026, 11, 10, 12, tzinfo=count.UTC))
 assert any(x.startswith("Calls are not sent") for x in count.gaps(r0))
 print("ok")
