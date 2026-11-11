@@ -62,6 +62,8 @@ export type PersonaList = {
   skills: PersonaSkill[]
   /** S35: the account has a Team connection its helpers could ask. */
   teamConnected?: boolean
+  /** EPIC-23 U7: helpers are still building for this account: every one off, switches disabled. */
+  building?: boolean
 }
 
 const BASE = "/api/console/personas"

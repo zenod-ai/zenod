@@ -7,9 +7,16 @@ const answer = (status: number, body: unknown) =>
 describe("testers apply form (EPIC-26 S2)", () => {
   it("returns accepted or waitlist from the server", async () => {
     const input = { use: "Voice notes on my walks", contact: "me@example.com", website: "" };
-    expect(await submitTesterApplication(input, answer(200, { ok: true, status: "accepted" }))).toBe("accepted");
-    expect(await submitTesterApplication(input, answer(200, { ok: true, status: "waitlist" }))).toBe("waitlist");
-    expect(await submitTesterApplication(input, answer(200, { ok: true }))).toBeNull();
+    expect(await submitTesterApplication(input, answer(200, { ok: true, status: "accepted" }))).toEqual({ status: "accepted", link: null });
+    expect(await submitTesterApplication(input, answer(200, { ok: true, status: "waitlist" }))).toEqual({ status: "waitlist", link: null });
+    expect(await submitTesterApplication(input, answer(200, { ok: true }))).toEqual({ status: null, link: null });
+  });
+
+  it("passes on the personal link to open now, only a Zenod join link (EPIC-23 U7)", async () => {
+    const input = { use: "Voice notes on my walks", contact: "me@example.com", website: "" };
+    const link = "https://cloud.zenod.dev/join?code=ZT-ABCD2345";
+    expect(await submitTesterApplication(input, answer(200, { ok: true, status: "accepted", code: "ZT-ABCD2345", link }))).toEqual({ status: "accepted", link });
+    expect(await submitTesterApplication(input, answer(200, { ok: true, status: "accepted", link: "https://evil.example/join?code=x" }))).toEqual({ status: "accepted", link: null });
   });
 
   it("shows the server's words when it refuses", async () => {

@@ -6,19 +6,31 @@ export const TESTERS_QUESTION = "How are you going to be using Zenod Memory?";
 
 export type TesterApplyStatus = "accepted" | "waitlist" | null;
 
-/** EPIC-26 S2: the server answers accepted (first ten, link by email) or waitlist. */
+/** EPIC-23 U7: the answer, with the personal link when the person was accepted just now. */
+export interface TesterApplyResult {
+  status: TesterApplyStatus;
+  link: string | null;
+}
+
+const JOIN_LINK = /^https:\/\/cloud\.zenod\.dev\/join\?code=[A-Za-z0-9_-]{3,40}$/;
+
+/** EPIC-26 S2: the server answers accepted (first ten) or waitlist; U7: with the link to open now. */
 export async function submitTesterApplication(
   input: { use: string; contact: string; website: string },
   fetcher: typeof fetch = fetch,
-): Promise<TesterApplyStatus> {
+): Promise<TesterApplyResult> {
   const response = await fetcher(TESTERS_APPLY_PATH, {
     method: "POST",
     credentials: "omit",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const payload = (await response.json().catch(() => ({}))) as { error?: unknown; status?: unknown };
-  if (response.ok) return payload.status === "accepted" || payload.status === "waitlist" ? payload.status : null;
+  const payload = (await response.json().catch(() => ({}))) as { error?: unknown; status?: unknown; link?: unknown };
+  if (response.ok) {
+    const status = payload.status === "accepted" || payload.status === "waitlist" ? payload.status : null;
+    const link = status === "accepted" && typeof payload.link === "string" && JOIN_LINK.test(payload.link) ? payload.link : null;
+    return { status, link };
+  }
   throw new Error(typeof payload.error === "string" ? payload.error : "Could not send your application. Please try again.");
 }
 

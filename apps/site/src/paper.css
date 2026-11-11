@@ -221,6 +221,7 @@ body:has(.pp) {
 .pp-apply-actions { margin: 1rem 0 0; }
 .pp-apply-sent { background: var(--pp-stage); padding: clamp(1.5rem, 3vw, 2.5rem); }
 .pp-apply-sent h3 { font: 400 1.6rem/1.2 var(--pp-serif); margin: 0 0 0.75rem; }
+.pp-apply-link { font-size: 0.9rem; color: var(--pp-muted, #4a554e); } .pp-apply-link span { word-break: break-all; font-family: ui-monospace, Menlo, monospace; }
 .pp-apply-sent p { margin: 0; }
 .pp-apply-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 .pp-testers .pp-foot { padding-top: clamp(4rem, 9vw, 8rem); }

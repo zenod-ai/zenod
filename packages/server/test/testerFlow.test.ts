@@ -8,6 +8,7 @@ import { TesterMarks } from "../src/testerMarks.js";
 import { COUNT_DEFINITIONS } from "../src/publicCounts.js";
 import {
   generateTesterCode,
+  localMinter,
   mountTesterFlowRoutes,
   normalizeTesterEmail,
   resendMailer,
@@ -158,9 +159,48 @@ describe("tester flow (EPIC-26 S2)", () => {
   it("reads production settings: cap, stop setting, minting only when asked, mail only with a key", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "zenod-tester-flow-env-"));
     const stripe = { promotionCodes: { create: async () => ({ code: "x" }) } };
-    expect(testerFlowFromEnv(dataDir, {}, stripe).snapshot()).toMatchObject({ cap: 10, autoAccept: true, canMint: false, canMail: false });
+    // U7: Zenod makes the code itself unless told to use Stripe or to stop.
+    expect(testerFlowFromEnv(dataDir, {}, stripe).snapshot()).toMatchObject({ cap: 10, autoAccept: true, canMint: true, canMail: false });
+    expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_MINT: "off" }, stripe).snapshot()).toMatchObject({ canMint: false });
     expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_CAP: "3", ZENOD_TESTER_AUTO_ACCEPT: "0", ZENOD_TESTER_MINT: "stripe", RESEND_API_KEY: "re_x" }, stripe).snapshot())
       .toMatchObject({ cap: 3, autoAccept: false, canMint: true, canMail: true });
+  });
+});
+
+describe("codes Zenod makes itself (EPIC-23 U7)", () => {
+  it("makes a code in the tester format and shows a new applicant their link on screen", async () => {
+    const { flow } = flowWith({ mint: localMinter, sendMail: null });
+    expect(flow.receive("new@example.com")).toBe("accepted");
+    const shown = await flow.linkForNew("new@example.com");
+    expect(shown?.code).toMatch(/^ZT-[A-Z2-9]{8}$/);
+    expect(shown?.link).toBe(`https://cloud.zenod.dev/join?code=${shown?.code}`);
+    expect(flow.snapshot().testers[0]).toMatchObject({ code: shown?.code, shownAt: NOW.toISOString() });
+  });
+
+  it("accepts our own test applications without taking a place", () => {
+    const { flow } = flowWith({ cap: 1, isTest: (email) => email.endsWith("@example.com") });
+    expect(flow.receive("check@example.com")).toBe("accepted");
+    expect(flow.receive("real@person.net")).toBe("accepted");
+    expect(flow.receive("second@person.net")).toBe("waitlist");
+    expect(flow.snapshot()).toMatchObject({ placesTaken: 1, accepting: false });
+  });
+
+  it("applies the tester coupon for one account only, for 14 days", async () => {
+    let now = NOW;
+    const { flow } = flowWith({ sendMail: null, now: () => now });
+    flow.receive("a@example.com");
+    await flow.process();
+    const code = flow.snapshot().testers[0]!.code!;
+    expect(flow.redeem("ZT-UNKNOWN1", "acct_a")).toBeNull();
+    expect(flow.redeem(code, "acct_a")).toBe("ZENOD_TESTER_1M");
+    expect(flow.redeem(code.toLowerCase(), "acct_a")).toBe("ZENOD_TESTER_1M");
+    expect(flow.redeem(code, "acct_b")).toBeNull();
+    expect(flow.snapshot().testers[0]).toMatchObject({ redeemedBy: "acct_a" });
+    flow.receive("b@example.com");
+    await flow.process();
+    const late = flow.snapshot().testers[1]!.code!;
+    now = new Date(NOW.getTime() + 15 * 86400 * 1000);
+    expect(flow.redeem(late, "acct_c")).toBeNull();
   });
 });
 

@@ -1039,12 +1039,15 @@ describe("hosted customer layer", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ use: "Voice notes on my walks, and Claude reading them.", contact: "stranger@example.com" }),
       });
-      expect(await applied.json()).toEqual({ ok: true, status: "accepted" });
+      // EPIC-23 U7: the same personal link is shown on screen at once, and still emailed.
+      const answer = (await applied.json()) as { ok: boolean; status: string; code: string; link: string };
+      expect(answer).toMatchObject({ ok: true, status: "accepted" });
       await flow.process();
       expect(mails.map((mail) => mail.to)).toEqual(["stranger@example.com"]);
       const link = mails[0]!.text.match(/https:\/\/cloud\.zenod\.dev\/join\?code=(ZT-[A-Z2-9]{8})/);
       expect(link).not.toBeNull();
       const code = link![1]!;
+      expect(answer).toMatchObject({ code, link: link![0] });
       expect(stripe.promotionCodes.create).toHaveBeenCalledWith(expect.objectContaining({ coupon: "ZENOD_TESTER_1M", code, max_redemptions: 1 }));
 
       const app = customerApp();
@@ -1074,6 +1077,47 @@ describe("hosted customer layer", () => {
       expect(refused.status).toBe(303);
       expect(createdParams).toMatchObject({ allow_promotion_codes: true });
       expect(createdParams).not.toHaveProperty("discounts");
+    });
+
+    it("applies the tester coupon directly for a code Zenod made itself, marked as a tester (EPIC-23 U7)", async () => {
+      const asked: Array<[string, string]> = [];
+      const app = createCustomerLayer(
+        { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+        {
+          env,
+          stripe,
+          tenantStore: tenants,
+          identity: {
+            authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+            exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+          },
+          testerCoupon: (code, accountId) => {
+            asked.push([code, accountId]);
+            return code === "ZT-LOCAL234" ? "ZENOD_TESTER_1M" : null;
+          },
+        },
+      ).app;
+      const { cookie } = await inviteSignIn(app, "/join?code=ZT-LOCAL234");
+      const join = await app.request("/join?code=ZT-LOCAL234", { headers: { cookie } });
+      expect(join.status).toBe(303);
+      expect(createdParams).toMatchObject({
+        discounts: [{ coupon: "ZENOD_TESTER_1M" }],
+        payment_method_collection: "if_required",
+        subscription_data: { metadata: { zenod_tester: "1" } },
+        custom_text: { submit: { message: expect.stringContaining("already applied") } },
+      });
+      expect(createdParams).not.toHaveProperty("allow_promotion_codes");
+      expect(asked).toEqual([["ZT-LOCAL234", expect.any(String)]]);
+
+      // A Stripe promotion code still wins, and the tester flow is not asked.
+      await app.request("/join?code=TESTER1", { headers: { cookie } });
+      expect(createdParams).toMatchObject({ discounts: [{ promotion_code: "promo_tester1" }] });
+      expect(asked).toHaveLength(1);
+
+      // A code the flow does not hold keeps the open code field.
+      await app.request("/join?code=ZT-NOTOURS9", { headers: { cookie } });
+      expect(createdParams).toMatchObject({ allow_promotion_codes: true });
+      expect(createdParams?.subscription_data?.metadata).not.toHaveProperty("zenod_tester");
     });
 
     it("shows a plain page instead of JSON when checkout cannot open, and keeps the normal checkout unchanged", async () => {

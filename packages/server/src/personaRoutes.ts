@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { personaById, BUILT_IN_PERSONAS } from "./personaCatalog.js";
-import { parsePersonaSchedule, PERSONA_MAX_EVERY_DAYS, PERSONA_MIN_EVERY_DAYS, PERSONA_SKILLS, PERSONA_TOTAL_MONTH_USD, personaEnabled, personaView, type PersonaDefinition } from "./personaRunner.js";
+import { helpersBuilding, parsePersonaSchedule, PERSONA_MAX_EVERY_DAYS, PERSONA_MIN_EVERY_DAYS, PERSONA_SKILLS, PERSONA_TOTAL_MONTH_USD, personaEnabled, personaView, type PersonaDefinition } from "./personaRunner.js";
 import { personasFor, type PersonaRun } from "./personaStore.js";
 import { opsAlert } from "./opsAlert.js";
 
@@ -12,6 +12,8 @@ import { opsAlert } from "./opsAlert.js";
 
 export interface PersonaRuntime {
   readonly dataDir: string;
+  /** EPIC-23 U7: the account's tenant, for the still-building rule. */
+  readonly tenantId?: string;
   runPersona(persona: PersonaDefinition, trigger: "schedule" | "manual"): Promise<PersonaRun | null>;
   /** S35: whether a Team connection exists for helpers to ask. */
   teamAskAvailable?(): boolean;
@@ -21,8 +23,12 @@ export type PersonaResolve = (c: Context) => Promise<{ runtime: PersonaRuntime }
 
 function list(runtime: PersonaRuntime, now = new Date()) {
   const store = personasFor(runtime);
-  const personas = BUILT_IN_PERSONAS.map((persona) => personaView(persona, store, now));
+  const building = helpersBuilding(runtime.tenantId);
+  // U7: while helpers are still building for this account, every one shows as off.
+  const personas = BUILT_IN_PERSONAS.map((persona) => personaView(persona, store, now))
+    .map((view) => (building ? { ...view, enabled: false, nextWakeAt: null } : view));
   return {
+    building,
     personas,
     budget: { spentUsd: personas[0]?.budget.totalUsd ?? 0, capUsd: PERSONA_TOTAL_MONTH_USD },
     teamConnected: runtime.teamAskAvailable?.() ?? false,
@@ -45,6 +51,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     const persona = personaById(c.req.param("id"));
     if (!persona) return c.json({ error: "not_found", message: "no such helper" }, 404);
     const body = await c.req.json<{ enabled?: unknown; cadence?: unknown; askTeam?: unknown }>().catch(() => ({}) as { enabled?: unknown; cadence?: unknown; askTeam?: unknown });
+    if (helpersBuilding(found.runtime.tenantId)) return c.json({ error: "building", message: "Helpers are still being built" }, 409);
     if (body.enabled === undefined && body.cadence === undefined && body.askTeam === undefined) return c.json({ error: "invalid", message: "send enabled, cadence or askTeam" }, 400);
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") return c.json({ error: "invalid", message: "enabled must be true or false" }, 400);
     if (body.askTeam !== undefined && typeof body.askTeam !== "boolean") return c.json({ error: "invalid", message: "askTeam must be true or false" }, 400);
@@ -67,6 +74,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     if ("response" in found) return found.response;
     const persona = personaById(c.req.param("id"));
     if (!persona) return c.json({ error: "not_found", message: "no such helper" }, 404);
+    if (helpersBuilding(found.runtime.tenantId)) return c.json({ error: "building", message: "Helpers are still being built" }, 409);
     // A persona runs only while it is switched on.
     if (!personaEnabled(personasFor(found.runtime), persona)) {
       return c.json({ error: "conflict", message: `Switch ${persona.name} on first` }, 409);

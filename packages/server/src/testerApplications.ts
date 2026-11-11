@@ -90,14 +90,21 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
     }
     console.log("[testers] application kept");
     let status: TesterStatus | undefined;
+    let shown: { code: string; link: string } | null = null;
     if (options.flow && email) {
       try {
+        const key = email.toLowerCase();
+        const known = options.flow.snapshot().testers.some((tester) => tester.email.toLowerCase() === key);
         status = options.flow.receive(email);
-        void options.flow.process();
+        // EPIC-23 U7: a person accepted just now sees their personal link on screen, so nobody waits
+        // for an email. A repeat application never shows it, so typing someone else's email shows nothing.
+        if (status === "accepted" && !known) shown = await options.flow.linkForNew(email);
+        else void options.flow.process();
       } catch (error) {
         console.error("[testers] could not queue an application:", error instanceof Error ? error.message : String(error));
       }
     }
-    return c.json(status ? { ok: true, status } : { ok: true });
+    if (!status) return c.json({ ok: true });
+    return c.json(shown ? { ok: true, status, code: shown.code, link: shown.link } : { ok: true, status });
   });
 }

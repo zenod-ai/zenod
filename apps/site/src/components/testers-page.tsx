@@ -27,6 +27,7 @@ function ApplyForm() {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [outcome, setOutcome] = React.useState<TesterApplyStatus>(null);
+  const [link, setLink] = React.useState<string | null>(null);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -40,7 +41,8 @@ function ApplyForm() {
         website: String(form.get("website") ?? ""),
       });
       countSignup();
-      setOutcome(result);
+      setOutcome(result.status);
+      setLink(result.link);
       setStatus("sent");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Could not send your application.");
@@ -57,6 +59,24 @@ function ApplyForm() {
             <p>
               The first ten places are taken. If a place opens, we email you
               your personal link.
+            </p>
+          </>
+        ) : link ? (
+          // EPIC-23 U7: the personal link right here, so nobody waits for an email.
+          <>
+            <h3>You're in. Here is your personal link.</h3>
+            <p>
+              Your code is already inside. Open it, sign in with Google or
+              GitHub, and checkout shows €0 with no card. It works once, only
+              for you, for 14 days.
+            </p>
+            <p>
+              <a className="pp-btn pp-btn-primary" href={link}>
+                Start testing Zenod
+              </a>
+            </p>
+            <p className="pp-apply-link">
+              Keep this link to come back later: <span>{link}</span>
             </p>
           </>
         ) : (
@@ -258,7 +278,7 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
           <h2 id="steps-title">How it works</h2>
           <ol>
             <li>Apply below with your email. It takes a minute.</li>
-            <li>The first ten are in straight away. Each gets a personal link by email, with a code inside that works once, only for them.</li>
+            <li>The first ten are in straight away. Each sees a personal link right after applying, with a code inside that works once, only for them.</li>
             <li>
               Open the link and sign in with Google or GitHub. Checkout opens
               with your code already applied: you pay €0 and no card is asked for.
