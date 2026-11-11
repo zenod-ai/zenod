@@ -68,7 +68,10 @@ import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFoun
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
 import { setHelpersBuilding } from "./personaRunner.js";
-import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
+import { mountTesterFlowRoutes, testerFlowFromEnv, testerMail, type TesterFlow } from "./testerFlow.js";
+import { MailGrantStore, googleMailClientFromEnv, mailSenderFromEnv } from "./mailGrant.js";
+import { mountMailSenderRoutes } from "./mailSenderPage.js";
+import { mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
@@ -1323,6 +1326,31 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       });
     });
     admin.mountRoutes?.(app);
+    if (agent.name === "zenod") {
+      // EPIC-26 S11: one Google consent for gmail.send as jordi@zenod.dev, given on /admin/mail.
+      const mailSender = mailSenderFromEnv(env);
+      const mail = mailerFromEnv(env, { dataDir: storage.dataDir });
+      const appUrl = (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "");
+      mountMailSenderRoutes(app, {
+        isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)),
+        store: new MailGrantStore(storage.dataDir, env.CHASSIS_VAULT_MASTER_KEY),
+        client: googleMailClientFromEnv(env),
+        sender: mailSender,
+        preview: () => testerMail("tester@example.com", `${appUrl}/join?code=ZT-EXAMPLE`, new Date(Date.now() + 30 * 86400 * 1000)
+          .toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })),
+        send: async (message) => {
+          if (!mail) throw new Error("Zenod has no mail sender");
+          await mail(message);
+        },
+        onConnected: () => {
+          void testerFlow?.process();
+          void welcomeMailer?.process();
+          void offerMailer?.process();
+        },
+        welcomeOn: env.ZENOD_WELCOME_MAIL === "1",
+        secure: env.NODE_ENV === "production",
+      });
+    }
     if (options.webDist) {
       app.get("/admin", serveStatic({
         root: options.webDist,

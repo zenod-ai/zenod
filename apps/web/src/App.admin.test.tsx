@@ -61,6 +61,11 @@ describe("Zenod owner admin", () => {
         .getByRole("link", { name: /Testers and daily counts/ })
         .getAttribute("href")
     ).toBe("/admin/testers")
+    expect(
+      screen
+        .getByRole("link", { name: /Mail sender/ })
+        .getAttribute("href")
+    ).toBe("/admin/mail")
     expect(document.body.textContent).not.toMatch(
       /pair|channel number|phylax admin/i
     )

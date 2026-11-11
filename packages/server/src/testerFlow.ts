@@ -35,7 +35,7 @@ import { bodyLimit } from "hono/body-limit";
 import type { PublicCountsDocument } from "./publicCounts.js";
 import type { TesterMarks } from "./testerMarks.js";
 import { oneMonthAfter, type ExtendResult, type FreeTimeRow } from "./testerMonthEnd.js";
-import { mailerFromEnv, resendMailer, type SendMail, type ZenodMail } from "./zenodMail.js";
+import { mailerFromEnv, mailReady, resendMailer, type SendMail, type ZenodMail } from "./zenodMail.js";
 
 export const TESTER_FLOW_FILE = "tester-flow.json";
 export const DEFAULT_TESTER_CAP = 10;
@@ -385,7 +385,7 @@ export class TesterFlow {
       cap: this.cap,
       accepting: this.accepting(state),
       canMint: Boolean(this.mint),
-      canMail: Boolean(this.sendMail),
+      canMail: mailReady(this.sendMail),
       testers: state.testers,
     };
   }
@@ -435,7 +435,7 @@ export class TesterFlow {
           continue;
         }
       }
-      if (!this.sendMail) {
+      if (!mailReady(this.sendMail)) {
         if (tester.waiting !== WAITING_FOR_MAIL) this.update(tester.id, { waiting: WAITING_FOR_MAIL });
         continue;
       }
@@ -485,7 +485,7 @@ export function testerFlowFromEnv(
       : env.ZENOD_TESTER_MINT === "local" || !stripe ? localMinter
       : env.ZENOD_TESTER_MINT === "stripe" ? stripeMinter(stripe)
       : stripeThenLocalMinter(stripe),
-    sendMail: mailerFromEnv(env),
+    sendMail: mailerFromEnv(env, { dataDir }),
     ...(isTest ? { isTest } : {}),
   });
 }
@@ -511,7 +511,7 @@ function sameOrigin(c: Context): boolean {
   }
 }
 
-const ADMIN_STYLE = `body{margin:0;background:#f6f2e9;color:#18211c;font:400 1rem/1.5 "Instrument Sans",system-ui,sans-serif;padding:2rem}main{max-width:62rem;margin:0 auto}h1{font:400 2.4rem/1.1 Newsreader,Georgia,serif;margin:0 0 1rem}h2{font:400 1.6rem/1.2 Newsreader,Georgia,serif;margin:2.5rem 0 .5rem}.where{border:1px solid #18211c;padding:1rem 1.25rem;max-width:44rem}.where p{margin:.4rem 0}a{color:#1f4d3a}table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.95rem}th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid #d9d2c1;vertical-align:top}th{font-weight:500;color:#4a554e}.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem;margin:1rem 0}.tile{border:1px solid #d9d2c1;padding:.75rem 1rem}.tile b{display:block;font:400 2.4rem/1 Newsreader,Georgia,serif}.tile span{color:#4a554e;font-size:.9rem}.muted{color:#4a554e;font-size:.9rem}.tag{font:500 .8rem system-ui,sans-serif;padding:.1rem .45rem;border-radius:3px;white-space:nowrap}.tag.test{background:#e8dfcc;color:#8a3b12}.tag.real{background:#1f4d3a;color:#f6f2e9}.btn{font:500 .9rem system-ui,sans-serif;padding:.45rem .8rem;border:1px solid #18211c;background:#f6f2e9;border-radius:3px;cursor:pointer}.btn.go{background:#1f4d3a;color:#f6f2e9;border-color:#1f4d3a}.state{font:500 1.05rem system-ui,sans-serif}.on{color:#1f4d3a}.off{color:#8a3b12}code{font:.9rem ui-monospace,Menlo,monospace}`;
+export const ADMIN_STYLE = `body{margin:0;background:#f6f2e9;color:#18211c;font:400 1rem/1.5 "Instrument Sans",system-ui,sans-serif;padding:2rem}main{max-width:62rem;margin:0 auto}h1{font:400 2.4rem/1.1 Newsreader,Georgia,serif;margin:0 0 1rem}h2{font:400 1.6rem/1.2 Newsreader,Georgia,serif;margin:2.5rem 0 .5rem}.where{border:1px solid #18211c;padding:1rem 1.25rem;max-width:44rem}.where p{margin:.4rem 0}a{color:#1f4d3a}table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.95rem}th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid #d9d2c1;vertical-align:top}th{font-weight:500;color:#4a554e}.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem;margin:1rem 0}.tile{border:1px solid #d9d2c1;padding:.75rem 1rem}.tile b{display:block;font:400 2.4rem/1 Newsreader,Georgia,serif}.tile span{color:#4a554e;font-size:.9rem}.muted{color:#4a554e;font-size:.9rem}.tag{font:500 .8rem system-ui,sans-serif;padding:.1rem .45rem;border-radius:3px;white-space:nowrap}.tag.test{background:#e8dfcc;color:#8a3b12}.tag.real{background:#1f4d3a;color:#f6f2e9}.btn{font:500 .9rem system-ui,sans-serif;padding:.45rem .8rem;border:1px solid #18211c;background:#f6f2e9;border-radius:3px;cursor:pointer}.btn.go{background:#1f4d3a;color:#f6f2e9;border-color:#1f4d3a}.state{font:500 1.05rem system-ui,sans-serif}.on{color:#1f4d3a}.off{color:#8a3b12}code{font:.9rem ui-monospace,Menlo,monospace}`;
 
 /** What the admin page shows beside the flow (S7 round 2); each part is optional. */
 export interface TesterAdminExtras {
@@ -690,7 +690,7 @@ ${freeTimeSection(freeRows, notice)}
 <h2>Acceptance</h2>
 <p>${state}</p>
 <form method="post" action="/admin/testers/switch">${button}</form>
-<p>Codes: ${snap.canMint ? "made here as people are accepted, and each person sees their link on screen" : WAITING_FOR_CODE}. Email: ${snap.canMail ? "sent here" : WAITING_FOR_MAIL}.</p>
+<p>Codes: ${snap.canMint ? "made here as people are accepted, and each person sees their link on screen" : WAITING_FOR_CODE}. Email: ${snap.canMail ? "sent here, from the <a href=\"/admin/mail\">mail sender</a>" : `${WAITING_FOR_MAIL}, <a href="/admin/mail">connect the mail sender</a>`}.</p>
 </main></body></html>`;
 }
 

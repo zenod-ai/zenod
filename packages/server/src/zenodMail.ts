@@ -1,13 +1,16 @@
 // EPIC-26 T2: Zenod's one mail sender. Every mail Zenod sends (the tester link, the
-// welcome after checkout) goes through `SendMail`; which provider sits behind it is
-// decided here from the env, once.
+// welcome after checkout, the end-of-test offer) goes through `SendMail`; which provider
+// sits behind it is decided here from the env, once.
 //
-//   GOOGLE_MAIL_SERVICE_ACCOUNT_JSON set -> Gmail API as ZENOD_MAIL_SENDER (default
-//   jordi@zenod.dev), through Zenod's own send-only service account with domain-wide
-//   delegation of gmail.send (E26-S9, ask E26-A6). Replies go to that mailbox.
+//   GOOGLE_OAUTH_CLIENT_ID/SECRET set -> Gmail API as ZENOD_MAIL_SENDER (default
+//   jordi@zenod.dev), through the one gmail.send consent Jordi gives on
+//   cloud.zenod.dev/admin/mail (E26-S11, mailGrant.ts). Until he connects it the sender
+//   is not ready and every mail stays queued. Replies go to that mailbox.
 //   else RESEND_API_KEY set -> Resend (kept for the E26-S2 path; Jordi chose not to use it).
 //   else -> null: nothing is sent and callers keep their mail queued.
-import { createSign } from "node:crypto";
+import { MailGrantStore, grantAccessToken, googleMailClientFromEnv, mailSenderFromEnv } from "./mailGrant.js";
+
+export { DEFAULT_MAIL_SENDER, GMAIL_SEND_SCOPE } from "./mailGrant.js";
 
 export interface ZenodMail {
   to: string;
@@ -16,18 +19,17 @@ export interface ZenodMail {
   html: string;
 }
 
-export type SendMail = (mail: ZenodMail) => Promise<void>;
+/** Sends one mail or throws. `ready` (when present) says whether it can send right now. */
+export type SendMail = ((mail: ZenodMail) => Promise<void>) & { ready?: () => boolean };
 
-export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-export const DEFAULT_MAIL_SENDER = "jordi@zenod.dev";
 export const DEFAULT_MAIL_SENDER_NAME = "Jordi at Zenod";
-const GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token";
 const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+/** The error when Google answers that the Gmail API is switched off in Zenod's Google project. */
+export const GMAIL_API_OFF = "mail provider answered 403, the Gmail API is off in Zenod's Google project";
 
-interface ServiceAccountKey {
-  client_email: string;
-  private_key: string;
-  token_uri?: string;
+/** True when a sender exists and can send now (a Gmail sender waits for Jordi's consent). */
+export function mailReady(send: SendMail | null | undefined): send is SendMail {
+  return Boolean(send) && (send!.ready?.() ?? true);
 }
 
 function base64url(value: Buffer | string): string {
@@ -74,71 +76,36 @@ export function mimeMessage(mail: ZenodMail, from: { name: string; address: stri
   ].join("\r\n");
 }
 
-export function parseServiceAccountKey(json: string): ServiceAccountKey {
-  const parsed = JSON.parse(json) as Partial<ServiceAccountKey>;
-  if (typeof parsed.client_email !== "string" || typeof parsed.private_key !== "string") {
-    throw new Error("the mail service account key lacks client_email or private_key");
-  }
-  return { client_email: parsed.client_email, private_key: parsed.private_key, ...(parsed.token_uri ? { token_uri: parsed.token_uri } : {}) };
+export interface AccessTokenSource {
+  /** An access token for gmail.send; `fresh` skips any cached one. */
+  token(fresh?: boolean): Promise<string>;
+  ready?: () => boolean;
 }
 
-/**
- * Gmail API through a service account with domain-wide delegation: a signed JWT for the
- * sender mailbox buys an hour's token (cached), then users.messages.send.
- */
+/** Gmail API users.messages.send as the sender mailbox, with a token from `source`. */
 export function gmailMailer(
-  key: ServiceAccountKey,
+  source: AccessTokenSource,
   sender: string,
   senderName = DEFAULT_MAIL_SENDER_NAME,
   fetchImpl: typeof fetch = fetch,
-  now: () => Date = () => new Date(),
 ): SendMail {
-  const tokenUri = key.token_uri || GOOGLE_TOKEN_URI;
-  let cached: { token: string; until: number } | null = null;
-
-  async function accessToken(): Promise<string> {
-    const nowMs = now().getTime();
-    if (cached && cached.until > nowMs + 60_000) return cached.token;
-    const iat = Math.floor(nowMs / 1000);
-    const unsigned = `${base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${base64url(JSON.stringify({
-      iss: key.client_email,
-      sub: sender,
-      scope: GMAIL_SEND_SCOPE,
-      aud: tokenUri,
-      iat,
-      exp: iat + 3600,
-    }))}`;
-    const signature = createSign("RSA-SHA256").update(unsigned).sign(key.private_key);
-    const response = await fetchImpl(tokenUri, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: `${unsigned}.${base64url(signature)}`,
-      }).toString(),
-    });
-    // Never echo the body: an error body can name the account; the status is enough.
-    if (!response.ok) throw new Error(`mail sign-in answered ${response.status}`);
-    const body = (await response.json()) as { access_token?: string; expires_in?: number };
-    if (!body.access_token) throw new Error("mail sign-in gave no token");
-    cached = { token: body.access_token, until: nowMs + (body.expires_in ?? 3600) * 1000 };
-    return cached.token;
-  }
-
-  return async (mail) => {
+  const send: SendMail = async (mail) => {
     const raw = base64url(mimeMessage(mail, { name: senderName, address: sender }, sender));
-    const send = async () => fetchImpl(GMAIL_SEND_URL, {
+    const post = async (fresh: boolean) => fetchImpl(GMAIL_SEND_URL, {
       method: "POST",
-      headers: { Authorization: `Bearer ${await accessToken()}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${await source.token(fresh)}`, "Content-Type": "application/json" },
       body: JSON.stringify({ raw }),
     });
-    let response = await send();
-    if (response.status === 401) {
-      cached = null;
-      response = await send();
+    let response = await post(false);
+    if (response.status === 401) response = await post(true);
+    // Never echo the body: an error body can name the account; the status is enough.
+    if (response.status === 403 && /SERVICE_DISABLED|accessNotConfigured/.test(await response.text().catch(() => ""))) {
+      throw new Error(GMAIL_API_OFF);
     }
     if (!response.ok) throw new Error(`mail provider answered ${response.status}`);
   };
+  if (source.ready) send.ready = source.ready;
+  return send;
 }
 
 /** Resend's HTTP API (https://resend.com/docs/api-reference/emails/send-email). */
@@ -160,20 +127,26 @@ export function resendMailer(apiKey: string, from: string, replyTo?: string, fet
   };
 }
 
-/** The sender production uses, or null when no mail key is set. */
-export function mailerFromEnv(env: NodeJS.ProcessEnv, fetchImpl: typeof fetch = fetch): SendMail | null {
-  const serviceAccount = env.GOOGLE_MAIL_SERVICE_ACCOUNT_JSON?.trim();
-  if (serviceAccount) {
-    try {
+/**
+ * The sender production uses, or null when Zenod has no way to send. With Zenod's Google
+ * client and a data dir it is the Gmail sender, ready once Jordi has connected it.
+ */
+export function mailerFromEnv(
+  env: NodeJS.ProcessEnv,
+  options: { dataDir?: string; fetchImpl?: typeof fetch } = {},
+): SendMail | null {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const client = googleMailClientFromEnv(env);
+  if (client && options.dataDir) {
+    const store = new MailGrantStore(options.dataDir, env.CHASSIS_VAULT_MASTER_KEY);
+    if (store.available) {
+      const sender = mailSenderFromEnv(env);
       return gmailMailer(
-        parseServiceAccountKey(serviceAccount),
-        env.ZENOD_MAIL_SENDER?.trim() || DEFAULT_MAIL_SENDER,
+        grantAccessToken(store, client, sender, fetchImpl),
+        sender,
         env.ZENOD_MAIL_SENDER_NAME?.trim() || DEFAULT_MAIL_SENDER_NAME,
         fetchImpl,
       );
-    } catch (error) {
-      console.error("[mail] the Google mail key is unreadable:", error instanceof Error ? error.message : "error");
-      return null;
     }
   }
   const resendKey = env.RESEND_API_KEY?.trim();

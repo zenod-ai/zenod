@@ -135,14 +135,14 @@ export const OFFER_MAIL_FILE = "offer-mail.json";
 /**
  * The offer email's queue: the welcome email's queue with its own file, one record per subscription and
  * free month, retried every 10 minutes. On only behind the welcome mail's switch (ZENOD_WELCOME_MAIL=1)
- * and Zenod's own Google mail key, so nothing is sent before E26-A6 lands.
+ * and the connected mail sender (E26-S11), so nothing is sent before Jordi connects it.
  */
 export function offerMailerFromEnv(dataDir: string, env: NodeJS.ProcessEnv, sendMail: SendMail | null = null): WelcomeMailer {
-  const on = env.ZENOD_WELCOME_MAIL === "1" && Boolean(env.GOOGLE_MAIL_SERVICE_ACCOUNT_JSON?.trim());
+  const on = env.ZENOD_WELCOME_MAIL === "1";
   const appUrl = (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "");
   return new WelcomeMailer({
     dataDir,
-    sendMail: on ? sendMail ?? mailerFromEnv(env) : null,
+    sendMail: on ? sendMail ?? mailerFromEnv(env, { dataDir }) : null,
     appUrl,
     file: OFFER_MAIL_FILE,
     label: "offer",
