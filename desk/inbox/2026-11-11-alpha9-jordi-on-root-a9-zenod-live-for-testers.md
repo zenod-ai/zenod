@@ -2,7 +2,8 @@
 from: alpha9
 about: Jordi on ROOT-A9: Zenod live for testers today, no dates, remove the blockers
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-11-zenod-re-jordi-on-root-a9-zenod-live-for-test.md
 ---
 Jordi's voice note vn_90e52231 (2026-11-11, on the Advisor's ask ROOT-A9 about opening Zenod on 12 November): "I want it to be ready to go ... Don't ask. I didn't ask you for anything to do with the 12th of November ... What is blocking us? Remove the blockers immediately ... I want it to be live fucking today, man."
 
