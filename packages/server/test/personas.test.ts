@@ -662,7 +662,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
       entry(3, "2026-11-03", "Buy milk"),
       voice(4, "2026-10-30", "Same thing, my head runs through tomorrow when I try to sleep."),
     ];
-    const pattern = { noticed: "Your worries seem to visit at bedtime, when you try to sleep.", idea: "Try writing tomorrow's worries on paper for ten minutes in the early evening.", known: "a worry window", source: "Studied by Borkovec and colleagues in the 1980s.", yes: "It gives the thoughts a time and place that is not your pillow.", no: "If the evenings are already full, it may feel like one more chore.", sources: [1, 2, 3] };
+    const pattern = { noticed: "Your worries seem to visit at bedtime, when you try to sleep.", topic: "plans at bedtime", idea: "Try writing tomorrow's worries on paper for ten minutes in the early evening.", known: "a worry window", source: "Studied by Borkovec and colleagues in the 1980s.", yes: "It gives the thoughts a time and place that is not your pillow.", no: "If the evenings are already full, it may feel like one more chore.", sources: [1, 2, 3] };
     const stub = stubModel(JSON.stringify({ pattern }));
     const { deps: d, inbox, written } = deps({ model: () => stub.model, entries, now: () => new Date("2026-11-08T03:00:00Z") });
     expect(await runPersona(PATTERNS_AND_IDEAS, d, "manual")).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 3 notes and offered one idea" });
@@ -672,7 +672,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     expect(stub.calls[0]!.system).toContain("Never diagnose");
     expect(stub.calls[0]!.system).toContain("real distress");
     const card = inbox.list()[0]!;
-    expect(card).toMatchObject({ kind: "finding", from: "Patterns and ideas", title: pattern.idea, body: `${pattern.noticed}\n\nKnown as a worry window. ${pattern.source}`, card: { picture: null, yes: pattern.yes, no: pattern.no } });
+    expect(card).toMatchObject({ kind: "finding", from: "Patterns and ideas", title: pattern.idea, body: `${pattern.noticed}\n\nKnown as a worry window. ${pattern.source}`, card: { picture: { change: "try", from: "plans at bedtime", to: "a worry window" }, yes: pattern.yes, no: pattern.no } });
     expect(card.links.map((l) => l.path)).toEqual(["Log/2026-11-07.md", "Log/2026-11-04.md", "Log/2026-10-30.md", "Personas/patterns-and-ideas/2026-11-08.md"]);
     expect(written[0]!.files[0]!.content).toContain("## Idea\n\nTry writing tomorrow's worries");
 

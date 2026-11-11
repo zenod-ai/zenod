@@ -2,6 +2,7 @@ import type { MemoryEntry } from "zenod";
 import type { InboxLink } from "./inboxStore.js";
 import type { PersonaDefinition } from "./personaRunner.js";
 import { isProjectWork } from "./helperScope.js";
+import { cleanHelperCard, HELPER_CARD_WORDS, namedCard, namedMemories } from "./helperCard.js";
 
 /**
  * Patterns and ideas (EPIC-14 S41). Jordi, 2026-11-10 23:08Z: "Can you hire a therapist on your
@@ -29,6 +30,8 @@ export interface PatternsWords {
   memoryTitle(entry: MemoryEntry): string;
   memoryWords(content: string): string;
   parseJsonReply(text: string): Record<string, unknown> | null;
+  /** How the person knows each memory, like "your voice note of 3 Nov". */
+  memoryPhrases(entries: ReadonlyArray<MemoryEntry>): string[];
 }
 
 export const PATTERNS_ID = "patterns-and-ideas";
@@ -61,6 +64,8 @@ export function soundsClinical(...texts: Array<string | null | undefined>): bool
 export interface PatternIdea {
   /** One gentle sentence that names the pattern, said to the person. */
   noticed: string;
+  /** The pattern in a few of their own words, for the card's picture. */
+  topic: string;
   /** The idea to try: one sentence that starts with a verb. */
   idea: string;
   /** The idea's plain, well-known name, like "a worry window". */
@@ -80,6 +85,7 @@ export function parsePattern(reply: Record<string, unknown> | null): PatternIdea
   if (!raw) return null;
   const found: PatternIdea = {
     noticed: line(raw.noticed),
+    topic: line(raw.topic, 90),
     idea: line(raw.idea),
     known: line(raw.known, 80),
     source: line(raw.source, 160),
@@ -99,6 +105,7 @@ const SYSTEM = [
   "If any note sounds like real distress or crisis, reply with null and say nothing about it.",
   "You are not a project manager: never suggest a task, a ticket, a release or work for a team or an agent. The pattern can show up in their work; the idea is for the person.",
   "Use only what the notes say. Never invent facts, names or dates. When no pattern clearly repeats across several notes, reply with null.",
+  HELPER_CARD_WORDS,
 ].join(" ");
 
 /** Its earlier note for a day, if any: the idea it named, and whether it posted. */
@@ -108,7 +115,7 @@ function earlierIdea(body: string): string | null {
 }
 
 export function createPatterns(words: PatternsWords): PersonaDefinition {
-  const { memoryTitle, memoryWords, parseJsonReply } = words;
+  const { memoryTitle, memoryWords, parseJsonReply, memoryPhrases } = words;
   const label = (entry: MemoryEntry) => `${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}`;
 
   const recent = async (ctx: { recentMemories(input: { days: number; limit: number }): Promise<MemoryEntry[]> }) => {
@@ -169,13 +176,16 @@ export function createPatterns(words: PatternsWords): PersonaDefinition {
         ...lines,
         ...(earlier.length ? ["", "Ideas you offered before. Offer a different one:", ...earlier.map((idea) => `- ${idea}`)] : []),
         "",
-        'Reply with JSON only: {"pattern": {"noticed": "one gentle sentence to them naming the pattern you saw", "idea": "the idea to try, one sentence that starts with a verb", "known": "the idea\'s plain well-known name", "source": "one line: who studied it and roughly when", "yes": "one sentence: why it might help them", "no": "one honest sentence: why it might not fit them", "sources": [numbers of the notes it shows in]}} or {"pattern": null}',
+        'Reply with JSON only: {"pattern": {"noticed": "one gentle sentence to them naming the pattern you saw", "topic": "the pattern in at most 6 of their own words", "idea": "the idea to try, one sentence that starts with a verb", "known": "the idea\'s plain well-known name", "source": "one line: who studied it and roughly when", "yes": "one sentence: why it might help them", "no": "one honest sentence: why it might not fit them", "sources": [numbers of the notes it shows in]}} or {"pattern": null}',
       ].join("\n");
-      const found = parsePattern(parseJsonReply(await ctx.think({ system: SYSTEM, prompt })));
+      const parsed = parsePattern(parseJsonReply(await ctx.think({ system: SYSTEM, prompt })));
+      // S36: notes named the way the person knows them, never by the model's numbers.
+      const said = memoryPhrases(entries);
+      const found = parsed ? { ...parsed, noticed: namedMemories(parsed.noticed, said), yes: namedMemories(parsed.yes, said), no: namedMemories(parsed.no, said) } : null;
       const sources = (found?.sources ?? []).map((n) => entries[n - 1]).filter((entry): entry is MemoryEntry => entry !== undefined);
       const why = !found ? null
         : isProjectWork(found.noticed, found.idea) ? "the idea was project work"
-        : soundsClinical(found.noticed, found.idea, found.known, found.source, found.yes, found.no) ? "the words were too clinical"
+        : soundsClinical(found.noticed, found.topic, found.idea, found.known, found.source, found.yes, found.no) ? "the words were too clinical"
         : sources.length < 2 ? "it showed in fewer than two notes"
         : null;
       if (!found || why) {
@@ -194,7 +204,8 @@ export function createPatterns(words: PatternsWords): PersonaDefinition {
         title: found.idea,
         body: `${found.noticed}\n\nKnown as ${found.known}. ${found.source}`,
         links,
-        card: { picture: null, yes: found.yes, no: found.no },
+        // S36's card: what keeps coming back, to the idea by its name; why yes, why not.
+        card: namedCard(cleanHelperCard({ picture: { change: "try", from: found.topic, to: found.known }, yes: found.yes, no: found.no }) ?? { picture: null, yes: found.yes, no: found.no }, said),
       });
       return { summary: `Read ${entries.length} notes and offered one idea` };
     },
