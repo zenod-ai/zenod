@@ -55,3 +55,42 @@ export function creditRouteFor(route: CreditRoute | null, tenantId: string): Cre
 export function creditCapMessage(resetsAt: string): string {
   return `This month's AI allowance for this account is used up. It resets on ${resetsAt.slice(0, 10)}.`;
 }
+
+/**
+ * E7-S1 round 2: what /api/health says about the Anthropic route across every account in this
+ * process since it started: calls that worked, calls that failed and the last failure's code. Never
+ * an account, a prompt or the key.
+ */
+const tally = {
+  since: new Date().toISOString(),
+  calls: 0,
+  failed: 0,
+  lastOkAt: null as string | null,
+  lastFailedAt: null as string | null,
+  lastError: null as string | null,
+  byModel: {} as Record<string, number>,
+};
+
+export function noteCreditCall(report: { status?: "succeeded" | "failed"; errorCode?: string | null; model?: string }, at: number = Date.now()): void {
+  const when = new Date(at).toISOString();
+  if (report.status === "failed") {
+    tally.failed += 1;
+    tally.lastFailedAt = when;
+    tally.lastError = (report.errorCode ?? "provider_error").slice(0, 60);
+    return;
+  }
+  tally.calls += 1;
+  tally.lastOkAt = when;
+  if (report.model) tally.byModel[report.model] = (tally.byModel[report.model] ?? 0) + 1;
+}
+
+/** ok: the last call worked · failing: the last call failed · idle: no call yet since start. */
+export function creditCallHealth(): { state: "ok" | "failing" | "idle"; since: string; calls: number; failed: number; byModel: Record<string, number>; lastOkAt: string | null; lastFailedAt: string | null; lastError: string | null } {
+  const state = tally.lastFailedAt && (!tally.lastOkAt || tally.lastFailedAt > tally.lastOkAt) ? "failing" : tally.lastOkAt ? "ok" : "idle";
+  return { state, ...tally, byModel: { ...tally.byModel } };
+}
+
+/** Test seam: forget the tally. */
+export function resetCreditCallHealth(): void {
+  Object.assign(tally, { since: new Date().toISOString(), calls: 0, failed: 0, lastOkAt: null, lastFailedAt: null, lastError: null, byModel: {} });
+}

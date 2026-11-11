@@ -16,6 +16,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { decodeSupportedAnswer } from "./answerSupportProtocol.js";
 import { DEEPSEEK_BASE_URL, deepseekCostUsd } from "./deepseek.js";
+import { claude5Fetch, claude5Model } from "./claude5.js";
 import { classificationSourceUnits } from "./classificationSourceUnits.js";
 import { AnswerCursorAliases } from "./answerCursors.js";
 import { ANSWER_SUPPORT_INSTRUCTION } from "../engine/answerSupport.js";
@@ -492,7 +493,11 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
     }
     return response;
   } : undefined;
-  if (provider === "anthropic") return createAnthropic({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}), ...(headers ? { headers } : {}) });
+  if (provider === "anthropic") {
+    // E7-S1 round 2: Claude 5 models get the request shape they accept (claude5.ts).
+    const anthropic = createAnthropic({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}), ...(headers ? { headers } : {}), fetch: claude5Fetch() });
+    return (id: string) => claude5Model(id, anthropic(id));
+  }
   if (provider === "openai") {
     const openai = createOpenAI({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}), ...(headers ? { headers } : {}) });
     return apiFormat === "responses" ? (id: string) => openai.responses(id) : openai;

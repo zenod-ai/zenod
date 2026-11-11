@@ -84,12 +84,35 @@ import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
 import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
 import { subscribersEnabled } from "./subscribers.js";
-import { creditRouteFromEnv, type CreditRoute } from "./creditRoute.js";
+import { creditCallHealth, creditRouteFromEnv, type CreditRoute } from "./creditRoute.js";
 
-/** EPIC-14 S41 round 2: whether the Anthropic credit route is on and for how many accounts; never the key or the ids. */
-function anthropicCreditHealth(env: NodeJS.ProcessEnv): { on: boolean; model?: string; accounts?: number | "all" } {
+/**
+ * EPIC-14 S41 round 2: whether the Anthropic credit route is on and for how many accounts; never the key or the ids.
+ * E7-S1 round 2: also the answer model, the per-account monthly cap and how its calls went since start.
+ */
+function anthropicCreditHealth(env: NodeJS.ProcessEnv): { on: boolean; model?: string; askModel?: string; capUsd?: number; accounts?: number | "all"; calls?: ReturnType<typeof creditCallHealth> } {
   const route: CreditRoute | null = creditRouteFromEnv(env);
-  return route ? { on: true, model: route.model, accounts: route.tenants === "all" ? "all" : route.tenants.size } : { on: false };
+  return route
+    ? { on: true, model: route.model, askModel: route.askModel, capUsd: route.monthlyUsd, accounts: route.tenants === "all" ? "all" : route.tenants.size, calls: creditCallHealth() }
+    : { on: false };
+}
+
+/**
+ * E7-S1 round 2: the background provider /api/health reports. With every account on Anthropic
+ * (ZENOD_CREDIT_TENANTS=all) filing, desk work, helpers and reflection all run there; DeepSeek and
+ * OpenRouter are then only the fallback switch (unset ZENOD_CREDIT_TENANTS), named as such.
+ */
+export function backgroundProviderHealth(env: NodeJS.ProcessEnv): Record<string, unknown> {
+  const route = creditRouteFromEnv(env);
+  if (route?.tenants !== "all") return { ...backgroundHealth() };
+  const calls = creditCallHealth();
+  return {
+    provider: "anthropic",
+    model: route.model,
+    jobs: { filing: "anthropic", desk: "anthropic", personas: "anthropic", reflection: "anthropic" },
+    state: calls.state,
+    fallback: { deepseek: backgroundHealth().provider === "deepseek" ? "standby" : "off", switch: "ZENOD_CREDIT_TENANTS" },
+  };
 }
 import { backgroundHealth, backgroundRouteFromEnv, openRouterKeyHealth, startBackgroundBalanceMonitor, startOpenRouterKeyMonitor, type BackgroundRoute } from "./backgroundRoute.js";
 import {
@@ -1222,7 +1245,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     );
   }
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth(), credit: { openrouter: openRouterKeyHealth(), anthropic: anthropicCreditHealth(env) } }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundProviderHealth(env), credit: { openrouter: openRouterKeyHealth(), anthropic: anthropicCreditHealth(env) } }),
   );
   if (
     agent.name === "zenod" &&
