@@ -22,6 +22,7 @@ function healthyGet(url) {
       channels: { whatsapp: { state: "connected", receivePath: { status: "ready", outageSince: null } } },
     });
     case URLS["host.observatory"]: return ok("ok");
+    case URLS["staging.health"]: return ok({ status: "ok", sha: "abc1234def" });
     default: return { status: 0, body: "", headers: {}, error: `ENOTFOUND reaching ${new URL(url).host}` };
   }
 }
@@ -31,7 +32,7 @@ function healthySsh(cmd) {
     return { code: 0, stdout: `2026-11-03T16:17:00+00:00 h zenod-readiness-watch[1]: [keeper] watch ready=True issues=[] proofs=[{"id": "backup_restore", "expiresAt": "2026-12-02T08:06:42Z", "daysLeft": 28.6}]\n` };
   }
   if (cmd.includes("tester-watch")) return { code: 0, stdout: "OK 1 tester(s), no alerts\n" };
-  if (cmd.includes("deploy-poller")) return { code: 0, stdout: "2026-11-03T16:58:00+00:00 h python3[1]: deploy-poller zenod-mt: noop up to date\n" };
+  if (cmd.includes("deploy-poller")) return { code: 0, stdout: "2026-11-03T16:58:00+00:00 h python3[1]: deploy-poller zenod-staging: noop up to date\n" };
   if (cmd.includes("zenod-health-watchdog")) return { code: 0, stdout: "user=inactive root=active\n" };
   if (cmd.includes("is-active")) return { code: 0, stdout: "active\n" };
   if (cmd.startsWith("df")) return { code: 0, stdout: "/dev/sda1 78425224 39839000 35341484 53% /\n" };
@@ -81,7 +82,7 @@ test("judges catch stale deploys, a disconnected WhatsApp and an expired proof",
     : healthySsh(cmd));
   const r = await runBattery({ ...base, get, ssh, publish: () => ({ headSha: "fff0000", createdAt: "2026-11-03T12:00:00Z" }) });
   const by = Object.fromEntries(r.checks.map((c) => [c.id, c]));
-  assert.match(by["cloud.deployed-sha"].reason, /newest publish is fff0000/);
+  assert.match(by["cloud.deployed-sha"].reason, /staging abc1234 but newest publish is fff0000/);
   assert.match(by["phylax.whatsapp"].reason, /state disconnected, receive path reconnecting \(428\)/);
   assert.match(by["readiness.proofs"].reason, /expired proof: backup_restore/);
   assert.equal(by["phylax.health"].ok, true);

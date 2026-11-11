@@ -29,6 +29,8 @@ export const URLS = {
   "mcp.auth-metadata": "https://cloud.zenod.dev/.well-known/oauth-authorization-server",
   "phylax.health": "https://phylax.zenod.dev/api/health",
   "host.observatory": "http://100.104.206.10:8090/",
+  // Root D28 (EPIC-24 M10): staging follows main, production moves only on a promote.
+  "staging.health": "http://100.104.206.10:8781/api/health",
 };
 
 // Components use the row keys of the health page (docs/health/s1-live/probe.py, INVENTORY.md §2–§4).
@@ -90,15 +92,26 @@ export function checks() {
       },
     },
     {
-      id: "cloud.deployed-sha", component: "cloud", title: "Deployed sha is the newest published image", kind: "local",
+      id: "staging.health", component: "cloud", title: "Staging app health and sha", kind: "http",
+      judge: (r, ctx) => {
+        const j = json(r.body);
+        if (r.status !== 200 || j?.status !== "ok") return fail(`${r.status || r.error}, status ${j?.status ?? "unreadable"}`);
+        ctx.stagingSha = j.sha || null;
+        return pass(`ok, sha ${String(j.sha || "?").slice(0, 7)}`);
+      },
+    },
+    {
+      // Root D28: staging (not production) follows main; production moves only on scripts/promote-production.sh.
+      id: "cloud.deployed-sha", component: "cloud", title: "Staging runs the newest published image", kind: "local",
       run: (ctx) => ctx.newestPublish(),
       judge: (r, ctx) => {
-        if (!ctx.cloudSha) return fail("no sha from cloud health");
+        if (!ctx.stagingSha) return fail("no sha from staging health");
         if (!r?.headSha) return fail(`newest successful publish run unknown${r?.error ? ` (${r.error})` : ""}`);
-        if (r.headSha === ctx.cloudSha) return pass(`live ${ctx.cloudSha.slice(0, 7)} = newest publish`);
+        const prod = ctx.cloudSha ? `; production ${ctx.cloudSha.slice(0, 7)} moves on a promote` : "";
+        if (r.headSha === ctx.stagingSha) return pass(`staging ${ctx.stagingSha.slice(0, 7)} = newest publish${prod}`);
         const ageMin = (ctx.now() - Date.parse(r.createdAt)) / 60000;
-        if (ageMin < 30) return pass(`live ${ctx.cloudSha.slice(0, 7)}, publish ${r.headSha.slice(0, 7)} ${Math.round(ageMin)} min old, roll pending`);
-        return fail(`live ${ctx.cloudSha.slice(0, 7)} but newest publish is ${r.headSha.slice(0, 7)} from ${Math.round(ageMin)} min ago`);
+        if (ageMin < 30) return pass(`staging ${ctx.stagingSha.slice(0, 7)}, publish ${r.headSha.slice(0, 7)} ${Math.round(ageMin)} min old, roll pending${prod}`);
+        return fail(`staging ${ctx.stagingSha.slice(0, 7)} but newest publish is ${r.headSha.slice(0, 7)} from ${Math.round(ageMin)} min ago`);
       },
     },
     {
@@ -188,11 +201,11 @@ export function checks() {
     },
     {
       id: "deploy.poller", component: "deploy", title: "Deploy poller ran in the last 10 min", kind: "remote",
-      cmd: "journalctl --user -u infra-vps-deploy-poller --since -10min -o short-iso --no-pager | grep 'deploy-poller zenod-mt' | tail -1",
+      cmd: "journalctl --user -u infra-vps-deploy-poller --since -10min -o short-iso --no-pager | grep -E 'deploy-poller (zenod-staging|zenod-mt)' | tail -1",
       judge: (r) => {
         const line = (r.stdout || "").trim();
         if (!line) return fail(r.code ? `ssh exit ${r.code}` : "no deploy-poller run in 10 min");
-        const msg = line.split("deploy-poller zenod-mt: ")[1] || line;
+        const msg = line.split(/deploy-poller zenod-(?:staging|mt): /)[1] || line;
         return /error|fail/i.test(msg) ? fail(msg.slice(0, 80)) : pass(msg.slice(0, 80));
       },
     },

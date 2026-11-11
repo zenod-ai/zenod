@@ -496,7 +496,7 @@ def remote() -> dict:
         return res
 
     dp = journal("infra-vps-deploy-poller", "-30min", user=True)
-    dp = [x for x in dp if "deploy-poller zenod-mt" in x[1]]
+    dp = [x for x in dp if re.search(r"deploy-poller zenod-(staging|mt):", x[1])]
     out["deploy_poller"] = {"at": iso(dp[-1][0]), "msg": dp[-1][1][:120]} if dp else None
     # the last roll (14 days) and the keeper's last plan or drill (35 days): journals since the last run, the
     # newest match carried in the cache (a minute of overlap; a repeat only re-finds the same last line)
@@ -506,7 +506,7 @@ def remote() -> dict:
         cache["lastRoll"] = cache["keeperLast"] = cache["watchdogRun"] = None
     js = f"@{int(ja.timestamp()) - 60}" if inc else None
     rolls = [x for x in journal("infra-vps-deploy-poller", js or "-14d", user=True, failed=jfail)
-             if "deploy-poller zenod-mt" in x[1] and "noop" not in x[1]]
+             if re.search(r"deploy-poller zenod-(staging|mt):", x[1]) and "noop" not in x[1]]
     if rolls:
         cache["lastRoll"] = {"at": iso(rolls[-1][0]), "msg": rolls[-1][1][:120]}
     out["deploy_last_roll"] = _within(cache.get("lastRoll"), t_now - dt.timedelta(days=14))
@@ -642,7 +642,9 @@ def collect() -> dict:
     s, body, secs = get("https://zenod.dev/")
     m = re.search(r"<title>(.*?)</title>", body, re.S)
     d["site"] = {"status": s, "secs": round(secs, 3), "title": html.unescape(m.group(1).strip())[:80] if m else None}
-    for key, url in (("cloud", "https://cloud.zenod.dev/api/health"), ("phylax", "https://phylax.zenod.dev/api/health")):
+    # root D28 (EPIC-24 M10): staging (tailnet) follows main; production moves only on a promote
+    for key, url in (("cloud", "https://cloud.zenod.dev/api/health"), ("phylax", "https://phylax.zenod.dev/api/health"),
+                     ("staging", "http://100.104.206.10:8781/api/health")):
         s, body, secs = get(url)
         try:
             j = json.loads(body)

@@ -94,6 +94,14 @@ class StatusRules(unittest.TestCase):
         d["publish"]["createdAt"] = "2026-11-03T11:00:00Z"
         self.assertEqual(status(d)["cloud"], "amber")
 
+    def test_with_staging_only_staging_must_follow_the_newest_publish(self):
+        """Root D28 (EPIC-24 M10): production lagging main is expected; staging lagging it is amber."""
+        d = raw(); d["publish"] = {"headSha": "fff0000", "createdAt": "2026-11-03T11:00:00Z"}
+        d["staging"] = {"status": 200, "json": {"status": "ok", "sha": "fff0000aaaa"}}
+        self.assertEqual(status(d)["cloud"], "green")
+        d["staging"]["json"]["sha"] = "abc1234def"
+        self.assertEqual(status(d)["cloud"], "amber")
+
     def test_site_wrong_title_is_red(self):
         d = raw(); d["site"]["title"] = "502 Bad Gateway"
         self.assertEqual(status(d)["site"], "red")
