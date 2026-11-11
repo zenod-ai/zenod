@@ -1522,6 +1522,25 @@ export class Runtime {
     return { provider: "anthropic", model: route.model, askModel: route.askModel, spendUsd: this.creditSpendUsd(now), capUsd: route.monthlyUsd };
   }
 
+  /**
+   * One tiny call on the credit (the helpers' path: one prompt, no tools), for proving the route on an
+   * account without a memory (staging). Logged in the usage ledger like any call; null when not on the credit.
+   */
+  async creditProbe(): Promise<{ model: string; text: string; inputTokens: number; outputTokens: number; costUsd: number; ms: number } | null> {
+    if (!this.creditRoute) return null;
+    let usage: { inputTokens: number; outputTokens: number; costUsd: number } = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+    const llm = this.creditLlm({
+      feature: "personas",
+      onUsage: (report) => {
+        this.usageStore.record(report, Date.now(), "personas");
+        usage = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
+      },
+    });
+    const started = Date.now();
+    const text = await llm.streamMemoryChat!({ system: "You answer in one short word.", prompt: "Reply with the word OK." }, () => {});
+    return { model: this.creditRoute.model, text: text.slice(0, 40), ...usage, ms: Date.now() - started };
+  }
+
   /** The stop once this account's credit spend reaches its monthly cap; null while it may run. Fails open. */
   private creditBlock(now: number = Date.now()): { message: string; resetsAt: string; reason: "allowance" } | null {
     const route = this.creditRoute;

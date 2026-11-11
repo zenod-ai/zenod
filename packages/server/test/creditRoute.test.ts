@@ -92,5 +92,6 @@ describe("credit route limits", () => {
     expect(other.creditStatus(NOW)).toBeNull();
     spend(other, "anthropic", 2.9);
     expect(other.aiAllowanceStatus(NOW)!.spendUsd).toBeCloseTo(2.9, 6);
+    return expect(other.creditProbe()).resolves.toBeNull();
   });
 });

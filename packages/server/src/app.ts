@@ -2246,6 +2246,18 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     });
   });
 
+  // EPIC-14 S41 round 2: one tiny call on the Anthropic credit route for this account (404 when not on it).
+  app.post("/api/credit/probe", async (c) => {
+    try {
+      const probe = await runtime.creditProbe();
+      if (!probe) return c.json({ error: "this account is not on the Anthropic credit" }, 404);
+      return c.json({ ok: true, provider: "anthropic", ...probe });
+    } catch (error) {
+      const status = (error as { statusCode?: number }).statusCode ?? null;
+      return c.json({ ok: false, provider: "anthropic", status, error: String((error as Error).message ?? error).slice(0, 300) }, 502);
+    }
+  });
+
   // C-25 · W2-3 (#570) — credit-headroom projection the host watchdog polls. Ledger-driven
   // (last-hour burn) vs a configured daily budget (ZENOD_CREDIT_BUDGET_USD_PER_DAY);
   // level "warn" once projected daily spend hits ZENOD_CREDIT_WARN_FRACTION (default 0.8).
