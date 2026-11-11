@@ -40,6 +40,13 @@ class FakeDrive implements DriveVaultClient {
   journalMetadataOnRead = false;
   journalPreconditionRace = false;
   uploadMetadataDelay = false;
+  /** Real Drive (T7-F1): appProperties key order differs between two reads of an unchanged file. */
+  reorderAppPropertiesOnRead = false;
+  /** Real Drive (T7-F1): a few seconds after a write, version advances with no content or modifiedTime change. */
+  lateMetadataBump = false;
+  failNextMutationAfterUpdateOf: string | null = null;
+  armedFailures = 0;
+  private readonly pendingLateBump = new Set<string>();
   private nextId = 1;
 
   constructor() {
@@ -136,7 +143,10 @@ class FakeDrive implements DriveVaultClient {
   async getFile(fileId: string): Promise<DriveVaultFile> {
     const file = this.getStored(fileId);
     if (this.journalMetadataOnRead && file.name.endsWith(".json") && file.name !== "manifest.json") this.updateMetadata(file);
-    return this.clone(file);
+    const read = this.clone(file);
+    if (this.lateMetadataBump && this.pendingLateBump.delete(fileId)) file.version = String(Number(file.version ?? "0") + 1);
+    if (this.reorderAppPropertiesOnRead && read.appProperties) read.appProperties = Object.fromEntries(Object.entries(read.appProperties).reverse());
+    return read;
   }
   async download(fileId: string): Promise<Buffer> { return Buffer.from(this.getStored(fileId).data); }
 
@@ -148,6 +158,7 @@ class FakeDrive implements DriveVaultClient {
       this.files.set(id, file);
       const response = this.clone(file);
       if (this.uploadMetadataDelay) this.updateMetadata(file);
+      if (this.lateMetadataBump) this.pendingLateBump.add(id);
       return response;
     });
   }
@@ -161,6 +172,11 @@ class FakeDrive implements DriveVaultClient {
   }
 
   async updateFile(fileId: string, mimeType: string, data: Buffer, precondition: DriveVaultPrecondition): Promise<DriveVaultFile> {
+    if (this.armedFailures > 0) {
+      this.armedFailures -= 1;
+      this.faultTriggered = true;
+      throw new Error("injected failure before remote update");
+    }
     const file = this.getStored(fileId);
     if (this.journalPreconditionRace && file.name.endsWith(".json") && file.name !== "manifest.json") {
       this.journalPreconditionRace = false;
@@ -193,6 +209,12 @@ class FakeDrive implements DriveVaultClient {
         this.externalEdit(authorityRace.externalFileId === "self" ? fileId : authorityRace.externalFileId, authorityRace.data);
       }
       if (race) this.raceWindow = null;
+      if (this.lateMetadataBump) this.pendingLateBump.add(fileId);
+      if (this.failNextMutationAfterUpdateOf === file.name) {
+        this.failNextMutationAfterUpdateOf = null;
+        // updateRemoteJournal retries a few times; keep failing so the save aborts.
+        this.armedFailures = 10;
+      }
       return response;
     });
   }
@@ -330,6 +352,76 @@ afterEach(async () => {
 });
 
 describe("DriveVaultRepository", { timeout: 20_000 }, () => {
+  describe("T7-F1: real Google Drive metadata behaviour", () => {
+    it("publishes the first save when Drive reorders appProperties keys between reads", async () => {
+      // Live on production (sha-d9ebdd6) and reproduced against the real Drive API:
+      // the PATCH response and the GET straight after it listed the same
+      // appProperties in a different order, so a correct write looked like an
+      // interleaving edit and the first save failed for every new Drive user.
+      const drive = new FakeDrive();
+      drive.reorderAppPropertiesOnRead = true;
+      drive.lateMetadataBump = true;
+      const workdir = await temp("t7f1-order");
+      const repo = await open(drive, workdir);
+      const created = await ensureSchemaV1(repo.path);
+      expect(created.length).toBeGreaterThan(0);
+      await repo.commitAndPublish(`schema: v1 — add ${created.join(", ")}`);
+      await writeVaultFile(workdir, "Notes/First.md", "# first save\n");
+      const revision = await repo.commitAndPublish("first save");
+      const cold = await open(drive, await temp("t7f1-order-cold"));
+      expect((await cold.currentPublishedRevision()).commitSha).toBe(revision.commitSha);
+      expect(await cold.trackedFiles()).toContain("Notes/First.md");
+    });
+
+    async function halfMadeVault(name: string): Promise<{ drive: FakeDrive; journalId: string; transactionId: string }> {
+      // The exact shape production left for the T7 account: bootstrap committed,
+      // the first save's bundle already replaced on Drive, then its journal closed
+      // "failed" by the false interleaving check with no foreign revision found,
+      // so the manifest still names the old bundle ("Drive Git bundle checksum mismatch").
+      const drive = new FakeDrive();
+      const workdir = await temp(name);
+      const repo = await open(drive, workdir);
+      const created = await ensureSchemaV1(repo.path);
+      drive.failNextMutationAfterUpdateOf = "repository.bundle";
+      await expect(repo.commitAndPublish(`schema: v1 — add ${created.join(", ")}`)).rejects.toThrow(/injected failure/);
+      drive.armedFailures = 0;
+      const stateDir = join(`${workdir}.state`, "transactions");
+      const [local] = (await readdir(stateDir)).filter((entry) => entry.endsWith(".json"));
+      const journal = JSON.parse(await readFile(join(stateDir, local!), "utf8"));
+      const bundle = journal.mutations.find((mutation: any) => mutation.path === ".git/repository.bundle");
+      expect(bundle.state).toBe("applied");
+      bundle.state = "failed";
+      bundle.conflictRevisions = [];
+      delete bundle.resultingFile;
+      journal.state = "failed";
+      const remote = [...drive.files.values()].find((file) => file.name === `${journal.transactionId}.json`)!;
+      drive.externalWrite(remote.id, Buffer.from(JSON.stringify(journal, null, 2)));
+      return { drive, journalId: remote.id, transactionId: journal.transactionId };
+    }
+
+    it("reopens a vault whose first save was falsely closed as failed, instead of a bundle checksum mismatch", async () => {
+      const { drive, journalId, transactionId } = await halfMadeVault("t7f1-half");
+      drive.reorderAppPropertiesOnRead = true;
+      drive.lateMetadataBump = true;
+      const recoveredDir = await temp("t7f1-half-recover");
+      const recovered = await open(drive, recoveredDir);
+      const revision = await recovered.currentPublishedRevision();
+      expect(revision.id).toBe(transactionId);
+      expect(await recovered.trackedFiles()).toEqual(expect.arrayContaining(["index.md", ".brain/config.yml"]));
+      expect(JSON.parse(drive.files.get(journalId)!.data.toString("utf8")).state).toBe("committed");
+      await writeVaultFile(recoveredDir, "Notes/After.md", "# saved after recovery\n");
+      await recovered.commitAndPublish("save after recovery");
+      expect(await (await open(drive, await temp("t7f1-half-cold"))).trackedFiles()).toContain("Notes/After.md");
+    });
+
+    it("keeps a falsely failed vault closed when someone else wrote the bundle", async () => {
+      const { drive } = await halfMadeVault("t7f1-foreign");
+      const bundle = [...drive.files.values()].find((file) => file.name === "repository.bundle")!;
+      drive.externalWrite(bundle.id, Buffer.from("foreign bytes"));
+      await expect(open(drive, await temp("t7f1-foreign-recover"))).rejects.toThrow(/bundle checksum mismatch/);
+    });
+  });
+
   it("guards exact filing publication and refuses unvalidated prepared local commits", async () => {
     const drive = new FakeDrive(); const workdir = await temp("filing-guard"); const repo = await open(drive, workdir);
     const base = await repo.currentPublishedRevision();
