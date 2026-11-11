@@ -808,6 +808,19 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     expect(stub.calls[0]!.system).toContain("never by a number");
   });
 
+  it("a suggestion that came without its card asks once for the card alone (S36, seen live on DeepSeek)", async () => {
+    const replies = [
+      JSON.stringify({ looked: "Home", suggestion: { title: "Link Boiler and Home", action: "Link Boiler to Home so each shows the other.", sources: [1] } }),
+      JSON.stringify({ picture: { change: "link", from: "Boiler", to: "Home" }, yes: "Every boiler note is about the flat.", no: "Boiler already sits under Home." }),
+    ];
+    const calls: Array<{ system: string; prompt: string }> = [];
+    const model: PersonaModel = { async complete(input) { calls.push(input); return { text: replies[calls.length - 1] ?? "{}", inputTokens: 1200, outputTokens: 90, costUsd: 0.0004 }; } };
+    const { deps: d, inbox } = deps({ model: () => model, outline: OUTLINE });
+    expect(await runPersona(TOPIC_GARDENER, d, "manual")).toMatchObject({ status: "done", modelCalls: 2 });
+    expect(calls[1]!.prompt).toContain("You suggested this change: Link Boiler to Home so each shows the other.");
+    expect(inbox.list()[0]).toMatchObject({ title: 'I\'d link "Boiler" with "Home".', card: { yes: "Every boiler note is about the flat.", no: "Boiler already sits under Home." } });
+  });
+
   it("a suggestion without why not keeps the old card, and Health's filing card says both sides (S36)", async () => {
     const reply = JSON.stringify({ looked: "Home", suggestion: { title: "Boiler is filed under Garden", why: "Every boiler note is about the flat.", action: "Move Boiler under Home.", picture: { change: "move", from: "Boiler", to: "Home" }, sources: [1] } });
     const { deps: d, inbox } = deps({ model: () => stubModel(reply).model, outline: OUTLINE });
@@ -824,7 +837,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
 
   it("the helpers post at most one suggestion a run, never the same waiting change twice, and read what became of earlier ones (S27)", async () => {
     let clock = new Date("2026-11-08T03:00:00Z");
-    const reply = JSON.stringify({ loops: [{ title: "Book the dentist", sources: [1] }], suggestion: { title: "Link the dentist notes", why: "Both say next week.", action: "Link Dentist to Home.", sources: [1, 2] } });
+    const reply = JSON.stringify({ loops: [{ title: "Book the dentist", sources: [1] }], suggestion: { title: "Link the dentist notes", why: "Both say next week.", yes: "Both say next week.", no: "It may add little.", action: "Link Dentist to Home.", sources: [1, 2] } });
     const stub = stubModel(reply);
     const { deps: d, inbox } = deps({ model: () => stub.model, outline: OUTLINE, now: () => clock });
     expect(await runPersona(OPEN_LOOPS, d, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories, found 1 open loops and suggested one change" });
@@ -957,12 +970,12 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
   describe("a helper may ask the Team desk one question a run, read only (S35)", () => {
     const QUESTION_REPLY = JSON.stringify({
       loops: [{ title: "Decide on the flat", sources: [1] }],
-      suggestion: { title: "Link the flat notes", why: "Both are about the flat.", action: "Link Dentist to Home.", sources: [1] },
+      suggestion: { title: "Link the flat notes", why: "Both are about the flat.", yes: "Both are about the flat.", no: "It may add little.", action: "Link Dentist to Home.", sources: [1] },
       teamQuestion: "Which of my plans does the flat decision connect to?",
     });
     const SECOND_REPLY = JSON.stringify({
       loops: [{ title: "Decide on the flat", sources: [1] }],
-      suggestion: { title: "Link the flat notes", why: "Both are about the flat.", action: "Link Dentist to Home.", sources: [1] },
+      suggestion: { title: "Link the flat notes", why: "Both are about the flat.", yes: "Both are about the flat.", no: "It may add little.", action: "Link Dentist to Home.", sources: [1] },
       usedTeamAnswer: true,
     });
     function twoReplies(first: string, second: string) {
@@ -1021,7 +1034,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
       store.setAskTeam("open-loops", true, false);
       const run = await runPersona(OPEN_LOOPS, d, "manual");
       expect(run).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 2 memories, found 1 open loops and suggested one change; the team gave no answer" });
-      expect(inbox.list()[0]!.body).not.toContain("Asked the team");
+      expect(inbox.list()[0]!.body ?? "").not.toContain("Asked the team");
     });
 
     it("an answer the helper did not use stays off the card; a second question in one run is refused", async () => {
@@ -1038,18 +1051,19 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
       const { deps: d, inbox, store } = deps({ model: () => stub.model, outline: OUTLINE, teamAsk: team });
       store.setAskTeam("open-loops", true, false);
       await runPersona(OPEN_LOOPS, d, "manual");
-      expect(inbox.list()[0]!.body).toBe("Both are about the flat.");
+      // S36: the reason sits on the card; the body would hold only what the team said.
+      expect(inbox.list()[0]!).toMatchObject({ body: null, card: { yes: "Both are about the flat." } });
       expect((await runPersona(greedy, d, "manual"))!.summary).toBe("first none");
       expect(asked).toHaveLength(2);
     });
 
     it("switching it on wakes the helper once more, never switches it on, and only helpers that can ask may", async () => {
-      // S36: after the helpers' last wake for their new cards (23:45Z).
-      let now = new Date("2026-11-11T00:00:00Z");
+      // S36: after the helpers' last wake for their new cards (02:00Z).
+      let now = new Date("2026-11-11T12:00:00Z");
       const { deps: d, store } = deps({ now: () => now });
       store.setEnabled("open-loops", true);
       store.start("open-loops", "schedule", "x");
-      now = new Date("2026-11-11T00:05:00Z");
+      now = new Date("2026-11-11T12:05:00Z");
       expect(duePersonas([OPEN_LOOPS], store, now)).toHaveLength(0);
       store.setAskTeam("open-loops", true, false);
       expect(duePersonas([OPEN_LOOPS], store, now).map((p) => p.id)).toEqual(["open-loops"]);
