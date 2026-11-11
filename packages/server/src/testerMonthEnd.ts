@@ -103,6 +103,9 @@ export interface MonthEndAccount {
   tenantId: string | null;
   /** Who it is, for the operator's page only (never logged). */
   who?: string;
+  /** EPIC-26 S13: the Zenod account and its email, for the end-of-test offer email. */
+  accountId?: string;
+  email?: string | null;
   usage(): Promise<TesterUsage>;
 }
 
@@ -174,6 +177,8 @@ export interface TesterMonthEndOptions {
   now?: () => number;
   alert?: (reason: string, fields?: Record<string, string | number>) => void;
   log?: (line: string) => void;
+  /** EPIC-26 S13: a free month the team did not extend was just set to end: send the offer. */
+  onFreeTimeEnding?: (account: MonthEndAccount, freeEndsMs: number) => void;
 }
 
 const isActive = (sub: Stripe.Subscription) => sub.status === "active" || sub.status === "trialing";
@@ -266,7 +271,14 @@ export class TesterMonthEnd {
       this.alert("end_failed");
       return { ...result, action: "failed", exception: "end_failed" };
     }
-    if (decision.exception === "free_time_ending") this.alert("free_time_ending", await this.usageFields(account, sub, nowMs));
+    if (decision.exception === "free_time_ending") {
+      this.alert("free_time_ending", await this.usageFields(account, sub, nowMs));
+      try {
+        this.options.onFreeTimeEnding?.(account, sub.current_period_end * 1000);
+      } catch {
+        this.alert("offer_mail_failed");
+      }
+    }
     else if (decision.exception) this.alert(decision.exception);
     return result;
   }

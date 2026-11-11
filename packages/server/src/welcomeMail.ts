@@ -73,6 +73,8 @@ export function welcomeMail(to: string, appUrl = "https://cloud.zenod.dev"): Zen
 
 export interface WelcomeRecord {
   email: string;
+  /** EPIC-26 S13: what the composed mail needs besides the address (the offer's date and link). */
+  data?: Record<string, string>;
   queuedAt: string;
   sentAt?: string;
   tries?: number;
@@ -91,6 +93,10 @@ export interface WelcomeMailOptions {
   sendMail: SendMail | null;
   appUrl?: string;
   now?: () => Date;
+  /** EPIC-26 S13: the same queue for another mail: its own file, words and log label. */
+  file?: string;
+  compose?: (record: WelcomeRecord) => ZenodMail;
+  label?: string;
 }
 
 export class WelcomeMailer {
@@ -101,7 +107,7 @@ export class WelcomeMailer {
   private timer: NodeJS.Timeout | null = null;
 
   constructor(private readonly options: WelcomeMailOptions) {
-    this.path = join(options.dataDir, WELCOME_MAIL_FILE);
+    this.path = join(options.dataDir, options.file ?? WELCOME_MAIL_FILE);
     this.now = options.now ?? (() => new Date());
   }
 
@@ -124,13 +130,13 @@ export class WelcomeMailer {
   }
 
   /** Queue the welcome for this account once; later calls for the same account do nothing. */
-  queue(accountId: string, email: string | null | undefined): WelcomeQueueResult {
+  queue(accountId: string, email: string | null | undefined, data?: Record<string, string>): WelcomeQueueResult {
     if (!this.options.sendMail) return "off";
     const address = email?.trim() ?? "";
     if (!accountId || address.length > 200 || !EMAIL.test(address)) return "no email";
     const state = this.read();
     if (state.accounts[accountId]) return "duplicate";
-    state.accounts[accountId] = { email: address, queuedAt: this.now().toISOString() };
+    state.accounts[accountId] = { email: address, queuedAt: this.now().toISOString(), ...(data ? { data } : {}) };
     this.write(state);
     void this.process();
     return "queued";
@@ -177,12 +183,12 @@ export class WelcomeMailer {
     for (const [accountId, record] of Object.entries(this.read().accounts)) {
       if (record.sentAt || (record.tries ?? 0) >= MAX_TRIES) continue;
       try {
-        await send(welcomeMail(record.email, this.options.appUrl));
+        await send(this.options.compose?.(record) ?? welcomeMail(record.email, this.options.appUrl));
         this.update(accountId, { sentAt: this.now().toISOString(), lastError: "" });
-        console.log("[welcome] welcome email sent");
+        console.log(`[${this.options.label ?? "welcome"}] email sent`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.warn("[welcome] could not send a welcome email:", message);
+        console.warn(`[${this.options.label ?? "welcome"}] could not send an email:`, message);
         this.update(accountId, { tries: (record.tries ?? 0) + 1, lastError: message.slice(0, 200) });
       }
     }

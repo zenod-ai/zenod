@@ -40,7 +40,7 @@ export function FreePlanNotice({
   )
 }
 
-function useFreePlanAccount(): FreePlanAccount | null {
+export function useFreePlanAccount(): FreePlanAccount | null {
   const [account, setAccount] = React.useState<FreePlanAccount | null>(null)
   React.useEffect(() => {
     let live = true

@@ -161,6 +161,16 @@ export interface CheckoutInvite {
   welcome?: boolean;
   /** Carry the first sign-in's sign-up marker to that page (ZAL-A13 counter). */
   signedUp?: boolean;
+  /**
+   * EPIC-26 S13: the end-of-test offer before the free month ends. The €9 subscription starts with a
+   * trial up to this unix second, so its first charge is the day the free month ends; a card is
+   * always asked for, and the code field stays closed.
+   */
+  firstChargeAt?: number | null;
+  /** EPIC-26 S13: the words above the pay button. */
+  submitMessage?: string;
+  /** EPIC-26 S13: where "back" from checkout goes (default the pricing page). */
+  cancelPath?: string;
 }
 
 /** The active promotion code with exactly this customer-facing code, or null (unknown, used up, or no lookup). */
@@ -194,20 +204,23 @@ export async function createCustomerCheckout(
     line_items: [{ price: checkout.price, quantity: 1 }],
     client_reference_id: accountId,
     metadata,
-    subscription_data: { metadata },
+    subscription_data: { metadata, ...(invite.firstChargeAt ? { trial_end: invite.firstChargeAt } : {}) },
     billing_address_collection: "required",
     tax_id_collection: { enabled: true },
     consent_collection: { terms_of_service: "required" },
     ...(product.product === "zenod"
       ? {
           // Stripe takes either a prefilled code or the "Add promotion code" field, never both.
-          ...(invite.promotionCodeId
-            ? { discounts: [{ promotion_code: invite.promotionCodeId }] }
-            : { allow_promotion_codes: true }),
-          payment_method_collection: "if_required",
+          ...(invite.firstChargeAt
+            ? {}
+            : invite.promotionCodeId
+              ? { discounts: [{ promotion_code: invite.promotionCodeId }] }
+              : { allow_promotion_codes: true }),
+          payment_method_collection: invite.firstChargeAt ? "always" : "if_required",
           custom_text: {
             submit: {
-              message: invite.promotionCodeId ? ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE : ZENOD_CHECKOUT_SUBMIT_MESSAGE,
+              message: invite.submitMessage ??
+                (invite.promotionCodeId ? ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE : ZENOD_CHECKOUT_SUBMIT_MESSAGE),
             },
           },
         }
@@ -216,7 +229,7 @@ export async function createCustomerCheckout(
     success_url: `${config.domain}/checkout/complete?session_id={CHECKOUT_SESSION_ID}${
       invite.welcome ? `&welcome=1${invite.signedUp ? "&signed_up=1" : ""}` : ""
     }`,
-    cancel_url: `${config.domain}/pricing?checkout=cancelled`,
+    cancel_url: `${config.domain}${invite.cancelPath ?? "/pricing?checkout=cancelled"}`,
   });
   accounts.upsert(session.id, {
     account_id: accountId,

@@ -12,6 +12,7 @@ import {
 
 import { ZenodLogo } from "@/components/zenod-logo"
 import { HostedFreePlanBanner, HostedPlanLine } from "@/components/free-plan-notice"
+import { HostedEndOfTestOffer } from "@/components/end-of-test-offer"
 import { UsageByFeaturePanel } from "@/components/usage-by-feature"
 import { Button } from "@/components/ui/button"
 import {
@@ -202,6 +203,7 @@ export function HostedApp({
         </div>
         <HostedPlanLine />
       </header>
+      <HostedEndOfTestOffer />
 
       <Tabs
         className="zl-tabs"

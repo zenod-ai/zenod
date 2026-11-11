@@ -71,6 +71,8 @@ import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./tes
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
+import { OFFER_LINK_TTL_MS, offerMailerFromEnv, signedOfferUrl } from "./endOfTestOffer.js";
+import { customerLinkSecret } from "./customerSession.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
@@ -1356,6 +1358,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   app.route("/", customer.app);
   // EPIC-26 S5 round 3: a tester's free month ends at its end unless the team gives one more month.
   let testerMonthEnd: TesterMonthEnd | null = null;
+  let offerMailer: ReturnType<typeof offerMailerFromEnv> | null = null;
   const monthEndStripe = customer.stripe as unknown as Partial<MonthEndStripe> | null;
   if (
     agent.name === "zenod" &&
@@ -1363,8 +1366,20 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     typeof monthEndStripe?.subscriptions?.update === "function" &&
     typeof monthEndStripe?.invoices?.createPreview === "function"
   ) {
+    // EPIC-26 S13: the end-of-test offer email, queued when a free month is set to end (off until E26-A6).
+    const offers = offerMailerFromEnv(storage.dataDir, env);
+    offerMailer = offers;
+    offers.start();
+    const offerAppUrl = (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "");
     testerMonthEnd = new TesterMonthEnd({
       stripe: monthEndStripe as MonthEndStripe,
+      onFreeTimeEnding: (account, freeEndsMs) => {
+        if (!account.accountId) return;
+        offers.queue(`${account.subscriptionId}:${freeEndsMs}`, account.email, {
+          free_ends_ms: String(freeEndsMs),
+          pay_url: signedOfferUrl(offerAppUrl, account.accountId, freeEndsMs + OFFER_LINK_TTL_MS, customerLinkSecret(env)),
+        });
+      },
       accounts: () =>
         customer.accounts.list().flatMap((account) =>
           account.stripe_subscription_id && account.subscription_status !== "checkout_pending"
@@ -1372,6 +1387,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
                 subscriptionId: account.stripe_subscription_id,
                 tenantId: account.tenant_id ?? null,
                 who: account.stripe_email || account.github_email || account.github_login || account.tenant_slug || "a tester",
+                accountId: account.account_id,
+                email: account.stripe_email || account.github_email || null,
                 usage: async () => {
                   const usage = await customer.usageForAccount(account);
                   return {
@@ -1605,6 +1622,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => testerFlow?.stop()),
           Promise.resolve().then(() => welcomeMailer?.stop()),
           Promise.resolve().then(() => testerMonthEnd?.stop()),
+          Promise.resolve().then(() => offerMailer?.stop()),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => subscriberApi.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),
