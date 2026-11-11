@@ -40,6 +40,10 @@ TARGET = 0.90
 TEST_NOTES = {"vn_8a891947", "vn_e59dac3f"}
 # A call this short never got a word in (dialled and hung up).
 MIN_CALL_SECONDS = 10
+# EPIC-21 V7: calls that kept none of Jordi's words (agent_team E42-S47 desk notes 2026-11-11): call_46755499 has no
+# transcript or chat post at all, the four 2 Nov prototype calls' chat posts hold only the desk's lines. Counted like
+# short calls. Any other call EpicTeam skipped for the same reason (forward state skipped, code no_words) counts so too.
+NO_WORDS_CALLS = {"call_46755499", "call_747961f5", "call_c5d23c48", "call_4a83e358", "call_2eec04be"}
 CHANNELS = [("chat", "Chat voice notes"), ("card", "Card answers"), ("call", "Calls")]
 
 REMOTE = r'''
@@ -49,10 +53,11 @@ since = %r
 notes = c.execute("""SELECT v.id, v.tenant_id, v.state, v.started_at, v.seconds, length(coalesce(v.transcript, '')) > 0,
   f.state, f.last_code FROM voice_notes v LEFT JOIN zenod_voice_forwards f ON f.note_id = v.id
   WHERE v.started_at >= ?""", (since,)).fetchall()
-calls = c.execute("""SELECT id, coalesce(tenant_id, 'alpha9'), started_at,
-  (julianday(coalesce(ended_at, last_beat_at)) - julianday(started_at)) * 86400,
-  transcript_posted_at IS NOT NULL OR length(coalesce(transcript, '')) > 0
-  FROM voice_calls WHERE started_at >= ?""", (since,)).fetchall()
+calls = c.execute("""SELECT k.id, coalesce(k.tenant_id, 'alpha9'), k.started_at,
+  (julianday(coalesce(k.ended_at, k.last_beat_at)) - julianday(k.started_at)) * 86400,
+  k.transcript_posted_at IS NOT NULL OR length(coalesce(k.transcript, '')) > 0, f.state, f.last_code
+  FROM voice_calls k LEFT JOIN zenod_voice_forwards f ON f.note_id = k.id
+  WHERE k.started_at >= ?""", (since,)).fetchall()
 print(json.dumps({"notes": notes, "calls": calls}))
 '''
 
@@ -108,7 +113,7 @@ def read_vault() -> dict:
 
 def items(console: dict) -> tuple[list, dict]:
     """Jordi's voice notes and calls (channel, id, start), and what was left out and why."""
-    kept, skipped = [], {"discarded": 0, "empty": 0, "unfinished": 0, "test": 0, "short call": 0}
+    kept, skipped = [], {"discarded": 0, "empty": 0, "unfinished": 0, "test": 0, "short call": 0, "no words": 0}
     for nid, _world, state, started, _secs, _has_text, _fwd, _code in console["notes"]:
         if nid in TEST_NOTES:
             skipped["test"] += 1
@@ -122,9 +127,11 @@ def items(console: dict) -> tuple[list, dict]:
             skipped["empty"] += 1
         else:
             skipped["unfinished"] += 1
-    for cid, _world, started, secs, _has_text in console["calls"]:
+    for cid, _world, started, secs, _has_text, *fwd in console["calls"]:
         if (secs or 0) < MIN_CALL_SECONDS:
             skipped["short call"] += 1
+        elif cid in NO_WORDS_CALLS or tuple(fwd[:2]) == ("skipped", "no_words"):
+            skipped["no words"] += 1
         else:
             kept.append({"channel": "call", "id": cid, "at": started, "fwd": None, "code": None})
     return kept, skipped
@@ -249,7 +256,8 @@ Chat voice notes and card answers alone: <b>{pct(voice_only)}</b> since 2 Novemb
 <h2>Since 2 November</h2>{table(a)}
 <h2>What is missing</h2><ul>{''.join(f'<li>{e(x)}</li>' for x in g) or '<li>Nothing. Every one landed.</li>'}</ul>
 <p class=sub>Not counted: {sk['discarded']} notes you discarded, {sk['empty']} empty, {sk['unfinished']} never finished,
-{sk['test']} agents' test notes and {sk['short call']} calls hung up within {MIN_CALL_SECONDS} seconds.
+{sk['test']} agents' test notes, {sk['short call']} calls hung up within {MIN_CALL_SECONDS} seconds
+and {sk.get('no words', 0)} calls that kept none of your words.
 {'Last call: ' + e(r['last_call'][:10]) + '.' if r['last_call'] else ''}</p>
 <h2>Day by day</h2>
 <table><tr><th>Day</th><th>last 7 days</th><th>since 2 November</th></tr>{hist}</table>
