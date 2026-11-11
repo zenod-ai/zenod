@@ -6,3 +6,4 @@
 {"id": "a06", "store": "Orchard Sync release 2.3 ships with offline mode turned off by default.", "query": "Orchard Sync offline mode", "expect": ["offline mode"]}
 {"id": "a07", "store": "Water the bonsai on the balcony twice a week in summer, once a week in winter.", "query": "bonsai watering", "expect": ["twice a week"]}
 {"id": "a08", "store": "The landlord's new bank account for rent is at Banco Lumen, reference FLAT-12.", "query": "rent bank account landlord", "expect": ["FLAT-12"]}
+{"id": "a09", "store": "Readiness self-test: the marker word for the office alarm check is periwinkle.", "source": "selftest", "query": "periwinkle", "ask": "What is the marker word for the office alarm check?", "expect": ["periwinkle"]}

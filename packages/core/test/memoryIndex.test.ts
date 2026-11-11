@@ -224,6 +224,22 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
     expect(searchText).not.toContain("· tree:"); // E9-5j: lineage is structured output only
   });
 
+  it("ask_brain's search also lists a self-test Log entry that search_memory's note list leaves out (E23-U6)", async () => {
+    const SELFTEST = "Log/2026-11-09.md#^e-d20001";
+    const files = { "Log/2026-11-09.md": "# 2026-11-09\n\n## 12:00 Self-test  ^e-d20001\n- source: selftest\n\n> Self-test: the Porto quote marker word is periwinkle.\n" };
+    let searchText = "";
+    const llm = { answer: async (_input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult> => {
+      searchText = await tools.searchVault!("Porto quote marker");
+      await tools.readNote!(QUOTES);
+      return { text: "About 4,000 euros.", readPaths: [QUOTES] };
+    } } as unknown as BrainLlm;
+    const { engine } = await engineWithIndex("t1", files, llm);
+    expect((await engine.search("Porto quote marker")).map((hit) => hit.path)).not.toContain(SELFTEST);
+    await engine.ask("What is the Porto quote marker word?");
+    expect(searchText).toContain(`${SELFTEST} (score`);
+    expect(searchText.split("\n")[0]).not.toContain(SELFTEST);
+  });
+
   it("warms the index before the first search, which then finds the same hits with nothing left to refresh (E24-M7)", async () => {
     const { engine } = await engineWithIndex("t1", {});
     const warmed = await engine.warmMemorySearch!();
@@ -273,6 +289,25 @@ describe("agent reports are not the person's memories (E12-S15)", { timeout: 20_
     const theirs = (await index.search("what did the agents report about the greenhouse heater")).map((hit) => hit.path);
     expect(theirs).toContain("Log/2026-11-08.md#^e-b10001");
     expect((await index.search("E41-S2 greenhouse")).map((hit) => hit.path)).toContain("Log/2026-11-08.md#^e-b10001");
+  });
+
+  it("lets ask see a self-test or agent Log entry after the person's hits, the way search finds it (E23-U6)", async () => {
+    const vault = await vaultFrom({
+      "Log/2026-11-08.md": `${LOG}\n## 11:00 Readiness self-test  ^e-c10001\n- source: selftest\n\n> Readiness self-test: the greenhouse test marker word is periwinkle.\n`,
+      "Index.md": "---\ntitle: Index\n---\n# Index\n",
+    });
+    const index = indexFor(vault, join(dirname(vault), "idx.sqlite"));
+    // Search's list is as before: the person's note only.
+    const plain = (await index.search("greenhouse marker word")).map((hit) => hit.path);
+    expect(plain).toContain("Log/2026-11-08.md#^e-a10001");
+    expect(plain).not.toContain("Log/2026-11-08.md#^e-c10001");
+    // Ask's list adds the self-test entry after the person's own hits, and only entries holding the question's words.
+    const ask = await index.search("greenhouse marker word", undefined, { agentLogs: 3 });
+    const paths = ask.map((hit) => hit.path);
+    expect(paths.indexOf("Log/2026-11-08.md#^e-c10001")).toBeGreaterThan(paths.indexOf("Log/2026-11-08.md#^e-a10001"));
+    expect(ask.find((hit) => hit.path === "Log/2026-11-08.md#^e-c10001")).toMatchObject({ kind: "log" });
+    expect(ask.at(-1)!.matchPercent).toBeLessThanOrEqual(ask[0]!.matchPercent);
+    expect((await index.search("tomato watering", undefined, { agentLogs: 3 })).map((hit) => hit.path)).not.toContain("Log/2026-11-08.md#^e-c10001");
   });
 
   it("reads a question as about the agents' work only when it names them", () => {

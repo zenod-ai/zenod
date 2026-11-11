@@ -115,7 +115,11 @@ export class StandInModel {
   }
 
   async describeImage() { return ""; }
-  async answer() { return { text: "I could not find that in your memory.", sources: [] }; }
+  // E23-U6: ask's first step, its own search, run on the question as a model would, so the suite sees what ask can find.
+  async answer(input, tools) {
+    if (tools?.searchVault && input?.question) this.lastAskSearch = await tools.searchVault(input.question).catch((e) => `error: ${e instanceof Error ? e.message : e}`);
+    return { text: "I could not find that in your memory.", sources: [] };
+  }
   async work() { throw new Error("stand-in model: work loop not used by the memory suite"); }
   async extractBacklog() { return { candidates: [] }; }
 }

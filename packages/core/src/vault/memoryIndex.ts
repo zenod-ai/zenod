@@ -589,8 +589,12 @@ export class MemoryIndex {
   }
 
   /** BM25-ranked hits, one per path, freshest index first. Empty when nothing matches. */
-  async search(query: string, limit = MAX_HITS): Promise<MemoryIndexHit[]> {
-    const hits = await this.searchHits(query, limit);
+  /**
+   * `agentLogs` (ask only, E23-U6): the best few agent or self-test Log entries that hold the
+   * question's words join after the person's own hits, so ask finds a memory search finds.
+   */
+  async search(query: string, limit = MAX_HITS, options: { agentLogs?: number } = {}): Promise<MemoryIndexHit[]> {
+    const hits = await this.searchHits(query, limit, options.agentLogs ?? 0);
     const privacy = this.privacy();
     return privacy.size === 0 ? hits : hits.map((hit) => {
       const kind = privacy.get(hit.path);
@@ -622,7 +626,7 @@ export class MemoryIndex {
     return map;
   }
 
-  private async searchHits(query: string, limit: number): Promise<MemoryIndexHit[]> {
+  private async searchHits(query: string, limit: number, agentLogs = 0): Promise<MemoryIndexHit[]> {
     await this.fresh();
     // "What was in my last voice note?" is answered by time and the graph, not by its words (E12-S3c).
     const intent = recentIntent(query, this.now(), this.options.timeZone?.());
@@ -672,7 +676,37 @@ export class MemoryIndex {
       ...(row.filed ? { filedOn: row.filed } : {}),
     }));
     const walked = this.withGraphNeighbours(hits, limit, aboutAgents);
-    return generic ? walked : this.withAskedNotes(walked, query, limit);
+    const ranked = generic ? walked : this.withAskedNotes(walked, query, limit);
+    if (aboutAgents || agentLogs <= 0) return ranked;
+    return [...ranked, ...this.hiddenLogHits(rows, ranked, terms, words, best, topScore, agentLogs)];
+  }
+
+  /**
+   * E23-U6: Log entries left out above because they read as agent work (a self-test, an agent's
+   * report). Only those holding at least as much of the question as the cut-off for the person's
+   * own hits, at most `max`, each below the person's hits.
+   */
+  private hiddenLogHits(
+    rows: ReadonlyArray<{ rowid: number; kind: MemoryIndexHitKind; path: string; filed: string; lineage: string; meta: string; rank: number; title: string }>,
+    shown: readonly MemoryIndexHit[], terms: readonly string[], words: readonly string[], best: number, topScore: number, max: number,
+  ): MemoryIndexHit[] {
+    const seen = new Set(shown.map((hit) => hit.path));
+    const hidden = rows.filter((row) => row.kind === "log" && row.meta.startsWith("agent") && !seen.has(row.path))
+      .map((row) => ({ ...row, rank: row.rank * factorOf(row) })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
+    if (hidden.length === 0) return [];
+    const coverage = this.coverageOf(terms, hidden.map((row) => row.rowid));
+    const kept = hidden.filter((row) => (coverage.get(row.rowid) ?? 0) > 0 && (coverage.get(row.rowid) ?? 0) >= best * MIN_SHARE_OF_BEST).slice(0, max);
+    if (kept.length === 0) return [];
+    const texts = new Map((this.db.prepare(`SELECT rowid, summary, body FROM docs WHERE rowid IN (${kept.map(() => "?").join(", ")})`)
+      .all(...kept.map((row) => row.rowid)) as Array<{ rowid: number; summary: string; body: string }>).map((row) => [row.rowid, row]));
+    const floor = Math.min(...shown.map((hit) => hit.matchPercent), 100);
+    return kept.map((row): MemoryIndexHit => ({
+      path: row.path, kind: "log", title: row.title, snippet: snippetOf(texts.get(row.rowid), words),
+      score: Math.round(-row.rank * 100) / 100,
+      matchPercent: Math.max(1, Math.min(floor, matchPercent({ score: -row.rank, topScore, coverage: coverage.get(row.rowid) ?? 0 }))),
+      treePath: row.lineage,
+      ...(row.filed ? { filedOn: row.filed } : {}),
+    }));
   }
 
   /**
