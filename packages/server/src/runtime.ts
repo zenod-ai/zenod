@@ -5,7 +5,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { SqliteCredentialVault, type CredentialVault } from "./credentialVault.js";
 import type { BackgroundRoute } from "./backgroundRoute.js";
-import { CREDIT_PROVIDER, creditCapMessage, creditRouteFor, type CreditRoute } from "./creditRoute.js";
+import { runAnthropicQuestionSet } from "./anthropicProbe.js";
+import { CREDIT_PROVIDER, creditCapMessage, creditRouteFor, noteCreditCall, type CreditRoute } from "./creditRoute.js";
 import {
   createBrainLlm,
   isLlmAllowanceExceededError,
@@ -1484,7 +1485,7 @@ export class Runtime {
     // EPIC-14 S41 round 2: on the credit, answers, helpers and desk work stop only at the credit cap;
     // filing stops at the credit cap or far past the paid allowance (speech to text is paid); calls stay paid.
     if (this.creditRoute && feature !== "calls") {
-      const credit = this.creditBlock(now);
+      const credit = this.creditBlock(now, feature);
       if (credit || feature !== "filing") return credit;
     }
     try {
@@ -1541,14 +1542,48 @@ export class Runtime {
     return { model: this.creditRoute.model, text: text.slice(0, 40), ...usage, ms: Date.now() - started };
   }
 
+  /**
+   * E7-S1 round 2: the small memory question set (anthropicProbe.ts) on this account's Anthropic route:
+   * one note filed on the filing model, three questions through the answer loop on the answer model.
+   * Real calls, logged and capped like any; null when the account is not on the route.
+   */
+  async creditQuestionSet(): Promise<(Awaited<ReturnType<typeof runAnthropicQuestionSet>> & { model: string; askModel: string; costUsd: number; ms: number }) | null> {
+    if (!this.creditRoute) return null;
+    const route = this.creditRoute;
+    let costUsd = 0;
+    const record = (feature: UsageFeature) => (report: LlmUsageReport) => {
+      this.usageStore.record(report, Date.now(), feature);
+      if (report.status !== "failed") costUsd += report.providerCostUsd ?? estimateCostUsd(report);
+    };
+    const started = Date.now();
+    const result = await runAnthropicQuestionSet(
+      this.creditLlm({ feature: "filing", onUsage: record("filing") }),
+      this.creditLlm({ answers: true, feature: "chat", onUsage: record("chat") }),
+    );
+    return { ...result, model: route.model, askModel: route.askModel, costUsd: Math.round(costUsd * 1e6) / 1e6, ms: Date.now() - started };
+  }
+
   /** The stop once this account's credit spend reaches its monthly cap; null while it may run. Fails open. */
-  private creditBlock(now: number = Date.now()): { message: string; resetsAt: string; reason: "allowance" } | null {
+  private creditBlock(now: number = Date.now(), feature: UsageFeature = "chat"): { message: string; resetsAt: string; reason: "allowance" | "share" } | null {
     const route = this.creditRoute;
     if (!route) return null;
     try {
-      if (this.creditSpendUsd(now) < route.monthlyUsd) return null;
+      // E7-S1 round 2: the per-account limits testers had on the paid route, on Anthropic spend: answers
+      // stop at the cap, filing carries on to the cap plus the filing overdraft, helpers and desk work
+      // keep their own monthly share and pause at the reserve (limits.ts).
+      // Read fresh before each call (two index-range sums), so a cap holds within the turn that reaches it.
+      const since = startOfUtcMonth(now);
+      const only = { only: CREDIT_PROVIDER };
       const resetsAt = nextUtcMonthlyReset(now);
-      return { message: creditCapMessage(resetsAt), resetsAt, reason: "allowance" };
+      const decision = featureDecision(feature, {
+        totalUsd: this.usageStore.spendSince(since, only),
+        featureUsd: this.usageStore.spendByFeatureSince(since, only)[feature] ?? 0,
+        allowanceUsd: route.monthlyUsd,
+        resetsAt,
+      });
+      if (decision.state !== "paused") return null;
+      const message = feature === "chat" ? creditCapMessage(resetsAt) : decision.message!;
+      return { message, resetsAt, reason: decision.reason ?? "allowance" };
     } catch {
       return null;
     }
@@ -1575,10 +1610,12 @@ export class Runtime {
       visionModel: route.model,
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
       onBeforeCall: options.feature ? () => withFeature(options.feature!, check) : check,
-      onUsage: options.onUsage ?? ((report) => {
+      onUsage: (report) => {
+        noteCreditCall(report);
+        if (options.onUsage) return options.onUsage(report);
         this.usageStore.record(report);
         if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
-      }),
+      },
     });
   }
 

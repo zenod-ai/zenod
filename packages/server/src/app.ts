@@ -2249,6 +2249,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // EPIC-14 S41 round 2: one tiny call on the Anthropic credit route for this account (404 when not on it).
   app.post("/api/credit/probe", async (c) => {
     try {
+      // E7-S1 round 2: ?set=memory runs the small memory question set (one filing, three answers) instead.
+      if (c.req.query("set") === "memory") {
+        const set = await runtime.creditQuestionSet();
+        if (!set) return c.json({ error: "this account is not on the Anthropic credit" }, 404);
+        return c.json({ ok: set.passed === set.total, provider: "anthropic", ...set });
+      }
       const probe = await runtime.creditProbe();
       if (!probe) return c.json({ error: "this account is not on the Anthropic credit" }, 404);
       return c.json({ ok: true, provider: "anthropic", ...probe });
