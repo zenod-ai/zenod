@@ -269,7 +269,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     // Content stays: the plans and the connect steps.
     expect(render("/pricing")).toContain("Start free. Stay in control.");
     expect(render("/connect")).toContain("cloud.zenod.dev/mcp");
-    // The listing icon is the favicon: the heavy Z on the ink tile (E25-S1).
+    // The listing icon is the favicon: the Newsreader Z on parchment (E25-S1 round 3, Jordi kept the earlier Z).
     const icon = readFileSync(new URL("./public/brand/zenod-icon.svg", import.meta.url), "utf8");
     expect(icon).toBe(readFileSync(new URL("./public/favicon.svg", import.meta.url), "utf8"));
   });
