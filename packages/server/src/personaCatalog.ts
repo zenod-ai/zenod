@@ -510,12 +510,17 @@ const TRY_DAYS = 3;
 /** How many of its own earlier days it reads back, so it never offers the same thing twice in a row. */
 const TRY_LOOK_BACK = 5;
 
-/** S38: the one thing to try from its reply, or null. */
-export function parseThingToTry(reply: Record<string, unknown> | null): { title: string; why: string; sources: number[] } | null {
+/**
+ * S38: the one thing to try from its reply, or null. S36: with what it came from and the thing in a few
+ * words, and why they might skip it, it also carries the helpers' card: the picture, why yes, why not.
+ */
+export function parseThingToTry(reply: Record<string, unknown> | null): { title: string; why: string; sources: number[]; card: HelperCard | null } | null {
   const raw = reply?.try && typeof reply.try === "object" ? (reply.try as Record<string, unknown>) : null;
   const title = str(raw?.title);
   if (!title) return null;
-  return { title, why: str(raw?.why, 500), sources: nums(raw?.sources) };
+  const why = str(raw?.why, 500);
+  const card = cleanHelperCard({ picture: { change: "try", from: raw?.topic, to: raw?.short }, yes: why, no: raw?.whyNot });
+  return { title, why, sources: nums(raw?.sources), card };
 }
 
 const TRY_SYSTEM = [
@@ -524,6 +529,7 @@ const TRY_SYSTEM = [
   "Tie it plainly to what they said, so they see where it comes from. Be gentle: an idea to try, never a claim that it solves anything.",
   "You are not a project manager. Never suggest a task, a ticket, a release, a deploy, or work for a team or an agent. A project can be what they talk about; the thing to try is for the person.",
   "Use only what the notes say. Never invent facts, names or dates. Plain words a friend would use.",
+  HELPER_CARD_WORDS,
 ].join(" ");
 
 /**
@@ -572,20 +578,25 @@ export const SOMETHING_TO_TRY: PersonaDefinition = {
       ...memoryLines(entries),
       ...(earlier.length ? ["", "What you suggested on earlier days. Suggest something different:", ...earlier.map((line) => `- ${line}`)] : []),
       "",
-      'Reply with JSON only: {"try": {"title": "the thing to try, one sentence that starts with a verb", "why": "one or two sentences on what they said that it comes from", "sources": [numbers]}} or {"try": null} when nothing they said calls for it',
+      'Reply with JSON only: {"try": {"title": "the thing to try, one sentence that starts with a verb", "short": "the thing to try in at most 6 words", "topic": "what they keep talking about, in at most 6 of their own words", "why": "one or two sentences on what they said that it comes from", "whyNot": "one honest sentence on why they might skip it", "sources": [numbers]}} or {"try": null} when nothing they said calls for it',
     ].join("\n");
-    const raw = parseThingToTry(parseJsonReply(await ctx.think({ system: TRY_SYSTEM, prompt })));
+    const parsed = parseThingToTry(parseJsonReply(await ctx.think({ system: TRY_SYSTEM, prompt })));
+    // S36: the card names notes the way the person knows them, never by the model's numbers.
+    const said = memoryPhrases(entries);
+    const raw = parsed ? { ...parsed, why: namedMemories(parsed.why, said), card: parsed.card ? namedCard(parsed.card, said) : null } : null;
     const leftOut = raw !== null && isProjectWork(raw.title);
     const thing = leftOut ? null : raw;
     const sources = (thing?.sources ?? []).map((n) => entries[n - 1]).filter((entry): entry is MemoryEntry => entry !== undefined);
     ctx.writeNote(`${ctx.today}.md`, personaNote("something-to-try", "Something to try", ctx.today, entries.length, thing
-      ? ["## Try", "", thing.title, "", ...(thing.why ? [thing.why, ""] : []), ...(sources.length ? ["## From", "", ...sources.map((entry) => `- [[${entry.evidenceRef.replace(/\.md(?=#)/, "")}|${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}]]`)] : [])]
+      ? ["## Try", "", thing.title, "", ...(thing.why ? [thing.why, ""] : []), ...(thing.card?.no ? [`Why not: ${thing.card.no}`, ""] : []), ...(sources.length ? ["## From", "", ...sources.map((entry) => `- [[${entry.evidenceRef.replace(/\.md(?=#)/, "")}|${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}]]`)] : [])]
       : [leftOut ? "- Nothing to try today: the idea was project work, left out." : "- Nothing to try today."]));
     if (!thing) return { summary: `Read ${entries.length} notes, nothing to try${leftOut ? "; left out one idea about project work" : ""}` };
     ctx.postFinding({
       title: thing.title,
-      ...(thing.why ? { body: thing.why } : {}),
+      // S36: with a card its why sits on the card as why yes, beside why not.
+      ...(thing.why && !thing.card ? { body: thing.why } : {}),
       links: [...sourceLinks(entries, thing.sources), { label: "Its notes", path: `Personas/something-to-try/${ctx.today}.md` }],
+      ...(thing.card ? { card: thing.card } : {}),
     });
     return { summary: `Read ${entries.length} notes and posted one thing to try` };
   },

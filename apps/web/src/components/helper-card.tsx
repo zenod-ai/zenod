@@ -16,6 +16,7 @@ const CHANGE_WORDS: Record<HelperCardChange, string> = {
   rename: "new name",
   "own-place": "own place",
   which: "could mean",
+  try: "to try",
 }
 
 function Picture({ picture }: { picture: NonNullable<HelperCard["picture"]> }) {

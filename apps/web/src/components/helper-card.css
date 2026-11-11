@@ -45,10 +45,12 @@
 .zh-unlink .zh-change { color: var(--zp-muted); }
 .zh-unlink .zh-change::before { content: "✕ "; }
 /* Move, rename, own place: an arrow to where it goes. */
-.zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after {
+.zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after, .zh-try .zh-line::after {
   content: ""; position: absolute; right: -1px; top: -6px;
   border-left: 8px solid var(--zp-accent); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
 }
+/* Something to try: the thing to try in the one green. */
+.zh-try .zh-to { border-color: var(--zp-accent); background: var(--zp-accent-soft); }
 .zh-move .zh-to, .zh-top { border-color: var(--zp-accent); }
 .zh-rename .zh-from { text-decoration: line-through; color: var(--zp-muted); }
 /* A question: the words said, then each thing they could mean, stacked. */
@@ -74,7 +76,7 @@
   .zh-unlink .zh-line { border-top: 0; border-left: 2px dashed var(--zp-faint); }
   .zh-link .zh-line::before { left: -5px; top: -4px; }
   .zh-link .zh-line::after { left: -5px; right: auto; top: auto; bottom: -4px; }
-  .zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after, .zh-which .zh-line::after {
+  .zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after, .zh-which .zh-line::after, .zh-try .zh-line::after {
     right: auto; left: -6px; top: auto; bottom: -1px;
     border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--zp-accent); border-bottom: 0;
   }

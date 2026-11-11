@@ -621,6 +621,23 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     expect(work.inbox.list()).toHaveLength(0);
   });
 
+  it("Something to try says it in the helpers' card: what you keep saying, the thing to try, why yes and why not (S36)", async () => {
+    const entries = [entry(1, "2026-11-07", "Slept badly before the long ride"), entry(2, "2026-11-06", "Sunday ride wrecked me")];
+    const reply = JSON.stringify({ try: {
+      title: "Try a short walk instead of the screen in the hour before bed on Saturday.", short: "a walk before bed", topic: "sleeping badly before rides",
+      why: "Memory 1 and memory 2 both say the night before a ride goes badly.", whyNot: "If the rides are what tire you, a walk may change little.", sources: [1, 2] } });
+    const { deps: d, inbox, written } = deps({ model: () => stubModel(reply).model, entries, now: () => new Date("2026-11-08T03:00:00Z") });
+    await runPersona(SOMETHING_TO_TRY, d, "manual");
+    const card = inbox.list()[0]!;
+    expect(card).toMatchObject({ kind: "finding", title: "Try a short walk instead of the screen in the hour before bed on Saturday.", body: null });
+    expect(card.card).toMatchObject({
+      picture: { change: "try", from: "sleeping badly before rides", to: "a walk before bed" },
+      no: "If the rides are what tire you, a walk may change little.",
+    });
+    expect(card.card!.yes).toMatch(/^Your note ".+" and your note ".+" both say/);
+    expect(written[0]!.files[0]!.content).toContain("Why not: If the rides are what tire you");
+  });
+
   it("Something to try is off for a new account and on for an account that used helpers before (S38)", () => {
     expect(SOMETHING_TO_TRY.defaultEnabled).toBe(false);
     const fresh = new PersonaStore(join(dir, "fresh.sqlite"));

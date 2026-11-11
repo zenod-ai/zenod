@@ -11,10 +11,11 @@
 /**
  * What the change does between the two ideas in the picture; the memory desk can do each of these.
  * `which`: a question's picture, the words said and the two or three things they could mean.
+ * `try`: something to try (S38), from what the person keeps talking about to the small thing to try.
  */
-export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place" | "which";
+export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place" | "which" | "try";
 
-export const HELPER_CARD_CHANGES: readonly HelperCardChange[] = ["link", "unlink", "move", "rename", "own-place", "which"];
+export const HELPER_CARD_CHANGES: readonly HelperCardChange[] = ["link", "unlink", "move", "rename", "own-place", "which", "try"];
 
 export interface HelperCardPicture {
   change: HelperCardChange;
@@ -89,13 +90,14 @@ export function pictureTitle(picture: HelperCardPicture): string {
     case "rename": return `I'd rename "${from}" to "${to}".`;
     case "own-place": return `I'd give "${from}" its own place at the top of your memory.`;
     case "which": return `Which did you mean by "${from}"?`;
+    case "try": return `Something to try: ${to}.`;
   }
 }
 
 /** The picture in one line, as the helper's note keeps it: `Boiler, new link, Home`. */
 export function pictureWords(picture: HelperCardPicture): string {
   if (picture.change === "which") return `${picture.from}, could mean, ${(picture.meanings ?? []).join(" or ")}`;
-  const words = { link: "new link", unlink: "link off", move: "moves under", rename: "new name", "own-place": "own place" }[picture.change];
+  const words = { link: "new link", unlink: "link off", move: "moves under", rename: "new name", "own-place": "own place", try: "to try" }[picture.change];
   return [picture.from, words, picture.to ?? "top of your memory"].join(", ");
 }
 

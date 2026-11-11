@@ -31,7 +31,7 @@ export type InboxReply = {
 }
 
 /** S36: what a helper's change does between the two ideas in its card's picture. */
-export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place" | "which"
+export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place" | "which" | "try"
 
 /**
  * S36: a helper's card in plain words: the picture of the change, why yes, why not. A question
