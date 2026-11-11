@@ -35,7 +35,7 @@ Status: active
 Last attempted: 2026-11-11 roll-up: the graph, retrieval and answer rows S1 to S3, S8, S11, S13 to S25, S27, S29, S31 to S33 done and approved ; S21 done (45 real questions graded, approved 10 Nov) ; S35 done (named day and missed recall question fixed, approved 10 Nov) ; S36 done ("what did I say yesterday" answers from the right day, approved 11 Nov) ; S38 in review (day questions answered in his own time zone) ; S30 monitoring (confidence tuning waits on 20+ of his Right place and Wrong place answers, next check 12 Nov 18:00Z) ; S4, S5, S7, S9, S12, S26, S28, S34 and S37 draft, each waiting for Jordi to start it
 Result: retrieval is at 96.2 with named-day and yesterday questions answering from the right day; the time zone fix S38 is ready for his judgment
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: Jordi: judge the S38 card, and his Right place and Wrong place answers for S30
+Waiting on: nobody (S38 card in review with Jordi; S30 monitoring for his Right place and Wrong place answers, no ask)
 Approved work: none
 Next action: Jordi judges the S38 card (an evening question about yesterday lists the notes he sent that day); S30 reruns on his vault at 2026-11-12T18:00Z
 Source revision: uncommitted scaffold
