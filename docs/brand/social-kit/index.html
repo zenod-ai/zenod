@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod social kit</title>
+<link rel="icon" href="assets/zenod-avatar.svg">
+<style>
+  @font-face { font-family: "Newsreader"; font-weight: 500; src: url(fonts/newsreader-500.ttf) format("truetype"); }
+  @font-face { font-family: "Newsreader"; font-weight: 400; src: url(fonts/newsreader-400.ttf) format("truetype"); }
+  @font-face { font-family: "Instrument Sans"; font-weight: 500; src: url(fonts/instrument-sans-500.ttf) format("truetype"); }
+  :root { --bg: #f6f2e9; --stage: #e9e3d5; --ink: #18211c; --muted: #4a554e; --faint: #8d948c; --line: #c9c1ae; --accent: #1f4d3a; --accent-ink: #f6f2e9; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 500 16px/1.55 "Instrument Sans", system-ui, sans-serif; font-kerning: normal; }
+  main { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+  header { display: flex; gap: 22px; align-items: center; }
+  header img { width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
+  h1, h2 { font-family: "Newsreader", Georgia, serif; font-weight: 500; letter-spacing: -0.01em; margin: 0; }
+  h1 { font-size: 44px; line-height: 1.1; }
+  h2 { font-size: 30px; margin: 64px 0 6px; padding-top: 28px; border-top: 1px solid var(--line); }
+  .lede { color: var(--muted); max-width: 720px; margin: 10px 0 0; }
+  .tagline { font-family: "Newsreader", Georgia, serif; font-size: 34px; margin: 36px 0 0; }
+  .tagline span { color: var(--accent); }
+  .meta { color: var(--muted); margin: 4px 0 18px; }
+  .meta a { color: var(--accent); }
+  .stage { background: var(--stage); border-radius: 14px; padding: 22px; overflow-x: auto; }
+  .stage img { display: block; max-width: 100%; height: auto; box-shadow: 0 0 0 1px var(--line); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  a.dl { display: inline-block; background: var(--accent); color: var(--accent-ink); text-decoration: none; padding: 9px 16px; border-radius: 999px; font-size: 15px; }
+  a.dl.soft { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+  .note { font-size: 14px; color: var(--muted); margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  td, th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="assets/zenod-avatar-x-400.png" alt="The Zenod Z">
+    <div>
+      <h1>Zenod social kit</h1>
+      <p class="lede">The one place for every Zenod profile picture and banner. Each file is at the exact size its platform asks for. New assets and new versions go here, nowhere else.</p>
+    </div>
+  </header>
+  <p class="tagline">Own, organize, <span>compound your memory.</span></p>
+  <p class="meta">The tagline for every banner. The site keeps its own hero line.</p>
+
+  <h2>Profile picture</h2>
+  <p class="meta">The Newsreader Z, ink on paper. Every platform crops it round, the Z stays clear down to 24 pixels.</p>
+  <div class="stage"><img src="previews/avatars-round.png" alt="The Z at avatar sizes, round and square" style="width:520px"></div>
+  <div class="row">
+    <a class="dl" href="assets/zenod-avatar-1024.png" download>Master PNG 1024 × 1024</a>
+    <a class="dl soft" href="assets/zenod-avatar.svg" download>SVG</a>
+  </div>
+
+  <h2>X</h2>
+  <p class="meta"><a href="https://x.com/ZenodMemory">x.com/ZenodMemory</a> · header 1500 × 500, profile picture 400 × 400</p>
+  <div class="stage"><img src="assets/zenod-banner-x-1500x500.png" alt="X header"></div>
+  <div class="grid" style="margin-top:18px">
+    <div class="stage"><img src="previews/x-profile-desktop.png" alt="X profile on a computer" style="width:600px"></div>
+    <div class="stage"><img src="previews/x-profile-phone.png" alt="X profile on a phone" style="width:390px"></div>
+  </div>
+  <div class="row">
+    <a class="dl" href="assets/zenod-banner-x-1500x500.png" download>Header 1500 × 500</a>
+    <a class="dl soft" href="assets/zenod-avatar-x-400.png" download>Profile picture 400 × 400</a>
+  </div>
+
+  <h2>YouTube</h2>
+  <p class="meta"><a href="https://www.youtube.com/@ZenodMemory">youtube.com/@ZenodMemory</a> · banner 2560 × 1440, the words sit inside the area every screen shows · profile picture 800 × 800</p>
+  <div class="stage"><img src="assets/zenod-banner-youtube-2560x1440.png" alt="YouTube banner, full"></div>
+  <div class="grid" style="margin-top:18px">
+    <div class="stage"><img src="previews/youtube-desktop.png" alt="YouTube banner on a computer"></div>
+    <div class="stage"><img src="previews/youtube-phone.png" alt="YouTube banner on a phone" style="width:390px"></div>
+  </div>
+  <div class="row">
+    <a class="dl" href="assets/zenod-banner-youtube-2560x1440.png" download>Banner 2560 × 1440</a>
+    <a class="dl soft" href="assets/zenod-avatar-youtube-800.png" download>Profile picture 800 × 800</a>
+  </div>
+
+  <h2>LinkedIn</h2>
+  <p class="meta"><a href="https://www.linkedin.com/company/zenodmemory">linkedin.com/company/zenodmemory</a> · cover 1128 × 191, logo 400 × 400</p>
+  <div class="stage"><img src="previews/linkedin-page.png" alt="LinkedIn page with cover and logo"></div>
+  <div class="row">
+    <a class="dl" href="assets/zenod-banner-linkedin-1128x191.png" download>Cover 1128 × 191</a>
+    <a class="dl soft" href="assets/zenod-avatar-linkedin-400.png" download>Logo 400 × 400</a>
+  </div>
+
+  <h2>Instagram</h2>
+  <p class="meta"><a href="https://www.instagram.com/zenodmemory">instagram.com/zenodmemory</a> · profile picture only, Instagram has no banner</p>
+  <div class="row"><a class="dl" href="assets/zenod-avatar-instagram-1080.png" download>Profile picture 1080 × 1080</a></div>
+
+  <h2>TikTok</h2>
+  <p class="meta"><a href="https://www.tiktok.com/@zenodmemory">tiktok.com/@zenodmemory</a> · profile picture only, TikTok has no banner. The account is not made yet, this file is ready for when it is</p>
+  <div class="row"><a class="dl" href="assets/zenod-avatar-1024.png" download>Profile picture 1024 × 1024</a></div>
+
+  <h2>Versions</h2>
+  <table>
+    <tr><th>Version</th><th>Date</th><th>What changed</th></tr>
+    <tr><td>3, current</td><td>11 Nov 2026</td><td>One kit for every profile. The earlier Newsreader Z is back. Light paper banners with the new tagline, set in the real fonts and checked at real size.</td></tr>
+    <tr><td>2, withdrawn</td><td>11 Nov 2026</td><td>A heavy block Z on a dark tile and dark banners. Jordi kept the earlier Z.</td></tr>
+    <tr><td>1</td><td>8 Nov 2026</td><td>The Newsreader Z on paper, the first Zenod profile picture.</td></tr>
+  </table>
+  <p class="note">To add an asset or a new version: change the files beside this page and render them again with the kit's render script, then add a line here. Everything stays in the zenod repository under docs/brand/social-kit.</p>
+</main>
+</body>
+</html>

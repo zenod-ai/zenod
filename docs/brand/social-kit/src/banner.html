@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Zenod social kit banner template. One file, every platform: ?p=x|youtube|linkedin.
+     Real fonts only (fonts/ beside this kit, OFL). render.mjs screenshots it at the exact size. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Newsreader"; font-weight: 500; src: url(../fonts/newsreader-500.ttf) format("truetype"); }
+  @font-face { font-family: "Instrument Sans"; font-weight: 500; src: url(../fonts/instrument-sans-500.ttf) format("truetype"); }
+  :root { --bg: #f6f2e9; --ink: #18211c; --muted: #4a554e; --accent: #1f4d3a; --line: #c9c1ae; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); overflow: hidden; }
+  body {
+    position: relative;
+    font-kerning: normal; font-feature-settings: "kern" 1, "liga" 1;
+    text-rendering: geometricPrecision; -webkit-font-smoothing: antialiased;
+  }
+  .block { position: absolute; color: var(--ink); }
+  h1 { font-family: "Newsreader"; font-weight: 500; letter-spacing: -0.012em; line-height: 1.06; }
+  h1 .one, h1 .two { white-space: nowrap; }
+  h1 .two { color: var(--accent); display: block; }
+  .url { font-family: "Instrument Sans"; font-weight: 500; color: var(--muted); letter-spacing: 0.01em; }
+  .rule { position: absolute; background: var(--line); }
+
+  /* X header 1500x500. Avatar covers the lower left, phones crop top and bottom: words sit right of centre, mid-height. */
+  body.x { width: 1500px; height: 500px; }
+  body.x .block { left: 500px; top: 50%; transform: translateY(-50%); }
+  body.x h1 { font-size: 88px; }
+  body.x .url { font-size: 30px; margin-top: 30px; }
+
+  /* YouTube 2560x1440. Everything inside the 1546x423 safe area every device shows (x 507-2053, y 508-931). */
+  body.youtube { width: 2560px; height: 1440px; }
+  body.youtube .block { left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; }
+  body.youtube h1 { font-size: 120px; }
+  body.youtube .url { font-size: 38px; margin-top: 28px; }
+
+  /* LinkedIn company cover 1128x191. Logo covers the lower left: one line on the right. */
+  body.linkedin { width: 1128px; height: 191px; }
+  body.linkedin .block { right: 64px; top: 50%; transform: translateY(-50%); text-align: right; }
+  body.linkedin h1 { font-size: 46px; white-space: nowrap; }
+  body.linkedin h1 .two { display: inline; }
+  body.linkedin .url { font-size: 19px; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="block">
+    <h1><span class="one">Own, organize,</span> <span class="two">compound your memory.</span></h1>
+    <p class="url">zenod.dev</p>
+  </div>
+<script>
+  const p = new URLSearchParams(location.search).get("p") || "x";
+  document.body.className = p;
+</script>
+</body>
+</html>
