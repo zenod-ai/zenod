@@ -30,7 +30,7 @@ Goal sentence: The errors Jordi is hitting are fixed today, and the team hears o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-10 stamped ready on Jordi's ask and planned; M1 and M2 dispatched
+Last attempted: 2026-11-11 Delivery Manager run_285a0f57: M13 readied on Jordi's ask vn_1ac62a8c and started (worker run_82d2344f: probe his 23:34Z and one-hour notes' audio against their transcripts, fix a cut, guard transcribe.ts) ; 2026-11-10 stamped ready on Jordi's ask and planned; M1 and M2 dispatched
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
