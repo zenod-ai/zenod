@@ -39,16 +39,16 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 ## Current State
 
 Status: active
-Phase: A0 re-check done and proposed done 2026-10-25 (worker run_f010b4a9); A1–A5 not started
-Last verified: 2026-10-25
-Last attempted: 2026-11-10 roll-up: EPIC-7 (active) all leaked keys rolled, dress rehearsal waits on the team sign-in E7-A18 on Jordi's Mac list ; EPIC-6 (ready) health page waits on his S1 review ; A13 testers page done, its applications page waits on infra-vps/EPIC-2-A46 ; A14 alerts key and A15..A20 fixes done ; the first real tester now goes through EPIC-23 and EPIC-26
-Result: production is up (health ok) with alerts, seamless releases, voice notes saving; the tester page leads with three promises; no tester invited yet
+Phase: tester door open on production; launch work runs in EPIC-7 (testers), EPIC-23 and EPIC-26 (first tester and invites); A0 done 2026-10-25
+Last verified: 2026-11-11
+Last attempted: 2026-11-11T10:37Z roll-up (run_cd3490c1): docs/EPIC-7-REAL-USER-TEST.md (active) the dress rehearsal on production signs up a stranger at 0 euro but their Drive vault fails; the fix and the Anthropic switch for testers sit on staging waiting for a promote ; docs/EPIC-6-HEALTH-DASHBOARD.md (review) the health page is finished and waits only for Jordi's verdict ; the first real tester runs through EPIC-23 and EPIC-26
+Result: production d9ebdd6 is up; strangers can apply, get their own code and sign up at 0 euro with no card; saving fails for a new Drive vault until T7-F1 reaches production; no outside tester invited yet
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: Jordi: E23-A1 name the first tester ; Mac list: E7-A18, E26-A2 ; infra-vps/EPIC-2-A46 (his root key)
+Waiting on: Jordi: infra-vps/EPIC-2-A50 (resume gated promotes, carries T7-F1, E7-S1, E26-S11, E26-S15) ; infra-vps/EPIC-2-A49 (tester-watch install) ; his verdict on EPIC-6
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: EPIC-26 T1 round 2 builds the one-link tester funnel; then the first invite goes out
-Verified at: 2026-11-10T09:20Z
+Next action: on EPIC-2-A50 yes the M12 timer promotes e0b6d80; then EPIC-7 T7 round 5 proves a tester can save, then T8 go or no-go and the first invites (EPIC-26)
+Verified at: 2026-11-11T10:37Z (EPIC-7 and EPIC-6 Current States and ledgers read)
 
 ## Waiting on
 

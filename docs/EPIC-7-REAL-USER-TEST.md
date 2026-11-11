@@ -31,15 +31,15 @@ Goal sentence: Five real people use production Zenod as ordinary users, capped a
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-11T04:31Z T7 round 3 (run_020f90c0) on production d9ebdd6: tester page, own single-use code and €0 invite page pass ; Google sign-in stopped by a phone check only Jordi can answer (ask E7-A20) ; WhatsApp voice-note leg needs a second phone, the cap proof needs container access agents no longer have ; tester-watch does not see zenod.dev/testers applicants (follow-up)
-Result: a new tester could sign up, get a free month with no card and be capped; tester-watch alerts on Stripe renewals; nobody new has walked the whole path yet
-Evidence: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md); live readiness ready=true read 2026-10-31
-Waiting on: nobody
+Last attempted: 2026-11-11T10:37Z Delivery Manager roll-up (run_cd3490c1) of the 2026-11-11 rows: T7 round 4 on production d9ebdd6 (05:28–05:46Z) ; T7-F1 Drive vault fix ; T7-F2 tester-watch ; E7-S1 round 2 Anthropic for testers
+Result: a stranger can sign in with Google and check out at 0 euro with no card on production (T7 round 4) ; a new tester's Google Drive vault then fails to set up, so memory, saving and the cap step could not be proved yet ; the vault fix T7-F1 (c99504ae) and E7-S1 round 2 (Anthropic for every tester, in review) are healthy on staging e0b6d80 ; T7-F2 tester-watch is built, its install waits on infra-vps/EPIC-2-A49
+Evidence: [T7 round 4](evidence/epic7-t7-r4-2026-11-11.md) · [T7-F1](evidence/e7-t7-f1-2026-11-11.md) · [E7-S1](evidence/e7-s1-2026-11-11.md) · earlier: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md)
+Waiting on: Jordi: infra-vps/EPIC-2-A50 (resume gated promotes; carries T7-F1 and E7-S1 to production) ; infra-vps/EPIC-2-A49 (tester-watch install, T7-F2) ; E7-S1 card in his review list
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
-Next action: on E7-A20 done, T7 round 4 runs checkout, memory, saves and the Stripe check; then T8 go or no-go
+Next action: on EPIC-2-A50 yes the M12 timer promotes e0b6d80 to production ; then T7 round 5 proves a new tester can save a memory and hit the cap ; then T8 go or no-go for inviting
 Monitoring: Drive OAuth readiness proof renewed 2026-11-11 (E26-A5, look at 03:48:45Z) until 2027-02-09 · next check 2027-02-02 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
 Source revision: see git log
-Verified at: 2026-11-11T04:40Z (T7 round 3 evidence fdcf71c0)
+Verified at: 2026-11-11T10:37Z (EPIC-7 ledger rows T7, T7-F1, T7-F2, E7-S1 read)
 
 ## Waiting on
 
