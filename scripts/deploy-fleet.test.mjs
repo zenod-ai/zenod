@@ -122,14 +122,17 @@ test("slow roll beyond the configured timeout still fails with elapsed time and 
   assert.match(out, /timed out after [3-9]s \(limit 3s;.*live sha '587c005/);
 });
 
-test("default timeout is 900s and the workflow job limit exceeds it", async () => {
+test("default timeout is 900s", async () => {
   const { readFileSync } = await import("node:fs");
   const sh = readFileSync(script, "utf8");
   assert.match(sh, /HEALTH_TIMEOUT_SECONDS="\$\{HEALTH_TIMEOUT_SECONDS:-900\}"/);
+});
+
+test("publish.yml has no production deploy job: production moves only on a promote (root D28)", async () => {
+  const { readFileSync } = await import("node:fs");
   const wf = readFileSync(join(dirname(script), "..", ".github", "workflows", "publish.yml"), "utf8");
-  const deploy = wf.slice(wf.indexOf("\n  deploy:"));
-  const minutes = Number(/timeout-minutes:\s*(\d+)/.exec(deploy)[1]);
-  assert.ok(minutes * 60 >= 900 + 300, `deploy timeout-minutes ${minutes} too small`);
+  assert.equal(wf.indexOf("\n  deploy:"), -1);
+  assert.match(wf, /promote-production\.sh/);
 });
 
 test("DRY_RUN changes nothing", async () => {

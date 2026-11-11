@@ -183,50 +183,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Zenod PRODUCTION rolls are made OUTSIDE GitHub: dokploy.polyqu.com was closed on
-  # 2026-10-22 (the Dokploy panel is Tailscale-only), so a GitHub runner can no longer
-  # reach the Dokploy API (it answered 404 here). The outbound deploy poller on VPS1
-  # (infra-vps `infra-vps-deploy-poller.timer`, every 2 min) sees this workflow's
-  # `publish` job succeed on main, re-pins Dokploy app zenod-mt (zenod/production) to
-  # ghcr.io/zenod-ai/zenod:sha-<short> and verifies /api/health, rolling back on failure.
-  # This job only PROVES the roll: it fails red when production does not report this sha.
+  # Rolls are made OUTSIDE GitHub (the Dokploy panel is Tailscale-only since 2026-10-22, so a runner cannot
+  # reach it). Root D28 (EPIC-24 M10, 2026-11-11): the outbound deploy poller on VPS1 (infra-vps
+  # `infra-vps-deploy-poller.timer`, every 2 min) sees this workflow's `publish` job succeed on main and rolls
+  # STAGING (Dokploy app zenod-staging, tailnet only, its own data and test tenant) to
+  # ghcr.io/zenod-ai/zenod:sha-<short>. PRODUCTION (zenod-mt, cloud.zenod.dev) no longer follows main: it moves
+  # only on a promote, `scripts/promote-production.sh` on VPS3, once the standard question set passed for the
+  # sha staging runs; `--rollback` re-pins the previous image. So there is no deploy job here any more (the
+  # old one waited for production to report the pushed sha, which is no longer the contract).
   #
-  # Boundary (AGENTS.md "Production deployment boundary", 2026-09-07): Zenod production
-  # only; the dedicated Phylax image is published but never rolled, and independent
-  # agents are not touched. No Dokploy secret lives in GitHub. Manual rollback or a
-  # roll by hand: scripts/deploy-fleet.sh over the tailnet (docs/DEPLOYMENTS.md).
-  deploy:
-    needs: publish
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    # poller interval (2 min) + Dokploy's shared FIFO queue (up to ~12 min behind an
-    # unrelated build, see scripts/deploy-fleet.sh) + the ~40 s roll; keep the job
-    # limit above the 900 s wait below.
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    # A newer push replaces a still-waiting check: only the latest main is expected live.
-    concurrency:
-      group: deploy-zenod-production
-      cancel-in-progress: true
-    steps:
-      - name: Wait for production to report the published sha
-        env:
-          VERIFY_URL: https://cloud.zenod.dev/api/health
-          EXPECTED_SHA: ${{ github.sha }}
-          TIMEOUT_SECONDS: "900"
-        run: |
-          start=$(date +%s)
-          live=""
-          while :; do
-            live="$(curl --silent --show-error --max-time 10 "$VERIFY_URL" | jq -r '.sha // empty' || true)"
-            if [ "$live" = "$EXPECTED_SHA" ]; then
-              echo "production reports $EXPECTED_SHA after $(( $(date +%s) - start ))s"
-              exit 0
-            fi
-            if [ $(( $(date +%s) - start )) -ge "$TIMEOUT_SECONDS" ]; then
-              echo "::error::production still reports '${live:-<unreachable>}' after ${TIMEOUT_SECONDS}s, expected $EXPECTED_SHA. The VPS1 deploy poller (infra-vps-deploy-poller.timer) rolls zenod-mt; check its journal."
-              exit 1
-            fi
-            sleep 10
-          done
+  # Boundary (AGENTS.md "Production deployment boundary", 2026-09-07): Zenod only; the dedicated Phylax image is
+  # published but never rolled, and independent agents are not touched. No Dokploy secret lives in GitHub.
+  # Back to push-to-main (D27): put the zenod-mt target back in infra-vps hosts/vps1/deploy-poller.json and
+  # restore the deploy job from git history (docs/DEPLOYMENTS.md, "Staging and promote").

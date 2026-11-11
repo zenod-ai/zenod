@@ -201,11 +201,18 @@ def components(d: dict) -> list[dict]:
     elif (el.get("p99Ms") or 0) > 200 or (el.get("utilization") or 0) > 0.8:
         col, prob = "amber", "event loop slow"
         notes.append("event loop slow")
-    if pub and sha and pub != sha:
+    # root D28 (EPIC-24 M10): staging follows main and must catch up with the newest image; production moves
+    # only on a promote, so it lagging main is expected. Probes without a staging reading keep the old rule.
+    st = ((d.get("staging") or {}).get("json") or {}) if "staging" in d else None
+    follow = (st.get("sha") or "")[:7] if st is not None else sha
+    if pub and follow and pub != follow:
         pt = parse_ts((d.get("publish") or {}).get("createdAt"))
         if pt and (ref - pt).total_seconds() > 1800 and col == "green":
-            col, prob = "amber", f"live sha {sha} is behind the newest published image {pub} for over 30 min"
+            col, prob = "amber", (f"staging sha {follow} is behind the newest published image {pub} for over 30 min"
+                                  if st is not None else f"live sha {sha} is behind the newest published image {pub} for over 30 min")
         notes.append(f"newest published image is {pub}")
+    if st is not None:
+        notes.append(f"staging runs {follow or '?'}; production moves on a promote")
     zl = v.get("zenod_log") or {}
     zc = (v.get("containers") or {}).get(ZENOD_SVC) or {}
     cz = acc.get("cloud.zenod.dev") or {}
