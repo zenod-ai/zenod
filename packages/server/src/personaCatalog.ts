@@ -245,7 +245,7 @@ export function parseSuggestion(reply: Record<string, unknown> | null): { title:
  * may hold any word).
  */
 export function aboutProjectWork(suggestion: { title: string; why: string; action: string; card?: HelperCard | null }): boolean {
-  return hasWorkCode(suggestion.action) || isProjectWork(suggestion.title, suggestion.why) || (suggestion.card ? isProjectWork(suggestion.card.no) : false);
+  return hasWorkCode(suggestion.action) || isProjectWork(suggestion.title, suggestion.why) || (suggestion.card?.no ? isProjectWork(suggestion.card.no) : false);
 }
 
 function earlierLines(ctx: PersonaContext): string[] {
@@ -402,7 +402,7 @@ function postSuggestionCard(ctx: PersonaContext, entries: MemoryEntry[], suggest
 
 /** The suggestion in the helper's own note: the change, why yes, why not, and the team's answer. */
 const suggestionLines = (suggestion: Offered | null, lead: string) => suggestion
-  ? [`- ${lead}${suggestion.action}`, ...(suggestion.card?.picture ? [`- Picture: ${pictureWords(suggestion.card.picture)}`] : []), ...(suggestion.why ? [`- Why: ${suggestion.why}`] : []), ...(suggestion.card ? [`- Why not: ${suggestion.card.no}`] : []), ...(suggestion.team ? ["", suggestion.team] : [])]
+  ? [`- ${lead}${suggestion.action}`, ...(suggestion.card?.picture ? [`- Picture: ${pictureWords(suggestion.card.picture)}`] : []), ...(suggestion.why ? [`- Why: ${suggestion.why}`] : []), ...(suggestion.card?.no ? [`- Why not: ${suggestion.card.no}`] : []), ...(suggestion.team ? ["", suggestion.team] : [])]
   : [];
 const suggestionNote = (suggestion: Offered | null) => (suggestion ? ["", "## Suggested", "", ...suggestionLines(suggestion, "")] : []);
 

@@ -3,29 +3,38 @@
  * introducing this new link. It's between these two concepts. That's why I think you should do it.
  * That's why you might not want to do it. Make your call." Every helper card says it the same way: a
  * small picture of the two ideas and what the change does between them, one line why yes, one line
- * why not, and the call is the person's. Later helpers (a clarifying question, something to try)
- * post the same shape, with or without a picture. Only the shape lives here; the web app draws it.
+ * why not, and the call is the person's. A helper's question (the Clarifier, S37, folded in as S40)
+ * says it the same way: the words that could mean two things with a line to each meaning, one line
+ * why it asks, and the call is the person's. Only the shape lives here; the web app draws it.
  */
 
-/** What the change does between the two ideas in the picture; the memory desk can do each of these. */
-export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place";
+/**
+ * What the change does between the two ideas in the picture; the memory desk can do each of these.
+ * `which`: a question's picture, the words said and the two or three things they could mean.
+ */
+export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place" | "which";
 
-export const HELPER_CARD_CHANGES: readonly HelperCardChange[] = ["link", "unlink", "move", "rename", "own-place"];
+export const HELPER_CARD_CHANGES: readonly HelperCardChange[] = ["link", "unlink", "move", "rename", "own-place", "which"];
 
 export interface HelperCardPicture {
   change: HelperCardChange;
   /** The first idea: the page that is linked, moved or renamed, by what it is about. */
   from: string;
-  /** The second idea: the page it links to, the place it moves under, or the new name. Null for own-place. */
+  /** The second idea: the page it links to, the place it moves under, or the new name. Null for own-place and which. */
   to: string | null;
+  /** which: the two or three things the words could mean. */
+  meanings?: string[];
 }
 
+/** A change has why yes and why not; a question has why it asks. */
 export interface HelperCard {
   picture: HelperCardPicture | null;
   /** One line: why the helper thinks you should. */
-  yes: string;
+  yes?: string;
   /** One line: why you might not want to. */
-  no: string;
+  no?: string;
+  /** A question: one line why it asks. */
+  why?: string;
 }
 
 /** The last words on every helper card. */
@@ -37,14 +46,17 @@ const LINE_MAX = 240;
 const words = (value: unknown, max: number): string =>
   typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max).trim() : "";
 
-/** A card from untrusted input (a model's reply, a post): null unless it has both reasons. */
+/** A card from untrusted input (a model's reply, a post): null unless it has both reasons, or why it asks. */
 export function cleanHelperCard(raw: unknown): HelperCard | null {
   if (!raw || typeof raw !== "object") return null;
   const data = raw as Record<string, unknown>;
   const yes = words(data.yes, LINE_MAX);
   const no = words(data.no, LINE_MAX);
-  if (!yes || !no) return null;
-  return { picture: cleanPicture(data.picture), yes, no };
+  const why = words(data.why, LINE_MAX);
+  const picture = cleanPicture(data.picture);
+  if (yes && no) return { picture: picture?.change === "which" ? null : picture, yes, no };
+  if (why && picture?.change === "which") return { picture, why };
+  return null;
 }
 
 function cleanPicture(raw: unknown): HelperCardPicture | null {
@@ -55,6 +67,14 @@ function cleanPicture(raw: unknown): HelperCardPicture | null {
   const to = words(data.to, IDEA_MAX);
   if (!change || !from) return null;
   if (change === "own-place") return { change, from, to: null };
+  if (change === "which") {
+    const seen = new Set<string>();
+    const meanings = (Array.isArray(data.meanings) ? data.meanings : [])
+      .map((meaning) => words(meaning, IDEA_MAX))
+      .filter((meaning) => meaning && !seen.has(meaning.toLowerCase()) && seen.add(meaning.toLowerCase()))
+      .slice(0, 3);
+    return meanings.length >= 2 ? { change, from, to: null, meanings } : null;
+  }
   if (!to || to.toLowerCase() === from.toLowerCase()) return null;
   return { change, from, to };
 }
@@ -68,11 +88,13 @@ export function pictureTitle(picture: HelperCardPicture): string {
     case "move": return `I'd move "${from}" under "${to}".`;
     case "rename": return `I'd rename "${from}" to "${to}".`;
     case "own-place": return `I'd give "${from}" its own place at the top of your memory.`;
+    case "which": return `Which did you mean by "${from}"?`;
   }
 }
 
 /** The picture in one line, as the helper's note keeps it: `Boiler, new link, Home`. */
 export function pictureWords(picture: HelperCardPicture): string {
+  if (picture.change === "which") return `${picture.from}, could mean, ${(picture.meanings ?? []).join(" or ")}`;
   const words = { link: "new link", unlink: "link off", move: "moves under", rename: "new name", "own-place": "own place" }[picture.change];
   return [picture.from, words, picture.to ?? "top of your memory"].join(", ");
 }
@@ -97,8 +119,9 @@ export function namedCard(card: HelperCard, phrases: ReadonlyArray<string>): Hel
   const named = (text: string) => namedMemories(text, phrases);
   return {
     picture: card.picture ? { ...card.picture, from: named(card.picture.from), to: card.picture.to ? named(card.picture.to) : null } : null,
-    yes: named(card.yes),
-    no: named(card.no),
+    ...(card.yes ? { yes: named(card.yes) } : {}),
+    ...(card.no ? { no: named(card.no) } : {}),
+    ...(card.why ? { why: named(card.why) } : {}),
   };
 }
 

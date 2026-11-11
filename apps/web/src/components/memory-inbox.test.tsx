@@ -176,6 +176,22 @@ describe("one chat, and a reply box on every card (EPIC-14 S2 round 3)", () => {
     links: [{ label: "Flat hunt", path: "Areas/Flat hunt.md" }],
   }
 
+  it("a helper's question shows the words with each meaning and why it asks (S36, S40 folded in)", async () => {
+    const ASK: InboxItem = {
+      ...QUESTION, id: "q2", from: "Clarifier", title: 'In your note of 10 Nov you said "the flat": which one did you mean?',
+      options: [{ id: "m1", label: "Valencia flat" }, { id: "m2", label: "Barcelona flat" }], recommended: null,
+      card: { picture: { change: "which", from: "the flat", to: null, meanings: ["Valencia flat", "Barcelona flat"] }, why: "You have two flats in your memory." },
+    }
+    mockFetch((url) => (url === "/api/console/inbox" ? { items: [ASK], needsYou: 1 } : { needsYou: 1 }))
+    render(<MemoryInbox />)
+    expect(await screen.findByText(ASK.title)).toBeTruthy()
+    expect(screen.getByTestId("helper-card-picture").getAttribute("aria-label")).toBe('"the flat" could mean Valencia flat or Barcelona flat')
+    expect(screen.getByText("Why I ask")).toBeTruthy()
+    expect(screen.queryByText("Why not")).toBeNull()
+    expect(screen.getByText("Make your call.")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Valencia flat" })).toBeTruthy()
+  })
+
   it("a new link shows the two ideas, why yes, why not and Make your call (S36)", async () => {
     const LINK: InboxItem = {
       ...SUGGESTION, id: "s2", title: 'I\'d link "Boiler" with "Home".', action: "Link Boiler to Home so each shows the other.",

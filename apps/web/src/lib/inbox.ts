@@ -31,13 +31,22 @@ export type InboxReply = {
 }
 
 /** S36: what a helper's change does between the two ideas in its card's picture. */
-export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place"
+export type HelperCardChange = "link" | "unlink" | "move" | "rename" | "own-place" | "which"
 
-/** S36: a helper's card in plain words: the picture of the change, why yes, why not. */
+/**
+ * S36: a helper's card in plain words: the picture of the change, why yes, why not. A question
+ * (the Clarifier) has the words it asks about with their meanings, and why it asks.
+ */
 export type HelperCard = {
-  picture: { change: HelperCardChange; from: string; to: string | null } | null
-  yes: string
-  no: string
+  picture: {
+    change: HelperCardChange
+    from: string
+    to: string | null
+    meanings?: string[]
+  } | null
+  yes?: string
+  no?: string
+  why?: string
 }
 
 export type InboxItem = {

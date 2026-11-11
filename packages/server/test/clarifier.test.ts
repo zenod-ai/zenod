@@ -96,7 +96,9 @@ describe("Clarifier (EPIC-14 S37)", () => {
     const flat = items.find((item) => item.title.includes("the flat"))!;
     expect(flat).toMatchObject({ from: "Clarifier", status: "open", title: "In your note of 10 Nov you said \"the flat\": by \"the flat\", which one did you mean?" });
     expect(flat.options.map((o) => o.label)).toEqual(["Valencia flat", "Barcelona flat"]);
-    expect(flat.body).toBe("You have two flats in your memory. Pick one, or answer in your own words.");
+    // S36 (S40 folded in): the card in every helper's shape: the words, a line to each meaning, why it asks.
+    expect(flat.body).toBeNull();
+    expect(flat.card).toEqual({ picture: { change: "which", from: "the flat", to: null, meanings: ["Valencia flat", "Barcelona flat"] }, why: "You have two flats in your memory." });
     expect(flat.links[0]).toEqual({ label: "Your note of 10 Nov", path: "Log/2026-11-10.md" });
     const ana = items.find((item) => item.title.includes("Ana"))!;
     // A repeated meaning is dropped; one with a single meaning is no question.

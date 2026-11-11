@@ -31,7 +31,10 @@ app.post("/dev/seed", async (c) => {
   const shape = c.req.query("shape");
   inbox.db.exec("DELETE FROM inbox_items"); // a local check only: start each shape on an empty inbox
   const cards = JSON.parse(await readFile(CARDS, "utf8"));
-  const posted = cards.map((card, i) => inbox.post(shape === "after"
+  // A helper's question (the Clarifier): the same title and buttons, the new shape adds its card.
+  const ask = (card, i) => inbox.post({ kind: "question", from: card.from, title: card.title, options: card.options.map((label, n) => ({ id: `m${n + 1}`, label })),
+    ...(shape === "after" ? { card: card.after.card } : { body: card.before.body }), links: card.links ?? [], sourceKey: `${shape}:${i}` });
+  const posted = cards.map((card, i) => card.kind === "question" ? ask(card, i) : inbox.post(shape === "after"
     ? { kind: "suggestion", from: card.from, title: card.after.title, ...(card.after.body ? { body: card.after.body } : {}), action: card.action, links: card.links ?? [], card: card.after.card, sourceKey: `${shape}:${i}` }
     : { kind: "suggestion", from: card.from, title: card.before.title, ...(card.before.body ? { body: card.before.body } : {}), action: card.action, links: card.links ?? [], sourceKey: `${shape}:${i}` }));
   return c.json({ posted: posted.length });

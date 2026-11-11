@@ -15,6 +15,15 @@ describe("helper card (S36)", () => {
     expect(cleanHelperCard({ yes: "y", no: "n", picture: { change: "own-place", from: "Shed", to: "anything" } })!.picture).toEqual({ change: "own-place", from: "Shed", to: null });
   });
 
+  it("a question's card: the words with two or three meanings, and why it asks (S40 folded in)", () => {
+    const which = { change: "which", from: "the flat", meanings: ["Valencia flat", "valencia flat", "Barcelona flat", "Lisbon flat", "Porto flat"] };
+    expect(cleanHelperCard({ why: "You have two flats.", picture: which })).toEqual({
+      picture: { change: "which", from: "the flat", to: null, meanings: ["Valencia flat", "Barcelona flat", "Lisbon flat"] }, why: "You have two flats.",
+    });
+    expect(cleanHelperCard({ why: "One meaning only.", picture: { change: "which", from: "the flat", meanings: ["Valencia flat"] } })).toBeNull();
+    expect(cleanHelperCard({ why: "No picture." })).toBeNull();
+  });
+
   it("says each change in plain words", () => {
     expect(pictureTitle({ change: "link", from: "Boiler", to: "Home" })).toBe('I\'d link "Boiler" with "Home".');
     expect(pictureTitle({ change: "unlink", from: "Boiler", to: "Garden" })).toBe('I\'d take the link off between "Boiler" and "Garden".');

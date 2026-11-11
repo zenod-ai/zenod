@@ -51,12 +51,19 @@
 }
 .zh-move .zh-to, .zh-top { border-color: var(--zp-accent); }
 .zh-rename .zh-from { text-decoration: line-through; color: var(--zp-muted); }
+/* A question: the words said, then each thing they could mean, stacked. */
+.zh-said { font-style: italic; }
+.zh-meanings { display: flex; flex-direction: column; gap: 0.4rem; }
+.zh-which .zh-line::after {
+  content: ""; position: absolute; right: -1px; top: -6px;
+  border-left: 8px solid var(--zp-accent); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+}
 .zh-top { font-family: var(--zp-sans); font-size: 0.9rem; border-style: dashed; color: var(--zp-accent); }
 
 .zh-why { margin: 0; display: grid; gap: 0.35rem; }
 .zh-why div { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 0.6rem; align-items: baseline; }
 .zh-why dt { font: 500 0.8rem var(--zp-sans); color: var(--zp-accent); }
-.zh-why div + div dt { color: var(--zp-warn); }
+.zh-why .zh-not dt { color: var(--zp-warn); }
 .zh-why dd { margin: 0; font-size: 0.96rem; line-height: 1.45; }
 .zh-call { margin: 0; font: italic 400 1rem var(--zp-serif); color: var(--zp-muted); }
 
@@ -67,7 +74,7 @@
   .zh-unlink .zh-line { border-top: 0; border-left: 2px dashed var(--zp-faint); }
   .zh-link .zh-line::before { left: -5px; top: -4px; }
   .zh-link .zh-line::after { left: -5px; right: auto; top: auto; bottom: -4px; }
-  .zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after {
+  .zh-move .zh-line::after, .zh-rename .zh-line::after, .zh-own-place .zh-line::after, .zh-which .zh-line::after {
     right: auto; left: -6px; top: auto; bottom: -1px;
     border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--zp-accent); border-bottom: 0;
   }
