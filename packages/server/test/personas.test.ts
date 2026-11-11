@@ -17,6 +17,7 @@ import {
   OPEN_LOOPS,
   parseRecapReply,
   PEOPLE_FOLLOW_UPS,
+  PATTERNS_AND_IDEAS,
   SOMETHING_TO_TRY,
   TOPIC_GARDENER,
   WEEKLY_RECAP,
@@ -447,7 +448,7 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
         ["weekly-recap", false, null], ["open-loops", false, null], ["people-follow-ups", false, null],
-        ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["memory-health", false, null], ["clarifier", false, null],
+        ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["patterns-and-ideas", false, null], ["memory-health", false, null], ["clarifier", false, null],
       ]);
       // E23-A2: a new account starts with every helper off; the user switches one on.
       const on = await (await app.request("/api/console/personas/weekly-recap", { method: "POST", body: JSON.stringify({ enabled: true }), headers: { "content-type": "application/json" } })).json() as { personas: Array<{ enabled: boolean }> };
@@ -499,8 +500,8 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     entry(16, "2026-11-06", "Only one this week"),
   ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 
-  it("lists eight personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
-    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Health of your memory", "Clarifier"]);
+  it("lists nine personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
+    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Patterns and ideas", "Health of your memory", "Clarifier"]);
     expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual([]);
     for (const persona of BUILT_IN_PERSONAS) {
       expect(persona.purpose.length).toBeGreaterThan(10);
@@ -651,6 +652,76 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     owner.setEnabled("something-to-try", false);
     expect(owner.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
     expect(owner.enabled("something-to-try")).toBe(false);
+  });
+
+  it("Patterns and ideas names one pattern gently with one idea research supports, as a why yes, why not card (S41)", async () => {
+    const voice = (n: number, day: string, words: string): MemoryEntry => ({ ...entry(n, day, `Voice note "p${n}.ogg" ingested`), contentType: "voice_note", content: `Voice note "p${n}.ogg" ingested through Zenod media seam.\nSource: WhatsApp voice note\n\n${words}` });
+    const entries = [
+      voice(1, "2026-11-07", "Lying awake again going over the launch."),
+      voice(2, "2026-11-04", "I keep replaying the call with the bank at night."),
+      entry(3, "2026-11-03", "Buy milk"),
+      voice(4, "2026-10-30", "Same thing, my head runs through tomorrow when I try to sleep."),
+    ];
+    const pattern = { noticed: "Your worries seem to visit at bedtime, when you try to sleep.", idea: "Try writing tomorrow's worries on paper for ten minutes in the early evening.", known: "a worry window", source: "Studied by Borkovec and colleagues in the 1980s.", yes: "It gives the thoughts a time and place that is not your pillow.", no: "If the evenings are already full, it may feel like one more chore.", sources: [1, 2, 3] };
+    const stub = stubModel(JSON.stringify({ pattern }));
+    const { deps: d, inbox, written } = deps({ model: () => stub.model, entries, now: () => new Date("2026-11-08T03:00:00Z") });
+    expect(await runPersona(PATTERNS_AND_IDEAS, d, "manual")).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 3 notes and offered one idea" });
+    // Voice notes first, two weeks back; it is told to stay gentle and quiet on distress.
+    expect(stub.calls[0]!.prompt).toContain("my head runs through tomorrow");
+    expect(stub.calls[0]!.prompt).not.toContain("Buy milk");
+    expect(stub.calls[0]!.system).toContain("Never diagnose");
+    expect(stub.calls[0]!.system).toContain("real distress");
+    const card = inbox.list()[0]!;
+    expect(card).toMatchObject({ kind: "finding", from: "Patterns and ideas", title: pattern.idea, body: `${pattern.noticed}\n\nKnown as a worry window. ${pattern.source}`, card: { picture: null, yes: pattern.yes, no: pattern.no } });
+    expect(card.links.map((l) => l.path)).toEqual(["Log/2026-11-07.md", "Log/2026-11-04.md", "Log/2026-10-30.md", "Personas/patterns-and-ideas/2026-11-08.md"]);
+    expect(written[0]!.files[0]!.content).toContain("## Idea\n\nTry writing tomorrow's worries");
+
+    // The next day it waits: at most one card every few days, even when run by hand.
+    const memory = { ...fakeMemory(entries), async get(path: string) {
+      if (path === "Personas/patterns-and-ideas/2026-11-08.md") return { path, frontmatter: {}, body: written[0]!.files[0]!.content, url: "", provider: "github" as const };
+      throw new Error("no note");
+    } };
+    const soon = stubModel(JSON.stringify({ pattern }));
+    const next = deps({ model: () => soon.model, entries, memory, now: () => new Date("2026-11-09T03:00:00Z") });
+    expect(await runPersona(PATTERNS_AND_IDEAS, next.deps, "manual")).toMatchObject({ status: "done", summary: "Posted a card 1 day ago, waits" });
+    expect(soon.calls).toHaveLength(0);
+    // Three days on it reads again and is told to offer a different idea.
+    const later = stubModel(JSON.stringify({ pattern: null }));
+    const again = deps({ model: () => later.model, entries, memory, now: () => new Date("2026-11-11T03:00:00Z") });
+    expect(await runPersona(PATTERNS_AND_IDEAS, again.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes, no pattern" });
+    expect(later.calls[0]!.prompt).toContain("Offer a different one:\n- Try writing tomorrow's worries");
+  });
+
+  it("Patterns and ideas stays quiet on distress and leaves out clinical words (S41)", async () => {
+    const voice = (n: number, day: string, words: string): MemoryEntry => ({ ...entry(n, day, `Voice note "q${n}.ogg" ingested`), contentType: "voice_note", content: words });
+    const hard = [voice(1, "2026-11-07", "Some days it feels hopeless."), voice(2, "2026-11-05", "Busy week."), voice(3, "2026-11-04", "Long ride.")];
+    const quiet = stubModel(JSON.stringify({ pattern: null }));
+    const one = deps({ model: () => quiet.model, entries: hard });
+    expect(await runPersona(PATTERNS_AND_IDEAS, one.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes, stayed quiet" });
+    expect(quiet.calls).toHaveLength(0);
+    expect(one.inbox.list()).toHaveLength(0);
+    expect(one.written[0]!.files[0]!.content).not.toContain("hopeless");
+
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const calm = [voice(1, "2026-11-07", "Lying awake again."), voice(2, "2026-11-05", "Awake at 3am."), voice(3, "2026-11-04", "Bad sleep.")];
+    const clinical = { noticed: "This looks like an anxiety pattern.", idea: "Try a breathing exercise.", known: "box breathing", source: "Used widely.", yes: "Calming.", no: "Takes practice.", sources: [1, 2] };
+    const two = deps({ entries: calm, model: () => stubModel(JSON.stringify({ pattern: clinical })).model });
+    expect(await runPersona(PATTERNS_AND_IDEAS, two.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes, no pattern; left out one because the words were too clinical" });
+    expect(two.inbox.list()).toHaveLength(0);
+  });
+
+  it("Patterns and ideas is off for a new account and on for an account that used helpers before (S41)", () => {
+    expect(PATTERNS_AND_IDEAS.defaultEnabled).toBe(false);
+    expect(PATTERNS_AND_IDEAS.schedule).toEqual({ every: "days", days: 3 });
+    const fresh = new PersonaStore(join(dir, "fresh.sqlite"));
+    expect(fresh.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    const owner = new PersonaStore(join(dir, "owner.sqlite"), () => new Date("2026-11-05T03:00:00Z"));
+    owner.setEnabled("open-loops", true);
+    expect(owner.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE)).toBe(true);
+    owner.setEnabled("patterns-and-ideas", false);
+    expect(owner.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    expect(owner.enabled("patterns-and-ideas")).toBe(false);
   });
 
   it("Topic gardener suggests one tidy-up as a suggestion card and changes nothing itself (S27)", async () => {

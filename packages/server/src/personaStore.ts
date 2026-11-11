@@ -292,6 +292,8 @@ export function personasFor(runtime: { readonly dataDir: string }): PersonaStore
     store.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE);
     // EPIC-14 S38: Something to try comes switched on for those same accounts (the owner's), off for testers.
     store.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE);
+    // EPIC-14 S41: Patterns and ideas the same way: on for the owner's account, off for testers.
+    store.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE);
     stores.set(runtime.dataDir, store);
   }
   return store;
