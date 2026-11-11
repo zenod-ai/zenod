@@ -39,6 +39,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# The suite times every filing (three minutes on the real notes): on a box loaded far past its cores every
+# filing runs out of time and the gate fails on load, not on the build (EPIC-24 M11). Wait for a quiet box,
+# at most ZENOD_GATE_QUIET_WAIT seconds, then run anyway and say how loaded it was.
+quiet() { # what
+  local cores waited=0 limit=${ZENOD_GATE_QUIET_WAIT:-1200}
+  cores=$(nproc)
+  while awk -v c="$cores" '{ exit !($1 > c) }' /proc/loadavg && [ "$waited" -lt "$limit" ]; do
+    [ "$waited" = 0 ] && echo "gate: waiting for a quiet box before the $1 set (load $(cut -d' ' -f1 /proc/loadavg), $cores cores)"
+    sleep 30; waited=$((waited + 30))
+  done
+  awk -v c="$cores" '{ exit !($1 > c) }' /proc/loadavg && echo "gate: box still busy (load $(cut -d' ' -f1 /proc/loadavg)); the $1 set's times may fail on load" || true
+}
 health_sha() { curl -fsS -m 15 "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))'; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 prod_before=$(health_sha "$PROD_HEALTH" || true)
@@ -92,6 +104,7 @@ build="$work/build"
 [ -f "$build/.memory-eval-built" ] && [ "$(cat "$build/.memory-eval-built")" != "$sha" ] && { git -C "$REPO" worktree remove --force "$build" 2>/dev/null || rm -rf "$build"; }
 nice -n 10 bash "$suite/build-at.sh" "$REPO" "$sha" "$build" "$DEPS" >/dev/null
 s7=${sha:0:7}
+quiet demo
 nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset demo --sha "$s7" --label "staging $s7" \
   --out "$work/runs/demo-$s7.json" --floor "$suite/floor.json" 2>&1 | grep -E '^ingestion|below its floor'
 gate=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["record"]; print(json.dumps({"demo":[r.get(k) for k in ("ingestionSuccess","retrievalEfficiency","errorRate")]}))' "$work/runs/demo-$s7.json")
@@ -99,7 +112,13 @@ VAULT_CLONE=${ZENOD_VAULT_CLONE:-/var/lib/vps3-scratch/t3agent/github/obsidian-b
 if [ -f "$EVAL/real-questions.jsonl" ] && [ -d "$VAULT_CLONE/.git" ]; then
   git -C "$VAULT_CLONE" fetch -q origin
   rev=$(git -C "$VAULT_CLONE" rev-parse --short=7 origin/main)
-  [ -d "$EVAL/vaults/$rev" ] || { mkdir -p "$EVAL/vaults/$rev"; git -C "$VAULT_CLONE" archive origin/main | tar -x -C "$EVAL/vaults/$rev"; }
+  # Copy into a temporary dir and rename it into place, so a copy cut short never stands as that revision.
+  if [ ! -d "$EVAL/vaults/$rev" ]; then
+    rm -rf "$EVAL/vaults/.$rev.partial" && mkdir -p "$EVAL/vaults/.$rev.partial"
+    git -C "$VAULT_CLONE" archive "$rev" | tar -x -C "$EVAL/vaults/.$rev.partial"
+    mv "$EVAL/vaults/.$rev.partial" "$EVAL/vaults/$rev"
+  fi
+  quiet private
   nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset private --vault "$EVAL/vaults/$rev" --vault-rev "$rev" --vault-git "$VAULT_CLONE" \
     --questions "$EVAL/real-questions.jsonl" --judged "$HOME/zenod-feedback/landing-feedback.jsonl,$EVAL/vaults/$rev/.brain/tree-corrections.jsonl" \
     --sha "$s7" --label "staging $s7" --out "$work/runs/private-$s7.json" --floor "$suite/floor.json" 2>&1 | grep -E '^ingestion|below its floor'

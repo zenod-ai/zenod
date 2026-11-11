@@ -114,6 +114,7 @@ async function loadCheckout(checkout) {
   const ranked = await tryImport("packages/server/dist/rankedMemory.js");
   const mcp = await tryImport("packages/server/dist/mcp.js");
   const recent = await tryImport("packages/core/dist/vault/recentIntent.js");
+  const recovery = await tryImport("packages/server/dist/vaultRecovery.js");
   const req = createRequire(join(checkout, "packages/server/package.json"));
   let sdk = null;
   try {
@@ -121,7 +122,57 @@ async function loadCheckout(checkout) {
     const mem = await import(pathToFileURL(req.resolve("@modelcontextprotocol/sdk/inMemory.js")).href);
     sdk = { Client: client.Client, InMemoryTransport: mem.InMemoryTransport };
   } catch { sdk = null; }
-  return { core, chat, ranked, mcp, sdk, recentIntent: recent?.recentIntent ?? null };
+  return { core, chat, ranked, mcp, sdk, recentIntent: recent?.recentIntent ?? null, recovery };
+}
+
+// ---------- vault recovery, as production does it (EPIC-24 M11) ----------
+
+// Production never leaves a vault blocked: a write refused with filing_recovery_pending makes the server run
+// recoverInterruptedFiling (packages/server/src/vaultRecovery.ts), which replays the interrupted filing from its
+// job, then retries the refused job. The suite does the same, so one failed filing counts once instead of
+// refusing every later store in the run (the 2026-11-11 gate: one conflict became 9 agent errors).
+const enrichInputs = new Map();
+const recoveries = { ran: 0, recovered: 0, unresolved: 0 };
+const isRecoveryPending = (error) => /filing_recovery_pending/.test(error instanceof Error ? error.message : String(error));
+
+async function recoverVault(mods, engine) {
+  if (!mods.recovery?.recoverInterruptedFiling || !engine.inspectInterruptedFiling) return false;
+  recoveries.ran++;
+  const replays = [];
+  const outcome = await mods.recovery.recoverInterruptedFiling({
+    store: { requeueFilingRecoveryBlocked: () => 0, enrichmentJobsFor: () => [], requeueForRecovery: () => false },
+    getEngine: async () => engine,
+    // Production replays a known job's own input; the suite keeps each note's input for the same reason.
+    enqueue: (kind, input, key) => {
+      const job = { id: key ?? `recovery-${replays.length}`, kind, status: "running" };
+      replays.push(engine.enrichEvidence(enrichInputs.get(input.evidenceRef) ?? input).then(() => { job.status = "done"; }, () => { job.status = "error"; }));
+      return job;
+    },
+    kick: () => {}, isClosed: () => false, pollMs: 500, timeoutMs: FILING_LIMIT_MS,
+  });
+  await Promise.allSettled(replays);
+  const ok = outcome.status === "recovered" || outcome.status === "clean";
+  recoveries[ok ? "recovered" : "unresolved"]++;
+  return ok;
+}
+
+/** Run a vault write; when the vault guard refuses it, recover as production does and retry it once. */
+async function healing(mods, engine, write) {
+  try { return await write(); } catch (error) {
+    if (!isRecoveryPending(error) || !(await recoverVault(mods, engine))) throw error;
+    return write();
+  }
+}
+
+/** Capture, then enrich (twice when the first run leaves the filing pending), recovering a blocked vault first. */
+async function captureAndFile(mods, engine, input) {
+  const captured = await healing(mods, engine, () => engine.captureEvidence(input));
+  const enrichInput = { ...input, evidenceRef: captured.evidenceRef };
+  enrichInputs.set(captured.evidenceRef, enrichInput);
+  let enriched = await healing(mods, engine, () => engine.enrichEvidence(enrichInput));
+  // Production re-queues a pending filing once (taskJobStore resumePending); the second run is the final attempt.
+  if (enriched.filing === "pending") enriched = await healing(mods, engine, () => engine.enrichEvidence(enrichInput));
+  return { ...enriched, evidenceRef: enriched.evidenceRef ?? captured.evidenceRef };
 }
 
 async function openVault(mods, vaultSrc, model, timeZone = null) {
@@ -261,13 +312,7 @@ async function filingSuite(mods, ctx, notes) {
     const refused0 = ctx.model?.calls?.refused ?? 0;
     try {
       result = await withLimit((async () => {
-        if (engine.captureEvidence && engine.enrichEvidence) {
-          const captured = await engine.captureEvidence(input);
-          let enriched = await engine.enrichEvidence({ ...input, evidenceRef: captured.evidenceRef });
-          // Production re-queues a pending filing once (taskJobStore resumePending); the second run is the final attempt.
-          if (enriched.filing === "pending") enriched = await engine.enrichEvidence({ ...input, evidenceRef: captured.evidenceRef });
-          return { ...enriched, evidenceRef: enriched.evidenceRef ?? captured.evidenceRef };
-        }
+        if (engine.captureEvidence && engine.enrichEvidence) return captureAndFile(mods, engine, input);
         return engine.store(input);
       })(), FILING_LIMIT_MS, "filing");
     } catch (e) { error = e instanceof Error ? e.message : String(e); }
@@ -306,7 +351,7 @@ async function filingSuite(mods, ctx, notes) {
  * (landing-feedback.jsonl from the trial page). A note passes when it is stored, written on a meaning page that
  * cites it, linked, in time, and not filed on a page they said was wrong for it.
  */
-async function judgedFilingSuite(ctx, judgedFile) {
+async function judgedFilingSuite(mods, ctx, judgedFile) {
   const { engine, vault } = ctx;
   // Several files, comma separated: the trial page's answers and the app's own checks (E12-S27).
   const judged = judgedFile.split(",").filter((file) => existsSync(file)).flatMap((file) => readSet(file)).filter((r) => r.type === "answer" && r.note_id);
@@ -337,12 +382,7 @@ async function judgedFilingSuite(ctx, judgedFile) {
     const started = performance.now();
     let result = null; let error = null;
     try {
-      result = await withLimit((async () => {
-        const captured = await engine.captureEvidence(input);
-        let enriched = await engine.enrichEvidence({ ...input, evidenceRef: captured.evidenceRef });
-        if (enriched.filing === "pending") enriched = await engine.enrichEvidence({ ...input, evidenceRef: captured.evidenceRef });
-        return { ...enriched, evidenceRef: enriched.evidenceRef ?? captured.evidenceRef };
-      })(), FILING_LIMIT_MS, "filing");
+      result = await withLimit(captureAndFile(mods, engine, input), FILING_LIMIT_MS, "filing");
     } catch (e) { error = e instanceof Error ? e.message : String(e); }
     const ms = Math.round(performance.now() - started) + (ctx.model?.takeReplayedMs?.() ?? 0);
     if (refusedSince(ctx.model, refused0)) { rows.push({ id, skipped: "live cap reached" }); continue; }
@@ -371,8 +411,11 @@ async function agentSuite(mods, ctx, items) {
     const row = { id: item.id, stored: false, got: false, found: false, rank: null, ms: null, error: null, ...(item.ask ? { asked: null } : {}) };
     const started = performance.now();
     try {
-      const put = await withLimit(client.callTool({ name: "store_memory", arguments: { content: item.store, ...(item.source ? { source: item.source } : {}) } }), FILING_LIMIT_MS, "store_memory");
-      if (put.isError) throw new Error(`store_memory: ${put.content?.[0]?.text ?? "error"}`);
+      const put = await healing(mods, ctx.engine, async () => {
+        const put = await withLimit(client.callTool({ name: "store_memory", arguments: { content: item.store, ...(item.source ? { source: item.source } : {}) } }), FILING_LIMIT_MS, "store_memory");
+        if (put.isError) throw new Error(`store_memory: ${put.content?.[0]?.text ?? "error"}`);
+        return put;
+      });
       const ref = put.structuredContent?.evidenceRef;
       row.stored = Boolean(ref);
       if (ref) {
@@ -525,7 +568,7 @@ async function main() {
     const nowById = new Map(now.map((row) => [row.id, row]));
     suites.questions = set.map((item) => timeRows.get(item.id) ?? nowById.get(item.id));
     const judged = opt("judged");
-    if (judged && judged.split(",").some((file) => existsSync(file)) && ctx.engine.captureEvidence) suites.filing = await judgedFilingSuite(ctx, judged);
+    if (judged && judged.split(",").some((file) => existsSync(file)) && ctx.engine.captureEvidence) suites.filing = await judgedFilingSuite(mods, ctx, judged);
     if (!skip.has("agent")) suites.agent = await agentSuite(mods, ctx, readSet(join(HERE, "demo", "agent.jsonl")));
   } else throw new Error(`unknown dataset ${dataset}`);
 
@@ -538,7 +581,7 @@ async function main() {
   const record = {
     at: new Date().toISOString(), dataset, vault: vaultLabel, sha, label: opt("label") ?? sha, model: live ? model.model : "stand-in",
     ...(slice || skip.size ? { slice: { questions: slice ?? "all", skip: [...skip] } } : {}),
-    seconds: Math.round((Date.now() - t0) / 1000), modelCalls: model.calls, ...(live ? { live: { ...model.summary(), notRun: skipped } } : {}), ...summary,
+    seconds: Math.round((Date.now() - t0) / 1000), modelCalls: model.calls, ...(recoveries.ran ? { vaultRecoveries: recoveries } : {}), ...(live ? { live: { ...model.summary(), notRun: skipped } } : {}), ...summary,
   };
   const out = opt("out");
   if (out) writeFileSync(out, JSON.stringify({ record, suites }, null, 2));
