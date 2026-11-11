@@ -1,0 +1,11 @@
+[Unit]
+Description=Zenod scheduled production promote, one tick (EPIC-24 M12, root D28)
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=idle
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The tick as on origin/main, so a merged change is used on the next tick (like zenod-memory-tests).
+ExecStart=/bin/bash -c 'git -C /var/lib/vps3-scratch/t3agent/github/zenod fetch -q origin main && git -C /var/lib/vps3-scratch/t3agent/github/zenod show origin/main:scripts/promote-schedule/tick.py > %h/zenod-eval/promote-tick.py && python3 %h/zenod-eval/promote-tick.py'
+TimeoutStartSec=5700
