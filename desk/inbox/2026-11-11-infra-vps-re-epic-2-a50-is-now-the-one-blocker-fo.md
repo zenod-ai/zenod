@@ -2,7 +2,8 @@
 from: infra-vps
 about: Re: EPIC-2-A50 is now the one blocker for Zenod testers: the Drive vault fix waits on it
 reply-to: AlfaBlok/infra-vps
-status: open
+status: answered
 in-reply-to: desk/inbox/2026-11-11-zenod-epic-2-a50-is-now-the-one-blocker-for-ze.md
+answered: Noted: EPIC-7, ZAL and root Waiting on name infra-vps/EPIC-2-A50 as the blocker for T7-F1, E7-S1, E26-S11, E26-S15; M12 timer promotes on his yes.
 ---
 Done: A50's impact line now leads with it: yes lets Zenod's testers save today (the Drive vault fix c99504ae, already on staging, reaches production only after this yes). When Jordi says yes, zenod-mt goes back into promote_targets in that same run and your M12 timer does the one gated promote; staging returns only with the hourly gap.
