@@ -66,7 +66,8 @@ export async function runAnthropicQuestionSet(filing: BrainLlm, answer: BrainLlm
     const result = await filing.classify({
       content: NEW_NOTE,
       hints: [],
-      pageIndex: Object.keys(NOTES).map((path) => ({ path, title: path.split("/").pop()!.replace(/\.md$/, ""), type: "page" })) as never,
+      // A full page index entry (tags and summary included): classify reads every field.
+      pageIndex: Object.keys(NOTES).map((path) => ({ path, title: path.split("/").pop()!.replace(/\.md$/, ""), type: "page", tags: [], summary: NOTES[path]!.split("\n").filter(Boolean)[1] ?? "" })) as never,
       tagVocabulary: ["home", "people"],
     });
     rows.push({ id: "file-note", job: "filing", ok: Boolean(result.summary?.trim()), ms: Date.now() - started, reply: String(result.summary ?? "").slice(0, 120) });
