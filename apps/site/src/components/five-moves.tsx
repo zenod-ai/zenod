@@ -313,10 +313,11 @@ export const FiveMoves = React.memo(function FiveMoves() {
         </p>
         <p>
           Others suggest a tidy-up, and you answer Do it or Not now from your
-          inbox. Every helper starts off, and you switch on the ones you want.
+          inbox.
         </p>
         <p>
-          Helpers are still being built. Your memory works fully without them.
+          Helpers are still being built, so they stay off for now. Your memory
+          works fully without them.
         </p>
       </Move>
 
