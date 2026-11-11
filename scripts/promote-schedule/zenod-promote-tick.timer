@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly: promote staging's sha to Zenod production when the gate passes (EPIC-24 M12)
+
+[Timer]
+# Off the quarter hours (VPS1's poller and the other timers sit on them). The tick itself enforces
+# one promote per hour, batching, quiet hours and infra-vps's pause.
+OnCalendar=*-*-* *:41:00
+RandomizedDelaySec=120
+Persistent=false
+
+[Install]
+WantedBy=timers.target
