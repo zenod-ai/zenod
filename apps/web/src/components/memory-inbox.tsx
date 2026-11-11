@@ -766,7 +766,8 @@ function InboxCard({
         {item.needsYou ? <span className="zi-new">New</span> : null}
       </p>
       <p className="zi-what">{item.title}</p>
-      {item.body && !item.followUpOf ? (
+      {/* S36: with a card, the body (what the team said) is a note under its reasons. */}
+      {item.body && !item.followUpOf && !item.card ? (
         <p className="zi-body">{item.body}</p>
       ) : null}
       {item.followUpOf ? (
@@ -783,7 +784,11 @@ function InboxCard({
       ) : null}
 
       {item.card ? (
-        <HelperCardView card={item.card} open={item.status === "open"} />
+        <HelperCardView
+          card={item.card}
+          open={item.status === "open"}
+          note={item.followUpOf ? null : item.body}
+        />
       ) : null}
 
       {item.kind === "suggestion" ? (

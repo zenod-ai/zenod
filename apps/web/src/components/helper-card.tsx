@@ -65,13 +65,18 @@ function Which({ from, meanings }: { from: string; meanings: string[] }) {
   )
 }
 
-/** The card's picture, its reasons and "Make your call", while the call is still open. */
+/**
+ * The card's picture, its reasons and "Make your call", while the call is still open. `note` is any
+ * longer context (what the team said): small, under the reasons, so it never hides the picture.
+ */
 export function HelperCardView({
   card,
   open,
+  note = null,
 }: {
   card: HelperCard
   open: boolean
+  note?: string | null
 }) {
   return (
     <div className="zh-card" data-testid="helper-card">
@@ -96,6 +101,7 @@ export function HelperCardView({
           </div>
         ) : null}
       </dl>
+      {note ? <p className="zh-note">{note}</p> : null}
       {open ? <p className="zh-call">Make your call.</p> : null}
     </div>
   )
