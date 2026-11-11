@@ -93,10 +93,48 @@ Steps: each is independently testable and closes only with evidence. T0–T6 mus
 | T5 | Ticket worker | worker run_12d29631 | Tester wording: invite DM, checkout/welcome text and console say plainly: no payment details needed, you will not be charged, 1 month free, extended month by month while you test and give feedback, we will never charge you | done | none (wording; final codes from T4) | [#1450](https://github.com/zenod-ai/zenod/pull/1450) | main | [T5 evidence](evidence/epic7-t5-2026-11-01.md), [invite DM draft](epic7/invite-dm.md): checkout, welcome and console say no card, never charged, free until <date>, extended monthly — shown for any 100% discount (no tester mode); live fcbe434 | 2026-11-01 | Jordi reviews wording after the fact; feedback channel = reply to the invite DM; apply each extension right after renewal so the "free until" line shows |
 | T6 | Ticket worker | worker run_ca4b466d | Watching testers: one place showing per tester signup, WhatsApp linked, last Saved reply, usage vs cap, errors; feedback channel named in the invite | done | T3 code (merged); cap figure E7-A2 shown when set | [#1449](https://github.com/zenod-ai/zenod/pull/1449) | main | [T6 proof](evidence/epic7-t6-2026-11-01.md): `tester-watch` on VPS1 (1a11ef6): per tester signup, Stripe status/discount/card, WhatsApp linked, saves, usage vs cap, errors; daily hook `ssh hetzner_vps_1 tester-watch --check` (ALERT, exit 1); feedback channel proposed: reply to Jordi's invite DM | 2026-11-01 | T10 runs --check daily |
 | T7 | Tester | run_02d22167-9f74-48b6-8c89-e1d8c335c9b2 — claimed 2026-11-11T03:35Z, lease until 2026-11-11T05:35Z | Dress rehearsal as a new user: fresh Google account, own tester code, €0 checkout, WhatsApp to the Zenod production number, 3 voice notes → 3 Saved replies, all visible in the console; a test account pushed to its cap is stopped with the message; Stripe shows €0 and no card | active (feedback E7-A18 by Jordi 2026-11-11, round 2: be more specific what you want me to do - I have several claude accounts I can log the browser with operations into, and can run from cli or from claude desktop, I think with desktop easier, give me better steps on what I have to do) | E7-A9 (Jordi: use operations@alpha9.io, try it) | - | main | [T7 evidence](evidence/epic7-t7-2026-11-01.md) a45e7a3: public path up to Google sign-in works (screenshots); stopped at step 1: no agent-usable Google login (Team Browser has none and cannot type; T3 browser blocked by VPS3 AppArmor; no test Google account; Jordi's two accounts already have €0 tenants); 2026-11-02 [T7 retry](evidence/epic7-t7-2026-11-02.md) 9f615dc: T3 browser enabled on VPS3 (one AppArmor profile, revert in evidence), paused at Google password for operations@alpha9.io; nothing written to prod | 2026-11-02 | waits on E7-A11 (Jordi signs in once); then steps 2–6 |
+| T7-M1 | Mac agent | Jordi's Mac (Claude app, any of his Claude accounts) | Sign the team Google account operations@alpha9.io into the agents' sign-in browser on VPS3 (ticket below), the drivable browser T7, the Glama claim and the WebMCP token run in | ready | - | - | main | [T7 round 2](evidence/epic7-t7-r2-2026-11-11.md): VPS3 browser on Google's sign-in page, no Google session (checked 2026-11-11T03:37Z); Team Browser on VPS1 has no Google site either | 2026-11-11 | Jordi runs the ticket from the Mac list (ask E7-A19); done when the status page says signed-in-headless-ok |
 | T8 | Operator | Jordi | Go / no-go for inviting | draft | T7 | - | - | none | 2026-10-27 | ask Jordi with T7's evidence |
 | T9 | Recruiter (zenod-social) | zenod-social Responder | Invite 5 by DM, each with their own code and the T5 text, from those who already answered on Reddit (Browerma, documentordie, WillowEmberly, UpSash, Relevant-Problem-794; FragrantBox4293, Ok-Car6047 unread) (E7-2) | draft | T8 | - | - | zenod-social data/posts-ledger.md rows 7–21 | 2026-10-27 | signal zenod-social after T8 |
 | T10 | Delivery manager | Delivery manager | Run the test: daily check per tester (T6), feedback logged, month-end extend/end decision per tester (E7-2..4) | draft | T9 | - | - | none | 2026-10-27 | starts with the first signup |
 | T11 | Delivery manager | Delivery manager | Answer Jordi definitively: why is Zenod not live, and why are we not getting testers now? (agent_team EPIC-73 / Jordi's 7 Nov note) | draft | none | - | - | [Jordi's 7 Nov note](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-07.md#%5Ee-5fc46c); [agent_team E73-S2 map](https://github.com/AlfaBlok/agent_team/blob/main/docs/status/e73-s2-tickets.md) item 33; facts read 2026-11-07: T0–T6 done (caps T3, codes T4 live), T7 blocked on one Google sign-in (E7-A15), T8 go/no-go not started; zenod-social E6-S4 (testers now) waits on this path | 2026-11-07 | Jordi readies it (or says not now) |
+
+## Laptop tickets
+
+A row whose Role is `Mac agent` (label `needs Mac agent`) is done by Claude on Jordi's Mac, never by a server worker. agent_team `scripts/laptop_ticket.py` turns the section below into its ticket page and puts it on the Mac list http://vps3.taild81fbb.ts.net:9196/mac/.
+
+### Laptop ticket T7-M1
+
+Title: Sign the team Google account into the agents' browser
+Task: In Jordi's Chrome, open the team sign-in page below and press Open the agents' browser. In that remote window, which runs on the team's server, sign in to Google as operations@alpha9.io: you type the email, Jordi types the password from his Bitwarden and any 2-step code. Then wait until the status page says signed-in-headless-ok. Nothing is signed in to Jordi's own Chrome.
+Minutes: 10
+Order: 20
+Profile: alpha9.io
+Ask: E7-A19
+Sites:
+- http://vps3.taild81fbb.ts.net:8921/t7-signin/
+- http://vps3.taild81fbb.ts.net:6081/
+- http://vps3.taild81fbb.ts.net:8921/t7-signin/status.txt
+Details:
+- The sign-in page and the remote window are on the tailnet only. If either does not open, Tailscale is off on this Mac: ask Jordi to switch Tailscale on, then reload.
+- The button opens a remote browser window (noVNC) showing Google's Sign in page. It is the browser the agents drive on VPS3, so which Chrome profile or Claude account you run in does not matter.
+- In the remote window click the Email or phone box, type operations@alpha9.io and press Next.
+- At the password box stop and hand over to Jordi: he copies the operations@alpha9.io password from Bitwarden and types or pastes it in the remote window. If a paste does not arrive, open the small tab on the left edge of the remote window, choose Clipboard, paste the password into that box, then click the password field and press Control and V.
+- If Google asks for a 2-step code or a phone prompt, Jordi answers it on his phone.
+- If Google offers extras (recovery phone, a passkey, Chrome sync, Not now), choose Not now or Skip.
+- About 90 seconds after the sign-in the remote window disconnects by itself. That is expected: the server has the session and closes the window.
+- Then open the status page. It says waiting before the sign-in, signing-in during it, and signed-in-headless-ok when the server has proved the session. Reload every 30 seconds for up to 4 minutes. Anything starting not-ok or error means stuck: report it word for word.
+Done looks like:
+- The status page says signed-in-headless-ok.
+- The report names Google's last screen before the window closed, for example the Google Account page or Welcome.
+By hand:
+- The operations@alpha9.io password from Bitwarden, typed or pasted by Jordi.
+- The 2-step code or phone prompt, if Google asks for one.
+- Switching Tailscale on, if the page does not open.
+Never also:
+- Never sign in to Google in Jordi's own Chrome, and never sign out of any account there.
+- Never change the account's password, recovery phone, recovery email or 2-step settings, even if Google suggests it.
+- Never read, copy or describe a password, a code or a cookie.
 
 ## Decisions
 
