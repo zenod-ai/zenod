@@ -68,7 +68,7 @@
       "E14-S28",
       "E14-S29"
      ],
-     "since": "2026-11-10",
+     "since": "2026-11-11",
      "draft": true
     }
    ]
@@ -110,9 +110,9 @@
      "draft": true
     },
     {
-     "id": "tester-month-renews-or-ends",
-     "title": "Your free test month renews or ends by itself",
-     "text": "If you used Zenod in the last two weeks, the next month of your free test is free too, with no card. If you did not, the free month just ends: nothing is charged, your notes stay in your own Drive or GitHub, and you can come back or keep going for €9 a month.",
+     "id": "tester-free-month",
+     "title": "One free test month, never charged",
+     "text": "A tester gets one free month with no card. It ends by itself, and more free months come only when the team adds them, one at a time. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
      "rows": [
       "E26-S5"
      ],
