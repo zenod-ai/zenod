@@ -6,11 +6,12 @@
 // Checkout completes on two paths (the return page and Stripe's webhook), and Stripe
 // retries webhooks, so the queue is keyed by account id in a private file on the data
 // volume: the first call queues, every later call is a no-op, a failed send retries every
-// 10 minutes. Off unless ZENOD_WELCOME_MAIL=1 and Zenod's own Google mail key is set, so
-// it never claims "reply to me" from a mailbox that is not Jordi's.
+// 10 minutes. Off unless ZENOD_WELCOME_MAIL=1, and nothing goes out before Jordi connects
+// the mail sender as jordi@zenod.dev (E26-S11), so it never claims "reply to me" from a
+// mailbox that is not his.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mailerFromEnv, type SendMail, type ZenodMail } from "./zenodMail.js";
+import { mailerFromEnv, mailReady, type SendMail, type ZenodMail } from "./zenodMail.js";
 
 export const WELCOME_MAIL_FILE = "welcome-mail.json";
 const RETRY_MS = 10 * 60 * 1000;
@@ -179,7 +180,7 @@ export class WelcomeMailer {
 
   private async step(): Promise<void> {
     const send = this.options.sendMail;
-    if (!send) return;
+    if (!mailReady(send)) return;
     for (const [accountId, record] of Object.entries(this.read().accounts)) {
       if (record.sentAt || (record.tries ?? 0) >= MAX_TRIES) continue;
       try {
@@ -207,12 +208,12 @@ export class WelcomeMailer {
   }
 }
 
-/** Production: on only with ZENOD_WELCOME_MAIL=1 and Zenod's own Google mail key. */
+/** Production: on only with ZENOD_WELCOME_MAIL=1; it sends once Jordi has connected the mail sender (E26-S11). */
 export function welcomeMailerFromEnv(dataDir: string, env: NodeJS.ProcessEnv, sendMail: SendMail | null = null): WelcomeMailer {
-  const on = env.ZENOD_WELCOME_MAIL === "1" && Boolean(env.GOOGLE_MAIL_SERVICE_ACCOUNT_JSON?.trim());
+  const on = env.ZENOD_WELCOME_MAIL === "1";
   return new WelcomeMailer({
     dataDir,
-    sendMail: on ? sendMail ?? mailerFromEnv(env) : null,
+    sendMail: on ? sendMail ?? mailerFromEnv(env, { dataDir }) : null,
     appUrl: (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, ""),
   });
 }

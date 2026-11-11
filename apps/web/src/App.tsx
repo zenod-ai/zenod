@@ -419,6 +419,12 @@ export function ZenodAdmin() {
           >
             Testers and daily counts: who applied, with their emails →
           </a>
+          <a
+            className="w-fit text-sm font-medium underline underline-offset-4"
+            href="/admin/mail"
+          >
+            Mail sender: connect the address tester emails come from →
+          </a>
         </header>
         {!overview && !error && (
           <div className="flex min-h-48 items-center justify-center">

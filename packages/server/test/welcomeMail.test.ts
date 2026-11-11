@@ -78,13 +78,21 @@ describe("welcome email after checkout (EPIC-26 T2)", () => {
     expect(welcome.counts()).toEqual({ enabled: true, queued: 0, sent: 1, failing: 0 });
   });
 
-  it("is on in production only with its switch and Zenod's own Google mail key", () => {
+  it("is on in production only with its switch, and sends only once the mail sender is connected", async () => {
     const dir = mkdtempSync(join(tmpdir(), "zenod-welcome-"));
     const stub = async () => {};
     expect(welcomeMailerFromEnv(dir, {}, stub).enabled).toBe(false);
-    expect(welcomeMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1" }, stub).enabled).toBe(false);
-    expect(welcomeMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1", RESEND_API_KEY: "re_x" }, stub).enabled).toBe(false);
-    expect(welcomeMailerFromEnv(dir, { GOOGLE_MAIL_SERVICE_ACCOUNT_JSON: "{}" }, stub).enabled).toBe(false);
-    expect(welcomeMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1", GOOGLE_MAIL_SERVICE_ACCOUNT_JSON: "{}" }, stub).enabled).toBe(true);
+    expect(welcomeMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1" }).enabled).toBe(false);
+    expect(welcomeMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1" }, stub).enabled).toBe(true);
+    // E26-S11: with Zenod's Google client the welcome queues, and waits until Jordi connects the sender.
+    const google = { ZENOD_WELCOME_MAIL: "1", GOOGLE_OAUTH_CLIENT_ID: "c", GOOGLE_OAUTH_CLIENT_SECRET: "s", CHASSIS_VAULT_MASTER_KEY: "k".repeat(64) };
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const waiting = welcomeMailerFromEnv(dir, google);
+    expect(waiting.queue("acct_1", "ada@example.test")).toBe("queued");
+    await waiting.process();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(waiting.counts()).toEqual({ enabled: true, queued: 1, sent: 0, failing: 0 });
+    fetchSpy.mockRestore();
   });
+
 });

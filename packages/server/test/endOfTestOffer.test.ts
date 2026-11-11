@@ -69,16 +69,16 @@ describe("end-of-test offer (EPIC-26 S13)", () => {
       await rm(dir, { recursive: true, force: true });
     });
 
-    it("stays off without the welcome mail's switch and key", () => {
+    it("stays off without the welcome mail's switch or any mail sender", () => {
       const mailer = offerMailerFromEnv(dir, {}, async () => undefined);
       expect(mailer.queue("sub_t:1", "t@example.com")).toBe("off");
-      const half = offerMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1" }, async () => undefined);
+      const half = offerMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1" });
       expect(half.queue("sub_t:1", "t@example.com")).toBe("off");
     });
 
     it("sends the offer once per free month when the switch and key are set", async () => {
       const sent: ZenodMail[] = [];
-      const mailer = offerMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1", GOOGLE_MAIL_SERVICE_ACCOUNT_JSON: "{}" }, async (mail) => {
+      const mailer = offerMailerFromEnv(dir, { ZENOD_WELCOME_MAIL: "1" }, async (mail) => {
         sent.push(mail);
       });
       const data = { free_ends_ms: String(Date.UTC(2026, 11, 3)), pay_url: "https://cloud.zenod.dev/keep-zenod?a=x" };
