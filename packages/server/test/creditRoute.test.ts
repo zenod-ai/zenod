@@ -16,10 +16,10 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function runtime(options: { credit: boolean; tenantId?: string }): Runtime {
+function runtime(options: { credit: boolean; tenantId?: string; capUsd?: string }): Runtime {
   const dir = mkdtempSync(join(tmpdir(), "zenod-credit-"));
   dirs.push(dir);
-  const route = creditRouteFromEnv({ ZENOD_CREDIT_ANTHROPIC_API_KEY: "sk-ant-test", ZENOD_CREDIT_TENANTS: "tenant-a", ZENOD_CREDIT_MONTHLY_USD: "1" } as NodeJS.ProcessEnv);
+  const route = creditRouteFromEnv({ ZENOD_CREDIT_ANTHROPIC_API_KEY: "sk-ant-test", ZENOD_CREDIT_TENANTS: "tenant-a", ZENOD_CREDIT_MONTHLY_USD: options.capUsd ?? "1" } as NodeJS.ProcessEnv);
   return new Runtime(dir, undefined, {
     seedFromEnv: false,
     tenantId: options.tenantId ?? "tenant-a",
@@ -29,7 +29,7 @@ function runtime(options: { credit: boolean; tenantId?: string }): Runtime {
   });
 }
 
-function spend(rt: Runtime, provider: string, usd: number, feature?: "personas" | "calls"): void {
+function spend(rt: Runtime, provider: string, usd: number, feature?: "personas" | "calls" | "desk"): void {
   rt.usageStore.record(
     { operation: "answer", provider, model: "m", inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: usd },
     NOW,
@@ -80,11 +80,27 @@ describe("credit route limits", () => {
     spend(credit, "anthropic", 0.5);
     expect(credit.aiAllowanceStatus(NOW)!.spendUsd).toBe(0);
     expect(credit.creditStatus(NOW)).toMatchObject({ provider: "anthropic", model: "claude-haiku-5-5", spendUsd: 0.5, capUsd: 1 });
-    expect(credit.featureBlock("personas", NOW)).toBeNull();
-    spend(credit, "anthropic", 0.6);
+    expect(credit.featureBlock("chat", NOW)).toBeNull();
+    // E7-S1 round 2: the paid route's limits on credit spend: helpers pause at the 50 cent reserve,
+    // answers at the cap, filing carries on to the cap plus the 2 dollar filing overdraft.
     expect(credit.featureBlock("personas", NOW)?.reason).toBe("allowance");
+    spend(credit, "anthropic", 0.6);
     expect(credit.featureBlock("chat", NOW)).not.toBeNull();
+    expect(credit.featureBlock("filing", NOW)).toBeNull();
+    spend(credit, "anthropic", 2);
     expect(credit.featureBlock("filing", NOW)).not.toBeNull();
+  });
+
+  it("restates the tester limits on Anthropic: helpers and desk keep their own monthly share", () => {
+    const credit = runtime({ credit: true, capUsd: "3" });
+    spend(credit, "anthropic", 1, "personas");
+    expect(credit.featureBlock("personas", NOW)?.reason).toBe("share");
+    expect(credit.featureBlock("chat", NOW)).toBeNull();
+    expect(credit.featureBlock("desk", NOW)).toBeNull();
+    // Paid speech to text does not use up the Anthropic cap, and Anthropic spend does not use up the paid allowance.
+    spend(credit, "openrouter", 2.9);
+    expect(credit.featureBlock("chat", NOW)).toBeNull();
+    expect(credit.aiAllowanceStatus(NOW)!.spendUsd).toBeCloseTo(2.9, 6);
   });
 
   it("changes nothing for an account not named", () => {
