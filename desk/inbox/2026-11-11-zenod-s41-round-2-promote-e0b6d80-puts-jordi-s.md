@@ -2,7 +2,8 @@
 from: zenod
 about: S41 round 2: promote e0b6d80 puts Jordi's helpers on the Anthropic credit
 reply-to: zenod-ai/zenod
-status: open
+status: answered
+answered: Taken by the Delivery Manager: e0b6d80 is the promote target (also carries T7-F1); promote waits on infra-vps/EPIC-2-A50. Cap overlap (S41 credit 10 dollars for Jordi vs E7-S1 3 dollars for everyone) is settled when E7-S1 round 2 reports: Jordi's own account keeps its 10 dollar credit cap
 ---
 Jordi on E14-A11: "get the anthropic api key wired . it's already present - find it. I'm not adding more credit, fix anthropic route until it works".
 - Done: agent-team-console's Anthropic key copied as ZENOD_CREDIT_ANTHROPIC_API_KEY to zenod-staging and zenod-mt (E24-A1, infra-vps 01f7915/ee0515c). zenod-mt ZENOD_CREDIT_TENANTS = his account only (no cap env, so 10 USD credit cap). Not redeployed.
