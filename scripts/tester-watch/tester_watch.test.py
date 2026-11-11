@@ -194,6 +194,112 @@ class Collect(unittest.TestCase):
         self.assertIn("stripe read failed", " ".join(tw.alerts_for(rows[0] if rows[0]["label"] == "t-ana" else rows[1], NOW, 5, 80)))
 
 
+FLOW = {"paused": False, "testers": [
+    # Applied on zenod.dev/testers, got a Stripe one-time code, signed up with it (like the T7 account).
+    {"id": "t1", "email": "ana.applied@gmail.com", "appliedAt": "2026-10-20T00:00:00Z", "status": "accepted",
+     "code": "TESTER-ANA", "codeSource": "stripe"},
+    {"id": "t2", "email": "bob@gmail.com", "appliedAt": "2026-10-21T00:00:00Z", "status": "accepted",
+     "code": "ZT-BOBBOBBO", "codeSource": "local"},
+    {"id": "t3", "email": "carla@gmail.com", "appliedAt": "2026-10-22T00:00:00Z", "status": "waitlist"},
+    {"id": "t4", "email": "operations+t7@alpha9.io", "appliedAt": "2026-10-19T00:00:00Z", "status": "accepted",
+     "code": "TESTER-OPS", "codeSource": "stripe"},
+]}
+
+
+class Flow(unittest.TestCase):
+    """T7-F2: testers who apply through zenod.dev/testers, read from Zenod's tester-flow.json."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.z, self.p = build(Path(self.tmp.name))
+        (self.z / "tester-flow.json").write_text(json.dumps(FLOW))
+        self.stripe = FakeStripe({"sub_ana": sub()}, codes={"TESTER-OPS": {"code": "TESTER-OPS", "active": True,
+                                                                           "times_redeemed": 0, "expires_at": None}})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def collect(self, testers=None, env=ENV):
+        return tw.collect(self.z, self.p, env, self.stripe, testers, NOW, 24, [], tw.read_flow(self.z, env))
+
+    def test_no_flow_file_is_none(self):
+        (self.z / "tester-flow.json").unlink()
+        self.assertIsNone(tw.read_flow(self.z, ENV))
+
+    def test_applicants_listed_with_the_same_checks(self):
+        rows, problems = self.collect()
+        self.assertEqual(problems, [])
+        self.assertEqual([r["label"] for r in rows],
+                         ["operations+t7@alpha9.io", "ana.applied@gmail.com", "bob@gmail.com", "carla@gmail.com"])
+        ops, ana, bob, carla = rows
+        # Matched through the Stripe promotion code on the subscription, though the emails differ.
+        self.assertEqual(ana["account_id"], "acc-ana")
+        self.assertEqual(ana["source"], "apply")
+        self.assertEqual(ana["stripe"]["status"], "active")
+        self.assertEqual(ana["usage"]["phylax_pct"], 85.0)
+        self.assertEqual(ana["saves"]["captures_7d"], 2)
+        self.assertIn("Phylax units 85.0% of allowance", tw.alerts_for(ana, NOW, 5, 80))
+        self.assertTrue(ops["flow"]["test"])
+        self.assertFalse(ana["flow"]["test"])
+        self.assertEqual(ops["code"]["times_redeemed"], 0)
+        self.assertEqual(bob["code"], {"code": "ZT-BOBBOBBO", "source": "local", "redeemed": False})
+        self.assertEqual(carla["signup"], "waitlist")
+        out = tw.table(rows, NOW)
+        self.assertIn("operations+t7@alpha9.io (apply, test)", out)
+        self.assertIn("ana.applied@gmail.com (apply)", out)
+        self.assertIn("Zenod code, redeemed=no", out)
+        self.assertIn("waitlist", out)
+
+    def test_local_code_matches_the_redeeming_account(self):
+        flow = json.loads(json.dumps(FLOW))
+        flow["testers"][1]["redeemedBy"] = "acc-comp"
+        (self.z / "tester-flow.json").write_text(json.dumps(flow))
+        bob = next(r for r in self.collect()[0] if r["label"] == "bob@gmail.com")
+        self.assertEqual(bob["account_id"], "acc-comp")
+
+    def test_ledger_kept_and_not_doubled(self):
+        rows, _ = self.collect(testers=tw.parse_testers("Ana\tTESTER-ANA\nZed\tNOPE"))
+        labels = [r["label"] for r in rows]
+        self.assertEqual(labels[:2], ["Ana", "Zed"])
+        self.assertNotIn("ana.applied@gmail.com", labels)  # same account: one row, marked from both
+        self.assertEqual(rows[0]["source"], "ledger+apply")
+        self.assertIn("Ana (ledger, apply)", tw.table(rows, NOW))
+        self.assertEqual(len(rows), 5)
+
+    def test_operator_mark_wins_over_rule(self):
+        (self.z / "tester-marks.json").write_text(json.dumps({"marks": {"operations+t7@alpha9.io": "real",
+                                                                         "bob@gmail.com": "test"}}))
+        rows = {r["label"]: r for r in self.collect()[0]}
+        self.assertFalse(rows["operations+t7@alpha9.io"]["flow"]["test"])
+        self.assertTrue(rows["bob@gmail.com"]["flow"]["test"])
+        rows = {r["label"]: r for r in self.collect(env={**ENV, "ZENOD_TEAM_EMAILS": "Carla@gmail.com"})[0]}
+        self.assertTrue(rows["carla@gmail.com"]["flow"]["test"])
+
+    def test_redact_hides_applicant_emails_and_codes(self):
+        flow = json.loads(json.dumps(FLOW))
+        flow["testers"][1]["redeemedBy"] = "user-usr_450335af676221c44d2d4394"
+        (self.z / "tester-flow.json").write_text(json.dumps(flow))
+        rows = tw.redact(self.collect()[0])
+        out = json.dumps(rows) + tw.table(rows, NOW)
+        for leak in ("ana.applied", "gmail.com", "operations+t7", "alpha9.io", "TESTER-", "ZT-BOB",
+                     "450335af676221c4", "ana@example.com"):
+            self.assertNotIn(leak, out)
+        self.assertIn("o***@a*** (apply, test)", out)
+
+    def test_bad_flow_file_does_not_crash(self):
+        self.assertEqual(tw.parse_flow("{not json"), [])
+        self.assertEqual(tw.parse_flow(""), [])
+
+    def test_rule_matches_testermarks_ts(self):
+        src = (HERE.parents[1] / "packages/server/src/testerMarks.ts").read_text()
+        for d in tw.TEST_DOMAINS:
+            self.assertIn(f'"{d}"', src)
+        self.assertIn("(test|invalid|example|localhost)", src)
+        self.assertIn('TESTER_MARKS_FILE = "tester-marks.json"', src)
+        self.assertIn('TESTER_FLOW_FILE = "tester-flow.json"',
+                      (HERE.parents[1] / "packages/server/src/testerFlow.ts").read_text())
+
+
 class Alerts(unittest.TestCase):
     def row(self, **over):
         r = {"account_id": "a", "local_status": "active",

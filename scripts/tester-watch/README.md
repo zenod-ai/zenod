@@ -14,7 +14,9 @@ It installs `/usr/local/lib/zenod-tester-watch/tester_watch.py` and the `/usr/lo
 
 ## Who is a tester
 
-T4's private ledger, `/root/.local/state/zenod-testers/live-codes.tsv`, mode 0600 (the runbook runs `scripts/stripe-testers.mjs issue <label>` as root on VPS1; it appends `label code promotion_code created expires`). Override with `--testers FILE`, `TESTER_WATCH_TESTERS` or `ZENOD_TESTERS_LEDGER_DIR`. A row matches an account by promotion code (or its `promo_` id), account/tenant/user id or email. Codes not redeemed yet show as `not signed up` with the code's state. With no ledger, every live account with a tenant is shown (`--all` forces that; canceled accounts are left out).
+T4's private ledger, `/root/.local/state/zenod-testers/live-codes.tsv`, mode 0600 (the runbook runs `scripts/stripe-testers.mjs issue <label>` as root on VPS1; it appends `label code promotion_code created expires`). Override with `--testers FILE`, `TESTER_WATCH_TESTERS` or `ZENOD_TESTERS_LEDGER_DIR`. A row matches an account by promotion code (or its `promo_` id), account/tenant/user id or email. Codes not redeemed yet show as `not signed up` with the code's state. With no ledger and no applicants, every live account with a tenant is shown (`--all` forces that; canceled accounts are left out).
+
+Testers who apply on zenod.dev/testers (EPIC-26 S2, row T7-F2) come from Zenod's own list, `tester-flow.json` on the `zenod-mt-data` volume (the data behind cloud.zenod.dev/admin/testers), listed after the ledger's testers and tagged `apply`; our own test applications are tagged `apply, test` (the operator's marks in `tester-marks.json` win, then the same rule as `testerMarks.ts` with `ZENOD_TEAM_EMAILS`). They match an account by their one-time code (the Stripe promotion code on the subscription, or the account that redeemed a Zenod-made code) or by email; one that is also in the ledger stays one row, tagged `ledger, apply`. Not signed up yet: `not signed up` with the code's state; waitlisted: `waitlist`. `--redact` masks their emails like every other email. The same volume is read as before, so no new access is needed.
 
 ## Columns and sources (all read-only)
 
