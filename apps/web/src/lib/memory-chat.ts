@@ -195,6 +195,20 @@ function failure(status: number, data: { error?: string; code?: string; message?
   )
 }
 
+/**
+ * E12-S38: the browser's time zone ("America/Mexico_City"), sent with a question so "today" and
+ * "yesterday" are the person's days, not UTC's. Left out when the browser does not say.
+ */
+export function withTimeZone<T extends object>(body: T): T & { timeZone?: string } {
+  let timeZone: string | undefined
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+  } catch {
+    timeZone = undefined
+  }
+  return timeZone ? { ...body, timeZone } : body
+}
+
 /** Read an NDJSON stream line by line; a handler that throws stops the read. */
 async function readLines(path: string, body: unknown, handle: (event: StreamEvent) => void): Promise<void> {
   const response = await fetch(path, json(body))
@@ -236,7 +250,7 @@ export async function sendToMemory(
   let desk: MemorySendResult["desk"] = null
   let talk: MemoryTalkReply | null = null
   const previous = handlers.previous?.trim()
-  await readLines("/api/console/memory-send/stream", previous ? { message, previous } : { message }, (event) => {
+  await readLines("/api/console/memory-send/stream", withTimeZone(previous ? { message, previous } : { message }), (event) => {
     if (event.type === "route") {
       route = event.route
       handlers.onRoute?.(event.route)
@@ -271,7 +285,7 @@ export async function lookUpInMemory(
   handlers: MemoryChatStreamHandlers = {}
 ): Promise<MemoryChatAnswer> {
   let answer: MemoryChatAnswer | null = null
-  await readLines("/api/console/memory-chat/stream", { question }, (event) => {
+  await readLines("/api/console/memory-chat/stream", withTimeZone({ question }), (event) => {
     if (event.type === "memories") handlers.onMemories?.(event.memories)
     else if (event.type === "text") handlers.onText?.(event.text)
     else if (event.type === "answer") answer = event.answer

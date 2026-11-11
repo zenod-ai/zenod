@@ -42,6 +42,7 @@ import {
   toolKind,
   LlmAllowanceExceededError,
   looksLikeDeskJob,
+  validTimeZone,
 } from "zenod";
 import { InboxError, inboxFor, type InboxDeskHooks } from "./inboxStore.js";
 import { channelTurn } from "./channelBrain.js";
@@ -836,6 +837,8 @@ export class Runtime {
         : {}),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
+      // E12-S38: the person's own days in memory answers, read on each question (the app may change it).
+      timeZone: () => this.timeZone(),
       enqueueEnrichment: (input, idempotencyKey) => this.taskJobQueue.enqueue("enrich_memory", { ...input, notifyCaptureCompletion: true }, idempotencyKey),
     });
     this.engine = {
@@ -1426,6 +1429,17 @@ export class Runtime {
       enforced: this.tenantAllowanceEnforced,
       resetsAt: nextUtcMonthlyReset(now),
     };
+  }
+
+  /** E12-S38: the person's time zone, kept from their browser; null (UTC days) until one is known. */
+  timeZone(): string | null {
+    return validTimeZone(this.settings.getRaw("time_zone"));
+  }
+
+  /** E12-S38: keep the time zone the app reports, so every memory answer (the app's, MCP's) reads their days. */
+  noteTimeZone(value: unknown): void {
+    const zone = validTimeZone(value);
+    if (zone && zone !== this.settings.getRaw("time_zone")) this.settings.setRaw("time_zone", zone);
   }
 
   /** The user-facing stop for chat answers when an enforced allowance is used up; null while they may run. Fails open. */

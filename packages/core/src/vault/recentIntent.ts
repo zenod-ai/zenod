@@ -137,8 +137,56 @@ function namedRange(text: string, now: number): { from: string; to: string } | n
   return null;
 }
 
-/** The recent-note intent of a question, or null when it asks about a subject, not a time. */
-export function recentIntent(question: string, now: number = Date.now()): RecentIntent | null {
+const zoneFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * E12-S38: how far a time zone's clock is ahead of UTC at `ms` (Mexico City: minus 6 hours). An
+ * unknown, empty or invalid zone is UTC, the day every question was read in before.
+ */
+export function zoneOffsetMs(ms: number, timeZone?: string | null): number {
+  if (!timeZone || timeZone === "UTC") return 0;
+  try {
+    let format = zoneFormats.get(timeZone);
+    if (!format) {
+      format = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      zoneFormats.set(timeZone, format);
+    }
+    const part = Object.fromEntries(format.formatToParts(new Date(ms)).map((p) => [p.type, Number(p.value)]));
+    return Date.UTC(part.year!, part.month! - 1, part.day!, part.hour!, part.minute!, part.second!) - Math.floor(ms / 1000) * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+/** An IANA time zone the runtime knows ("America/Mexico_City"), in its own spelling, or null. */
+export function validTimeZone(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim() || value.length > 64) return null;
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: value.trim() }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
+/** The UTC moment a day (YYYY-MM-DD) starts in a time zone: 6:00 UTC for a Mexico City day. */
+export function zoneDayStartMs(date: string, timeZone?: string | null): number {
+  const midnight = Date.parse(`${date}T00:00:00Z`);
+  return midnight - zoneOffsetMs(midnight - zoneOffsetMs(midnight, timeZone), timeZone);
+}
+
+/** The day (YYYY-MM-DD) it is at `ms` in a time zone. */
+export function zoneDayOf(ms: number, timeZone?: string | null): string {
+  return dayOf(ms + zoneOffsetMs(ms, timeZone));
+}
+
+/**
+ * The recent-note intent of a question, or null when it asks about a subject, not a time. Its days
+ * are the person's own (E12-S38): "yesterday" at 19:00 in Mexico City is the day before that
+ * evening's date there, though UTC is already the next day. Without a zone, the days are UTC's.
+ */
+export function recentIntent(question: string, at: number = Date.now(), timeZone?: string | null): RecentIntent | null {
+  // Every day below is read on the person's wall clock: the UTC getters of a shifted moment.
+  const now = at + zoneOffsetMs(at, timeZone);
   const text = ` ${normalize(question)} `;
   const voice = VOICE_RE.test(text);
   const names = voice || NOTE_RE.test(text) || SAID_RE.test(text);

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { MemoryChat } from "@/components/memory-chat"
-import { memoryPathFromHash, plainWikilinks, presentAnswer } from "@/lib/memory-chat"
+import { memoryPathFromHash, plainWikilinks, presentAnswer, withTimeZone } from "@/lib/memory-chat"
 
 // EPIC-12 E12-S1: the hosted app's chat with your memory; E12-S1b: the answer streams in and is
 // checked. EPIC-16 E16-B1: one Send button; Zenod decides to keep, answer or both and says which.
@@ -96,7 +96,7 @@ describe("MemoryChat one Send (E16-B1)", () => {
     expect(screen.getByTestId("memory-did").textContent).toBe("Answered from your memory · nothing saved")
     expect(screen.queryByTestId("memory-kept")).toBeNull()
     expect(screen.queryByRole("button", { name: "Keep" })).toBeNull()
-    expect(live.calls).toEqual([{ url: "/api/console/memory-send/stream", body: { message: "Who fixes the boiler?" } }])
+    expect(live.calls).toEqual([{ url: "/api/console/memory-send/stream", body: withTimeZone({ message: "Who fixes the boiler?" }) }])
    // E12-S13: the answered memories open lit up in the graph, with their percentages.
     const show = screen.getByTestId("show-in-graph").getAttribute("href")!
     expect(show.startsWith("/#graph?")).toBe(true)
@@ -355,7 +355,7 @@ describe("MemoryChat as the librarian: four modes (EPIC-22 E22-2)", () => {
     await waitFor(() => expect(screen.getByTestId("memory-mode").textContent).toContain("Looked up"))
     const [url, init] = fetchMock.mock.calls.at(-1)!
     expect(url).toBe("/api/console/memory-chat/stream")
-    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ question: "Ana's birthday is 14 March" })
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual(withTimeZone({ question: "Ana's birthday is 14 March" }))
     // E22-L3: the switch away from Zenod's pick is recorded once, with the message and both modes.
     const switches = () => fetchMock.mock.calls.filter(([to]) => to === "/api/console/memory-switch")
     expect(switches().map(([, sent]) => JSON.parse(String((sent as RequestInit).body)))).toEqual([

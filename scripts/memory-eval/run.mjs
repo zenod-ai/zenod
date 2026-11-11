@@ -18,7 +18,8 @@
 //   node scripts/memory-eval/run.mjs --checkout <dir> --dataset private --vault <vault dir> --questions <jsonl> [...]
 //        a person's own set: a throwaway copy of their vault, never pushed; only counts leave the machine.
 //        [--vault-git <clone>] questions that ask by time ("my last voice note", "today") are asked on the vault
-//        revision and at the moment their `asOf` names, read from this clone (E12-S33).
+//        revision and at the moment their `asOf` names, read from this clone (E12-S33); in the person's time
+//        zone when `asOf.timeZone` names one, so "yesterday" at 19:30 in Mexico City is that evening's day before (E12-S38).
 //   live tier: add --model live [--slice <question id prefix>] [--skip agent] [--live-dir <cache and ledger dir>]
 //        [--live-run-cap 0.25] [--live-month-cap 3] [--live-model deepseek-flash] [--live-reasoning none]
 //        with DEEPSEEK_API_KEY in the environment (never on the command line).
@@ -122,7 +123,7 @@ async function loadCheckout(checkout) {
   return { core, chat, ranked, mcp, sdk, recentIntent: recent?.recentIntent ?? null };
 }
 
-async function openVault(mods, vaultSrc, model) {
+async function openVault(mods, vaultSrc, model, timeZone = null) {
   const dir = mkdtempSync(join(tmpdir(), "zenod-memory-eval-"));
   const seed = join(dir, "seed");
   cpSync(vaultSrc, seed, { recursive: true, filter: (p) => !p.endsWith("/.git") });
@@ -135,7 +136,7 @@ async function openVault(mods, vaultSrc, model) {
   const repo = await core.VaultRepo.open({ workdir: join(dir, "vault"), remoteUrl: join(dir, "origin.git") });
   // The copy is throwaway: machine-wide git hooks (leak scanners and the like) must not run on its commits.
   execFileSync("git", ["config", "core.hooksPath", "/dev/null"], { cwd: join(dir, "vault"), stdio: "ignore" });
-  const engine = core.createEngine({ repo, llm: model, state: new core.SqliteStateStore(":memory:"), memoryIndex: { path: join(dir, "index.sqlite"), tenantId: "eval" } });
+  const engine = core.createEngine({ repo, llm: model, state: new core.SqliteStateStore(":memory:"), memoryIndex: { path: join(dir, "index.sqlite"), tenantId: "eval" }, ...(timeZone ? { timeZone: () => timeZone } : {}) });
   if (engine.rebuildMemoryIndex) await engine.rebuildMemoryIndex();
   return { dir, engine, vault: join(dir, "vault"), model };
 }
@@ -495,15 +496,15 @@ async function main() {
     // A question that asks by time is asked on the vault and at the moment its `asOf` names: later notes
     // change its right answer honestly ("my last voice note" is the newest one), so the live vault cannot score it.
     const vaultGit = opt("vault-git");
-    const byTime = (item) => Boolean(vaultGit && mods.recentIntent && item.asOf?.vaultRevision && item.asOf?.at && mods.recentIntent(item.question, Date.parse(item.asOf.at)));
+    const byTime = (item) => Boolean(vaultGit && mods.recentIntent && item.asOf?.vaultRevision && item.asOf?.at && mods.recentIntent(item.question, Date.parse(item.asOf.at), item.asOf.timeZone ?? null));
     const timeRows = new Map();
-    for (const [key, items] of Map.groupBy(set.filter(byTime), (item) => `${item.asOf.vaultRevision} ${item.asOf.at}`)) {
-      const [rev, at] = key.split(" ");
+    for (const [key, items] of Map.groupBy(set.filter(byTime), (item) => `${item.asOf.vaultRevision} ${item.asOf.at} ${item.asOf.timeZone ?? ""}`)) {
+      const [rev, at, zone] = key.split(" ");
       const snap = mkdtempSync(join(tmpdir(), "zenod-memory-asof-"));
       try {
         execFileSync("bash", ["-c", 'git -C "$1" archive "$2" | tar -x -C "$3"', "_", vaultGit, rev, snap], { stdio: "ignore" });
         const rows = await atMoment(Date.parse(at), async () => {
-          const then = await openVault(mods, snap, model);
+          const then = await openVault(mods, snap, model, zone || null);
           try { return await questionSuite(mods, then, model, items, wantedIn(citingIndex(then.vault))); } finally { rmSync(then.dir, { recursive: true, force: true }); }
         });
         for (const row of rows) timeRows.set(row.id, { ...row, asOf: rev });
