@@ -10,10 +10,10 @@
 // Minting tries Stripe from here (it needs "Promotion codes: Write" on the key); when the
 // key cannot, the code stays queued "waiting for the code command" until the operator
 // script attaches one (scripts/tester-flow-codes.mjs, through the tester-code command).
-// EPIC-23 U7 (Jordi, 2026-11-11: "go live"): by default Zenod now makes the code itself and
-// keeps it here; checkout applies the tester coupon straight to the session for that code
-// (`redeem`), one account per code, so no promotion-code permission is needed. The applicant
-// also sees their personal link on screen right after applying, so no mail is needed first.
+// EPIC-23 U7 (Jordi, 2026-11-11: "go live"): the applicant sees their personal link on screen
+// right after applying, so no mail is needed first. A code made inside Zenod with its coupon put
+// on the session at checkout (`redeem`) exists only behind ZENOD_TESTER_MINT=local, off by
+// default: the Stripe promotion-code path above stays the one in use (E26-S2 owns it).
 // Email goes through Zenod's one sender (zenodMail.ts: Gmail with Zenod's own key, E26-T2)
 // once its key is set; until then it stays queued "waiting for the mail key". Every queued
 // step is retried, so nothing is lost.
@@ -58,6 +58,8 @@ export interface TesterRecord {
   waiting?: string;
   /** U7: when the personal link was shown on screen right after applying. */
   shownAt?: string;
+  /** U7: true for a code made inside Zenod (ZENOD_TESTER_MINT=local), never a Stripe promotion code. */
+  madeHere?: boolean;
   /** U7: the one account that used this code at checkout (a code made here works for one account). */
   redeemedBy?: string;
   redeemedAt?: string;
@@ -148,7 +150,7 @@ interface PromotionCodeCreator {
   };
 }
 
-/** U7: a code made and kept by Zenod itself; checkout applies the coupon for it (`TesterFlow.redeem`). */
+/** U7: a code made and kept by Zenod itself (opt-in); checkout applies the coupon for it (`TesterFlow.redeem`). */
 export const localMinter: MintCode = async () => generateTesterCode();
 
 /** Mints on the existing tester coupon, like scripts/stripe-testers.mjs issue: one use, 14 days. */
@@ -256,7 +258,7 @@ export class TesterFlow {
   redeem(code: string, accountId: string): string | null {
     const state = this.read();
     const key = code.trim().toUpperCase();
-    const tester = state.testers.find((t) => t.status === "accepted" && t.code?.toUpperCase() === key);
+    const tester = state.testers.find((t) => t.status === "accepted" && t.madeHere && t.code?.toUpperCase() === key);
     if (!tester?.codeAt) return null;
     if (this.now().getTime() > Date.parse(tester.codeAt) + TESTER_CODE_TTL_DAYS * 86400 * 1000) return null;
     if (tester.redeemedBy && tester.redeemedBy !== accountId) return null;
@@ -350,7 +352,7 @@ export class TesterFlow {
         }
         try {
           code = await this.mint(tester.id);
-          this.update(tester.id, { code, codeAt: this.now().toISOString(), waiting: "mail" });
+          this.update(tester.id, { code, codeAt: this.now().toISOString(), waiting: "mail", ...(this.mint === localMinter ? { madeHere: true } : {}) });
         } catch (error) {
           console.warn("[testers] could not mint a code here:", error instanceof Error ? error.message : String(error));
           this.update(tester.id, { waiting: WAITING_FOR_CODE });
@@ -401,11 +403,11 @@ export function testerFlowFromEnv(
     cap: Number.isSafeInteger(cap) && cap >= 0 ? cap : DEFAULT_TESTER_CAP,
     autoAccept: env.ZENOD_TESTER_AUTO_ACCEPT !== "0",
     joinUrl: `${(env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "")}/join`,
-    // Stripe minting is opt-in: it only works once the Stripe key may write promotion codes.
-    // U7: otherwise Zenod makes the code itself (ZENOD_TESTER_MINT=off keeps the old queue).
+    // Minting from the server is opt-in: it only works once the Stripe key may write promotion codes.
+    // U7: ZENOD_TESTER_MINT=local makes the code inside Zenod instead; off unless set.
     mint: env.ZENOD_TESTER_MINT === "stripe" && stripe
       ? stripeMinter(stripe)
-      : env.ZENOD_TESTER_MINT === "off" ? null : localMinter,
+      : env.ZENOD_TESTER_MINT === "local" ? localMinter : null,
     sendMail: mailerFromEnv(env),
     ...(isTest ? { isTest } : {}),
   });

@@ -159,9 +159,9 @@ describe("tester flow (EPIC-26 S2)", () => {
   it("reads production settings: cap, stop setting, minting only when asked, mail only with a key", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "zenod-tester-flow-env-"));
     const stripe = { promotionCodes: { create: async () => ({ code: "x" }) } };
-    // U7: Zenod makes the code itself unless told to use Stripe or to stop.
-    expect(testerFlowFromEnv(dataDir, {}, stripe).snapshot()).toMatchObject({ cap: 10, autoAccept: true, canMint: true, canMail: false });
-    expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_MINT: "off" }, stripe).snapshot()).toMatchObject({ canMint: false });
+    expect(testerFlowFromEnv(dataDir, {}, stripe).snapshot()).toMatchObject({ cap: 10, autoAccept: true, canMint: false, canMail: false });
+    // U7: codes made inside Zenod only when asked.
+    expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_MINT: "local" }, stripe).snapshot()).toMatchObject({ canMint: true });
     expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_CAP: "3", ZENOD_TESTER_AUTO_ACCEPT: "0", ZENOD_TESTER_MINT: "stripe", RESEND_API_KEY: "re_x" }, stripe).snapshot())
       .toMatchObject({ cap: 3, autoAccept: false, canMint: true, canMail: true });
   });
@@ -185,9 +185,16 @@ describe("codes Zenod makes itself (EPIC-23 U7)", () => {
     expect(flow.snapshot()).toMatchObject({ placesTaken: 1, accepting: false });
   });
 
+  it("never applies the coupon for a Stripe promotion code", async () => {
+    const { flow } = flowWith({ sendMail: null });
+    flow.receive("s@example.com");
+    await flow.process();
+    expect(flow.redeem(flow.snapshot().testers[0]!.code!, "acct_s")).toBeNull();
+  });
+
   it("applies the tester coupon for one account only, for 14 days", async () => {
     let now = NOW;
-    const { flow } = flowWith({ sendMail: null, now: () => now });
+    const { flow } = flowWith({ mint: localMinter, sendMail: null, now: () => now });
     flow.receive("a@example.com");
     await flow.process();
     const code = flow.snapshot().testers[0]!.code!;
