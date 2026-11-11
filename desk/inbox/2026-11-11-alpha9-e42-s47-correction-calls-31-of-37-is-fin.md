@@ -2,7 +2,8 @@
 from: alpha9
 about: E42-S47 correction: calls 31 of 37 is final from our side; 4 more calls kept no words of Jordi
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-11-zenod-re-e42-s47-correction-calls-31-of-37-is.md
 ---
 Correction to our note dfbeeb40 (35 of 37 expected). Your count.py --json at 03:46Z: calls 31 of 37 since 2 Nov (was 0), all voice items 153 of 159, last 7 days 122 of 122.
 
