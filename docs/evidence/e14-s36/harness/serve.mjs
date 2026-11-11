@@ -34,7 +34,10 @@ app.post("/dev/seed", async (c) => {
   // A helper's question (the Clarifier): the same title and buttons, the new shape adds its card.
   const ask = (card, i) => inbox.post({ kind: "question", from: card.from, title: card.title, options: card.options.map((label, n) => ({ id: `m${n + 1}`, label })),
     ...(shape === "after" ? { card: card.after.card } : { body: card.before.body }), links: card.links ?? [], sourceKey: `${shape}:${i}` });
-  const posted = cards.map((card, i) => card.kind === "question" ? ask(card, i) : inbox.post(shape === "after"
+  // Something to try: a finding, its reason as the body before, the card after.
+  const tip = (card, i) => inbox.post({ kind: "finding", from: card.from, title: card.title, links: card.links ?? [],
+    ...(shape === "after" ? { card: card.after.card } : { body: card.before.body }), sourceKey: `${shape}:${i}` });
+  const posted = cards.map((card, i) => card.kind === "question" ? ask(card, i) : card.kind === "finding" ? tip(card, i) : inbox.post(shape === "after"
     ? { kind: "suggestion", from: card.from, title: card.after.title, ...(card.after.body ? { body: card.after.body } : {}), action: card.action, links: card.links ?? [], card: card.after.card, sourceKey: `${shape}:${i}` }
     : { kind: "suggestion", from: card.from, title: card.before.title, ...(card.before.body ? { body: card.before.body } : {}), action: card.action, links: card.links ?? [], sourceKey: `${shape}:${i}` }));
   return c.json({ posted: posted.length });

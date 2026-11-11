@@ -1,5 +1,30 @@
 [
   {
+    "kind": "finding",
+    "from": "Something to try",
+    "title": "Try a short walk instead of the screen in the hour before bed on Saturday.",
+    "links": [
+      {
+        "label": "Its notes",
+        "path": "Personas/something-to-try/2026-11-10.md"
+      }
+    ],
+    "before": {
+      "body": "Memories 1 and 3 say you sleep badly before the long rides."
+    },
+    "after": {
+      "card": {
+        "picture": {
+          "change": "try",
+          "from": "sleeping badly before rides",
+          "to": "a walk before bed"
+        },
+        "yes": "Your voice notes of 7 and 6 Nov both say the night before a ride goes badly.",
+        "no": "If the rides are what tire you, a walk may change little."
+      }
+    }
+  },
+  {
     "kind": "question",
     "from": "Clarifier",
     "title": "In your voice note of 9 Nov you said \"Ana\": which Ana did you mean?",
