@@ -67,6 +67,7 @@
 .zh-why dt { font: 500 0.8rem var(--zp-sans); color: var(--zp-accent); }
 .zh-why .zh-not dt { color: var(--zp-warn); }
 .zh-why dd { margin: 0; font-size: 0.96rem; line-height: 1.45; }
+.zh-note { margin: 0; font-size: 0.84rem; line-height: 1.45; color: var(--zp-faint); }
 .zh-call { margin: 0; font: italic 400 1rem var(--zp-serif); color: var(--zp-muted); }
 
 @media (max-width: 560px) {

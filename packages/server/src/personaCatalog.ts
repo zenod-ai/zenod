@@ -280,8 +280,8 @@ interface ModelPersonaSpec {
 
 /** When the helpers kept to the memory only (S27 round 2): each wakes once more at once, in its own period. */
 const SUGGESTS_SINCE = "2026-11-10T04:15:00.000Z";
-/** S36: when the helpers' cards took Jordi's shape (picture, why yes, why not): each wakes once more. */
-const CARDS_SINCE = "2026-11-10T23:45:00.000Z";
+/** S36: when the helpers' cards took Jordi's shape (picture, why yes, why not), and again once a card left out asks for it: each wakes once more. */
+const CARDS_SINCE = "2026-11-11T02:00:00.000Z";
 
 /**
  * S35: what a helper may ask the Team desk. Read only: how something in the memories connects to
@@ -320,7 +320,8 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
     skills: spec.skills,
     defaultEnabled: false,
     // S35: two more steps when it asks the team: the question and the second call with the answer.
-    limits: { maxSteps: 9, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
+    // S36: one more when its suggestion came without its card and it asks for the card alone.
+    limits: { maxSteps: 10, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
     // S36: a helper with a card wakes once more to say it Jordi's way (S35 round 2 woke them at 10:50Z for its clearer words).
     revisedAt: CARDS_SINCE,
     asksTeam: true,
@@ -368,6 +369,7 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
       }
       let offered: Offered | null = canSuggest ? parseSuggestion(reply) : null;
       const leftOut = offered !== null && aboutProjectWork(offered);
+      if (offered && !leftOut && !offered.card) offered = { ...offered, ...(await askForCard(ctx, system, memoriesOnly(promptWith([], "")), offered)) };
       if (offered) {
         // S36: the card names memories the way the person knows them, never by the model's numbers.
         const said = memoryPhrases(entries);
@@ -379,6 +381,27 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
       return { summary: `${leftOut ? `${summary}; left out one suggestion about project work` : summary}${teamWords}` };
     },
   };
+}
+
+/**
+ * S36: on DeepSeek a second call (after the team's answer) sometimes leaves the card out, and the
+ * suggestion would reach the person with no picture and no reasons. One short call asks for the card
+ * alone; without it the old card stays. Its words fill `why` too, as before S36.
+ */
+async function askForCard(ctx: PersonaContext, system: string, prompt: string, offered: { action: string }): Promise<{ card: HelperCard; why: string } | Record<string, never>> {
+  try {
+    const reply = parseJsonReply(await ctx.think({ system, prompt: [prompt, "", `You suggested this change: ${offered.action}`, `Now reply with JSON only, for that change: {${HELPER_CARD_ASK}}`].join("\n") }));
+    const card = cleanHelperCard(reply);
+    return card?.yes ? { card, why: card.yes } : {};
+  } catch {
+    // A cap or a failed call: the suggestion is still worth posting, in the old card.
+    return {};
+  }
+}
+
+/** The prompt without its closing "Reply with JSON only" line, so the card ask is the only shape asked for. */
+function memoriesOnly(prompt: string): string {
+  return prompt.split("\n").slice(0, -1).join("\n");
 }
 
 /** A helper's suggestion as it posts it: S35's line about what the team said rides along. */

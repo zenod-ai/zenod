@@ -44,8 +44,20 @@ export const MAKE_YOUR_CALL = "Make your call.";
 const IDEA_MAX = 90;
 const LINE_MAX = 240;
 
-const words = (value: unknown, max: number): string =>
-  typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max).trim() : "";
+/**
+ * A model's words, at most `max` characters, never cut mid-word (seen live on 11 Nov: "whether it a"):
+ * a longer line ends at its last full sentence that fits, else at its last whole word with "…".
+ */
+export function words(value: unknown, max: number): string {
+  if (typeof value !== "string") return "";
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const sentence = cut.match(/^.*[.!?](?=\s)/)?.[0] ?? (/[.!?]$/.test(cut) && /\s/.test(text.charAt(max)) ? cut : "");
+  if (sentence.length >= max / 2) return sentence.trim();
+  const word = cut.slice(0, cut.lastIndexOf(" ")).replace(/[\s,;:–—-]+$/, "");
+  return `${word || cut.slice(0, max - 1)}…`;
+}
 
 /** A card from untrusted input (a model's reply, a post): null unless it has both reasons, or why it asks. */
 export function cleanHelperCard(raw: unknown): HelperCard | null {
