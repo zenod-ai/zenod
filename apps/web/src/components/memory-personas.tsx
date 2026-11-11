@@ -333,12 +333,14 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
           A helper is a harness that wakes up bound to a persona, reads your
           memory and puts cards in your inbox.
         </p>
-        <p className="zp-lede">
-          Switch on the ones you want. Each wakes on its own schedule inside
-          your Zenod account, uses only the skills listed, writes only into
-          its own folder and leaves what it finds in your inbox. None of them
-          ever messages anyone.
-        </p>
+        {building ? null : (
+          <p className="zp-lede">
+            Switch on the ones you want. Each wakes on its own schedule inside
+            your Zenod account, uses only the skills listed, writes only into
+            its own folder and leaves what it finds in your inbox. None of
+            them ever messages anyone.
+          </p>
+        )}
       </div>
       <div className="zp-stage">
         <div className="zp-screen zi-screen">
