@@ -176,6 +176,43 @@ describe("one chat, and a reply box on every card (EPIC-14 S2 round 3)", () => {
     links: [{ label: "Flat hunt", path: "Areas/Flat hunt.md" }],
   }
 
+  it("a helper's question shows the words with each meaning and why it asks (S36, S40 folded in)", async () => {
+    const ASK: InboxItem = {
+      ...QUESTION, id: "q2", from: "Clarifier", title: 'In your note of 10 Nov you said "the flat": which one did you mean?',
+      options: [{ id: "m1", label: "Valencia flat" }, { id: "m2", label: "Barcelona flat" }], recommended: null,
+      card: { picture: { change: "which", from: "the flat", to: null, meanings: ["Valencia flat", "Barcelona flat"] }, why: "You have two flats in your memory." },
+    }
+    mockFetch((url) => (url === "/api/console/inbox" ? { items: [ASK], needsYou: 1 } : { needsYou: 1 }))
+    render(<MemoryInbox />)
+    expect(await screen.findByText(ASK.title)).toBeTruthy()
+    expect(screen.getByTestId("helper-card-picture").getAttribute("aria-label")).toBe('"the flat" could mean Valencia flat or Barcelona flat')
+    expect(screen.getByText("Why I ask")).toBeTruthy()
+    expect(screen.queryByText("Why not")).toBeNull()
+    expect(screen.getByText("Make your call.")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Valencia flat" })).toBeTruthy()
+  })
+
+  it("a new link shows the two ideas, why yes, why not and Make your call (S36)", async () => {
+    const LINK: InboxItem = {
+      ...SUGGESTION, id: "s2", title: 'I\'d link "Boiler" with "Home".', action: "Link Boiler to Home so each shows the other.",
+      card: { picture: { change: "link", from: "Boiler", to: "Home" }, yes: "Both are about the flat.", no: "Boiler already sits under Home." },
+    }
+    mockFetch((url) => (url === "/api/console/inbox" ? { items: [LINK], needsYou: 1 } : { needsYou: 1 }))
+    render(<MemoryInbox />)
+    expect(await screen.findByText(LINK.title)).toBeTruthy()
+    const picture = screen.getByTestId("helper-card-picture")
+    expect(picture.getAttribute("aria-label")).toBe("Boiler, new link, Home")
+    expect(screen.getByText("Why yes")).toBeTruthy()
+    expect(screen.getByText("Both are about the flat.")).toBeTruthy()
+    expect(screen.getByText("Why not")).toBeTruthy()
+    expect(screen.getByText("Boiler already sits under Home.")).toBeTruthy()
+    expect(screen.getByText("Make your call.")).toBeTruthy()
+    // The desk's own words wait behind Change.
+    expect(screen.queryByText(LINK.action!)).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Change" }))
+    expect((screen.getByLabelText("The change, in your words") as HTMLTextAreaElement).value).toBe(LINK.action)
+  })
+
   it("a suggestion: Do it runs one desk job shown on the card, and Undo puts it back", async () => {
     const job: InboxItem = { ...WORKING, id: "j9", title: "Join the topic Flat hunt into Moving to Valencia.", step: "Waiting for its turn", followUpOf: { id: "s1", title: SUGGESTION.title } }
     const accepted = { ...SUGGESTION, status: "accepted" as const, needsYou: false, done: { jobItemId: "j9", action: SUGGESTION.action!, changed: false, at: "x" } }

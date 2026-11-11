@@ -659,6 +659,45 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     expect(none.inbox.list()).toHaveLength(0);
   });
 
+  it("a new link reads the way Jordi asked: the two ideas, why yes, why not, never a memory's number (S36)", async () => {
+    const reply = JSON.stringify({ looked: "Home", suggestion: {
+      title: "Link memory 1 to Home", action: "Link Boiler to Home so each shows the other.",
+      picture: { change: "link", from: "Boiler", to: "Home" },
+      yes: "Memory 1 is about the flat's boiler, and Home is where the flat lives.",
+      no: "Boiler already sits under Home, so the link may add little.", sources: [1] } });
+    const stub = stubModel(reply);
+    const { deps: d, inbox, written } = deps({ model: () => stub.model, outline: OUTLINE });
+    await runPersona(TOPIC_GARDENER, d, "manual");
+    const card = inbox.list()[0]!;
+    expect(card).toMatchObject({ kind: "suggestion", title: 'I\'d link "Boiler" with "Home".', body: null, action: "Link Boiler to Home so each shows the other." });
+    expect(card.card).toEqual({
+      picture: { change: "link", from: "Boiler", to: "Home" },
+      yes: expect.stringMatching(/^Your note ".+" is about the flat's boiler/),
+      no: "Boiler already sits under Home, so the link may add little.",
+    });
+    expect(card.card!.yes).not.toMatch(/memory 1/i);
+    expect(written[0]!.files[0]!.content).toContain("- Why not: Boiler already sits under Home, so the link may add little.");
+    expect(written[0]!.files[0]!.content).toContain("- Picture: Boiler, new link, Home");
+    // The model is asked for the picture and both reasons, in plain words.
+    expect(stub.calls[0]!.prompt).toContain('"picture"');
+    expect(stub.calls[0]!.prompt).toContain('"no"');
+    expect(stub.calls[0]!.system).toContain("never by a number");
+  });
+
+  it("a suggestion without why not keeps the old card, and Health's filing card says both sides (S36)", async () => {
+    const reply = JSON.stringify({ looked: "Home", suggestion: { title: "Boiler is filed under Garden", why: "Every boiler note is about the flat.", action: "Move Boiler under Home.", picture: { change: "move", from: "Boiler", to: "Home" }, sources: [1] } });
+    const { deps: d, inbox } = deps({ model: () => stubModel(reply).model, outline: OUTLINE });
+    await runPersona(TOPIC_GARDENER, d, "manual");
+    expect(inbox.list()[0]).toMatchObject({ title: "Boiler is filed under Garden", body: "Every boiler note is about the flat.", card: null });
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const health = deps({ outline: OUTLINE });
+    await runPersona(MEMORY_HEALTH, health.deps, "manual");
+    const filing = health.inbox.list()[0]!;
+    expect(filing.kind).toBe("suggestion");
+    expect(filing.card).toMatchObject({ picture: null, yes: expect.stringContaining("harder to find"), no: expect.stringContaining("Undo puts it back") });
+  });
+
   it("the helpers post at most one suggestion a run, never the same waiting change twice, and read what became of earlier ones (S27)", async () => {
     let clock = new Date("2026-11-08T03:00:00Z");
     const reply = JSON.stringify({ loops: [{ title: "Book the dentist", sources: [1] }], suggestion: { title: "Link the dentist notes", why: "Both say next week.", action: "Link Dentist to Home.", sources: [1, 2] } });
@@ -881,11 +920,12 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     });
 
     it("switching it on wakes the helper once more, never switches it on, and only helpers that can ask may", async () => {
-      let now = new Date("2026-11-10T12:00:00Z");
+      // S36: after the helpers' last wake for their new cards (23:45Z).
+      let now = new Date("2026-11-11T00:00:00Z");
       const { deps: d, store } = deps({ now: () => now });
       store.setEnabled("open-loops", true);
       store.start("open-loops", "schedule", "x");
-      now = new Date("2026-11-10T12:05:00Z");
+      now = new Date("2026-11-11T00:05:00Z");
       expect(duePersonas([OPEN_LOOPS], store, now)).toHaveLength(0);
       store.setAskTeam("open-loops", true, false);
       expect(duePersonas([OPEN_LOOPS], store, now).map((p) => p.id)).toEqual(["open-loops"]);

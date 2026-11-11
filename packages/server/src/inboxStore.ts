@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { openZenodSqlite } from "./sqlite.js";
+import { cleanHelperCard, type HelperCard } from "./helperCard.js";
 
 /**
  * The inbox (EPIC-14 S2): one place in the web app for what is addressed to the user. Four kinds:
@@ -115,6 +116,8 @@ export interface InboxItem {
   action: string | null;
   /** suggestion: what Do it started, once pressed. */
   done: InboxSuggestionDone | null;
+  /** S36: a helper's card in plain words: the picture of the change, why yes, why not. */
+  card: HelperCard | null;
   /** True for the example items the empty inbox can show; they never write to the memory. */
   example: boolean;
   /** The poster's own key, so posting the same thing twice keeps one item. */
@@ -126,10 +129,10 @@ export interface InboxItem {
 }
 
 export type InboxPost =
-  | { kind: "question"; from: string; title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[]; sourceKey?: string; example?: boolean }
-  | { kind: "finding"; from: string; title: string; body?: string; links?: InboxLink[]; sourceKey?: string; example?: boolean }
+  | { kind: "question"; from: string; title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[]; card?: HelperCard; sourceKey?: string; example?: boolean }
+  | { kind: "finding"; from: string; title: string; body?: string; links?: InboxLink[]; card?: HelperCard; sourceKey?: string; example?: boolean }
   | { kind: "job"; from?: string; title: string; body?: string; step?: string; sourceKey?: string; example?: boolean }
-  | { kind: "suggestion"; from: string; title: string; body?: string; action: string; links?: InboxLink[]; sourceKey?: string; example?: boolean };
+  | { kind: "suggestion"; from: string; title: string; body?: string; action: string; links?: InboxLink[]; card?: HelperCard; sourceKey?: string; example?: boolean };
 
 /** What a desk job reports as it goes: a new step, then done (with its result) or failed. */
 export type InboxJobUpdate =
@@ -178,7 +181,7 @@ interface Row {
 }
 
 type ItemData = Pick<InboxItem, "from" | "title" | "body" | "options" | "recommended" | "answer" | "links" | "step" | "result"> &
-  Partial<Pick<InboxItem, "replies" | "followUpOf" | "action" | "done">>;
+  Partial<Pick<InboxItem, "replies" | "followUpOf" | "action" | "done" | "card">>;
 
 export const INBOX_REPLY_MAX_CHARS = 1_000;
 /** A voice note's words can run longer than a typed reply: about five minutes of speech. */
@@ -208,6 +211,7 @@ function rowToItem(row: Row): InboxItem {
     followUpOf: data.followUpOf ?? null,
     action: data.action ?? null,
     done: data.done ?? null,
+    card: data.card ?? null,
     example: row.example === 1,
     sourceKey: row.source_key,
     createdAt: row.created_at,
@@ -287,6 +291,10 @@ export class InboxStore {
       options: [], recommended: null, answer: null, links: [], step: null, result: null,
     };
     let status: InboxStatus = "open";
+    if (input.kind !== "job") {
+      const card = cleanHelperCard(input.card);
+      if (card) data.card = card;
+    }
     if (input.kind === "question") {
       const seen = new Set<string>();
       data.options = (input.options ?? [])
@@ -614,10 +622,15 @@ export function postInboxExamples(store: InboxStore): InboxItem[] {
   }
   return [
     store.post({
-      kind: "suggestion", example: true, sourceKey: "example:suggestion",
-      from: "Topic gardener", title: "Join \"Flat hunt\" into \"Moving to Valencia\": they are the same thing.",
-      body: "14 notes in Flat hunt and 9 in Moving to Valencia talk about the same three flats. One place would make \"what did the agent say\" find all of them.",
-      action: "Join the topic \"Flat hunt\" into \"Moving to Valencia\".",
+      // S36: in the card's own shape: the two ideas, why yes, why not.
+      kind: "suggestion", example: true, sourceKey: "example:suggestion-link",
+      from: "Topic gardener", title: "I'd link \"Flat hunt\" with \"Moving to Valencia\".",
+      action: "Link \"Flat hunt\" and \"Moving to Valencia\" so each shows the other.",
+      card: {
+        picture: { change: "link", from: "Flat hunt", to: "Moving to Valencia" },
+        yes: "Both talk about the same three flats, so asking about one would bring up the other.",
+        no: "If the flat hunt is only for Valencia, it may belong under it rather than beside it.",
+      },
       links: [{ label: "Flat hunt", path: "Areas/Flat hunt.md" }, { label: "Moving to Valencia", path: "Areas/Moving to Valencia.md" }],
     }),
     store.post({

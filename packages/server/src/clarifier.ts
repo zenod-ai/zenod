@@ -5,6 +5,7 @@ import type { PersonaStore } from "./personaStore.js";
 import type { SubscriberStore } from "./subscribers.js";
 import { isProjectWork } from "./helperScope.js";
 import { teamAskSubscription } from "./teamAsk.js";
+import type { HelperCard } from "./helperCard.js";
 
 /**
  * The Clarifier (EPIC-14 S37). Jordi, 2026-11-10: "we could have like a disambiguator or something.
@@ -90,17 +91,21 @@ export function memoryKind(title: string): string {
 }
 
 /**
- * The card it posts, in one place (S36 is rewriting every helper card in plain words; this is the
- * only spot to change). The title carries the memory, its day and the words, because the answer is
- * filed with the title as its first line: 'In your voice note of 10 Nov you said "the flat": which
- * flat did you mean?'.
+ * The card it posts, in one place. The title carries the memory, its day and the words, because the
+ * answer is filed with the title as its first line: 'In your voice note of 10 Nov you said "the
+ * flat": which flat did you mean?'. S36 (S40 folded in): in every helper card's shape, the words
+ * with a line to each thing they could mean, one line why it asks, then the call is the person's.
  */
-export function clarifierCard(c: Clarification, kind: string, capturedAt: string): { title: string; body: string; options: InboxOption[] } {
+export function clarifierCard(c: Clarification, kind: string, capturedAt: string): { title: string; body?: string; options: InboxOption[]; card?: HelperCard } {
   const said = `In your ${kind} of ${shortDay(capturedAt)}`;
+  const why = c.why || `It could mean ${c.options.length === 2 ? "either" : "any"} of these.`;
   return {
     title: c.quote ? `${said} you said "${c.quote}": ${c.question}` : `${said}: ${c.question}`,
-    body: [c.why, "Pick one, or answer in your own words."].filter(Boolean).join(" "),
     options: c.options.map((label, index) => ({ id: `m${index + 1}`, label })),
+    // Without the words said there is nothing to draw: the old body says why.
+    ...(c.quote
+      ? { card: { picture: { change: "which" as const, from: c.quote, to: null, meanings: c.options }, why } }
+      : { body: [c.why, "Pick one, or answer in your own words."].filter(Boolean).join(" ") }),
   };
 }
 
