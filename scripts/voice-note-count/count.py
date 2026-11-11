@@ -12,8 +12,9 @@ What it reads, and nothing else:
   world, state, start time and length; per call the same; per forward its state. Never a transcript, only whether
   one exists. Read on VPS1 so no transcript crosses.
 - The read-only clone of the owner's vault on VPS3: each forwarded Log entry's `source-id`, whose last part is
-  sha256(EpicTeam note id)[:32] (zenod packages/server/src/voiceNoteForward.ts), and its `Source app:` line. So a
-  note matches its entry exactly, by id, never by time or words.
+  sha256(EpicTeam note id)[:32] (zenod packages/server/src/voiceNoteForward.ts), and its `Source app:` line. A call
+  has no audio, so it comes through store_memory with the call id itself as sourceId (EPIC-21 decision 2026-11-11,
+  agent_team E42-S47). So a note or call matches its entry exactly, by id, never by time or words.
 
 Where it writes: ~/zenod-eval/v6/history.jsonl (one line per UTC day) and the page
 ~/zenod-evidence-pages/v6-voice-note-count/index.html (tailnet, http://vps3.taild81fbb.ts.net:8921/v6-voice-note-count/).
@@ -77,20 +78,26 @@ def read_console() -> dict:
 
 
 def parse_vault_log(text: str) -> dict:
-    """source hash -> Source app, for every forwarded entry in one Log file."""
+    """Source key -> Source app, for every entry in one Log file that carries a source id: a forward's id hash, or the
+    plain EpicTeam id (`call_…`, `vn_…`) a store_memory call sent as sourceId."""
     out = {}
     for block in re.split(r"\n(?=## )", text):
-        m = re.search(r"^- source-id: .*:forward:[0-9a-f]+:([0-9a-f]{32})\s*$", block, re.M)
+        m = re.search(r"^- source-id: (.+?)\s*$", block, re.M)
         if not m:
             continue
+        sid = m.group(1)
+        f = re.search(r":forward:[0-9a-f]+:([0-9a-f]{32})$", sid)
+        key = f.group(1) if f else sid.rsplit(":", 1)[-1]
+        if not f and not re.match(r"(call|vn)_[0-9a-f]+$", key):
+            continue
         app = re.search(r"^> Source app: (.+)$", block, re.M)
-        out[m.group(1)] = app.group(1).strip() if app else ""
+        out[key] = app.group(1).strip() if app else ""
     return out
 
 
 def read_vault() -> dict:
     subprocess.run(["git", "-C", VAULT, "fetch", "-q", "origin", "main"], check=True, timeout=120)
-    files = subprocess.run(["git", "-C", VAULT, "grep", "-l", ":forward:", "origin/main", "--", "Log/"],
+    files = subprocess.run(["git", "-C", VAULT, "grep", "-l", "-E", "^- source-id: .*(:forward:|call_|vn_)", "origin/main", "--", "Log/"],
                            capture_output=True, text=True).stdout.split()
     landed = {}
     for ref in files:
@@ -123,15 +130,19 @@ def items(console: dict) -> tuple[list, dict]:
     return kept, skipped
 
 
+def is_landed(item_id: str, landed: dict) -> bool:
+    return source_hash(item_id) in landed or item_id in landed
+
+
 def tally(kept: list, landed: dict, since: str) -> dict:
     out = {}
     for key, _label in CHANNELS:
         rows = [k for k in kept if k["channel"] == key and k["at"] >= since]
-        hit = [k for k in rows if source_hash(k["id"]) in landed]
+        hit = [k for k in rows if is_landed(k["id"], landed)]
         out[key] = {"left": len(rows), "landed": len(hit),
-                    "waiting": sum(1 for k in rows if source_hash(k["id"]) not in landed and k["fwd"] in ("queued", "waiting")),
-                    "failed": sum(1 for k in rows if source_hash(k["id"]) not in landed and k["fwd"] == "failed"),
-                    "never_sent": sum(1 for k in rows if source_hash(k["id"]) not in landed and not k["fwd"])}
+                    "waiting": sum(1 for k in rows if not is_landed(k["id"], landed) and k["fwd"] in ("queued", "waiting")),
+                    "failed": sum(1 for k in rows if not is_landed(k["id"], landed) and k["fwd"] == "failed"),
+                    "never_sent": sum(1 for k in rows if not is_landed(k["id"], landed) and not k["fwd"])}
     left = sum(v["left"] for v in out.values())
     hit = sum(v["landed"] for v in out.values())
     out["all"] = {"left": left, "landed": hit}
@@ -164,8 +175,11 @@ def gaps(r: dict) -> list[str]:
         if not miss:
             continue
         if key == "call" and c["never_sent"] == miss:
-            out.append(f"Calls are not sent to Zenod at all: {miss} calls since 2 November, none in your memory. "
-                       "This sits with EpicTeam and went to its desk.")
+            if c["landed"]:
+                out.append(f"Calls: {miss} not in your memory yet. EpicTeam sends them and back-fills the rest.")
+            else:
+                out.append(f"Calls are not sent to Zenod yet: {miss} calls since 2 November, none in your memory. "
+                           "EpicTeam is building it.")
             continue
         parts = []
         if c["never_sent"]:

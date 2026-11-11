@@ -17,11 +17,21 @@ log = f"""# 2026-11-10
 > Source app: EpicTeam card answer
 > Source timestamp: 2026-11-10T00:50:21.710Z
 
+## 01:10 Call transcript  ^e-333333
+- source: mcp
+- content-type: voice_note
+- source-id: call_1
+
+> Source app: EpicTeam call
+
+## 01:20 a store_memory note from elsewhere  ^e-444444
+- source-id: zmr-deployment-learnings-abcdef12
+
 ## 01:00 a text memo that quotes "Source app: EpicTeam Chat"  ^e-222222
 - source: mcp
 """
 landed = count.parse_vault_log(log)
-assert landed == {h: "EpicTeam card answer"}, landed
+assert landed == {h: "EpicTeam card answer", "call_1": "EpicTeam call"}, landed
 
 console = {
     "notes": [
@@ -38,11 +48,13 @@ console = {
 r = count.compute(console, landed, dt.datetime(2026, 11, 10, 12, tzinfo=count.UTC))
 assert r["week"]["card"] == {"left": 1, "landed": 1, "waiting": 0, "failed": 0, "never_sent": 0}, r["week"]["card"]
 assert r["week"]["chat"]["failed"] == 1 and r["week"]["chat"]["landed"] == 0
-assert r["week"]["call"]["never_sent"] == 1
-assert r["all"]["all"] == {"left": 3, "landed": 1}, r["all"]["all"]
+assert r["week"]["call"] == {"left": 1, "landed": 1, "waiting": 0, "failed": 0, "never_sent": 0}, r["week"]["call"]
+assert r["all"]["all"] == {"left": 3, "landed": 2}, r["all"]["all"]
 assert r["skipped"] == {"discarded": 1, "empty": 0, "unfinished": 0, "test": 1, "short call": 1}, r["skipped"]
 g = count.gaps(r)
-assert any("1 failed" in x for x in g) and any(x.startswith("Calls are not sent") for x in g), g
+assert any("1 failed" in x for x in g) and not any(x.startswith("Calls") for x in g), g
 page = count.render(r, [])
-assert "33%" in page and "vn_" not in page
+assert "67%" in page and "vn_" not in page
+r0 = count.compute(console, {h: "EpicTeam card answer"}, dt.datetime(2026, 11, 10, 12, tzinfo=count.UTC))
+assert any(x.startswith("Calls are not sent") for x in count.gaps(r0))
 print("ok")
