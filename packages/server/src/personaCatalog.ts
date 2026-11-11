@@ -369,7 +369,7 @@ function modelPersona(spec: ModelPersonaSpec): PersonaDefinition {
       }
       let offered: Offered | null = canSuggest ? parseSuggestion(reply) : null;
       const leftOut = offered !== null && aboutProjectWork(offered);
-      if (offered && !leftOut && !offered.card) offered = { ...offered, ...(await askForCard(ctx, system, promptWith([], ""), offered)) };
+      if (offered && !leftOut && !offered.card) offered = { ...offered, ...(await askForCard(ctx, system, memoriesOnly(promptWith([], "")), offered)) };
       if (offered) {
         // S36: the card names memories the way the person knows them, never by the model's numbers.
         const said = memoryPhrases(entries);
@@ -397,6 +397,11 @@ async function askForCard(ctx: PersonaContext, system: string, prompt: string, o
     // A cap or a failed call: the suggestion is still worth posting, in the old card.
     return {};
   }
+}
+
+/** The prompt without its closing "Reply with JSON only" line, so the card ask is the only shape asked for. */
+function memoriesOnly(prompt: string): string {
+  return prompt.split("\n").slice(0, -1).join("\n");
 }
 
 /** A helper's suggestion as it posts it: S35's line about what the team said rides along. */

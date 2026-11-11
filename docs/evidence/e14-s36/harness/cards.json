@@ -97,7 +97,7 @@
     ],
     "before": {
       "title": "Boiler is filed under Garden",
-      "body": "That page is about the flat's boiler, which the notes tie to Home, not to Garden."
+      "body": "That page is about the flat's boiler, which the notes tie to Home, not to Garden.\n\nAsked the team: Which of my places is the flat in? They said: Your flat notes, the boiler and the landlord, all sit under Home."
     },
     "after": {
       "title": "I'd move \"Boiler\" under \"Home\".",
@@ -109,7 +109,8 @@
         },
         "yes": "Every boiler note is about the flat, and the flat lives under Home.",
         "no": "If you think of the boiler as part of the outside works, Garden is fine."
-      }
+      },
+      "body": "Asked the team: Which of my places is the flat in? They said: Your flat notes, the boiler and the landlord, all sit under Home."
     }
   },
   {
