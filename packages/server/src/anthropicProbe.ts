@@ -66,7 +66,13 @@ export async function runAnthropicQuestionSet(filing: BrainLlm, answer: BrainLlm
     const result = await filing.classify({
       content: NEW_NOTE,
       hints: [],
-      pageIndex: Object.keys(NOTES).map((path) => ({ path, title: path.split("/").pop()!.replace(/\.md$/, ""), type: "page" })) as never,
+      pageIndex: Object.entries(NOTES).map(([path, body]) => ({
+        path,
+        title: path.split("/").pop()!.replace(/\.md$/, ""),
+        type: "page",
+        tags: [path.split("/")[0]!.toLowerCase()],
+        summary: body.split("\n").filter(Boolean).slice(1).join(" ").slice(0, 120),
+      })) as never,
       tagVocabulary: ["home", "people"],
     });
     rows.push({ id: "file-note", job: "filing", ok: Boolean(result.summary?.trim()), ms: Date.now() - started, reply: String(result.summary ?? "").slice(0, 120) });

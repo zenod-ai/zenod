@@ -27,6 +27,29 @@ describe("the memory question set on the Anthropic route", () => {
   });
 });
 
+describe("the question set through the real client", () => {
+  it("builds a filing request the real classifier accepts as input", async () => {
+    const { createBrainLlm } = await import("zenod");
+    const real = globalThis.fetch;
+    const bodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "stub" } }), { status: 400 });
+    }) as typeof fetch;
+    try {
+      const llm = createBrainLlm({ provider: "anthropic", apiKey: "sk-ant-test", chatModel: "claude-haiku-5-5", classifyModel: "claude-haiku-5-5", askModel: "claude-sonnet-5-5", maxSteps: 1 });
+      const set = await runAnthropicQuestionSet(llm, llm);
+      // The stub refuses every call: each row fails at the provider, never in building its input.
+      for (const row of set.rows) expect(row.reply).not.toMatch(/TypeError/);
+      const filing = bodies.find((b) => b.model === "claude-haiku-5-5")!;
+      expect(filing.temperature).toBeUndefined();
+      expect((filing.output_config as { format: { type: string } }).format.type).toBe("json_schema");
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+});
+
 describe("health reports Anthropic as the background provider", () => {
   it("counts calls and names the last failure", () => {
     resetCreditCallHealth();
