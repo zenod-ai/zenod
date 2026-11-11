@@ -17,6 +17,7 @@ import {
   OPEN_LOOPS,
   parseRecapReply,
   PEOPLE_FOLLOW_UPS,
+  SOMETHING_TO_TRY,
   TOPIC_GARDENER,
   WEEKLY_RECAP,
 } from "../src/personaCatalog.js";
@@ -446,7 +447,7 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
         ["weekly-recap", false, null], ["open-loops", false, null], ["people-follow-ups", false, null],
-        ["topic-gardener", false, null], ["ideas-digest", false, null], ["memory-health", false, null], ["clarifier", false, null],
+        ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["memory-health", false, null], ["clarifier", false, null],
       ]);
       // E23-A2: a new account starts with every helper off; the user switches one on.
       const on = await (await app.request("/api/console/personas/weekly-recap", { method: "POST", body: JSON.stringify({ enabled: true }), headers: { "content-type": "application/json" } })).json() as { personas: Array<{ enabled: boolean }> };
@@ -498,8 +499,8 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     entry(16, "2026-11-06", "Only one this week"),
   ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 
-  it("lists seven personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
-    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Health of your memory", "Clarifier"]);
+  it("lists eight personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
+    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Health of your memory", "Clarifier"]);
     expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual([]);
     for (const persona of BUILT_IN_PERSONAS) {
       expect(persona.purpose.length).toBeGreaterThan(10);
@@ -583,6 +584,56 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     const ideas = deps({ model: () => stubModel(JSON.stringify({ ideas: [{ title: "A shed for the bikes", sources: [1] }] })).model });
     expect(await runPersona(IDEAS_DIGEST, ideas.deps, "manual")).toMatchObject({ status: "done" });
     expect(ideas.inbox.list()[0]!.title).toBe("1 ideas this fortnight. Most on your mind: A shed for the bikes");
+  });
+
+  it("Something to try posts one thing to try from his voice notes, with the notes it came from, and never repeats yesterday's (S38)", async () => {
+    const voice = (n: number, day: string, words: string): MemoryEntry => ({ ...entry(n, day, `Voice note "a${n}.ogg" ingested`), contentType: "voice_note", content: `Voice note "a${n}.ogg" ingested through Zenod media seam.\nSource: WhatsApp voice note\n\n${words}` });
+    const entries = [voice(1, "2026-11-07", "I keep sleeping badly before the long rides."), entry(2, "2026-11-07", "Buy milk"), voice(3, "2026-11-06", "The ride on Sunday wrecked me again.")];
+    const reply = JSON.stringify({ try: { title: "Try a short walk instead of the screen in the hour before bed on Saturday.", why: "You said twice that you sleep badly before the long rides.", sources: [1, 2] } });
+    const stub = stubModel(reply);
+    const { deps: d, inbox, written } = deps({ model: () => stub.model, entries, now: () => new Date("2026-11-08T03:00:00Z") });
+    expect(await runPersona(SOMETHING_TO_TRY, d, "manual")).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 2 notes and posted one thing to try" });
+    // Voice notes first: the typed note is left out when there are voice notes, and the header is gone.
+    expect(stub.calls[0]!.prompt).toContain("I keep sleeping badly");
+    expect(stub.calls[0]!.prompt).not.toContain("Buy milk");
+    expect(stub.calls[0]!.prompt).not.toContain("ingested through");
+    expect(stub.calls[0]!.system).toContain("Never suggest a task");
+    const card = inbox.list()[0]!;
+    expect(card).toMatchObject({ kind: "finding", from: "Something to try", title: "Try a short walk instead of the screen in the hour before bed on Saturday.", body: "You said twice that you sleep badly before the long rides." });
+    expect(card.links.map((l) => l.path)).toEqual(["Log/2026-11-07.md", "Log/2026-11-06.md", "Personas/something-to-try/2026-11-08.md"]);
+    expect(written[0]!.files[0]!.content).toContain("## Try\n\nTry a short walk");
+
+    // The next day it reads what it offered yesterday and is told to suggest something different.
+    const memory = { ...fakeMemory(entries), async get(path: string) {
+      if (path === "Personas/something-to-try/2026-11-08.md") return { path, frontmatter: {}, body: written[0]!.files[0]!.content, url: "", provider: "github" as const };
+      throw new Error("no note");
+    } };
+    const next = stubModel(JSON.stringify({ try: null }));
+    const again = deps({ model: () => next.model, entries, memory, now: () => new Date("2026-11-09T03:00:00Z") });
+    expect(await runPersona(SOMETHING_TO_TRY, again.deps, "manual")).toMatchObject({ status: "done", summary: "Read 2 notes, nothing to try" });
+    expect(next.calls[0]!.prompt).toContain("Suggest something different:\n- Try a short walk instead of the screen in the hour before bed on Saturday.");
+
+    // Project work never reaches the inbox.
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const work = deps({ entries, model: () => stubModel(JSON.stringify({ try: { title: "Try closing three tickets before lunch.", why: "", sources: [1] } })).model });
+    expect(await runPersona(SOMETHING_TO_TRY, work.deps, "manual")).toMatchObject({ status: "done", summary: "Read 2 notes, nothing to try; left out one idea about project work" });
+    expect(work.inbox.list()).toHaveLength(0);
+  });
+
+  it("Something to try is off for a new account and on for an account that used helpers before (S38)", () => {
+    expect(SOMETHING_TO_TRY.defaultEnabled).toBe(false);
+    const fresh = new PersonaStore(join(dir, "fresh.sqlite"));
+    expect(fresh.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    expect(fresh.enabled("something-to-try")).toBeNull();
+    const owner = new PersonaStore(join(dir, "owner.sqlite"), () => new Date("2026-11-05T03:00:00Z"));
+    owner.setEnabled("open-loops", true);
+    expect(owner.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE)).toBe(true);
+    expect(owner.enabled("something-to-try")).toBe(true);
+    // His later choice stands.
+    owner.setEnabled("something-to-try", false);
+    expect(owner.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
+    expect(owner.enabled("something-to-try")).toBe(false);
   });
 
   it("Topic gardener suggests one tidy-up as a suggestion card and changes nothing itself (S27)", async () => {
