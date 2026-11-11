@@ -50,6 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 |---|---|---|---|---|---|---|---|---|---|---|
 | G1 | Ticket worker | run_f9669997-5116-45b6-b964-5ff1802e78b2 | E25-1: the animated landing sections on zenod.dev, live | done (approved by Jordi 2026-11-10) | none | [#1582](https://github.com/zenod-ai/zenod/pull/1582) merged f8ff11d | main | live https://zenod.dev/#how-zenod-works on 1f1ebae since 2026-11-10 05:22Z ([evidence](evidence/e25-g1-2026-11-10.md), [card](cards/E25-G1.md)) | 2026-11-10T05:24Z | followups: none; confirm: yes — only Jordi can say whether the page now lands the ideas from his voice note (E25-2) |
 | G2 | Ticket worker | run_f9669997 (with G1) | E25-2: Jordi says yes to the live page (his verdict on G1's review card) | active | G1 | none | main | none | 2026-11-10 | closes when Jordi closes G1's card |
+| E25-S1 | Ticket worker | unassigned | New Zenod social kit: a bolder Z, a readable banner, a cooler tagline: Redo the Zenod social kit: the Z icon is too thin top and bottom (make it as strong as our better marks); the banner text is barely readable at X size; a cooler tagline than 'Hire a librarian for your memory'; same kit for X, YouTube, Instagram, LinkedIn. | ready | none | none | main | none | 2026-11-11 | dispatch (Jordi's ask, L-37) |
 
 ## Decisions
 
@@ -61,6 +62,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-10 | accepted | epic “Landing: literals kept forever, a living graph, your data stays yours” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (WhatsApp → Zenod), 2026-11-10 03:54Z Zenod: Log/2026-11-10.md#^e-ecf0b8 I think there is this diagram in ") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-10 | accepted | Planned from Jordi's voice note (WhatsApp 2026-11-10 03:54Z, Zenod Log 2026-11-10 ^e-ecf0b8); ready on his ask (L-37) | G1 builds the sections live, he judges the page | his voice note | when G1 is in review |
 | 2026-11-10 | accepted | G1: five moves after the hero; move 5 replaces the old MCP path figure (same #mcp anchor); WhatsApp drawn one way in (root L-6); Codex named after an OAuth connect check | one section of five moves, no new routes | [evidence](evidence/e25-g1-2026-11-10.md) | on Jordi's verdict |
+| 2026-11-11 | accepted | E25-S1 ready on Jordi's ask (L-37, Team desk: "I need another social kit for Z-NOT for some reason you gave me the... an icon for this Z that is worse than a lot of th") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 
 ## Operating Learnings
 
