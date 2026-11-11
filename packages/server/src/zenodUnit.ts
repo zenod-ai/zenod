@@ -84,6 +84,13 @@ import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
 import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
 import { subscribersEnabled } from "./subscribers.js";
+import { creditRouteFromEnv, type CreditRoute } from "./creditRoute.js";
+
+/** EPIC-14 S41 round 2: whether the Anthropic credit route is on and for how many accounts; never the key or the ids. */
+function anthropicCreditHealth(env: NodeJS.ProcessEnv): { on: boolean; model?: string; accounts?: number | "all" } {
+  const route: CreditRoute | null = creditRouteFromEnv(env);
+  return route ? { on: true, model: route.model, accounts: route.tenants === "all" ? "all" : route.tenants.size } : { on: false };
+}
 import { backgroundHealth, backgroundRouteFromEnv, openRouterKeyHealth, startBackgroundBalanceMonitor, startOpenRouterKeyMonitor, type BackgroundRoute } from "./backgroundRoute.js";
 import {
   ZENOD_PUBLISHED_SKILL,
@@ -208,6 +215,7 @@ export class ZenodRuntimePool {
       },
       platformLlm: platformLlmFromEnv(this.env),
       backgroundRoute: this.backgroundRoute,
+      creditRoute: creditRouteFromEnv(this.env),
       subscriberEnv: this.env,
       tenantMonthlyAllowanceUsd: tenantMonthlyAllowanceFromEnv(this.env),
       tenantAllowanceEnforced: tenantAllowanceEnforcedFromEnv(this.env),
@@ -1214,7 +1222,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     );
   }
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth(), credit: { openrouter: openRouterKeyHealth() } }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth(), credit: { openrouter: openRouterKeyHealth(), anthropic: anthropicCreditHealth(env) } }),
   );
   if (
     agent.name === "zenod" &&
