@@ -42,6 +42,10 @@ Verified at: 2026-11-10T05:24Z (live bundle carries the new headings; desktop an
 
 - Claims that are not true of production today.
 
+## Waiting on
+
+- [ask E25-A1: decide @Jordi since 2026-11-11 row E25-S1] Which tagline goes on Zenod's social banners: A "Say it once. Every AI remembers.", B "Your words, kept forever. Found when you need them." or C "Think out loud. Ask any AI later."? — context: you asked for a cooler tagline than Hire a librarian for your memory; all three are shown on real-size X banners on a computer and a phone — impact: the social team holds the new banners until you pick; the landing keeps today's line unless you say to change it too — risk: none, each is one line of copy and easy to change back — recommend: A, the shortest, and it names what only Zenod does: one memory that Claude, ChatGPT, Cursor and other AI tools all read — why Jordi: the brand voice is your call — options: A · B · C · none of these — unblocks: zenod-social E10-S8 banners — details: [the three banners](http://vps3.taild81fbb.ts.net:8921/e25-s1/)
+
 ## Issue Ledger
 
 Steps: each is independently testable and closes only with evidence.
