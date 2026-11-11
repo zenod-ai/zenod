@@ -2,6 +2,7 @@ import type { MemoryEntry } from "zenod";
 import type { InboxLink } from "./inboxStore.js";
 import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill } from "./personaRunner.js";
 import { hasWorkCode, isProjectWork } from "./helperScope.js";
+import { createClarifier } from "./clarifier.js";
 
 /**
  * The built-in personas (EPIC-14 S4): a catalog the user switches on one by one. Only Weekly recap
@@ -530,8 +531,11 @@ export const MEMORY_HEALTH: PersonaDefinition = {
   },
 };
 
+/** S37: asks one short question when a memory could mean two things; its answer is filed like a note. */
+export const CLARIFIER: PersonaDefinition = createClarifier({ memoryOnly: MEMORY_ONLY, memoryTitle, memoryWords, parseJsonReply });
+
 /** Every persona the runner knows, in catalog order. Only Weekly recap is on by default. */
-export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, MEMORY_HEALTH];
+export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, MEMORY_HEALTH, CLARIFIER];
 
 export function personaById(id: string): PersonaDefinition | null {
   return BUILT_IN_PERSONAS.find((persona) => persona.id === id) ?? null;

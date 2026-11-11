@@ -126,6 +126,11 @@ export interface PersonaReadContext {
    * reason), newest first, so it neither repeats one nor suggests what the user turned down.
    */
   readonly earlierSuggestions: ReadonlyArray<PersonaEarlierSuggestion>;
+  /**
+   * S37: its own latest questions and the answers, newest first, so it never asks the same thing
+   * twice and leaves the person alone while earlier questions wait.
+   */
+  readonly earlierQuestions: ReadonlyArray<PersonaEarlierQuestion>;
   /** The memories captured in the last `days` days, newest first. One step. */
   recentMemories(options: { days: number; limit?: number }): Promise<MemoryEntry[]>;
   /** Search the memory (no model). One step. */
@@ -143,6 +148,15 @@ export interface PersonaEarlierSuggestion {
   status: "waiting" | "done" | "not now";
   /** The Not now reason, when one was given. */
   reason?: string;
+}
+
+/** S37: one of the helper's earlier questions, what it was about and the answer, if any. */
+export interface PersonaEarlierQuestion {
+  title: string;
+  /** The `about` key it was posted with (S37: the memory it asks about), when it had one. */
+  about: string | null;
+  status: "open" | "answered";
+  answer?: string;
 }
 
 /** S27: the memory tree as a helper sees it: one line per place, indented by depth. */
@@ -182,8 +196,11 @@ export interface PersonaContext extends PersonaReadContext {
   writeNote(name: string, content: string): void;
   /** A finding for the user's inbox. One step. */
   postFinding(input: { title: string; body?: string; links?: InboxLink[] }): InboxItem;
-  /** A question for the user's inbox, the recommended choice first. One step. */
-  postQuestion(input: { title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[] }): InboxItem;
+  /**
+   * A question for the user's inbox, the recommended choice first. One step. With `about` (S37: the
+   * memory it asks about) the same question is never posted twice: the earlier card comes back.
+   */
+  postQuestion(input: { title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[]; about?: string }): InboxItem;
   /**
    * Propose a job on the memory to the memory desk: an inbox card "Run it?". Nothing changes and
    * nothing is spent unless the user says Run it; then the desk runs it, with Undo. One step.
@@ -248,6 +265,9 @@ export const PERSONA_MAX_POSTS_PER_RUN = 3;
 /** S27: a helper offers at most one change a run. */
 export const PERSONA_MAX_SUGGESTIONS_PER_RUN = 1;
 const EARLIER_SUGGESTIONS = 8;
+const EARLIER_QUESTIONS = 20;
+/** S37: the part of a question's source key that names what it is about. */
+const ABOUT = ":about:";
 const MAX_NOTE_CHARS = 20_000;
 
 export class PersonaCapError extends Error {
@@ -396,10 +416,24 @@ export async function runPersona(
         ...(reason ? { reason } : {}),
       };
     });
+  const earlierQuestions: PersonaEarlierQuestion[] = deps.inbox.list(500)
+    .filter((item) => item.kind === "question" && item.from === persona.name && !item.example)
+    .slice(0, EARLIER_QUESTIONS)
+    .map((item) => {
+      const key = item.sourceKey ?? "";
+      const at = key.indexOf(ABOUT);
+      return {
+        title: item.title,
+        about: at >= 0 ? key.slice(at + ABOUT.length) : null,
+        status: item.status === "open" ? "open" : "answered",
+        ...(item.answer ? { answer: item.answer.label } : {}),
+      };
+    });
   const read: PersonaReadContext = {
     today: isoDay(started),
     feedback,
     earlierSuggestions,
+    earlierQuestions,
     // Spread over the days, newest first within each, so a busy day cannot crowd out the rest of the week.
     async recentMemories({ days, limit = 40 }) {
       skilled("read");
@@ -501,10 +535,14 @@ export async function runPersona(
       beforePost();
       return posted(deps.inbox.post({ kind: "finding", from: persona.name, sourceKey: sourceKey(), ...input }));
     },
-    postQuestion(input) {
+    postQuestion({ about, ...input }) {
       skilled("ask");
+      // S37: a question about one memory is asked once; the card already in the inbox comes back.
+      const key = about ? `persona:${persona.id}${ABOUT}${about.slice(0, 200)}` : null;
+      const same = key ? deps.inbox.list(500).find((item) => item.sourceKey === key) : undefined;
+      if (same) return same;
       beforePost();
-      return posted(deps.inbox.post({ kind: "question", from: persona.name, sourceKey: sourceKey(), ...input }));
+      return posted(deps.inbox.post({ kind: "question", from: persona.name, sourceKey: key ?? sourceKey(), ...input }));
     },
     postSuggestion(input) {
       // S26: one change the helper proposes; the user does it (one undoable desk job), changes it first or says not now.
