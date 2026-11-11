@@ -20,6 +20,7 @@ import { Runtime } from "../src/runtime.js";
 import { mountTesterApplications } from "../src/testerApplications.js";
 import { stripeMinter, TesterFlow, type TesterMail } from "../src/testerFlow.js";
 import { WelcomeMailer } from "../src/welcomeMail.js";
+import { signedOfferUrl } from "../src/endOfTestOffer.js";
 import type { HttpBindings } from "@hono/node-server";
 
 const DESTINATION = "https://cloud.zenod.dev";
@@ -786,6 +787,145 @@ describe("hosted customer layer", () => {
     expect(pendingAccount.status).toBe(404);
     expect(await pendingAccount.json()).toEqual({ error: "no_account" });
 
+  });
+
+  describe("end-of-test offer (EPIC-26 S13)", () => {
+    const freeEnds = 1_800_000_000;
+    function testerSub(status: Stripe.Subscription.Status, mark: string | null, cancelAtEnd = true): Stripe.Subscription {
+      return {
+        ...authoritativeSubscription,
+        status,
+        cancel_at_period_end: cancelAtEnd,
+        current_period_end: freeEnds,
+        ended_at: status === "canceled" ? freeEnds : null,
+        metadata: {
+          account_id: NEW_GITHUB_ACCOUNT_ID,
+          zenod_tester: "1",
+          ...(mark ? { zenod_tester_month_end: mark } : {}),
+        },
+      } as Stripe.Subscription;
+    }
+
+    async function testerAccount(app: ReturnType<typeof customerApp>) {
+      const cookie = await signInCookie(app);
+      await app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      const done = await app.request(`/checkout/complete?session_id=${session.id}`, { headers: { cookie } });
+      expect(done.status).toBe(303);
+      createdParams = null;
+      return cookie;
+    }
+
+    it("offers a tester whose free month the team did not extend one click into the €9 checkout, charged when it ends", async () => {
+      authoritativeSubscription = testerSub("active", "ended_free_time");
+      const app = customerApp();
+      const cookie = await testerAccount(app);
+
+      const account = await (await app.request("/api/console/account", { headers: { cookie } })).json();
+      expect(account.end_of_test_offer).toEqual({
+        phase: "before",
+        free_ends_at: new Date(freeEnds * 1000).toISOString(),
+        pay_url: "/keep-zenod",
+      });
+
+      const keep = await app.request("/keep-zenod", { headers: { cookie } });
+      expect(keep.status).toBe(303);
+      expect(keep.headers.get("location")).toBe(session.url);
+      expect(createdParams).toMatchObject({
+        mode: "subscription",
+        client_reference_id: NEW_GITHUB_ACCOUNT_ID,
+        line_items: [{ price: "price_monthly", quantity: 1 }],
+        subscription_data: { trial_end: freeEnds },
+        payment_method_collection: "always",
+        custom_text: { submit: { message: expect.stringMatching(/^Nothing is charged today\./) } },
+        cancel_url: `${DESTINATION}/app`,
+      });
+      expect(createdParams).not.toHaveProperty("allow_promotion_codes");
+      expect(createdParams).not.toHaveProperty("discounts");
+    });
+
+    it("opens the same checkout from the email's signed link without a sign-in, and refuses an altered one", async () => {
+      authoritativeSubscription = testerSub("active", "ended_free_time");
+      const app = customerApp();
+      await testerAccount(app);
+      const link = new URL(signedOfferUrl(DESTINATION, NEW_GITHUB_ACCOUNT_ID, Date.now() + 60_000, "test-state-secret"));
+
+      const keep = await app.request(`${link.pathname}${link.search}`);
+      expect(keep.status).toBe(303);
+      expect(keep.headers.get("location")).toBe(session.url);
+      expect(createdParams).toMatchObject({ client_reference_id: NEW_GITHUB_ACCOUNT_ID, subscription_data: { trial_end: freeEnds } });
+
+      createdParams = null;
+      link.searchParams.set("a", "acct_someone_else");
+      const altered = await app.request(`${link.pathname}${link.search}`);
+      expect(altered.status).toBe(303);
+      expect(altered.headers.get("location")).toBe(`${DESTINATION}/app`);
+      expect(createdParams).toBeNull();
+    });
+
+    it("after the free month ended, the button is the plain €9 checkout for the same account", async () => {
+      authoritativeSubscription = testerSub("active", "ended_free_time");
+      const app = customerApp();
+      const cookie = await testerAccount(app);
+      authoritativeSubscription = testerSub("canceled", "ended_free_time");
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.deleted",
+        livemode: false,
+        data: { object: authoritativeSubscription },
+      } as Stripe.Event);
+      await app.request("/webhook", { method: "POST", headers: { "stripe-signature": "valid" }, body: "{}" });
+
+      const account = await (await app.request("/api/console/account", { headers: { cookie } })).json();
+      expect(account.end_of_test_offer).toMatchObject({ phase: "after", pay_url: "/keep-zenod" });
+      const keep = await app.request("/keep-zenod", { headers: { cookie } });
+      expect(keep.status).toBe(303);
+      expect(createdParams).toMatchObject({ client_reference_id: NEW_GITHUB_ACCOUNT_ID, payment_method_collection: "if_required" });
+      expect(createdParams?.subscription_data).not.toHaveProperty("trial_end");
+    });
+
+    it("shows no offer while the team extended the month, or to anyone who is not an ending tester", async () => {
+      authoritativeSubscription = testerSub("active", "extended_by_us", false);
+      const app = customerApp();
+      const cookie = await testerAccount(app);
+      const account = await (await app.request("/api/console/account", { headers: { cookie } })).json();
+      expect(account.end_of_test_offer).toBeNull();
+      const keep = await app.request("/keep-zenod", { headers: { cookie } });
+      expect(keep.status).toBe(303);
+      expect(keep.headers.get("location")).toBe(`${DESTINATION}/app`);
+      expect(createdParams).toBeNull();
+    });
+
+    it("keeps the notes running when the old free month ends after the tester already paid", async () => {
+      authoritativeSubscription = testerSub("active", "ended_free_time");
+      const app = locallyBoundCustomerApp();
+      const cookie = await testerAccount(app as ReturnType<typeof customerApp>);
+      const tenantStatus = () => tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status;
+      expect(tenantStatus()).toBe("active");
+
+      // The tester pays from the offer: a second checkout for the same account, its own subscription.
+      const paid = { ...authoritativeSubscription, id: "sub_paid", status: "trialing", cancel_at_period_end: false,
+        metadata: { account_id: NEW_GITHUB_ACCOUNT_ID } } as Stripe.Subscription;
+      session = checkoutSession({ id: "cs_test_keep", subscription: "sub_paid" });
+      await app.request("/keep-zenod", { headers: { cookie } });
+      vi.mocked(stripe.subscriptions.retrieve).mockImplementation(async (id: string) =>
+        id === "sub_paid" ? paid : testerSub("canceled", "ended_free_time"));
+      const done = await app.request(`/checkout/complete?session_id=cs_test_keep`, { headers: { cookie } });
+      expect(done.status).toBe(303);
+
+      // Then the old free month ends: the account stays on.
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.deleted",
+        livemode: false,
+        data: { object: testerSub("canceled", "ended_free_time") },
+      } as Stripe.Event);
+      await app.request("/webhook", { method: "POST", headers: { "stripe-signature": "valid" }, body: "{}" });
+      expect(tenantStatus()).toBe("active");
+      const account = await (await app.request("/api/console/account", { headers: { cookie } })).json();
+      expect(account).toMatchObject({ subscription_status: "active", end_of_test_offer: null });
+    });
   });
 
   describe("tester invite link (EPIC-26 T1)", () => {

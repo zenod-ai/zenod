@@ -153,6 +153,25 @@ describe("TesterMonthEnd.runOnce", () => {
     expect(alerts).toHaveLength(1);
   });
 
+  it("queues the end-of-test offer once, when the free month is set to end (EPIC-26 S13)", async () => {
+    const subs = { sub_a: sub({ id: "sub_a" }) };
+    const { stripe } = fakeStripe(subs);
+    const offers: Array<[string, number]> = [];
+    const run = () => new TesterMonthEnd({
+      stripe,
+      accounts: () => [account("sub_a", "t_sub_a")],
+      lastUsed: () => NOW - 2 * DAY,
+      now: () => NOW,
+      alert: () => {},
+      log: () => {},
+      onFreeTimeEnding: (acct, freeEndsMs) => offers.push([acct.subscriptionId, freeEndsMs]),
+    }).runOnce();
+    await run();
+    expect(offers).toEqual([["sub_a", subs.sub_a.current_period_end * 1000]]);
+    await run();
+    expect(offers).toHaveLength(1);
+  });
+
   it("alerts when Stripe refuses to end it", async () => {
     const alerts: Array<[string, Record<string, string | number> | undefined]> = [];
     const [result] = await job(fakeStripe({ sub_a: sub({ id: "sub_a" }) }, { failUpdate: true }).stripe, ["sub_a"], alerts).runOnce();

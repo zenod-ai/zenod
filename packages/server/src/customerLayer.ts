@@ -56,6 +56,7 @@ import {
 } from "./customerMetering.js";
 import {
   clearCustomerSession,
+  customerLinkSecret,
   issueCustomerSession,
   readCustomerSession,
   type CustomerSession,
@@ -111,6 +112,7 @@ import {
   reportPublicSignupReadiness,
 } from "./productionReadiness.js";
 import { opsAlert } from "./opsAlert.js";
+import { endOfTestOffer, firstChargeAt, OFFER_PATH, offerCheckoutMessage, verifyOfferLink, type EndOfTestOffer } from "./endOfTestOffer.js";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
@@ -460,10 +462,20 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   };
   const isEntitledStatus = (status: CustomerAccount["subscription_status"]) =>
     status === "active" || status === "past_due";
+  /**
+   * EPIC-26 S13: a newer subscription for the same notes is live (a tester paid before their free month
+   * ended), so the old one ending must not pause the account or tell them access stopped.
+   */
+  const supersededByLiveSubscription = (account: CustomerAccount): boolean => {
+    if (!account.tenant_id || isEntitledStatus(account.subscription_status)) return false;
+    const newest = accounts.resolveForTenantId(account.tenant_id);
+    return Boolean(newest && newest.session_id !== account.session_id && isEntitledStatus(newest.subscription_status));
+  };
   const reconcileEntitlement = async (account: CustomerAccount | null): Promise<CustomerAccount | null> => {
     if (!account?.tenant_id || account.subscription_status === "checkout_pending" || account.subscription_status === null) {
       return account;
     }
+    if (supersededByLiveSubscription(account)) return account;
     const entitled = isEntitledStatus(account.subscription_status);
     if (options.tenantStore) {
       await options.tenantStore.setTenantStatus(account.tenant_id, entitled ? "active" : "suspended");
@@ -476,6 +488,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     account: CustomerAccount | null,
   ): Promise<void> => {
     if (!options.onBillingNotice || !account?.tenant_id || !isEntitledStatus(previousStatus)) return;
+    if (supersededByLiveSubscription(account)) return;
     const kind = !isEntitledStatus(account.subscription_status)
       ? "access_suspended"
       : previousStatus === "active" && account.subscription_status === "past_due"
@@ -1392,6 +1405,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         principal.github_id && runtime && (runtime.settings.hasGithubApp() || runtime.settings.get("github_token")),
       ),
     });
+    const offer = await endOfTestOfferFor(account);
     return c.json({
       account_id: account.account_id,
       tier: account.tier,
@@ -1409,6 +1423,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       vault_repo_url: account.vault_repo_url,
       vault,
       usage,
+      end_of_test_offer: offer
+        ? { phase: offer.phase, free_ends_at: new Date(offer.freeEndsMs).toISOString(), pay_url: OFFER_PATH }
+        : null,
     });
   });
 
@@ -2274,6 +2291,61 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
     return c.json({ id: session.id, url: session.url, product: product.product, tier: resolved.tier });
   }
+
+  // EPIC-26 S13: the end-of-test offer, read from the subscription itself (only a tester's free month
+  // that the month-end job set to end, so the team did not add a month).
+  async function endOfTestOfferFor(account: CustomerAccount): Promise<EndOfTestOffer | null> {
+    if (product.product !== "zenod" || !stripe?.subscriptions || !account.stripe_subscription_id) return null;
+    if (!account.cancel_at_period_end && account.subscription_status !== "canceled") return null;
+    try {
+      return endOfTestOffer(await stripe.subscriptions.retrieve(account.stripe_subscription_id, { expand: ["discounts"] }));
+    } catch (error) {
+      console.warn("[offer] could not read the subscription:", error instanceof Error ? error.name : "Error");
+      return null;
+    }
+  }
+
+  // EPIC-26 S13: one click from the offer (app banner or email) into the existing €9 Hosted checkout,
+  // bound to the tester's own account. Signed in, the session says whose; from the email, a signed link
+  // does, so no new sign-in is needed. Before the end, the first €9 is charged when the free month ends.
+  app.get(OFFER_PATH, async (c) => {
+    if (product.product !== "zenod") return c.notFound();
+    const home = `${customerDestination(env, product.defaultDomain)}/app`;
+    const owner = readCustomerSession(c, env);
+    const linked = owner
+      ? null
+      : verifyOfferLink({ a: c.req.query("a"), e: c.req.query("e"), s: c.req.query("s") }, customerLinkSecret(env), Date.now());
+    const account = owner ? accounts.resolveForUser(owner.user_id) : linked ? accounts.resolveForAccountId(linked) : null;
+    if (!account || account.subscription_status === "checkout_pending") return c.redirect(home, 303);
+    const offer = await endOfTestOfferFor(account);
+    if (!offer) return c.redirect(home, 303);
+    const buyer = {
+      user_id: account.user_id,
+      display_name: account.github_login ?? account.user_id,
+      account_id: account.account_id,
+      github_id: account.github_id ?? null,
+      github_login: account.github_login ?? null,
+      email: account.stripe_email ?? account.github_email ?? null,
+    };
+    if (!checkoutEnabledForOwner(buyer, env)) return c.html(signupPausedPage(), 503, { "Retry-After": "3600" });
+    const resolved = resolveCheckoutTier("monthly", billing, newCheckoutPolicyForProduct(product));
+    if (!stripe || "error" in resolved) {
+      return c.html(joinProblemPage("We could not open checkout just now. Please try again in a little while."), 503);
+    }
+    const firstCharge = firstChargeAt(offer, Date.now());
+    try {
+      const session = await createCustomerCheckout(stripe, accounts, billing, buyer, resolved, product, {
+        firstChargeAt: firstCharge,
+        ...(firstCharge ? { submitMessage: offerCheckoutMessage(firstCharge) } : {}),
+        cancelPath: "/app",
+      });
+      if (!session.url) throw new Error("checkout has no url");
+      return c.redirect(session.url, 303);
+    } catch (error) {
+      console.error("[offer] checkout failed:", error instanceof Error ? error.name : "Error");
+      return c.html(joinProblemPage("We could not open checkout just now. Please try again in a little while."), 503);
+    }
+  });
 
   app.get("/buy", async (c) => {
     const response = await startCheckout(c, c.req.query("tier"));

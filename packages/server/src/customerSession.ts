@@ -24,6 +24,11 @@ function secret(env: NodeJS.ProcessEnv): string {
   return env.ACCOUNT_STATE_SECRET || env.STRIPE_WEBHOOK_SECRET || "";
 }
 
+/** EPIC-26 S13: the same secret signs the end-of-test offer's one-click email link. */
+export function customerLinkSecret(env: NodeJS.ProcessEnv = process.env): string {
+  return secret(env);
+}
+
 function signature(value: string, env: NodeJS.ProcessEnv): string {
   return createHmac("sha256", secret(env)).update(value).digest("base64url");
 }

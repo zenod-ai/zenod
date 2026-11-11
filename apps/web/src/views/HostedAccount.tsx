@@ -24,7 +24,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { McpTokensCard } from "@/components/mcp-tokens-card"
 import { FreePlanNotice } from "@/components/free-plan-notice"
-import { isFreePlan } from "@/lib/free-plan"
+import { EndOfTestOffer } from "@/components/end-of-test-offer"
+import { isFreePlan, type EndOfTestOfferView } from "@/lib/free-plan"
 import type { VaultCapabilityProjection, VaultStatus } from "@/lib/api"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
@@ -51,6 +52,7 @@ type Account = {
   current_period_end: string | null
   fully_discounted?: boolean
   free_until?: string | null
+  end_of_test_offer?: EndOfTestOfferView | null
   mcp_url: string | null
   token: string | null
   token_hint: string | null
@@ -312,6 +314,9 @@ export function HostedAccount() {
         </section>
       ) : (
         <>
+          {account.end_of_test_offer ? (
+            <EndOfTestOffer offer={account.end_of_test_offer} />
+          ) : null}
           <div className="grid gap-5 md:grid-cols-2">
             <Card className="rounded-none">
               <CardHeader>
