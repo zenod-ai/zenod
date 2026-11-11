@@ -246,6 +246,16 @@
      ],
      "since": "2026-11-11",
      "draft": true
+    },
+    {
+     "id": "helper-cards",
+     "title": "Helper cards you can judge at a glance",
+     "text": "Every helper card in your inbox shows a small picture of the two ideas it joins, one line on why you might want it, one line on why you might not, and leaves the call to you. Suggestions, things to try and clarifying questions all read the same way.",
+     "rows": [
+      "E14-S36"
+     ],
+     "since": "2026-11-11",
+     "draft": true
     }
    ]
   }
