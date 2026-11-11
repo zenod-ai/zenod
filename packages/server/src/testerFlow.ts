@@ -14,6 +14,10 @@
 // keeps it here; checkout applies the tester coupon straight to the session for that code
 // (`redeem`), one account per code, so no promotion-code permission is needed. The applicant
 // also sees their personal link on screen right after applying, so no mail is needed first.
+// E26-S2 round 2 (Jordi, 2026-11-11: "it already was on write! You push man"): the key could
+// always make codes; minting was simply never switched on. Now Zenod makes a real one-time Stripe
+// promotion code by default and falls back to its own code only when Stripe refuses, logging
+// Stripe's answer. A Stripe code is checked by Stripe at checkout, never by `redeem`.
 // Email goes through Zenod's one sender (zenodMail.ts: Gmail with Zenod's own key, E26-T2)
 // once its key is set; until then it stays queued "waiting for the mail key". Every queued
 // step is retried, so nothing is lost.
@@ -61,6 +65,8 @@ export interface TesterRecord {
   /** U7: the one account that used this code at checkout (a code made here works for one account). */
   redeemedBy?: string;
   redeemedAt?: string;
+  /** E26-S2 round 2: "stripe" for a Stripe promotion code (Stripe enforces its one use), else made here. */
+  codeSource?: "stripe" | "local";
 }
 
 interface TesterFlowState {
@@ -73,8 +79,14 @@ export type TesterMail = ZenodMail;
 export { resendMailer };
 export type { SendMail };
 
-/** Returns a fresh single-use code for this tester id, or throws when it cannot mint. */
-export type MintCode = (testerId: string) => Promise<string>;
+/** A code and who checks it at checkout: Stripe (a promotion code) or Zenod (`redeem`). */
+export interface MintedCode {
+  code: string;
+  source: "stripe" | "local";
+}
+
+/** Returns a fresh single-use code for this tester id (a bare string is made here), or throws when it cannot mint. */
+export type MintCode = (testerId: string) => Promise<string | MintedCode>;
 
 export interface TesterFlowOptions {
   dataDir: string;
@@ -144,8 +156,20 @@ interface PromotionCodeCreator {
       max_redemptions: number;
       expires_at: number;
       metadata: Record<string, string>;
-    }): Promise<{ code: string }>;
+    }): Promise<{ code: string; id?: string; livemode?: boolean }>;
+    update?(id: string, params: { active: boolean }): Promise<{ active?: boolean }>;
   };
+  coupons?: {
+    retrieve?(id: string): Promise<{ id: string; valid?: boolean; livemode?: boolean; percent_off?: number | null }>;
+  };
+}
+
+/** Stripe's answer in a log-safe form: type, code and status, any key fragment removed. */
+export function describeStripeError(error: unknown): string {
+  const e = (error ?? {}) as { type?: unknown; code?: unknown; statusCode?: unknown; message?: unknown };
+  const parts = [e.type, e.code, e.statusCode].filter((part) => typeof part === "string" || typeof part === "number");
+  const message = typeof e.message === "string" ? e.message : String(error);
+  return [...parts, message.replace(/\b(sk|rk|pk)_(live|test)_[A-Za-z0-9*.]+/g, "<key>").slice(0, 200)].join(" ");
 }
 
 /** U7: a code made and kept by Zenod itself; checkout applies the coupon for it (`TesterFlow.redeem`). */
@@ -163,8 +187,59 @@ export function stripeMinter(stripe: PromotionCodeCreator, now: () => Date = () 
       expires_at: Math.floor(now().getTime() / 1000) + TESTER_CODE_TTL_DAYS * 86400,
       metadata: { zenod_tester: "1", zenod_tester_id: testerId },
     });
-    return promo.code;
+    return { code: promo.code, source: "stripe" };
   };
+}
+
+/** E26-S2 round 2: a real Stripe code first; when Stripe refuses, Zenod's own code so nobody waits. */
+export function stripeThenLocalMinter(stripe: PromotionCodeCreator, now?: () => Date): MintCode {
+  const viaStripe = stripeMinter(stripe, now);
+  if (!viaStripe) return localMinter;
+  return async (testerId) => {
+    try {
+      return await viaStripe(testerId);
+    } catch (error) {
+      console.warn("[testers] Stripe did not make the code, made here instead:", describeStripeError(error));
+      return { code: generateTesterCode(), source: "local" };
+    }
+  };
+}
+
+export interface StripeSelfTest {
+  ok: boolean;
+  coupon?: { valid: boolean | null; livemode: boolean | null; percentOff: number | null };
+  made?: { livemode: boolean | null; maxRedemptions: number; deactivated: boolean };
+  stripe?: string;
+}
+
+/**
+ * E26-S2 round 2: proves on production that this key makes codes. Makes one real one-time
+ * promotion code on the tester coupon, marked as a self-test, and deactivates it at once so
+ * nobody can use it. Never returns the code itself.
+ */
+export async function stripeSelfTest(stripe: PromotionCodeCreator | null, now: () => Date = () => new Date()): Promise<StripeSelfTest> {
+  const create = stripe?.promotionCodes?.create?.bind(stripe.promotionCodes);
+  const update = stripe?.promotionCodes?.update?.bind(stripe.promotionCodes);
+  if (!create || !update) return { ok: false, stripe: "no Stripe client" };
+  const result: StripeSelfTest = { ok: false };
+  try {
+    const coupon = await stripe?.coupons?.retrieve?.(TESTER_COUPON_ID);
+    if (coupon) result.coupon = { valid: coupon.valid ?? null, livemode: coupon.livemode ?? null, percentOff: coupon.percent_off ?? null };
+    const promo = await create({
+      coupon: TESTER_COUPON_ID,
+      code: generateTesterCode(),
+      max_redemptions: 1,
+      expires_at: Math.floor(now().getTime() / 1000) + 86400,
+      metadata: { zenod_tester: "0", zenod_selftest: "e26-s2" },
+    });
+    if (!promo.id) return { ...result, stripe: "Stripe returned no id" };
+    const after = await update(promo.id, { active: false });
+    result.made = { livemode: promo.livemode ?? null, maxRedemptions: 1, deactivated: after.active === false };
+    result.ok = result.made.deactivated;
+    return result;
+  } catch (error) {
+    return { ...result, stripe: describeStripeError(error) };
+  }
 }
 
 export class TesterFlow {
@@ -257,7 +332,7 @@ export class TesterFlow {
     const state = this.read();
     const key = code.trim().toUpperCase();
     const tester = state.testers.find((t) => t.status === "accepted" && t.code?.toUpperCase() === key);
-    if (!tester?.codeAt) return null;
+    if (!tester?.codeAt || tester.codeSource === "stripe") return null;
     if (this.now().getTime() > Date.parse(tester.codeAt) + TESTER_CODE_TTL_DAYS * 86400 * 1000) return null;
     if (tester.redeemedBy && tester.redeemedBy !== accountId) return null;
     if (!tester.redeemedBy) {
@@ -295,6 +370,7 @@ export class TesterFlow {
     if (!tester || tester.status !== "accepted" || tester.code) return false;
     tester.code = code;
     tester.codeAt = this.now().toISOString();
+    tester.codeSource = "stripe";
     tester.waiting = "mail";
     this.write(state);
     return true;
@@ -349,8 +425,10 @@ export class TesterFlow {
           continue;
         }
         try {
-          code = await this.mint(tester.id);
-          this.update(tester.id, { code, codeAt: this.now().toISOString(), waiting: "mail" });
+          const minted = await this.mint(tester.id);
+          const made = typeof minted === "string" ? { code: minted, source: "local" as const } : minted;
+          code = made.code;
+          this.update(tester.id, { code, codeAt: this.now().toISOString(), codeSource: made.source, waiting: "mail" });
         } catch (error) {
           console.warn("[testers] could not mint a code here:", error instanceof Error ? error.message : String(error));
           this.update(tester.id, { waiting: WAITING_FOR_CODE });
@@ -401,11 +479,12 @@ export function testerFlowFromEnv(
     cap: Number.isSafeInteger(cap) && cap >= 0 ? cap : DEFAULT_TESTER_CAP,
     autoAccept: env.ZENOD_TESTER_AUTO_ACCEPT !== "0",
     joinUrl: `${(env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "")}/join`,
-    // Stripe minting is opt-in: it only works once the Stripe key may write promotion codes.
-    // U7: otherwise Zenod makes the code itself (ZENOD_TESTER_MINT=off keeps the old queue).
-    mint: env.ZENOD_TESTER_MINT === "stripe" && stripe
-      ? stripeMinter(stripe)
-      : env.ZENOD_TESTER_MINT === "off" ? null : localMinter,
+    // E26-S2 round 2: a Stripe code by default, Zenod's own when Stripe refuses or there is no
+    // Stripe client. ZENOD_TESTER_MINT=stripe is Stripe only, =local only here, =off keeps the old queue.
+    mint: env.ZENOD_TESTER_MINT === "off" ? null
+      : env.ZENOD_TESTER_MINT === "local" || !stripe ? localMinter
+      : env.ZENOD_TESTER_MINT === "stripe" ? stripeMinter(stripe)
+      : stripeThenLocalMinter(stripe),
     sendMail: mailerFromEnv(env),
     ...(isTest ? { isTest } : {}),
   });
@@ -622,12 +701,20 @@ export interface TesterFlowRoutesOptions {
   opsToken?: string;
   /** Counts, every application and the test marks on the admin page (S7 round 2). */
   admin?: TesterAdminExtras;
+  /** E26-S2 round 2: the Stripe client for the ops self-test (one code made and switched off at once). */
+  stripe?: PromotionCodeCreator | null;
 }
 
 export function mountTesterFlowRoutes(app: Hono<{ Bindings: HttpBindings }>, flow: TesterFlow, options: TesterFlowRoutesOptions): void {
   app.get("/api/ops/testers/pending-codes", (c) => {
     if (!bearerMatches(c.req.header("authorization"), options.opsToken)) return c.json({ error: "not found" }, 404);
     return c.json({ pending: flow.pendingCodes() });
+  });
+  app.post("/api/ops/testers/stripe-self-test", async (c) => {
+    if (!bearerMatches(c.req.header("authorization"), options.opsToken)) return c.json({ error: "not found" }, 404);
+    const result = await stripeSelfTest(options.stripe ?? null);
+    console.log("[testers] Stripe self-test:", result.ok ? "a code was made and switched off" : result.stripe);
+    return c.json(result, result.ok ? 200 : 502);
   });
   app.post("/api/ops/testers/codes", bodyLimit({ maxSize: 4 * 1024 }), async (c) => {
     if (!bearerMatches(c.req.header("authorization"), options.opsToken)) return c.json({ error: "not found" }, 404);
