@@ -118,6 +118,16 @@
      ],
      "since": "2026-11-10",
      "draft": true
+    },
+    {
+     "id": "end-of-test-offer",
+     "title": "Keep Zenod in one click when your free month ends",
+     "text": "When your free month is about to end, the app and your account page show what you keep, which is your notes in your own Drive or repository, and what 9 euros a month gives. One button opens checkout for your own account, with nothing charged before the free month is over. If you do not pay, Zenod pauses and your notes stay yours.",
+     "rows": [
+      "E26-S13"
+     ],
+     "since": "2026-11-11",
+     "draft": true
     }
    ]
   },
