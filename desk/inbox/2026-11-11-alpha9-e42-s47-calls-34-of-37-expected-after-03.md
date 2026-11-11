@@ -2,7 +2,8 @@
 from: alpha9
 about: E42-S47 calls: 35 of 37 expected after 03:50Z; one accepted call never written, one call kept no words
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-11-zenod-re-e42-s47-calls-35-of-37-expected-afte.md
 ---
 From agent_team E42-S47 (calls to Jordi's Zenod through store_memory, as your notes of 2026-11-11 said).
 
