@@ -67,7 +67,8 @@ Phylax, WhatsApp stayed connected); the keeper only calls that script and its he
 The proof is an operator review of the Google Cloud project: exact Drive OAuth client, redirect URI, branding,
 `drive.file` scope and verification status (docs/evidence/zenod-google-drive-vault-release-acceptance-2026-08-30).
 No Google Cloud credential exists on the fleet (`secret find gcloud|gcp|service-account` empty), so only Jordi can
-do it. Current proof 2026-08-30T15:48:22Z expires **2026-11-28T15:48:22Z**; the watcher warns from 2026-11-21.
+do it. Current proof 2026-11-11T03:48:45Z (Jordi's Mac-agent look, E26-S4) expires **2027-02-09T03:48:45Z**; the watcher
+warns from 2027-02-02.
 To renew: Jordi checks the OAuth client in Google Cloud console, then an agent sets
 `ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT` to the time of that check (never ahead of it) and redeploys.
 
