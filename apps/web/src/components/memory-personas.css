@@ -26,3 +26,16 @@
 .zr-skills li { border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.05rem 0.55rem; color: var(--zp-ink); }
 .zr-askteam { display: flex; align-items: baseline; gap: 0.45rem; font-size: 0.86rem; color: var(--zp-muted); }
 .zr-on .zr-skills li { border-color: color-mix(in srgb, var(--zp-accent) 40%, var(--zp-line)); }
+
+/* EPIC-23 U7: helpers are still building; a quiet paper label above the heading. */
+.zp-building {
+  display: inline-block;
+  margin: 0 0 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: #8a3b12;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}

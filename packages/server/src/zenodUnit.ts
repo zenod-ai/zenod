@@ -67,6 +67,7 @@ import {
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
+import { setHelpersBuilding } from "./personaRunner.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, type TesterFlow } from "./testerFlow.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
@@ -897,6 +898,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ...options.customer,
       env,
       tenantStore,
+      // EPIC-23 U7: codes Zenod made itself; the tester flow is created further down.
+      testerCoupon: (code, accountId) => testerFlow?.redeem(code, accountId) ?? null,
       driveVaultOAuth: {
         authorizationUrl: googleDriveOAuthUrl,
         exchangeCode: exchangeGoogleDriveOAuthCode,
@@ -984,6 +987,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     });
   }
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  // EPIC-23 U7: Zenod goes live as memory only. Helpers are still building for every hosted customer
+  // but the operator; ZENOD_HELPERS_FOR_TESTERS=1 opens them again.
+  if (agent.name === "zenod" && env.ZENOD_HELPERS_FOR_TESTERS !== "1") {
+    setHelpersBuilding((tenantId) => isHostedCustomerTenant(tenantId) && !isOperatorTenant(tenantId));
+  }
   // EPIC-14 S27: a tenant's schedules (helpers, the tree sweep, the quick index) start when its
   // runtime loads, and a restart loaded none until the tenant's next request, so a night after a
   // production roll ran nothing. Shortly after boot, load every entitled hosted tenant once.
@@ -1406,11 +1414,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   // EPIC-26 S2: after an application, acceptance, a code and the email with the personal link.
   let testerFlow: TesterFlow | null = null;
   if (agent.name === "zenod") {
-    testerFlow = testerFlowFromEnv(storage.dataDir, env, customer.stripe);
+    const marks = new TesterMarks(storage.dataDir, teamEmailsFromEnv(env));
+    // EPIC-23 U7: our own test applications never take one of the testers' places.
+    testerFlow = testerFlowFromEnv(storage.dataDir, env, customer.stripe, (email) => marks.isTest(email));
     // EPIC-26 S7: the funnel as counts only, for zenod-social and the console; our own tests left out.
     const flow = testerFlow;
     const comped = compedAccountIdsFromEnv(env);
-    const marks = new TesterMarks(storage.dataDir, teamEmailsFromEnv(env));
     const counts = new PublicCounts(storage.dataDir, {
       applications: () => readApplications(storage.dataDir),
       testers: () => flow.snapshot().testers,

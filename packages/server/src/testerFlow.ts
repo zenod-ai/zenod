@@ -10,6 +10,10 @@
 // Minting tries Stripe from here (it needs "Promotion codes: Write" on the key); when the
 // key cannot, the code stays queued "waiting for the code command" until the operator
 // script attaches one (scripts/tester-flow-codes.mjs, through the tester-code command).
+// EPIC-23 U7 (Jordi, 2026-11-11: "go live"): by default Zenod now makes the code itself and
+// keeps it here; checkout applies the tester coupon straight to the session for that code
+// (`redeem`), one account per code, so no promotion-code permission is needed. The applicant
+// also sees their personal link on screen right after applying, so no mail is needed first.
 // Email goes through Zenod's one sender (zenodMail.ts: Gmail with Zenod's own key, E26-T2)
 // once its key is set; until then it stays queued "waiting for the mail key". Every queued
 // step is retried, so nothing is lost.
@@ -52,6 +56,11 @@ export interface TesterRecord {
   emailedAt?: string;
   /** What the next step waits for, in plain words; empty once emailed. */
   waiting?: string;
+  /** U7: when the personal link was shown on screen right after applying. */
+  shownAt?: string;
+  /** U7: the one account that used this code at checkout (a code made here works for one account). */
+  redeemedBy?: string;
+  redeemedAt?: string;
 }
 
 interface TesterFlowState {
@@ -76,6 +85,8 @@ export interface TesterFlowOptions {
   mint?: MintCode | null;
   sendMail?: SendMail | null;
   now?: () => Date;
+  /** EPIC-23 U7: our own test applications (testerMarks.ts) are accepted without taking a place. */
+  isTest?: (email: string) => boolean;
 }
 
 export function normalizeTesterEmail(value: string): string | null {
@@ -137,6 +148,9 @@ interface PromotionCodeCreator {
   };
 }
 
+/** U7: a code made and kept by Zenod itself; checkout applies the coupon for it (`TesterFlow.redeem`). */
+export const localMinter: MintCode = async () => generateTesterCode();
+
 /** Mints on the existing tester coupon, like scripts/stripe-testers.mjs issue: one use, 14 days. */
 export function stripeMinter(stripe: PromotionCodeCreator, now: () => Date = () => new Date()): MintCode | null {
   const create = stripe.promotionCodes?.create?.bind(stripe.promotionCodes);
@@ -191,7 +205,13 @@ export class TesterFlow {
 
   /** Accepting now? Off when the stop switch is on, automatic acceptance is off, or the cap is reached. */
   accepting(state = this.read()): boolean {
-    return this.autoAccept && !state.paused && state.testers.filter((t) => t.status === "accepted").length < this.cap;
+    return this.autoAccept && !state.paused && this.placesTaken(state) < this.cap;
+  }
+
+  /** Accepted people who hold a place: everyone but our own tests (U7). */
+  private placesTaken(state: TesterFlowState): number {
+    const isTest = this.options.isTest;
+    return state.testers.filter((t) => t.status === "accepted" && !isTest?.(t.email)).length;
   }
 
   /** One application with an email. The same email twice keeps its first place. */
@@ -229,6 +249,39 @@ export class TesterFlow {
     return true;
   }
 
+  /**
+   * U7: the tester coupon for a code Zenod made here, or null. A code works for one account only,
+   * for 14 days from when it was made; the same account may open checkout with it again.
+   */
+  redeem(code: string, accountId: string): string | null {
+    const state = this.read();
+    const key = code.trim().toUpperCase();
+    const tester = state.testers.find((t) => t.status === "accepted" && t.code?.toUpperCase() === key);
+    if (!tester?.codeAt) return null;
+    if (this.now().getTime() > Date.parse(tester.codeAt) + TESTER_CODE_TTL_DAYS * 86400 * 1000) return null;
+    if (tester.redeemedBy && tester.redeemedBy !== accountId) return null;
+    if (!tester.redeemedBy) {
+      tester.redeemedBy = accountId;
+      tester.redeemedAt = this.now().toISOString();
+      this.write(state);
+    }
+    return TESTER_COUPON_ID;
+  }
+
+  /**
+   * U7: the personal link to show on screen for a person accepted just now, once their code exists.
+   * Only for an application made in this request, so typing someone else's email never shows theirs.
+   */
+  async linkForNew(email: string): Promise<{ code: string; link: string } | null> {
+    const key = email.toLowerCase();
+    const find = () => this.read().testers.find((t) => t.email.toLowerCase() === key);
+    if (!find()?.code) await this.process();
+    const tester = find();
+    if (!tester || tester.status !== "accepted" || !tester.code) return null;
+    this.update(tester.id, { shownAt: this.now().toISOString() });
+    return { code: tester.code, link: `${this.joinUrl}?code=${encodeURIComponent(tester.code)}` };
+  }
+
   /** Accepted people still without a code: ids only, so the code command never sees an email. */
   pendingCodes(): Array<{ id: string; since: string }> {
     return this.read().testers
@@ -247,9 +300,10 @@ export class TesterFlow {
     return true;
   }
 
-  snapshot(): { paused: boolean; autoAccept: boolean; cap: number; accepting: boolean; canMint: boolean; canMail: boolean; testers: TesterRecord[] } {
+  snapshot(): { paused: boolean; autoAccept: boolean; cap: number; accepting: boolean; placesTaken: number; canMint: boolean; canMail: boolean; testers: TesterRecord[] } {
     const state = this.read();
     return {
+      placesTaken: this.placesTaken(state),
       paused: state.paused,
       autoAccept: this.autoAccept,
       cap: this.cap,
@@ -339,6 +393,7 @@ export function testerFlowFromEnv(
   dataDir: string,
   env: NodeJS.ProcessEnv,
   stripe: PromotionCodeCreator | null,
+  isTest?: (email: string) => boolean,
 ): TesterFlow {
   const cap = Number(env.ZENOD_TESTER_CAP);
   return new TesterFlow({
@@ -346,9 +401,13 @@ export function testerFlowFromEnv(
     cap: Number.isSafeInteger(cap) && cap >= 0 ? cap : DEFAULT_TESTER_CAP,
     autoAccept: env.ZENOD_TESTER_AUTO_ACCEPT !== "0",
     joinUrl: `${(env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "")}/join`,
-    // Minting from the server is opt-in: it only works once the Stripe key may write promotion codes.
-    mint: env.ZENOD_TESTER_MINT === "stripe" && stripe ? stripeMinter(stripe) : null,
+    // Stripe minting is opt-in: it only works once the Stripe key may write promotion codes.
+    // U7: otherwise Zenod makes the code itself (ZENOD_TESTER_MINT=off keeps the old queue).
+    mint: env.ZENOD_TESTER_MINT === "stripe" && stripe
+      ? stripeMinter(stripe)
+      : env.ZENOD_TESTER_MINT === "off" ? null : localMinter,
     sendMail: mailerFromEnv(env),
+    ...(isTest ? { isTest } : {}),
   });
 }
 
@@ -398,7 +457,9 @@ const COUNT_LABELS: Array<[string, string]> = [
 const when = (iso: string) => iso.slice(0, 16).replace("T", " ");
 
 function stepText(t: TesterRecord): string {
+  if (t.redeemedAt) return `code used at checkout ${escapeHtml(when(t.redeemedAt))}`;
   if (t.emailedAt) return `emailed ${escapeHtml(when(t.emailedAt))}`;
+  if (t.shownAt) return `link shown on screen ${escapeHtml(when(t.shownAt))}`;
   if (t.status === "waitlist") {
     return `waitlist <form method="post" action="/admin/testers/accept" style="display:inline"><input type="hidden" name="id" value="${escapeHtml(t.id)}"><button class="btn" type="submit">Accept</button></form>`;
   }
@@ -529,7 +590,7 @@ ${notice ? `<p class="where">${escapeHtml(notice)}</p>` : ""}
 
 function adminPage(flow: TesterFlow, extras: TesterAdminExtras = {}, freeRows: FreeTimeRow[] | null = null, notice = ""): string {
   const snap = flow.snapshot();
-  const accepted = snap.testers.filter((t) => t.status === "accepted").length;
+  const accepted = snap.placesTaken;
   const state = snap.accepting
     ? `<span class="state on">Accepting automatically: ${accepted} of ${snap.cap} places taken.</span>`
     : `<span class="state off">Not accepting: ${!snap.autoAccept ? "automatic acceptance is off in the server settings" : snap.paused ? "the stop switch is on" : `all ${snap.cap} places are taken`}. New applications go to the waitlist.</span>`;
@@ -550,7 +611,7 @@ ${freeTimeSection(freeRows, notice)}
 <h2>Acceptance</h2>
 <p>${state}</p>
 <form method="post" action="/admin/testers/switch">${button}</form>
-<p>Codes: ${snap.canMint ? "minted here as people are accepted" : WAITING_FOR_CODE}. Email: ${snap.canMail ? "sent here" : WAITING_FOR_MAIL}.</p>
+<p>Codes: ${snap.canMint ? "made here as people are accepted, and each person sees their link on screen" : WAITING_FOR_CODE}. Email: ${snap.canMail ? "sent here" : WAITING_FOR_MAIL}.</p>
 </main></body></html>`;
 }
 

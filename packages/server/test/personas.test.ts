@@ -31,6 +31,7 @@ import {
   personaPeriodKey,
   personaView,
   runPersona,
+  setHelpersBuilding,
   type PersonaDefinition,
   type PersonaModel,
   type PersonaRunnerDeps,
@@ -488,6 +489,41 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       expect(runtime.runs).toBe(2);
     } finally {
       closePersonasFor(runtime);
+    }
+  });
+});
+
+describe("helpers still building for testers (EPIC-23 U7)", () => {
+  afterEach(() => setHelpersBuilding(() => false));
+
+  it("shows every helper off, refuses switching on and Run now, and leaves the operator's alone", async () => {
+    const tester = { dataDir: join(dir, "tester"), tenantId: "t-tester", runs: 0, async runPersona() { this.runs += 1; return null; } };
+    const operator = { dataDir: join(dir, "operator"), tenantId: "t-operator", runs: 0, async runPersona() { this.runs += 1; return null; } };
+    await mkdir(tester.dataDir, { recursive: true });
+    await mkdir(operator.dataDir, { recursive: true });
+    // An earlier switch-on stays stored, and shows off while helpers are still building.
+    personasFor(tester).setEnabled("weekly-recap", true);
+    setHelpersBuilding((tenantId) => tenantId === "t-tester");
+    let who: typeof tester = tester;
+    const app = new Hono();
+    registerPersonaRoutes(app, async () => ({ runtime: who }));
+    const post = (path: string, body?: unknown) =>
+      app.request(path, { method: "POST", ...(body ? { body: JSON.stringify(body), headers: { "content-type": "application/json" } } : {}) });
+    try {
+      const listed = await (await app.request("/api/console/personas")).json() as { building: boolean; personas: Array<{ enabled: boolean; nextWakeAt: string | null }> };
+      expect(listed.building).toBe(true);
+      expect(listed.personas.every((p) => !p.enabled && p.nextWakeAt === null)).toBe(true);
+      expect((await post("/api/console/personas/open-loops", { enabled: true })).status).toBe(409);
+      expect((await post("/api/console/personas/weekly-recap/run")).status).toBe(409);
+      expect(tester.runs).toBe(0);
+
+      who = operator;
+      const own = await (await app.request("/api/console/personas")).json() as { building: boolean };
+      expect(own.building).toBe(false);
+      expect((await post("/api/console/personas/open-loops", { enabled: true })).status).toBe(200);
+    } finally {
+      closePersonasFor(tester);
+      closePersonasFor(operator);
     }
   });
 });

@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { describe, expect, it } from "vitest";
 import { mountTesterApplications, TESTER_APPLICATIONS_FILE } from "../src/testerApplications.js";
-import { TesterFlow } from "../src/testerFlow.js";
+import { localMinter, TesterFlow } from "../src/testerFlow.js";
 import { clientAddress } from "../src/zenodUnit.js";
 
 function setup() {
@@ -79,5 +79,23 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted" });
     expect(await (await apply("second@example.com")).json()).toEqual({ ok: true, status: "waitlist" });
     expect(flow.snapshot().testers.map((t) => t.email)).toEqual(["first@example.com", "second@example.com"]);
+  });
+
+  it("shows a person accepted just now their personal link, never on a repeat (EPIC-23 U7)", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "zenod-testers-link-"));
+    const flow = new TesterFlow({ dataDir, cap: 5, mint: localMinter });
+    const app = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterApplications(app, { dataDir, clientAddress, flow });
+    const apply = (contact: string) =>
+      app.request("/api/public/testers/apply", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.10" },
+        body: JSON.stringify({ use: "Voice notes on my walks", contact }),
+      });
+    const first = (await (await apply("first@example.com")).json()) as { status: string; code: string; link: string };
+    expect(first.status).toBe("accepted");
+    expect(first.code).toMatch(/^ZT-/);
+    expect(first.link).toBe(`https://cloud.zenod.dev/join?code=${first.code}`);
+    expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted" });
   });
 });

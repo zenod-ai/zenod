@@ -157,6 +157,8 @@ export const ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE =
 export interface CheckoutInvite {
   /** The Stripe promotion code id to apply up front; without it, the code field stays open. */
   promotionCodeId?: string | null;
+  /** EPIC-23 U7: a coupon to apply up front instead, for a tester code Zenod made itself. */
+  couponId?: string | null;
   /** Return to the "you're in" page instead of straight to the app. */
   welcome?: boolean;
   /** Carry the first sign-in's sign-up marker to that page (ZAL-A13 counter). */
@@ -199,12 +201,18 @@ export async function createCustomerCheckout(
     accounts.resolveForUser(normalizedOwner.user_id)?.account_id ??
     customerAccountIdForUser(normalizedOwner);
   const metadata = { product: product.product, unit: product.unit, tier: checkout.tier, account_id: accountId };
+  const prefilled = invite.couponId
+    ? { coupon: invite.couponId }
+    : invite.promotionCodeId ? { promotion_code: invite.promotionCodeId } : null;
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price: checkout.price, quantity: 1 }],
     client_reference_id: accountId,
     metadata,
-    subscription_data: { metadata, ...(invite.firstChargeAt ? { trial_end: invite.firstChargeAt } : {}) },
+    subscription_data: {
+      metadata: invite.couponId ? { ...metadata, zenod_tester: "1" } : metadata,
+      ...(invite.firstChargeAt ? { trial_end: invite.firstChargeAt } : {}),
+    },
     billing_address_collection: "required",
     tax_id_collection: { enabled: true },
     consent_collection: { terms_of_service: "required" },
@@ -213,14 +221,14 @@ export async function createCustomerCheckout(
           // Stripe takes either a prefilled code or the "Add promotion code" field, never both.
           ...(invite.firstChargeAt
             ? {}
-            : invite.promotionCodeId
-              ? { discounts: [{ promotion_code: invite.promotionCodeId }] }
+            : prefilled
+              ? { discounts: [prefilled] }
               : { allow_promotion_codes: true }),
           payment_method_collection: invite.firstChargeAt ? "always" : "if_required",
           custom_text: {
             submit: {
               message: invite.submitMessage ??
-                (invite.promotionCodeId ? ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE : ZENOD_CHECKOUT_SUBMIT_MESSAGE),
+                (prefilled ? ZENOD_INVITE_CHECKOUT_SUBMIT_MESSAGE : ZENOD_CHECKOUT_SUBMIT_MESSAGE),
             },
           },
         }

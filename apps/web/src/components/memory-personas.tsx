@@ -140,10 +140,12 @@ function Cadence({
 function PersonaCard({
   persona,
   teamConnected,
+  building,
   onList,
 }: {
   persona: Persona
   teamConnected: boolean
+  building: boolean
   onList: (list: PersonaList) => void
 }) {
   const [busy, setBusy] = React.useState<
@@ -196,8 +198,8 @@ function PersonaCard({
           className="zr-switch"
           role="switch"
           aria-checked={persona.enabled}
-          aria-label={`${persona.name} ${persona.enabled ? "on" : "off"}`}
-          disabled={busy !== null}
+          aria-label={`${persona.name} ${persona.enabled ? "on" : "off"}${building ? ", still building" : ""}`}
+          disabled={building || busy !== null}
           onClick={toggle}
         >
           <i aria-hidden="true" />
@@ -208,7 +210,7 @@ function PersonaCard({
       <p className="zi-body">{persona.brief}</p>
       <Cadence
         persona={persona}
-        disabled={busy !== null}
+        disabled={building || busy !== null}
         onChange={(cadence) =>
           change("cadence", () => setPersonaCadence(persona.id, cadence))
         }
@@ -222,7 +224,7 @@ function PersonaCard({
         </ul>
       </div>
       {/* EPIC-14 S35: one read-only question to the Team desk a run, off by default. */}
-      {teamConnected && typeof persona.askTeam === "boolean" ? (
+      {!building && teamConnected && typeof persona.askTeam === "boolean" ? (
         <label className="zr-askteam">
           <input
             type="checkbox"
@@ -243,6 +245,7 @@ function PersonaCard({
         <button
           type="button"
           className="zp-deskbtn"
+          disabled={building}
           onClick={() => {
             window.location.hash = talkHash(persona.id)
           }}
@@ -250,7 +253,9 @@ function PersonaCard({
           Talk it over
         </button>
       </div>
-      {persona.enabled ? (
+      {building ? (
+        <p className="zp-hint">Still building: off for now.</p>
+      ) : persona.enabled ? (
         <>
           <LastRun run={persona.lastRun} />
           <p className="zp-hint">
@@ -306,10 +311,24 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
     []
   )
 
+  const building = state.kind === "ready" && state.list.building === true
+
   return (
     <section className="zp zi" aria-labelledby="memory-personas-heading">
       <div className="zp-head">
+        {/* EPIC-23 U7 (Jordi, 2026-11-11): Zenod goes live as memory only; helpers are off and still building. */}
+        {building ? (
+          <p className="zp-building" data-testid="helpers-building">
+            Still building
+          </p>
+        ) : null}
         <h2 id="memory-personas-heading">Helpers that read your memory.</h2>
+        {building ? (
+          <p className="zp-lede" data-testid="helpers-building-note">
+            Helpers are switched off while we finish building them. Your
+            memory works fully without them: save, file and ask as usual.
+          </p>
+        ) : null}
         <p className="zp-lede zr-what" data-testid="helpers-what">
           A helper is a harness that wakes up bound to a persona, reads your
           memory and puts cards in your inbox.
@@ -337,6 +356,7 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
                     key={persona.id}
                     persona={persona}
                     teamConnected={state.list.teamConnected === true}
+                    building={building}
                     onList={onList}
                   />
                 ))}

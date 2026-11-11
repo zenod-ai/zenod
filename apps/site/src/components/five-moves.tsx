@@ -20,17 +20,23 @@ function Move({
   title,
   children,
   stage,
+  building,
 }: {
   no: string;
   id: string;
   title: string;
+  /** EPIC-23 U7: a part of Zenod that is not ready yet gets a "Still building" label. */
+  building?: boolean;
   children: React.ReactNode;
   stage: React.ReactNode;
 }) {
   return (
     <article className="mv" id={id} aria-labelledby={`${id}-title`}>
       <div className="mv-say">
-        <p className="mv-no">{no}</p>
+        <p className="mv-no">
+          {no}
+          {building ? <span className="mv-building">Still building</span> : null}
+        </p>
         <h3 id={`${id}-title`}>{title}</h3>
         {children}
       </div>
@@ -299,7 +305,7 @@ export const FiveMoves = React.memo(function FiveMoves() {
         </p>
       </Move>
 
-      <Move no="3" id="helpers" title="Helpers read it and add new memories." stage={<HelpersStage />}>
+      <Move no="3" id="helpers" title="Helpers read it and add new memories." stage={<HelpersStage />} building>
         <p>
           Helpers are small readers that wake at night. The weekly recap reads
           your week and writes a short recap into its own folder of your
@@ -308,6 +314,9 @@ export const FiveMoves = React.memo(function FiveMoves() {
         <p>
           Others suggest a tidy-up, and you answer Do it or Not now from your
           inbox. Every helper starts off, and you switch on the ones you want.
+        </p>
+        <p>
+          Helpers are still being built. Your memory works fully without them.
         </p>
       </Move>
 

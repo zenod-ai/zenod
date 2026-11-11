@@ -78,7 +78,7 @@ import { IngestStore } from "./ingestStore.js";
 import { UsageStore, estimateCostUsd } from "./usageStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
-import { duePersonas, nextPersonaWakeAt, withAskRevision, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
+import { duePersonas, helpersBuilding, nextPersonaWakeAt, withAskRevision, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import { putAwayProjectSuggestions } from "./helperScope.js";
 import { correctReading, QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
 import { readAs, shownReadings, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
@@ -1019,6 +1019,8 @@ export class Runtime {
   wakePersonas(now: Date = new Date(), personas: readonly PersonaDefinition[] = BUILT_IN_PERSONAS): Promise<PersonaRun[]> {
     if (this.personaWake) return this.personaWake;
     if (this.agent.vaultless === true || !this.settings.vaultConfigured() || !this.settings.activeApiKey()) return Promise.resolve([]);
+    // EPIC-23 U7: helpers are still building for testers; none wakes in their account.
+    if (helpersBuilding(this.tenantId)) return Promise.resolve([]);
     // S27 round 2: once per start, the helpers' earlier suggestions about project work are put away (Not now, reversible).
     if (!this.helperScopeSettled) {
       this.helperScopeSettled = true;

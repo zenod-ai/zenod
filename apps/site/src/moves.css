@@ -9,6 +9,8 @@
 .pp .mv-no { font: 400 clamp(2.4rem, 4vw, 3.4rem)/1 var(--pp-serif); color: var(--pp-accent); margin: 0 0 0.75rem; }
 .pp .mv h3 { font: 400 clamp(1.75rem, 2.7vw, 2.5rem)/1.08 var(--pp-serif); letter-spacing: -0.02em; margin: 0 0 1.1rem; }
 .mv-say p:not(.mv-no) { margin: 0 0 1rem; }
+/* EPIC-23 U7: a part not ready yet. */
+.pp .mv-building { display: inline-block; vertical-align: middle; margin-left: 0.75rem; padding: 0.15rem 0.55rem; border: 1px solid currentColor; border-radius: 3px; font: 500 0.8rem/1.4 var(--pp-sans, system-ui, sans-serif); letter-spacing: 0.02em; color: #8a3b12; }
 .mv-stage { background: var(--pp-stage); border-radius: 6px; padding: clamp(1rem, 2.5vw, 2rem); font-family: var(--pp-sans); color: var(--pp-ink); min-height: 21rem; position: relative; overflow: hidden; }
 .pp .mv-stage p { margin: 0; }
 

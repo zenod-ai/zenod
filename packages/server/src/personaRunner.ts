@@ -340,6 +340,21 @@ export function nextPersonaWakeAt(schedule: PersonaSchedule, now: Date, ranThisP
   return new Date(today > t ? today : today + day);
 }
 
+/**
+ * EPIC-23 U7 (Jordi, 2026-11-11: "turn off the personas for launch … we just say it's disabled and
+ * we're still building it"): which tenants have helpers switched off as still building. Hosted
+ * Zenod sets it (zenodUnit.ts) to every customer except the operator; a self-hosted Zenod never.
+ */
+let helpersBuildingFor: (tenantId: string) => boolean = () => false;
+
+export function setHelpersBuilding(rule: (tenantId: string) => boolean): void {
+  helpersBuildingFor = rule;
+}
+
+export function helpersBuilding(tenantId: string | undefined): boolean {
+  return tenantId ? helpersBuildingFor(tenantId) : false;
+}
+
 export function personaEnabled(store: PersonaStore, persona: PersonaDefinition): boolean {
   return store.enabled(persona.id) ?? persona.defaultEnabled;
 }

@@ -174,6 +174,11 @@ export interface CustomerLayerOptions {
   };
   product?: CustomerProductConfig;
   /**
+   * EPIC-23 U7: the tester coupon for an invite code Zenod made itself (testerFlow.ts `redeem`), or null.
+   * Asked only when Stripe holds no promotion code with that name; it binds the code to this account.
+   */
+  testerCoupon?: (code: string, accountId: string) => string | null;
+  /**
    * Optional route capabilities for product-specific customer surfaces.
    *
    * The shared customer layer defaults to the existing Zenod surface. Products
@@ -2275,15 +2280,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       // EPIC-26 T1: apply the invite's code up front. An unknown or used-up code, or one
       // Stripe will not apply to this checkout, falls back to the open code field.
       const promotionCodeId = invite.code ? await findActivePromotionCode(stripe, invite.code) : null;
-      const checkoutInvite: CheckoutInvite = { promotionCodeId, welcome: true, signedUp: invite.signedUp };
+      // U7: a code Zenod made itself has no Stripe promotion code; its coupon goes on the session directly.
+      const couponId = !promotionCodeId && invite.code ? options.testerCoupon?.(invite.code, accountId) ?? null : null;
+      const checkoutInvite: CheckoutInvite = { promotionCodeId, couponId, welcome: true, signedUp: invite.signedUp };
       try {
         session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product, checkoutInvite);
       } catch (error) {
-        if (!promotionCodeId) throw error;
+        if (!promotionCodeId && !couponId) throw error;
         console.error("invite checkout with code failed, retrying without it:", error instanceof Error ? error.name : "Error");
         session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product, {
           ...checkoutInvite,
           promotionCodeId: null,
+          couponId: null,
         });
       }
     } else {

@@ -76,6 +76,27 @@ describe("MemoryPersonas", () => {
     await waitFor(() => expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("false"))
     expect(calls.at(-1)).toMatchObject({ url: "/api/console/personas/weekly-recap", method: "POST", body: { enabled: false } })
   })
+
+  it("shows helpers off and still building for a tester, with every control disabled (EPIC-23 U7)", async () => {
+    mockFetch(() => ({ ...list({ ...RECAP, enabled: false, nextWakeAt: null }, LOOPS), building: true }))
+    render(<MemoryPersonas />)
+    expect(await screen.findByTestId("helpers-building")).toBeTruthy()
+    expect(screen.getByTestId("helpers-building-note").textContent).toMatch(/switched off while we finish building them/)
+    for (const toggle of screen.getAllByRole("switch")) {
+      expect(toggle.getAttribute("aria-checked")).toBe("false")
+      expect((toggle as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(screen.getAllByText("Still building: off for now.")).toHaveLength(2)
+    expect(screen.queryByRole("button", { name: "Run now" })).toBeNull()
+    for (const talk of screen.getAllByRole("button", { name: "Talk it over" })) expect((talk as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("shows no still-building label to an account whose helpers run", async () => {
+    mockFetch(() => list(RECAP))
+    render(<MemoryPersonas />)
+    expect(await screen.findByText("Weekly recap")).toBeTruthy()
+    expect(screen.queryByTestId("helpers-building")).toBeNull()
+  })
 })
 
 describe("MemoryPersonas catalog", () => {
