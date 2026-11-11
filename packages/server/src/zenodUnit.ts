@@ -1431,6 +1431,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     mountTesterFlowRoutes(app, testerFlow, {
       ...(options.customerAdmin ? { isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)) } : {}),
       opsToken: env.ZENOD_TESTER_OPS_TOKEN,
+      stripe: customer.stripe ?? null,
       // S7 round 2: the counts and every application with its email, on the operator's page only.
       admin: { counts: () => counts.refresh(), applications: () => readApplications(storage.dataDir), marks, freeTime: () => testerMonthEnd },
     });

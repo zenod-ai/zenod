@@ -13,6 +13,8 @@ import {
   normalizeTesterEmail,
   resendMailer,
   stripeMinter,
+  stripeSelfTest,
+  stripeThenLocalMinter,
   TESTER_FLOW_FILE,
   TesterFlow,
   testerFlowFromEnv,
@@ -128,7 +130,9 @@ describe("tester flow (EPIC-26 S2)", () => {
   it("mints on the tester coupon, single use, 14 days", async () => {
     const create = vi.fn(async (params: { code: string }) => ({ code: params.code }));
     const mint = stripeMinter({ promotionCodes: { create } }, () => NOW)!;
-    const code = await mint("tester-1");
+    const minted = await mint("tester-1");
+    expect(minted).toMatchObject({ source: "stripe" });
+    const code = typeof minted === "string" ? minted : minted.code;
     expect(code).toMatch(/^ZT-[A-Z2-9]{8}$/);
     expect(create).toHaveBeenCalledWith({
       coupon: "ZENOD_TESTER_1M",
@@ -138,6 +142,56 @@ describe("tester flow (EPIC-26 S2)", () => {
       metadata: { zenod_tester: "1", zenod_tester_id: "tester-1" },
     });
     expect(stripeMinter({ promotionCodes: {} })).toBeNull();
+  });
+
+  it("E26-S2 round 2: makes a Stripe code by default, its own when Stripe refuses, and logs Stripe's answer without the key", async () => {
+    const create = vi.fn(async (params: { code: string }) => ({ code: params.code }));
+    const { flow } = flowWith({ mint: stripeThenLocalMinter({ promotionCodes: { create } }, () => NOW), sendMail: null });
+    flow.receive("a@example.com");
+    await flow.process();
+    expect(flow.snapshot().testers[0]).toMatchObject({ codeSource: "stripe" });
+    // A Stripe code is Stripe's to check at checkout: Zenod's own coupon path never honours it.
+    expect(flow.redeem(flow.snapshot().testers[0]!.code!, "acct_a")).toBeNull();
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const refusing = vi.fn(async () => {
+      throw Object.assign(new Error("The provided key 'rk_live_abc***wxyz' does not have the required permissions"), {
+        type: "StripePermissionError", statusCode: 403,
+      });
+    });
+    const { flow: fallback } = flowWith({ mint: stripeThenLocalMinter({ promotionCodes: { create: refusing } }), sendMail: null });
+    fallback.receive("b@example.com");
+    await fallback.process();
+    const tester = fallback.snapshot().testers[0]!;
+    expect(tester).toMatchObject({ codeSource: "local", waiting: WAITING_FOR_MAIL });
+    expect(fallback.redeem(tester.code!, "acct_b")).toBe("ZENOD_TESTER_1M");
+    const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(logged).toContain("StripePermissionError 403");
+    expect(logged).not.toContain("rk_live");
+    warn.mockRestore();
+  });
+
+  it("E26-S2 round 2: the self-test makes one code, switches it off and never returns it", async () => {
+    let made = "";
+    const stripe = {
+      coupons: { retrieve: async (id: string) => ({ id, valid: true, livemode: true, percent_off: 100 }) },
+      promotionCodes: {
+        create: vi.fn(async (params: { code: string; max_redemptions: number }) => {
+          made = params.code;
+          return { code: params.code, id: "promo_1", livemode: true };
+        }),
+        update: vi.fn(async () => ({ active: false })),
+      },
+    };
+    const result = await stripeSelfTest(stripe, () => NOW);
+    expect(result).toEqual({
+      ok: true,
+      coupon: { valid: true, livemode: true, percentOff: 100 },
+      made: { livemode: true, maxRedemptions: 1, deactivated: true },
+    });
+    expect(JSON.stringify(result)).not.toContain(made);
+    expect(stripe.promotionCodes.update).toHaveBeenCalledWith("promo_1", { active: false });
+    expect(await stripeSelfTest(null)).toEqual({ ok: false, stripe: "no Stripe client" });
   });
 
   it("sends through Resend with the key in the header only", async () => {
@@ -159,8 +213,10 @@ describe("tester flow (EPIC-26 S2)", () => {
   it("reads production settings: cap, stop setting, minting only when asked, mail only with a key", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "zenod-tester-flow-env-"));
     const stripe = { promotionCodes: { create: async () => ({ code: "x" }) } };
-    // U7: Zenod makes the code itself unless told to use Stripe or to stop.
+    // E26-S2 round 2: a Stripe code first, Zenod's own as the fallback, unless told otherwise.
     expect(testerFlowFromEnv(dataDir, {}, stripe).snapshot()).toMatchObject({ cap: 10, autoAccept: true, canMint: true, canMail: false });
+    expect(testerFlowFromEnv(dataDir, {}, null).snapshot()).toMatchObject({ canMint: true });
+    expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_MINT: "local" }, stripe).snapshot()).toMatchObject({ canMint: true });
     expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_MINT: "off" }, stripe).snapshot()).toMatchObject({ canMint: false });
     expect(testerFlowFromEnv(dataDir, { ZENOD_TESTER_CAP: "3", ZENOD_TESTER_AUTO_ACCEPT: "0", ZENOD_TESTER_MINT: "stripe", RESEND_API_KEY: "re_x" }, stripe).snapshot())
       .toMatchObject({ cap: 3, autoAccept: false, canMint: true, canMail: true });
