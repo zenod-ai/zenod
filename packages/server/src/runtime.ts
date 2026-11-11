@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { SqliteCredentialVault, type CredentialVault } from "./credentialVault.js";
 import type { BackgroundRoute } from "./backgroundRoute.js";
+import { CREDIT_PROVIDER, creditCapMessage, creditRouteFor, type CreditRoute } from "./creditRoute.js";
 import {
   createBrainLlm,
   isLlmAllowanceExceededError,
@@ -339,6 +340,8 @@ export class Runtime {
   private readonly tenantAllowanceEnforced: boolean;
   /** Hosted background route to DeepSeek (EPIC-14 S10 round 4); null = everything on the primary route. */
   private readonly backgroundRoute: BackgroundRoute | null;
+  /** EPIC-14 S41 round 2: this account on alpha9's Anthropic credit (creditRoute.ts), else null. */
+  private readonly creditRoute: CreditRoute | null;
   private allowanceCache: { at: number; spendUsd: number; byFeature: Record<UsageFeature, number> } | null = null;
   private allowanceLoggedAt = 0;
   private readonly vaultBindingSource?: VaultProviderBindingSource;
@@ -399,6 +402,8 @@ export class Runtime {
       tenantAllowanceEnforced?: boolean;
       /** Background jobs on DeepSeek's own API (backgroundRoute.ts); null/absent = no change. */
       backgroundRoute?: BackgroundRoute | null;
+      /** Accounts on the Anthropic credit (creditRoute.ts); null/absent = no change. */
+      creditRoute?: CreditRoute | null;
       googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
       vaultProviderBinding?: VaultProviderBindingSource;
       onVaultBindingUpdate?: (input: {
@@ -439,6 +444,7 @@ export class Runtime {
     this.tenantMonthlyAllowanceUsd = options.tenantMonthlyAllowanceUsd ?? null;
     this.tenantAllowanceEnforced = options.tenantAllowanceEnforced ?? true;
     this.backgroundRoute = options.backgroundRoute ?? null;
+    this.creditRoute = creditRouteFor(options.creditRoute ?? null, this.tenantId);
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     const subscriberEnv = options.subscriberEnv ?? process.env;
     if (subscribersEnabled(subscriberEnv)) {
@@ -739,12 +745,12 @@ export class Runtime {
     if (githubBacked && vaultless) {
       // Backlog agent (Archus) / executor (Epaminon): needs an LLM key + GitHub
       // access, but NO vault.
-      if (!this.settings.activeApiKey() || !(this.settings.get("github_token") || this.settings.hasGithubApp())) {
+      if (!this.llmReady() || !(this.settings.get("github_token") || this.settings.hasGithubApp())) {
         throw new NotConfiguredError();
       }
     } else if (vaultless) {
-      if (!this.settings.activeApiKey()) throw new NotConfiguredError();
-    } else if (!this.settings.activeApiKey() || !this.settings.vaultConfigured()) {
+      if (!this.llmReady()) throw new NotConfiguredError();
+    } else if (!this.llmReady() || !this.settings.vaultConfigured()) {
       throw new NotConfiguredError();
     }
 
@@ -752,7 +758,7 @@ export class Runtime {
     const organizerReasoningEffort = this.settings.organizerReasoningEffort();
     const askReasoningEffort = this.settings.askReasoningEffort();
     const organizerProviderOrder = this.settings.organizerProviderOrder();
-    const primaryLlm = createBrainLlm({
+    const primaryLlm = this.creditRoute ? this.creditLlm({ answers: true }) : createBrainLlm({
       provider: this.settings.provider(),
       apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
@@ -776,7 +782,8 @@ export class Runtime {
         if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
       },
     });
-    const background = this.backgroundLlm(organizerReasoningEffort);
+    // On the credit every job already runs on Claude, so there is nothing to route apart.
+    const background = this.creditRoute ? null : this.backgroundLlm(organizerReasoningEffort);
     const routed = background && this.backgroundRoute
       ? withBackgroundRoute(primaryLlm, background, {
           filing: this.backgroundRoute.jobs.filing === "deepseek",
@@ -1018,7 +1025,7 @@ export class Runtime {
    */
   wakePersonas(now: Date = new Date(), personas: readonly PersonaDefinition[] = BUILT_IN_PERSONAS): Promise<PersonaRun[]> {
     if (this.personaWake) return this.personaWake;
-    if (this.agent.vaultless === true || !this.settings.vaultConfigured() || !this.settings.activeApiKey()) return Promise.resolve([]);
+    if (this.agent.vaultless === true || !this.settings.vaultConfigured() || !this.llmReady()) return Promise.resolve([]);
     // EPIC-23 U7: helpers are still building for testers; none wakes in their account.
     if (helpersBuilding(this.tenantId)) return Promise.resolve([]);
     // S27 round 2: once per start, the helpers' earlier suggestions about project work are put away (Not now, reversible).
@@ -1208,7 +1215,7 @@ export class Runtime {
    * Each call is counted in the tenant's AI allowance as filing.
    */
   private quickIndexModel(): QuickIndexModel | null {
-    if (this.backgroundRoute?.jobs.filing !== "deepseek") return null;
+    if (!this.creditRoute && this.backgroundRoute?.jobs.filing !== "deepseek") return null;
     let last: { inputTokens: number; outputTokens: number; costUsd: number } | null = null;
     const llm = this.backgroundLlm(undefined, (report) => {
       this.usageStore.record(report, Date.now(), "filing");
@@ -1235,6 +1242,7 @@ export class Runtime {
     onUsage?: (report: LlmUsageReport) => void,
     feature?: UsageFeature,
   ): BrainLlm | null {
+    if (this.creditRoute) return this.creditLlm({ ...(onUsage ? { onUsage } : {}), ...(feature ? { feature } : {}) });
     const route = this.backgroundRoute;
     if (!route) return null;
     const check = () => this.checkTenantAllowance();
@@ -1272,6 +1280,16 @@ export class Runtime {
       if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report, "personas");
       last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
     };
+    if (this.creditRoute) {
+      const credit = this.creditLlm({ onUsage: record, feature: "personas" });
+      return {
+        complete: async (input) => {
+          last = null;
+          const text = await credit.streamMemoryChat!(input, () => {});
+          return { text, ...(last ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }) };
+        },
+      };
+    }
     const background = this.backgroundRoute?.jobs.personas === "deepseek" ? this.backgroundLlm(undefined, record, "personas") : null;
     const llm = createBrainLlm({
       provider: this.settings.provider(),
@@ -1421,7 +1439,9 @@ export class Runtime {
     if (!this.settings.platformLlmActive()) return null;
     if (!this.allowanceCache || now - this.allowanceCache.at > 60_000 || now < this.allowanceCache.at) {
       const since = startOfUtcMonth(now);
-      this.allowanceCache = { at: now, spendUsd: this.usageStore.spendSince(since), byFeature: this.usageStore.spendByFeatureSince(since) };
+      // On the credit, the paid allowance counts only paid calls (speech to text, calls, earlier answers).
+      const paid = this.creditRoute ? { except: CREDIT_PROVIDER } : undefined;
+      this.allowanceCache = { at: now, spendUsd: this.usageStore.spendSince(since, paid), byFeature: this.usageStore.spendByFeatureSince(since, paid) };
     }
     const spend = this.allowanceCache.spendUsd;
     return {
@@ -1461,6 +1481,12 @@ export class Runtime {
    * allowance applies (hosted platform key). Fails open.
    */
   featureBlock(feature: UsageFeature, now: number = Date.now()): { message: string; resetsAt: string; reason: "allowance" | "share" } | null {
+    // EPIC-14 S41 round 2: on the credit, answers, helpers and desk work stop only at the credit cap;
+    // filing stops at the credit cap or far past the paid allowance (speech to text is paid); calls stay paid.
+    if (this.creditRoute && feature !== "calls") {
+      const credit = this.creditBlock(now);
+      if (credit || feature !== "filing") return credit;
+    }
     try {
       const status = this.aiAllowanceStatus(now);
       if (!status?.enforced) return null;
@@ -1477,6 +1503,64 @@ export class Runtime {
       // A metering read failure must never stop a user's turn.
       return null;
     }
+  }
+
+  /** Whether a model can be called: the account's own or platform key, or the credit route. */
+  private llmReady(): boolean {
+    return Boolean(this.creditRoute || this.settings.activeApiKey());
+  }
+
+  /** This UTC month's spend on the Anthropic credit (EPIC-14 S41 round 2). */
+  creditSpendUsd(now: number = Date.now()): number {
+    return this.usageStore.spendSince(startOfUtcMonth(now), { only: CREDIT_PROVIDER });
+  }
+
+  /** The credit route's state for this account, or null when it is not on the credit. Never the key. */
+  creditStatus(now: number = Date.now()): { provider: "anthropic"; model: string; askModel: string; spendUsd: number; capUsd: number } | null {
+    const route = this.creditRoute;
+    if (!route) return null;
+    return { provider: "anthropic", model: route.model, askModel: route.askModel, spendUsd: this.creditSpendUsd(now), capUsd: route.monthlyUsd };
+  }
+
+  /** The stop once this account's credit spend reaches its monthly cap; null while it may run. Fails open. */
+  private creditBlock(now: number = Date.now()): { message: string; resetsAt: string; reason: "allowance" } | null {
+    const route = this.creditRoute;
+    if (!route) return null;
+    try {
+      if (this.creditSpendUsd(now) < route.monthlyUsd) return null;
+      const resetsAt = nextUtcMonthlyReset(now);
+      return { message: creditCapMessage(resetsAt), resetsAt, reason: "allowance" };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A model on the Anthropic credit (EPIC-14 S41 round 2): Claude Haiku 5.5 by default, the answer
+   * model for answers. Checked against the credit cap (and the feature's rules) before each call and
+   * logged in the usage ledger as provider anthropic, apart from paid spend.
+   */
+  private creditLlm(options: { answers?: boolean; onUsage?: (report: LlmUsageReport) => void; feature?: UsageFeature } = {}): BrainLlm {
+    const route = this.creditRoute!;
+    const check = () => {
+      const feature = options.feature ?? currentFeature() ?? "chat";
+      const block = this.featureBlock(feature);
+      if (block) throw new LlmAllowanceExceededError(block.message, block.resetsAt);
+    };
+    return createBrainLlm({
+      provider: "anthropic",
+      apiKey: route.apiKey,
+      askModel: options.answers ? route.askModel : route.model,
+      chatModel: route.model,
+      classifyModel: route.model,
+      visionModel: route.model,
+      ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
+      onBeforeCall: options.feature ? () => withFeature(options.feature!, check) : check,
+      onUsage: options.onUsage ?? ((report) => {
+        this.usageStore.record(report);
+        if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
+      }),
+    });
   }
 
   /**

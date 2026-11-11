@@ -61,7 +61,9 @@ export function readFeatureSpend(path: string, since: number): Record<UsageFeatu
  * model-catalog (apps/web/src/lib/model-catalog.ts); pricing as of 2026-06.
  */
 const PRICING: Array<{ match: (model: string) => boolean; input: number; output: number }> = [
-  // Anthropic
+  // Anthropic — the current generation (claude-api skill table, 2026-11-03) before the families
+  { match: (m) => m.includes("haiku-5"), input: 0.1, output: 0.5 },
+  { match: (m) => m.includes("sonnet-5"), input: 2, output: 10 },
   { match: (m) => m.includes("opus"), input: 5, output: 25 },
   { match: (m) => m.includes("sonnet"), input: 3, output: 15 },
   { match: (m) => m.includes("haiku"), input: 1, output: 5 },
@@ -86,6 +88,14 @@ const PRICING: Array<{ match: (model: string) => boolean; input: number; output:
   { match: (m) => m.includes("deepseek-r1"), input: 0.5, output: 2.15 },
   { match: (m) => m.includes("deepseek"), input: 0.2, output: 0.8 },
 ];
+
+/** Which providers' calls a spend sum covers (EPIC-14 S41 round 2: credit calls apart from paid ones). */
+export type ProviderFilter = { only: string } | { except: string };
+
+function providerClause(filter?: ProviderFilter): [string, string[]] {
+  if (!filter) return ["", []];
+  return "only" in filter ? [" AND provider = ?", [filter.only]] : [" AND provider != ?", [filter.except]];
+}
 
 function priceFor(model: string): { input: number; output: number } | null {
   const id = model.toLowerCase();
@@ -367,13 +377,14 @@ export class UsageStore {
   }
 
   /** Spend by feature since `since` (succeeded calls; the gateway's charge when reported, else the estimate). */
-  spendByFeatureSince(since: number): Record<UsageFeature, number> {
+  spendByFeatureSince(since: number, providers?: ProviderFilter): Record<UsageFeature, number> {
+    const [clause, args] = providerClause(providers);
     const rows = this.db
       .prepare(
         `SELECT ${FEATURE_SQL} AS feature, COALESCE(SUM(${SPEND_SQL}), 0) AS spend
-         FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded' GROUP BY 1`,
+         FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded'${clause} GROUP BY 1`,
       )
-      .all(since) as unknown as Array<{ feature: string; spend: number }>;
+      .all(since, ...args) as unknown as Array<{ feature: string; spend: number }>;
     return featureTotals(rows);
   }
 
@@ -476,12 +487,13 @@ export class UsageStore {
    * Spend since `since` (one index-range SUM): the gateway's real charge when reported, else the
    * token-price estimate. This is the per-tenant metering figure (month-to-date, allowance readout).
    */
-  spendSince(since: number): number {
+  spendSince(since: number, providers?: ProviderFilter): number {
+    const [clause, args] = providerClause(providers);
     const row = this.db
       .prepare(
-        "SELECT COALESCE(SUM(COALESCE(provider_cost_usd, cost_usd)), 0) AS spend FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded'",
+        `SELECT COALESCE(SUM(COALESCE(provider_cost_usd, cost_usd)), 0) AS spend FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded'${clause}`,
       )
-      .get(since) as unknown as { spend: number };
+      .get(since, ...args) as unknown as { spend: number };
     return row.spend ?? 0;
   }
 

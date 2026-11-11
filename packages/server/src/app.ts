@@ -2240,6 +2240,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         allowanceUsd: runtime.tenantAllowanceUsd(),
         enforced: runtime.aiAllowanceStatus(now)?.enforced ?? false,
         platformKey: runtime.settings.platformLlmActive(),
+        // EPIC-14 S41 round 2: on alpha9's Anthropic credit, its spend and cap apart (null = not on it).
+        anthropicCredit: runtime.creditStatus(now),
       },
     });
   });
