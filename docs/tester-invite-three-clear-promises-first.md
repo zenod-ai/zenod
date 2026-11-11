@@ -27,16 +27,16 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 ## Current State
 
-Owner: run_7b98678e (E26-S2, answers T1's relaunch)
+Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-10T17:25Z E26-S2: the full tester picture on one page; the server now accepts the first 10 applicants itself and creates each a Stripe code and email; live on 0274bf2f
-Result: E26-1 met; application and acceptance live; invites are created automatically, never by hand; Stripe code making waits on one permission tick or E26-A2; emails wait on a Resend key; welcome email to build; E26-S2 and T1 in review on one page
-Evidence: [full tester picture](http://vps3.taild81fbb.ts.net:8921/e26-s2/), [e26-s2](evidence/e26-s2-2026-11-10.md), cards docs/cards/E26-S2.md and docs/cards/E26-T1.md
-Waiting on: nobody
+Last attempted: 2026-11-11T18:46Z Delivery Manager roll-up (run_c136ba80): T1, E26-S2, E26-S5, E26-S7, E26-S13 approved by Jordi ; E26-S11 one-click mail consent built, on staging 57ea1252, waits for a promote, then its ask E26-A9 is posted ; E26-S15 tester quick start built and merged 9013340, waits for the staging roll and promote ; T2 welcome email built, live but off, waits on the mail key from E26-S11 ; E26-S3 watches the first stranger, none yet
+Result: strangers can apply on zenod.dev/testers, the server accepts the first 10 itself and makes each a code; nobody can be emailed yet because the mail key waits on a promote; the quick start and welcome email are built and wait the same way
+Evidence: [full tester picture](http://vps3.taild81fbb.ts.net:8921/e26-s2/) · [e26-s11](evidence/e26-s11-2026-11-11.md) · [e26-s15](evidence/e26-s15-2026-11-11.md) · [e26-t2](evidence/e26-t2-2026-11-10.md)
+Waiting on: Jordi: infra-vps/EPIC-2-A50 (resume promotes; carries E26-S11 and E26-S15 to production)
 Approved work: none
-Next action: post the mail key ask and the code permission ask from the E26-S2 page; once both land, watch the first stranger's sign-up live
-Source revision: 0274bf2f
-Verified at: 2026-11-10T17:24Z (health sha 0274bf2f ok; live form refuses non-emails; admin and code queue closed without auth)
+Next action: on EPIC-2-A50 yes the M12 timer promotes; then post E26-A9 (one-click mail consent), switch the welcome email on (T2), and E26-S3 watches the first stranger sign up
+Source revision: main (staging 57ea1252 and later; production d9ebdd6)
+Verified at: 2026-11-11T18:46Z (EPIC-26 ledger and Waiting on read)
 
 ## Waiting on
 
