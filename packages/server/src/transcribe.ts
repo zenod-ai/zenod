@@ -21,7 +21,9 @@ import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
  *    cap; anything still larger is split into segments and stitched back.
  *
  * 2. OpenRouter cloud STT — the paid fallback for long notes and for Groq
- *    failures/quota exhaustion when an OpenRouter key is configured.
+ *    failures/quota exhaustion when an OpenRouter key is configured. A one-shot
+ *    answer whose words per probed minute fall far below speech rate is re-run in
+ *    10-minute segments (EPIC-24 M13), so a silent early stop cannot cut a note.
  *
  * 3. Local whisper.cpp — the default and the final fallback when cloud
  *    providers are missing, rate-limited, out of credits, or down. No cloud,
@@ -802,6 +804,126 @@ function recordTranscribeUsage(
   }
 }
 
+/**
+ * EPIC-24 M13: a cloud model can stop early and still answer 200 with clean text, so a long
+ * note would land cut with nothing to show for it. After a one-shot call, words per probed
+ * minute far below speech rate (people talk at about 130 to 160) mean the text does not cover
+ * the audio: the note is re-run in segments and the fuller transcript is kept.
+ */
+export const TRANSCRIPT_MIN_WORDS_PER_MINUTE = positiveNumberFromEnv("ZENOD_TRANSCRIPT_MIN_WPM", 50);
+/** Below this length a few quiet seconds swing the rate too much to judge coverage. */
+export const TRANSCRIPT_COVERAGE_MIN_SECONDS = 120;
+export const OPENROUTER_SEGMENT_SECONDS = positiveNumberFromEnv("ZENOD_OPENROUTER_SEGMENT_SECONDS", 600);
+
+function positiveNumberFromEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+export function countTranscriptWords(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+export interface TranscriptCoverage {
+  seconds: number | null;
+  words: number;
+  wordsPerMinute: number | null;
+  /** True when the audio is long enough to judge and the text covers far less of it than speech would. */
+  low: boolean;
+}
+
+export function transcriptCoverage(
+  transcript: string,
+  seconds: number | null,
+  minWordsPerMinute = TRANSCRIPT_MIN_WORDS_PER_MINUTE,
+): TranscriptCoverage {
+  const words = countTranscriptWords(transcript);
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) {
+    return { seconds: null, words, wordsPerMinute: null, low: false };
+  }
+  const wordsPerMinute = words / (seconds / 60);
+  return {
+    seconds,
+    words,
+    wordsPerMinute,
+    low: seconds >= TRANSCRIPT_COVERAGE_MIN_SECONDS && wordsPerMinute < minWordsPerMinute,
+  };
+}
+
+async function probeFileDurationSeconds(path: string, signal?: AbortSignal): Promise<number | null> {
+  try {
+    const out = await runCapture(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+      { signal },
+    );
+    const seconds = Number(out.trim());
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  } catch (err) {
+    console.warn(`[transcribe] could not probe audio duration: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/** One OpenRouter STT call on an mp3 already on disk; records its own usage row. */
+async function openRouterTranscribeMp3(
+  audio: Buffer,
+  seconds: number | null,
+  apiKey: string,
+  model: string,
+  signal?: AbortSignal,
+  user?: string,
+  onUsage?: UsageSink,
+): Promise<TranscriptionEnvelope> {
+  const body: {
+    model: string;
+    input_audio: { data: string; format: "mp3" };
+    language?: string;
+  } = {
+    model,
+    input_audio: { data: audio.toString("base64"), format: "mp3" },
+  };
+  if (LANGUAGE !== "auto") body.language = LANGUAGE;
+  if (user) (body as { user?: string }).user = user;
+  const timeout = AbortSignal.timeout(300_000);
+  const response = await fetchRetryingNetworkErrors(OPENROUTER_STT_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  if (!response.ok) {
+    const text = (await response.text().catch(() => "")).slice(0, 400);
+    const failed = transcriptionFailureFromResponse("openrouter", response.status, text);
+    recordTranscribeUsage(onUsage, { provider: "openrouter", model, status: "failed", errorCode: failureCode(failed), seconds });
+    return failed;
+  }
+  const json = (await response.json().catch(() => null)) as {
+    text?: unknown;
+    id?: unknown;
+    usage?: { cost?: unknown; seconds?: unknown } | null;
+  } | null;
+  const transcript = typeof json?.text === "string" ? json.text.trim() : "";
+  // Verified against the live API (2026-10-12, 1.5 s tone): the body is `{ text, usage: { seconds, cost } }` with
+  // no `id`; the generation id arrives only in the `x-generation-id` response header. Real `usage.cost` is used
+  // when present; otherwise the per-minute estimate is recorded and `provider_cost_usd` stays NULL.
+  const cost = json?.usage?.cost;
+  const billedSeconds = json?.usage?.seconds;
+  recordTranscribeUsage(onUsage, {
+    provider: "openrouter",
+    model,
+    status: transcript ? "succeeded" : "failed",
+    errorCode: "empty_transcript",
+    seconds: typeof billedSeconds === "number" && billedSeconds > 0 ? billedSeconds : seconds,
+    providerCostUsd: typeof cost === "number" && Number.isFinite(cost) ? cost : null,
+    generationId: typeof json?.id === "string" ? json.id : response.headers.get("x-generation-id"),
+  });
+  if (!transcript) {
+    return { success: false, provider: "openrouter", error: "transcription returned empty text", failureReason: "unknown" };
+  }
+  return { success: true, transcript, provider: `openrouter ${model}` };
+}
+
 async function transcribeWithOpenRouter(
   data: Buffer,
   filename: string,
@@ -823,54 +945,26 @@ async function transcribeWithOpenRouter(
       { signal },
     );
     const audio = await readFile(mp3);
-    seconds = audio.length / 4_000; // 32 kbps mono mp3
-    const body: {
-      model: string;
-      input_audio: { data: string; format: "mp3" };
-      language?: string;
-    } = {
-      model,
-      input_audio: { data: audio.toString("base64"), format: "mp3" },
-    };
-    if (LANGUAGE !== "auto") body.language = LANGUAGE;
-    if (user) (body as { user?: string }).user = user;
-    const timeout = AbortSignal.timeout(300_000);
-    const response = await fetchRetryingNetworkErrors(OPENROUTER_STT_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    });
-    if (!response.ok) {
-      const text = (await response.text().catch(() => "")).slice(0, 400);
-      const failed = transcriptionFailureFromResponse("openrouter", response.status, text);
-      recordTranscribeUsage(onUsage, { provider: "openrouter", model, status: "failed", errorCode: failureCode(failed), seconds });
-      return failed;
+    seconds = (await probeFileDurationSeconds(mp3, signal)) ?? audio.length / 4_000; // 32 kbps mono mp3
+    const whole = await openRouterTranscribeMp3(audio, seconds, apiKey, model, signal, user, onUsage);
+    if (!whole.success) return whole;
+    const coverage = transcriptCoverage(whole.transcript ?? "", seconds);
+    if (!coverage.low || signal?.aborted) {
+      logCoverage(model, coverage, false);
+      return whole;
     }
-    const json = (await response.json().catch(() => null)) as {
-      text?: unknown;
-      id?: unknown;
-      usage?: { cost?: unknown; seconds?: unknown } | null;
-    } | null;
-    const transcript = typeof json?.text === "string" ? json.text.trim() : "";
-    // Verified against the live API (2026-10-12, 1.5 s tone): the body is `{ text, usage: { seconds, cost } }` with
-    // no `id`; the generation id arrives only in the `x-generation-id` response header. Real `usage.cost` is used
-    // when present; otherwise the per-minute estimate is recorded and `provider_cost_usd` stays NULL.
-    const cost = json?.usage?.cost;
-    const billedSeconds = json?.usage?.seconds;
-    recordTranscribeUsage(onUsage, {
-      provider: "openrouter",
-      model,
-      status: transcript ? "succeeded" : "failed",
-      errorCode: "empty_transcript",
-      seconds: typeof billedSeconds === "number" && billedSeconds > 0 ? billedSeconds : seconds,
-      providerCostUsd: typeof cost === "number" && Number.isFinite(cost) ? cost : null,
-      generationId: typeof json?.id === "string" ? json.id : response.headers.get("x-generation-id"),
-    });
-    if (!transcript) {
-      return { success: false, provider: "openrouter", error: "transcription returned empty text", failureReason: "unknown" };
+    // The text stops well before the audio does: re-run in segments, keep the fuller transcript.
+    console.warn(
+      `[transcribe] openrouter text covers ${Math.round(coverage.wordsPerMinute ?? 0)} words/min of ${Math.round(seconds)}s audio; re-running in ${OPENROUTER_SEGMENT_SECONDS}s segments`,
+    );
+    const segmented = await transcribeOpenRouterSegments(mp3, dir, apiKey, model, signal, user, onUsage);
+    if (segmented.success && countTranscriptWords(segmented.transcript ?? "") > coverage.words) {
+      logCoverage(model, transcriptCoverage(segmented.transcript ?? "", seconds), true);
+      return segmented;
     }
-    return { success: true, transcript, provider: `openrouter ${model}` };
+    if (!segmented.success) console.warn(`[transcribe] openrouter segment re-run failed, keeping the one-shot text: ${segmented.error}`);
+    logCoverage(model, coverage, false);
+    return whole;
   } catch (err) {
     const failed = transcriptionFailureFromThrown("openrouter", err);
     recordTranscribeUsage(onUsage, { provider: "openrouter", model, status: "failed", errorCode: failureCode(failed), seconds });
@@ -878,6 +972,62 @@ async function transcribeWithOpenRouter(
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+async function transcribeOpenRouterSegments(
+  mp3: string,
+  dir: string,
+  apiKey: string,
+  model: string,
+  signal?: AbortSignal,
+  user?: string,
+  onUsage?: UsageSink,
+): Promise<TranscriptionEnvelope> {
+  await run(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      mp3,
+      "-f",
+      "segment",
+      "-segment_time",
+      String(OPENROUTER_SEGMENT_SECONDS),
+      "-reset_timestamps",
+      "1",
+      "-c",
+      "copy",
+      join(dir, "part%04d.mp3"),
+    ],
+    { signal },
+  );
+  const parts = (await readdir(dir)).filter((f) => f.startsWith("part") && f.endsWith(".mp3")).sort();
+  if (parts.length < 2) {
+    return { success: false, provider: "openrouter", error: "segmenting produced fewer than two parts", failureReason: "unknown" };
+  }
+  const texts: string[] = [];
+  for (const part of parts) {
+    const path = join(dir, part);
+    const audio = await readFile(path);
+    const partSeconds = (await probeFileDurationSeconds(path, signal)) ?? audio.length / 4_000;
+    const result = await openRouterTranscribeMp3(audio, partSeconds, apiKey, model, signal, user, onUsage);
+    if (!result.success) return result;
+    texts.push(result.transcript ?? "");
+  }
+  return { success: true, transcript: texts.join(" ").trim(), provider: `openrouter ${model}` };
+}
+
+/** One line per OpenRouter transcription: probed length against text length (numbers only, never text). */
+function logCoverage(model: string, coverage: TranscriptCoverage, segmented: boolean): void {
+  console.log(JSON.stringify({
+    event: "transcription.coverage",
+    provider: `openrouter ${model}`,
+    audio_seconds: coverage.seconds === null ? null : Math.round(coverage.seconds),
+    words: coverage.words,
+    words_per_minute: coverage.wordsPerMinute === null ? null : Math.round(coverage.wordsPerMinute),
+    low: coverage.low,
+    segmented,
+  }));
 }
 
 /**
