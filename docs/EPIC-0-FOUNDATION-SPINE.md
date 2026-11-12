@@ -54,7 +54,7 @@ Phase: production runs b4cf52b since 2026-11-12T03:49Z (gate passed): the Drive 
 Last attempted: 2026-11-12T03:55Z DM run_c6fa2e13: infra-vps restored Zenod promotes (A50 round 2, Jordi: "stop it" meant EpicBooks, not Zenod); flagged promote-now (D36, FYI E7-A22), the M12 timer promoted b4cf52b at 03:49Z ; started T7-F1 + T7 round 5, E7-S3, S41, E26-S11 (posts E26-A9), E26-S15 on production ; earlier: M3 closed clean, M7 still slow (M14 drafted), M9 folded per Jordi E94-A2, S42 merged
 Result: production b4cf52b healthy (gate demo 96/100/1.7, private 94.1/98.2/3.1); a stranger can apply and sign up at 0 euro; whether a new tester can save, and Claude on production, are being proved now; no outside tester yet
 Waiting on: five workers on production checks (T7-F1/T7, E7-S3, S41, E26-S11, E26-S15) ; then Jordi: E26-A9 mail consent (posted by E26-S11) ; infra-vps Mac ticket E2-M1 (tester-watch install)
-Monitoring: E7-S3 iteration 3 (run_5749a0c1; nightly check now on Claude through staging, 5291ae91) and E10-S1 dev.zenod sweep (run_e0378fa1) running, leases until ~17:15Z… · next check 2026-11-12T17:20:00.000Z
+Monitoring: S30 12 Nov check: Jordi's vault efc4268 still holds 0 Right place / Wrong place answers (script: too_few, need 20 with 5 wrong and 5 right); 500 filings now ca… · next check 2026-11-15T18:00:00.000Z
 Next action: integrate the five production checks; post E26-A9; then T8 go or no-go and the first invites
 Verified at: 2026-11-12T03:55Z (production health ok b4cf52b; promote log ~/zenod-eval/promotions.jsonl)
 
