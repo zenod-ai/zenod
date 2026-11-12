@@ -371,7 +371,7 @@ export const OneMemorySection = React.memo(function OneMemorySection() {
         <p className="pp-fine">
           Your tools reach it over MCP, from the cloud: add {host} once as a
           connector and sign in with Google or GitHub. Listed in the official
-          MCP Registry as dev.zenod/memory.
+          MCP Registry as Zenod.
         </p>
       </div>
       <figure className="pp-mcp-fig">
