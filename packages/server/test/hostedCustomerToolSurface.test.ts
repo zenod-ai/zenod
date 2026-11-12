@@ -121,6 +121,18 @@ describe("hosted customer MCP tool surface", () => {
     expect(names).toEqual([...HOSTED_CHANNEL_MCP_TOOLS].sort());
   });
 
+  it("describes every tool on the canonical credential without operator or backlog wording", async () => {
+    const tools = await listTools("customer-canonical");
+    for (const tool of tools) {
+      const texts = [tool.description ?? "", ...Object.values(tool.inputSchema.properties ?? {}).map((schema) => (schema as { description?: string }).description ?? "")];
+      for (const text of texts) {
+        expect(text, tool.name).not.toMatch(INSTRUCTION_TO_MODEL);
+        expect(text, tool.name).not.toMatch(/backlog|triage|issues|self-tests?|engine\.chat/i);
+      }
+      expect(typeof tool.annotations?.readOnlyHint, tool.name).toBe("boolean");
+    }
+  });
+
   it("keeps operator tools on the operator's tenant and on tenants with no customer account", async () => {
     for (const token of ["operator-canonical", "self-host-token"]) {
       const names = (await listTools(token)).map((tool) => tool.name);
