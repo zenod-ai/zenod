@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # E10-S1: our address is zenod.dev; never its backwards form in anything people read.
+      - run: scripts/ci/check-no-reversed-domain.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22

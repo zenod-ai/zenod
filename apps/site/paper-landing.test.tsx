@@ -102,7 +102,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(mcp).toContain("cloud.zenod.dev/mcp");
     for (const tool of ["WhatsApp", "Claude", "ChatGPT", "Codex", "Cursor", "VS Code", "Gemini CLI"]) expect(mcp).toContain(tool);
     expect(mcp).toContain("MCP Registry as Zenod");
-    expect(mcp).not.toContain("dev.zenod");
+    expect(mcp).not.toMatch(/dev[.]zenod/i);
     expect(mcp).toContain('href="/connect"');
     expect(mcp).toMatch(/class="mv-stage scene mv-hub"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/);
   });

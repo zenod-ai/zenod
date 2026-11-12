@@ -1,13 +1,19 @@
 name: MCP Registry
 
 # Publishes Zenod's listing (docs/epic10/server.json) to the official MCP
-# Registry as dev.zenod/memory whenever that file changes on main. The
-# namespace is proven by DNS: the zenod.dev TXT record `v=MCPv1; k=ed25519;
-# p=<public key>` matches the private key in the MCP_REGISTRY_PRIVATE_KEY
-# Actions secret (also in the VPS1 secret store as
-# zenod-mcp-registry/MCP_REGISTRY_PRIVATE_KEY). Bump "version" in server.json
-# to publish; an already-published version is skipped. See EPIC-10 row E10-R3
+# Registry as io.github.zenod-ai/zenod whenever that file changes on main.
+# The io.github.zenod-ai namespace is proven by this repository's own GitHub
+# Actions OIDC token (no secret, no DNS record). Bump "version" in server.json
+# to publish; an already-published version is skipped. Title "Zenod", website
+# https://zenod.dev. See EPIC-10 rows E10-R3 and E10-S1
 # (docs/zenod-in-every-mcp-directory-listing-spr.md).
+#
+# Retiring an old listing name (E10-S1): run this workflow by hand with
+# `retire_name` set. It signs in to the zenod.dev namespace by DNS (the
+# MCP_REGISTRY_PRIVATE_KEY secret matches the zenod.dev TXT record
+# `v=MCPv1; k=ed25519; p=...`) and sets every version of that name to
+# status "deleted", which hides it from registry listings and tells the
+# directories that copy the registry to drop it.
 
 on:
   push:
@@ -15,7 +21,12 @@ on:
     paths:
       - "docs/epic10/server.json"
       - ".github/workflows/mcp-registry.yml"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      retire_name:
+        description: "Old listing name to set to deleted (all versions), signed in by DNS on zenod.dev; leave empty to only publish"
+        required: false
+        default: ""
 
 concurrency:
   group: mcp-registry
@@ -23,16 +34,24 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
-  PUBLISHER_VERSION: v1.8.8
+  PUBLISHER_VERSION: v1.8.9
   SERVER_JSON: docs/epic10/server.json
+  REGISTRY: https://registry.modelcontextprotocol.io
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Listing copy says Zenod and zenod.dev (E10-S1 guard)
+        run: |
+          scripts/ci/check-no-reversed-domain.sh
+          jq -e '.title == "Zenod" and .websiteUrl == "https://zenod.dev" and (.name | startswith("io.github.zenod-ai/"))' "$SERVER_JSON" >/dev/null \
+            || { echo "server.json must keep title Zenod, website https://zenod.dev and an io.github.zenod-ai/ name"; exit 1; }
 
       - name: Install mcp-publisher
         run: |
@@ -48,26 +67,43 @@ jobs:
           name=$(jq -r .name "$SERVER_JSON")
           version=$(jq -r .version "$SERVER_JSON")
           code=$(curl -s -o /dev/null -w '%{http_code}' \
-            "https://registry.modelcontextprotocol.io/v0.1/servers/$(jq -rn --arg n "$name" '$n|@uri')/versions/${version}")
+            "${REGISTRY}/v0.1/servers/$(jq -rn --arg n "$name" '$n|@uri')/versions/${version}")
           echo "registry has ${name}@${version}: HTTP ${code}"
           if [ "$code" = "200" ]; then echo "publish=false" >> "$GITHUB_OUTPUT"; else echo "publish=true" >> "$GITHUB_OUTPUT"; fi
 
-      - name: Log in (DNS) and publish
+      - name: Log in (GitHub OIDC) and publish
         if: steps.check.outputs.publish == 'true'
-        env:
-          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
         run: |
-          ./mcp-publisher login dns --domain zenod.dev --private-key "$MCP_REGISTRY_PRIVATE_KEY" >/dev/null
+          ./mcp-publisher login github-oidc >/dev/null
           ./mcp-publisher publish "$SERVER_JSON"
+          ./mcp-publisher logout >/dev/null || true
 
       - name: Confirm in registry search
         run: |
+          name=$(jq -r .name "$SERVER_JSON")
           version=$(jq -r .version "$SERVER_JSON")
           for i in $(seq 1 12); do
-            if curl -fsS 'https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.zenod' \
-              | jq -e --arg v "$version" '[.servers[].server | select(.name=="dev.zenod/memory" and .version==$v)] | length > 0' >/dev/null; then
-              echo "dev.zenod/memory@${version} is listed"; exit 0
+            if curl -fsS "${REGISTRY}/v0.1/servers?search=$(jq -rn --arg n "$name" '$n|@uri')" \
+              | jq -e --arg n "$name" --arg v "$version" '[.servers[].server | select(.name==$n and .version==$v)] | length > 0' >/dev/null; then
+              echo "${name}@${version} is listed"; exit 0
             fi
             sleep 15
           done
-          echo "dev.zenod/memory@${version} not in registry search after 3 minutes"; exit 1
+          echo "${name}@${version} not in registry search after 3 minutes"; exit 1
+
+      - name: Retire an old listing name (by hand only)
+        if: github.event_name == 'workflow_dispatch' && inputs.retire_name != ''
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+          RETIRE_NAME: ${{ inputs.retire_name }}
+        run: |
+          case "$RETIRE_NAME" in */*) ;; *) echo "retire_name must look like namespace/name"; exit 1;; esac
+          new=$(jq -r .name "$SERVER_JSON")
+          ./mcp-publisher login dns --domain zenod.dev --private-key "$MCP_REGISTRY_PRIVATE_KEY" >/dev/null
+          ./mcp-publisher status --status deleted --all-versions --yes \
+            --message "Moved to ${new} (Zenod, https://zenod.dev)" "$RETIRE_NAME"
+          ./mcp-publisher logout >/dev/null || true
+          left=$(curl -fsS "${REGISTRY}/v0.1/servers?search=$(jq -rn --arg n "$RETIRE_NAME" '$n|@uri')" \
+            | jq --arg n "$RETIRE_NAME" '[.servers[] | select(.server.name==$n)] | length')
+          echo "versions of ${RETIRE_NAME} still in default registry listings: ${left}"
+          [ "$left" = "0" ]

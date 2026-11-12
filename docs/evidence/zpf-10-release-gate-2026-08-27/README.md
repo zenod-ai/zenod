@@ -21,7 +21,7 @@ No production image, environment value, credential, MCP token, OAuth grant, Goog
 | Zenod | `ghcr.io/zenod-ai/zenod:sha-73e309a` | `sha256:a25a84c15dc9a6d3e7e860a2d5cbdc59cb71ae328ae1131ad625e92b2dabc1f3` | `sha256:2258c29ec7ff8fa5ec1483ffa25d4bde8f555c9752db99dd583d93b2021c8082` | `node packages/server/dist/main.js` |
 | Phylax | `ghcr.io/zenod-ai/phylax:sha-73e309a` | `sha256:929b4b5c0c4bf5833f72eaa042d66d64f986f0856979b6cd9d3f71aa1a6fbc43` | `sha256:76ff048fb2aa02ff5a5be147a9ebb81b45d2c835fd436d90f7726c6b069312d3` | `node packages/server/dist/phylaxMain.js` |
 
-Both images carry the exact OCI revision and baked `GIT_SHA` `73e309adda4d04c5ea58f2ec4dc114143731ed1c`. The Phylax image carries `dev.zenod.runtime=phylax-only` and passed the separate-artifact contract.
+Both images carry the exact OCI revision and baked `GIT_SHA` `73e309adda4d04c5ea58f2ec4dc114143731ed1c`. The Phylax image carries `a Phylax-only runtime label` and passed the separate-artifact contract.
 
 Automated evidence:
 

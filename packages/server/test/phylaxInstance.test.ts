@@ -395,7 +395,7 @@ describe("dedicated Phylax deployment islands", () => {
       "utf8",
     );
     expect(dockerfile).toContain('CMD ["node", "packages/server/dist/phylaxMain.js"]');
-    expect(dockerfile).toContain('dev.zenod.runtime="phylax-only"');
+    expect(dockerfile).toContain('zenod.runtime="phylax-only"');
     expect(dockerfile).toContain("npm run build:phylax -w @zenod/server");
     expect(dockerfile).toContain("/app/packages/server/dist-phylax/phylaxMain.js");
     expect(dockerfile).not.toContain("/app/packages/server/dist ./packages/server/dist");

@@ -56,7 +56,7 @@ ENV NODE_ENV=production \
     GIT_SHA=${GIT_SHA}
 
 LABEL org.opencontainers.image.title="Phylax" \
-      dev.zenod.runtime="phylax-only"
+      zenod.runtime="phylax-only"
 
 COPY --from=build /app/.gitsha ./.gitsha
 COPY --from=build /app/node_modules ./node_modules

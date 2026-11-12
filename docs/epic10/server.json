@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "dev.zenod/memory",
-  "title": "Zenod — the AI librarian of your memory",
+  "name": "io.github.zenod-ai/zenod",
+  "title": "Zenod",
   "description": "Keeps your memory: WhatsApp, voice or any AI tool over MCP, Markdown you own, recall with sources",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "websiteUrl": "https://zenod.dev",
   "icons": [
     {
