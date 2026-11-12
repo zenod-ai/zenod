@@ -24,13 +24,16 @@
 //   live tier: add --model live [--slice <question id prefix>] [--skip agent] [--live-dir <cache and ledger dir>]
 //        [--live-run-cap 0.25] [--live-month-cap 3] [--live-model deepseek-flash] [--live-reasoning none]
 //        with DEEPSEEK_API_KEY in the environment (never on the command line).
+//   Claude (E7-S3 iteration 3): --model live --live-provider staging [--staging-url http://100.104.206.10:8781]
+//        [--staging-token-file ~/.config/zenod-staging/tenant-token]: every call runs inside zenod-staging on its
+//        Anthropic credit (Haiku files, Sonnet answers, as production), under its own monthly cap; no model key here.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { deepseekLive, LiveCapError, LiveModel } from "./live.mjs";
+import { deepseekLive, LiveCapError, LiveModel, stagingLive } from "./live.mjs";
 import { StandInModel } from "./organiser.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -500,6 +503,16 @@ async function main() {
       const inner = new StandInModel();
       return new Proxy(inner, { get: (t, p) => (typeof t[p] === "function" ? async (...a) => { const out = await t[p](...a); onUsage({ providerCostUsd: usd }); return out; } : t[p]) });
     } });
+  } else if (live && opt("live-provider", "deepseek") === "staging") {
+    // E7-S3 iteration 3: Claude on staging's Anthropic credit route (live.mjs stagingLive); only the
+    // staging test tenant's token is read here, from a file, never the model key.
+    const url = opt("staging-url", "http://100.104.206.10:8781");
+    const tokenFile = opt("staging-token-file", join(process.env.HOME ?? "", ".config/zenod-staging/tenant-token"));
+    const token = readFileSync(tokenFile, "utf8").trim();
+    const health = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(20_000) }).then((r) => r.json());
+    const a = health?.credit?.anthropic;
+    if (!a?.on) throw new Error("staging is not on the Anthropic credit route");
+    model = stagingLive({ url, token, model: `${a.model} files, ${a.askModel} answers`, dir: liveDir, ...caps });
   } else if (live) {
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
     if (!apiKey) throw new Error("--model live needs DEEPSEEK_API_KEY in the environment");

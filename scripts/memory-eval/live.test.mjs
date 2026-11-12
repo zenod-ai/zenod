@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LiveCapError, LiveModel, normalise, restore } from "./live.mjs";
+import { LiveCapError, LiveModel, normalise, restore, stagingLive } from "./live.mjs";
 
 function stub(usdPerCall = 0.004) {
   const seen = [];
@@ -93,4 +93,34 @@ test("a failed call is counted with its reason in a few words, never cached", as
   await assert.rejects(m.reconcile({ sources: [] }), /reconciliation_unavailable/);
   assert.equal(m.calls.failed, 2);
   assert.deepEqual(m.summary().failures, { "reconcile: Error: reconciliation_unavailable (AI_NoObjectGeneratedError: No object generated: response did not match schema.)": 2 });
+});
+
+test("E7-S3: Claude through staging sends one call per method with the tenant token, counts its price and caches it", async () => {
+  const sent = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    sent.push({ url, auth: init.headers.authorization, method: body.method });
+    const out = body.method === "streamMemoryChat" ? "frog" : { pages: [] };
+    return { ok: true, status: 200, json: async () => ({ ok: true, out, model: "claude-haiku-5-5", costUsd: 0.002, inputTokens: 10, outputTokens: 2 }) };
+  };
+  const dir = mkdtempSync(join(tmpdir(), "live-test-"));
+  const m = stagingLive({ url: "http://staging:8781/", token: "tok", model: "claude", dir, runCapUsd: 1, monthCapUsd: 5, runId: "t", fetchImpl });
+  let streamed = "";
+  assert.equal(await m.streamMemoryChat({ system: "s", prompt: "q" }, (d) => { streamed += d; }), "frog");
+  assert.equal(streamed, "frog");
+  assert.deepEqual(await m.classify({ ref: "x" }), { pages: [] });
+  assert.deepEqual(await m.classify({ ref: "x" }), { pages: [] });
+  assert.deepEqual(sent, [
+    { url: "http://staging:8781/api/credit/eval-call", auth: "Bearer tok", method: "streamMemoryChat" },
+    { url: "http://staging:8781/api/credit/eval-call", auth: "Bearer tok", method: "classify" },
+  ]);
+  assert.equal(m.summary().spentUsd, 0.004);
+  assert.deepEqual(m.calls, { live: 2, cached: 1, refused: 0, failed: 0 });
+});
+
+test("E7-S3: a refused staging call (its cap) fails the call and names why, without a body", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 502, json: async () => ({ ok: false, name: "LlmAllowanceExceededError", status: null, error: "This month's AI allowance for this account is used up." }) });
+  const m = stagingLive({ url: "http://s", token: "t", model: "claude", dir: mkdtempSync(join(tmpdir(), "live-test-")), runCapUsd: 1, monthCapUsd: 5, runId: "t", fetchImpl });
+  await assert.rejects(m.classify({ ref: "y" }), /LlmAllowanceExceededError/);
+  assert.equal(m.calls.failed, 1);
 });

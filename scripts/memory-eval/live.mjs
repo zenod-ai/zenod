@@ -196,3 +196,41 @@ export function deepseekLive(core, { apiKey, model, baseUrl, reasoning, dir, run
     }),
   });
 }
+
+/**
+ * E7-S3 iteration 3: Claude through staging. Production files on Claude Haiku and answers on Claude
+ * Sonnet; the Anthropic key is per-app and stays inside zenod-staging (Jordi 2026-11-12: no new or copied
+ * key). Each call goes to staging's POST /api/credit/eval-call as its test tenant, which runs it on
+ * staging's Anthropic credit route (filing model for classify, composePage and reconcile, answer model
+ * for streamMemoryChat) under that account's own monthly cap, and returns the result and its price.
+ * Only the staging tenant's token is needed here, read from a 0600 file, never the model key.
+ */
+export function stagingClient({ url, token, fetchImpl = fetch, timeoutMs = 120_000 }, onUsage) {
+  const call = async (method, args) => {
+    const res = await fetchImpl(`${url.replace(/\/$/, "")}/api/credit/eval-call`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ method, args }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.ok) {
+      const e = new Error(`staging ${method}: ${body.name ?? ""} ${body.error ?? res.statusText}`.trim().slice(0, 200));
+      e.name = body.name ?? "StagingError";
+      e.statusCode = body.status ?? res.status;
+      throw e;
+    }
+    onUsage({ providerCostUsd: body.costUsd, model: body.model, inputTokens: body.inputTokens, outputTokens: body.outputTokens });
+    return body.out;
+  };
+  return {
+    classify: (input) => call("classify", [input]),
+    composePage: (input) => call("composePage", [input]),
+    reconcile: (input) => call("reconcile", [input]),
+    streamMemoryChat: async (input, onText) => { const out = await call("streamMemoryChat", [{ system: input.system, prompt: input.prompt }]); if (typeof out === "string") onText?.(out); return out; },
+  };
+}
+
+export function stagingLive({ url, token, model, dir, runCapUsd, monthCapUsd, runId, fetchImpl }) {
+  return new LiveModel({ model, dir, runCapUsd, monthCapUsd, runId, make: (onUsage) => stagingClient({ url, token, fetchImpl }, onUsage) });
+}
