@@ -201,10 +201,50 @@ export function withParent(raw: string, parentPath: string, provisional: boolean
   return `---\n${kept.join("\n")}\n---${match[2]}${raw.slice(match[0].length)}`;
 }
 
-function safeTitle(text: string): string {
+/**
+ * E14-S42: a new page's name is whole. The first line of the title (or capture), made safe for a
+ * file name, kept in full when it fits; only a very long line is shortened, at the end of a clause
+ * or else between words, never mid-word, and without a dangling "a", "the" or "and" at the end.
+ * The limits leave room for ` 99.md` under the 255-byte file-name limit of Drive and git checkouts.
+ */
+export const PAGE_TITLE_MAX_CHARS = 120;
+export const PAGE_TITLE_MAX_BYTES = 200;
+const TRAILING_SMALL_WORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "nor", "of", "to", "in", "on", "at", "by", "for", "with", "from", "into",
+  "as", "that", "which", "who", "if", "so", "than", "then", "my", "your", "his", "her", "our", "their", "its",
+  "y", "o", "el", "la", "los", "las", "un", "una", "de", "del", "en", "con", "por", "para", "que", "al",
+]);
+
+function fitsName(text: string): boolean {
+  return Array.from(text).length <= PAGE_TITLE_MAX_CHARS && Buffer.byteLength(text, "utf8") <= PAGE_TITLE_MAX_BYTES;
+}
+
+/** The longest prefix (in whole code points) that fits the name limits. */
+function longestFit(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    if (!fitsName(out + ch)) break;
+    out += ch;
+  }
+  return out;
+}
+
+const tidyEnd = (text: string): string => text.replace(/[\s.,;!?\-–—]+$/, "").trim();
+
+export function pageTitle(text: string): string {
   const first = (text.trim().split("\n")[0] ?? "").replace(/[\\/:*?"<>|#^[\]]+/g, " ").replace(/\s+/g, " ").trim();
-  const words = first.split(" ").slice(0, 8).join(" ");
-  return (words.length > 60 ? words.slice(0, 60) : words).replace(/[\s.,;!?]+$/, "").trim() || "Unsorted capture";
+  if (fitsName(first)) return tidyEnd(first) || "Unsorted capture";
+  const room = longestFit(first);
+  // The next character is a space: the fitting part already ends on a whole word.
+  const atWordEnd = /\s/.test(first.charAt(room.length));
+  const clause = /^(.*\S)[.;:!?,]\s|^(.*\S)\s[-–—]\s/.exec(room + " ");
+  let cut = room;
+  const clauseEnd = clause ? (clause[1] ?? clause[2])! : "";
+  if (clauseEnd && Array.from(clauseEnd).length >= PAGE_TITLE_MAX_CHARS / 2) cut = clauseEnd;
+  else if (!atWordEnd && /\s/.test(room)) cut = room.slice(0, room.search(/\s\S*$/));
+  let words = tidyEnd(cut).split(" ");
+  while (words.length > 1 && TRAILING_SMALL_WORDS.has(words[words.length - 1]!.toLowerCase())) words = words.slice(0, -1);
+  return tidyEnd(words.join(" ")) || "Unsorted capture";
 }
 
 function oneLine(text: string, max: number): string {
@@ -285,7 +325,7 @@ export async function writeProvisionalLeaf(
   const parentTitle = index.fields.get(choice.path)?.title ?? basenameOf(choice.path);
   const quoted = input.content.trimEnd().split("\n").map(line => `> ${line}`).join("\n");
   const block = [`## Capture ${date} ${citation}`, "", quoted, "", `Filing note: ${oneLine(input.reason, 200)}`, ""].join("\n");
-  let title = safeTitle(input.title ?? input.content);
+  let title = pageTitle(input.title ?? input.content);
   for (let n = 2; ; n++) {
     const path = `Notes/${title}.md`;
     const existing = await readFile(join(vaultPath, path), "utf8").catch(() => null);
@@ -315,7 +355,7 @@ export async function writeProvisionalLeaf(
       await writes.write(path, outsideOpsRollup(existing, head => `${head}${head.endsWith("\n") ? "\n" : "\n\n"}${block}`));
       return { path, parent: choice.path };
     }
-    title = `${safeTitle(input.title ?? input.content)} ${n}`;
+    title = `${pageTitle(input.title ?? input.content)} ${n}`;
   }
 }
 
