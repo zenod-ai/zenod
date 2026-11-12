@@ -2,7 +2,7 @@
  "_about": "Zenod's feature list (same shape as agent_team docs/features/epicteam.json and epicsocial.json; started by EPIC-14 S8's worker 2026-11-08). Each line is true today and names the rows that built it. Habit: when Jordi closes a row done (approved) for something new a Zenod user can see, add it here in the same change or the next wake. `title` and `text` are public words: no row codes, no file paths. A line drafted for a row still in review has \"draft\": true until he closes it.",
  "service": "Zenod",
  "title": "What Zenod does for you",
- "updated": "2026-11-10",
+ "updated": "2026-11-12",
  "groups": [
   {
    "id": "talk-to-your-memory",
@@ -138,6 +138,16 @@
       "E26-S14"
      ],
      "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "tester-quick-start",
+     "title": "A quick start that ticks itself off",
+     "text": "New testers see one card above Chat with the few things that make Zenod theirs: send a WhatsApp, add Zenod to Claude or Codex, give it something to keep and ask for it back. Each step ticks off by itself when Zenod sees it happen, and a score in the header shows how far you are.",
+     "rows": [
+      "E26-S15"
+     ],
+     "since": "2026-11-12",
      "draft": true
     }
    ]
