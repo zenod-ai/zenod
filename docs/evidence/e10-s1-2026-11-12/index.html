@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dev.zenod vs zenod.dev: what was wrong and what is fixed</title>
+<style>
+body{background:#f6f1e7;color:#1d1b17;font:16px/1.5 "Instrument Sans",system-ui,sans-serif;margin:0}
+main{max-width:860px;margin:0 auto;padding:32px 20px 60px}
+h1{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:32px;line-height:1.2;margin:0 0 12px}
+h2{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:22px;margin:28px 0 8px}
+p{margin:6px 0}.lead{font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin-top:8px}
+td,th{border-top:1px solid #d8cfbd;padding:7px 6px;text-align:left;vertical-align:top}th{font-weight:600}
+.ok{color:#1f5c3d;font-weight:600}.keep{color:#8a5a00;font-weight:600}
+img{max-width:100%;border:1px solid #d8cfbd;border-radius:6px;margin:6px 0}
+a{color:#1f5c3d}code{background:#ece4d3;padding:0 4px;border-radius:3px}
+.small{font-size:13.5px;color:#5b5548}
+</style></head><body><main>
+<h1>You were right: "dev.zenod" reads like a wrong address. Every place people see now says Zenod and zenod.dev.</h1>
+<p class="lead">Why it was there: the official MCP Registry gives every server an ID written backwards from its website, so zenod.dev becomes <code>dev.zenod</code>. That backwards ID is how the registry checked we own zenod.dev. We then repeated that ID as if it were a name. Glama and others copy it into their own web addresses.</p>
+<p class="lead">What can't change: the registry's rules require that backwards form for an ID tied to a website, and it never allows <code>zenod.dev/…</code>. Its only other option is a GitHub-based ID, which is not better. So the ID stays, and only the registry and the Glama web addresses still contain it. Everything people read next to it now says <b>Zenod</b> and <b>https://zenod.dev</b>.</p>
+
+<h2>Every place found</h2>
+<table>
+<tr><th>Where</th><th>Before</th><th>Now</th></tr>
+<tr><td>Official MCP Registry entry</td><td>website https://zenod.dev/connect</td><td class="ok">website https://zenod.dev, title "Zenod — the AI librarian of your memory" (version 0.2.1, live)</td></tr>
+<tr><td>Glama listing</td><td>"by dev.zenod" only, no website</td><td class="ok">new Publisher details box: Operator Zenod, website https://zenod.dev, First-party, docs zenod.dev/connect. Glama still prints "by dev.zenod" under the title and in its web address. Glama makes that line from the registry ID, and no setting changes it.</td></tr>
+<tr><td>mcp.so submission</td><td>title "Zenod (dev.zenod/memory)"</td><td class="ok">title "Zenod (zenod.dev)", website https://zenod.dev</td></tr>
+<tr><td>awesome-mcp-servers list request</td><td>"Official MCP Registry: dev.zenod/memory"</td><td class="ok">Website https://zenod.dev added, registry line says "listed as Zenod"</td></tr>
+<tr><td>zenod.dev home page</td><td>source said "listed as dev.zenod/memory"</td><td class="ok">says "listed in the official MCP Registry as Zenod" (live zenod.dev already shows no dev.zenod)</td></tr>
+<tr><td>Zenod product deck</td><td>"listed … as dev.zenod/memory"</td><td class="ok">"listed … as Zenod"</td></tr>
+<tr><td>Social posts not yet out (one Reddit, two X) and the social team's product facts</td><td>"listed as dev.zenod/memory"</td><td class="ok">sent to the social team to reword before anything posts. None of them was ever published.</td></tr>
+<tr><td>GitHub repo About box, Gemini CLI extension, Instagram, YouTube, LinkedIn, TikTok</td><td>already https://zenod.dev</td><td class="ok">checked, nothing to fix</td></tr>
+<tr><td>X profile</td><td>not readable today because your laptop is offline</td><td class="keep">the saved bio text has no dev.zenod, and the next check reads the live profile</td></tr>
+<tr><td>Registry ID itself, the Glama web address, the registry check inside our publish step, an internal label inside a server image</td><td>dev.zenod</td><td class="keep">kept: the registry requires it, and nobody reads the last two</td></tr>
+<tr><td>Old evidence notes in the repo</td><td>dev.zenod</td><td class="keep">kept as records of what happened, not rewritten</td></tr>
+</table>
+<p>No real link anywhere pointed at a "dev.zenod" website. Every link already went to zenod.dev. The damage was the backwards ID shown as if it were our name.</p>
+
+<h2>What you see now</h2>
+<p><a href="https://glama.ai/mcp/connectors/dev.zenod/memory">Glama listing</a>, Publisher details:</p>
+<img src="glama-publisher.png" alt="Glama Publisher details: Operator Zenod, website https://zenod.dev">
+<p><a href="https://registry.modelcontextprotocol.io/v0.1/servers/dev.zenod%2Fmemory/versions/latest">Registry entry</a>: the registry's own search page shows only the ID, with no title or website. Its data, which Glama, VS Code and GitHub read, carries the title Zenod and https://zenod.dev.</p>
+<img src="registry.png" alt="Official MCP Registry search showing the Zenod entry, version 0.2.1">
+<p class="small">EPIC-10 row E10-S1, 12 November 2026.</p>
+</main></body></html>
