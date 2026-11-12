@@ -58,6 +58,13 @@ describe("credit route config", () => {
     const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-haiku-5-5", inputTokens: 1_000_000, outputTokens: 1_000_000, cachedInputTokens: 0, cacheCreationInputTokens: 0 });
     expect(usd).toBeCloseTo(0.6, 6);
   });
+
+  it("prices a cached Sonnet 5.5 answer once: the input total already holds cache reads and writes", () => {
+    // Production 2026-11-12 04:03:44Z, a tester's answer: input 57,235 (total), cache read 29,185, write 3,713, output 977.
+    const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-sonnet-5-5", inputTokens: 57_235, outputTokens: 977, cachedInputTokens: 29_185, cacheCreationInputTokens: 3_713 });
+    // 24,337 uncached x $2 + 29,185 read x $0.20 + 3,713 write x $2.50 + 977 out x $10, per million
+    expect(usd).toBeCloseTo(0.0735635, 6);
+  });
 });
 
 describe("credit route limits", () => {

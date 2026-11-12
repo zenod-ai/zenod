@@ -102,7 +102,10 @@ function priceFor(model: string): { input: number; output: number } | null {
   return PRICING.find((p) => p.match(id)) ?? null;
 }
 
-/** Cost of one call in USD, accounting for the cache read/write rate split. */
+/**
+ * Cost of one call in USD, accounting for the cache read/write rate split. `inputTokens` is the
+ * call's whole input, cached and cache-written tokens included.
+ */
 export function estimateCostUsd(report: LlmUsageReport): number {
   // Audio transcription is priced per minute by the caller, not per token; a call (EPIC-14 S8) is
   // priced from the Realtime API's audio and text tokens by memoryCall.ts.
@@ -115,8 +118,12 @@ export function estimateCostUsd(report: LlmUsageReport): number {
   }
   const rate = priceFor(report.model);
   if (!rate) return 0;
+  // E7-S3: the AI SDK's inputTokens is the total, cache reads and writes included (as the DeepSeek
+  // branch above already reads it), so only the rest bills at the full input rate. Counting the total
+  // at full rate charged a cached Sonnet answer about twice its real price against a tester's cap.
+  const uncached = Math.max(0, report.inputTokens - report.cachedInputTokens - report.cacheCreationInputTokens);
   const usd =
-    (report.inputTokens * rate.input +
+    (uncached * rate.input +
       report.cachedInputTokens * rate.input * 0.1 +
       report.cacheCreationInputTokens * rate.input * 1.25 +
       report.outputTokens * rate.output) /
