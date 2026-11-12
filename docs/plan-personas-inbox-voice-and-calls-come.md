@@ -29,14 +29,14 @@ Goal sentence: A plan at one link for personas, an inbox and calling your memory
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-11 roll-up: plan rounds P1 and S1 to S11 done ; S24 to S29 done (helpers, one-tap suggestion cards, the quick index and the chat reading it, all approved 10 Nov) ; S35 done (helpers ask the team desk how things connect, approved 10 Nov) ; S37 done (a helper asks him one clarifying question as a card, approved 11 Nov) ; S38 done (a daily something-to-try card, approved 11 Nov) ; S30 active (a week of helpers on his memory, counting 10 to 17 Nov, four helpers switched on and running) ; S36 review (helper cards in his own words, a new link shown as a picture: every helper card in that shape, round 3 merged 9e79f9b) ; S41 blocked (a gentle therapist helper, waits on his allowance answer E14-A11) ; S23 and S34 draft ; S31, S32, S33, S39, S40 and E14-S1 folded into the rows that built them
-Result: helpers, suggestion cards, the quick index, the clarifying-question card and the daily idea card are live and approved; the helper week is counting and S36 (every helper card in his words) is on review
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody
+Last attempted: 2026-11-12T06:01Z Delivery Manager roll-up (run_bcc7ccd0): helpers, suggestion cards, the quick index, the clarifying-question card and the daily idea card are live and approved ; S36 (every helper card in his words) approved by Jordi 2026-11-11 ; S42 (new pages keep whole names) merged b4cf52b, on production since 2026-11-12 03:49Z ; S41 (the pattern-spotting helper) runs on Claude on production since 03:49Z, two helper cards reached his inbox at 03:55Z, its own card is due 2026-11-15 02:00Z ; S30 counts the helper week until 2026-11-17 ; S43 (rename his ~255 cut page names) draft for after the 24 Nov freeze ; S23, S34 draft
+Result: his helpers run on Claude through the credit route on production, nothing billed to his own allowance; the pattern-spotting card arrives 15 Nov (or at once if he taps Run now in Helpers)
+Evidence: [S41 round 3](evidence/e14-s41-r3-2026-11-12.md) · [S42](evidence/e14-s42-2026-11-11.md) · [S36](evidence/e14-s36-2026-11-11.md)
+Waiting on: the date 2026-11-15 02:00Z (S41 card) ; 2026-11-17 (S30 helper week)
 Approved work: none
-Next action: Jordi judges S36 (helper cards in his language, on review) after the next promote carries 9e79f9b; S30 judges the helper week on 2026-11-17; S41 starts when Jordi answers E14-A11
-Source revision: uncommitted scaffold
-Verified at: 2026-11-11T04:40Z
+Next action: S41 check after 15 Nov 02:00Z, then its card to review ; S30 judges the helper week on 17 Nov
+Source revision: production b4cf52b
+Verified at: 2026-11-12T06:01Z (EPIC-14 ledger read; production health b4cf52b)
 
 ## Non-Goals
 
