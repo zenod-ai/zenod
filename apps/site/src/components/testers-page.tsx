@@ -19,15 +19,93 @@ import graphLivePhone from "@/assets/shots/graph-live-phone.webp";
 import { WhatsappScene } from "@/components/paper-landing";
 import { countSignup } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
-import { inviteCodeFromSearch, joinUrl, submitTesterApplication, TESTERS_QUESTION, type TesterApplyStatus } from "@/lib/testers";
+import {
+  fetchTesterLink,
+  inviteCodeFromSearch,
+  joinUrl,
+  rememberedTester,
+  rememberTester,
+  submitTesterApplication,
+  TESTERS_QUESTION,
+  type TesterApplyStatus,
+} from "@/lib/testers";
 
 type Status = "idle" | "sending" | "sent" | "error";
+
+// E26-S11 iteration 4 (Jordi, 2026-11-12: "test with testers, not with fucking API keys"): the
+// tester link on screen is the way in. This browser keeps it, so coming back to this page shows it
+// again; a slow code is fetched with the browser's own private key, never by email address.
+function TesterLink({ link }: { link: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <>
+      <h3>You're in. Your tester link:</h3>
+      <p className="pp-apply-link">
+        <a href={link}>{link}</a>
+      </p>
+      <p className="pp-apply-actions">
+        <a className="pp-btn pp-btn-primary" href={link}>
+          Open it now
+        </a>{" "}
+        <button className="pp-btn" type="button" onClick={copy}>
+          {copied ? "Copied" : "Copy the link"}
+        </button>
+      </p>
+      <p>
+        It also works later: this page keeps it in this browser, and the link
+        works once, only for you, for 14 days. Sign in with Google or GitHub,
+        and checkout shows €0 with no card.
+      </p>
+    </>
+  );
+}
 
 function ApplyForm() {
   const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [outcome, setOutcome] = React.useState<TesterApplyStatus>(null);
   const [link, setLink] = React.useState<string | null>(null);
+  const [claim, setClaim] = React.useState<string | null>(null);
+  const [again, setAgain] = React.useState(false);
+
+  // Coming back in the same browser: show the link it kept.
+  React.useEffect(() => {
+    const kept = rememberedTester();
+    if (!kept) return;
+    setOutcome("accepted");
+    setLink(kept.link);
+    setClaim(kept.claim);
+    setStatus("sent");
+  }, []);
+
+  // Accepted but the code is still being made: ask again with this browser's own key.
+  React.useEffect(() => {
+    if (status !== "sent" || outcome !== "accepted" || link || !claim) return;
+    let tries = 0;
+    let stopped = false;
+    const check = async () => {
+      tries += 1;
+      const found = await fetchTesterLink(claim).catch(() => null);
+      if (stopped) return;
+      if (found) {
+        setLink(found);
+        rememberTester({ link: found, claim });
+      } else if (tries < 20) timer = window.setTimeout(check, 6000);
+    };
+    let timer = window.setTimeout(check, 1500);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [status, outcome, link, claim]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,6 +121,10 @@ function ApplyForm() {
       countSignup();
       setOutcome(result.status);
       setLink(result.link);
+      setClaim(result.claim ?? null);
+      setAgain(Boolean(result.again));
+      if (result.status === "accepted" && (result.link || result.claim))
+        rememberTester({ link: result.link, claim: result.claim ?? null });
       setStatus("sent");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Could not send your application.");
@@ -55,36 +137,39 @@ function ApplyForm() {
       <div className="pp-apply pp-apply-sent" role="status">
         {outcome === "waitlist" ? (
           <>
-            <h3>Thank you, you are on the waitlist.</h3>
+            <h3>Thank you. The first ten places are taken.</h3>
             <p>
-              The first ten places are taken. If a place opens, we email you
-              your personal link.
+              We kept your application and your email. If a place opens, we
+              write to you, and you are first in line for the next round.
             </p>
           </>
         ) : link ? (
-          // EPIC-23 U7: the personal link right here, so nobody waits for an email.
+          <TesterLink link={link} />
+        ) : claim ? (
           <>
-            <h3>You're in. Here is your personal link.</h3>
+            <h3>You're in. Your tester link is being made.</h3>
             <p>
-              Your code is already inside. Open it, sign in with Google or
-              GitHub, and checkout shows €0 with no card. It works once, only
-              for you, for 14 days.
+              It appears right here in a moment. If you close this page, open
+              zenod.dev/testers again in this browser and it is here.
             </p>
+          </>
+        ) : again ? (
+          <>
+            <h3>You applied before with this email.</h3>
             <p>
-              <a className="pp-btn pp-btn-primary" href={link}>
-                Start testing Zenod
-              </a>
-            </p>
-            <p className="pp-apply-link">
-              Keep this link to come back later: <span>{link}</span>
+              Your place is kept. Your tester link shows on this page in the
+              browser you applied from. On another device? Write to{" "}
+              <a href="mailto:support@zenod.dev">support@zenod.dev</a> from
+              that email and we send it to you.
             </p>
           </>
         ) : (
           <>
             <h3>You're in. Thank you for applying.</h3>
             <p>
-              You are one of our first ten testers. Your personal link comes by
-              email, with your code inside. It works once, only for you.
+              Your place is kept. Write to{" "}
+              <a href="mailto:support@zenod.dev">support@zenod.dev</a> from
+              this email and we send you your tester link.
             </p>
           </>
         )}
@@ -126,7 +211,8 @@ function ApplyForm() {
       {error ? <p className="pp-fine pp-error">{error}</p> : null}
       <p className="pp-fine">
         Your answer stays with the Zenod team and is never published. We use
-        your email only to send your link and write to you about testing.
+        your email only to write to you about testing. If you are in, your
+        tester link shows right here, no email to wait for.
       </p>
     </form>
   );
@@ -278,7 +364,7 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
           <h2 id="steps-title">How it works</h2>
           <ol>
             <li>Apply below with your email. It takes a minute.</li>
-            <li>The first ten are in straight away. Each sees a personal link right after applying, with a code inside that works once, only for them.</li>
+            <li>The first ten are in straight away. Each sees a personal tester link right here after applying, with a code inside that works once, only for them. No email to wait for.</li>
             <li>
               Open the link and sign in with Google or GitHub. Checkout opens
               with your code already applied: you pay €0 and no card is asked for.

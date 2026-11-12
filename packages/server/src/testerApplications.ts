@@ -1,7 +1,8 @@
 // Zenod testers program (ZAL-A13): the zenod.dev/testers apply form posts here.
 // Answers go to a private file on the production data volume, never to a repo
 // or a public page. EPIC-26 S2: the email goes on to the tester flow, which
-// accepts the first ten automatically and mails each their personal link.
+// accepts the first ten automatically; each sees their personal link on screen (E26-S11
+// iteration 4: no email needed, their browser keeps a private key to show it again).
 // Spam-safe without cookies: a honeypot field, a per-address limit kept only in
 // memory, and a daily ceiling.
 import { appendFileSync, mkdirSync } from "node:fs";
@@ -91,6 +92,8 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
     console.log("[testers] application kept");
     let status: TesterStatus | undefined;
     let shown: { code: string; link: string } | null = null;
+    let claim: string | null = null;
+    let again = false;
     if (options.flow && email) {
       try {
         const key = email.toLowerCase();
@@ -98,13 +101,35 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
         status = options.flow.receive(email);
         // EPIC-23 U7: a person accepted just now sees their personal link on screen, so nobody waits
         // for an email. A repeat application never shows it, so typing someone else's email shows nothing.
-        if (status === "accepted" && !known) shown = await options.flow.linkForNew(email);
-        else void options.flow.process();
+        // E26-S11 iteration 4: plus a private key their browser keeps, to show the same link again later.
+        if (status === "accepted" && !known) {
+          claim = options.flow.issueClaim(email);
+          shown = await options.flow.linkForNew(email);
+        } else {
+          again = known;
+          void options.flow.process();
+        }
       } catch (error) {
         console.error("[testers] could not queue an application:", error instanceof Error ? error.message : String(error));
       }
     }
     if (!status) return c.json({ ok: true });
-    return c.json(shown ? { ok: true, status, code: shown.code, link: shown.link } : { ok: true, status });
+    return c.json({
+      ok: true,
+      status,
+      ...(shown ? { code: shown.code, link: shown.link } : {}),
+      ...(claim ? { claim } : {}),
+      ...(again ? { again: true } : {}),
+    });
+  });
+
+  // E26-S11 iteration 4: the applicant's own browser trades its private key for their link, so the page
+  // shows it again later, or once a slow code is made. An unknown key learns nothing.
+  app.post("/api/public/testers/link", bodyLimit({ maxSize: 1024 }), async (c) => {
+    const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+    const claim = typeof body?.claim === "string" ? body.claim : "";
+    const found = claim && options.flow ? options.flow.linkForClaim(claim) : null;
+    if (!found) return c.json({ error: "not found" }, 404);
+    return c.json({ ok: true, link: found.link });
   });
 }

@@ -20,13 +20,15 @@
 // Stripe's answer. A Stripe code is checked by Stripe at checkout, never by `redeem`.
 // Email goes through Zenod's one sender (zenodMail.ts: Gmail with Zenod's own key, E26-T2)
 // once its key is set; until then it stays queued "waiting for the mail key". Every queued
-// step is retried, so nothing is lost.
+// step is retried, so nothing is lost. E26-S11 iteration 4 (Jordi, 2026-11-12: "test with
+// testers, not with fucking API keys"): the link on screen is the way in, email an optional extra;
+// the applicant's browser keeps a private key (only its hash is kept here) to show the link again.
 //
 // The list lives in a private file on the data volume (0600) and is shown only on
 // cloud.zenod.dev/admin/testers to the operator, with the stop switch; since S7 round 2 that page
 // also says where it lives and who asked, shows the daily counts and every application with its
 // email, our own tests marked.
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Context, Hono } from "hono";
@@ -47,6 +49,8 @@ const EMAIL = /^[^\s@<>()",;:]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9]
 
 export const WAITING_FOR_CODE = "waiting for the code command";
 export const WAITING_FOR_MAIL = "waiting for the mail key";
+/** E26-S11 iteration 4: the link was shown on screen, so email is only an optional extra. */
+export const LINK_SHOWN = "link shown on screen, email optional";
 
 export type TesterStatus = "accepted" | "waitlist";
 
@@ -67,6 +71,11 @@ export interface TesterRecord {
   redeemedAt?: string;
   /** E26-S2 round 2: "stripe" for a Stripe promotion code (Stripe enforces its one use), else made here. */
   codeSource?: "stripe" | "local";
+  /**
+   * E26-S11 iteration 4: sha256 of the private key the applicant's browser keeps, so the page can show
+   * their link again later (or once a slow code is made) without anyone else's code ever being shown.
+   */
+  claimHash?: string;
 }
 
 interface TesterFlowState {
@@ -110,6 +119,10 @@ export function generateTesterCode(bytes: Uint8Array = randomBytes(8)): string {
   let out = "";
   for (let i = 0; i < 8; i += 1) out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length];
   return `ZT-${out}`;
+}
+
+function hashClaim(claim: string): string {
+  return createHash("sha256").update(claim).digest("hex");
 }
 
 function escapeHtml(value: string): string {
@@ -353,8 +366,43 @@ export class TesterFlow {
     if (!find()?.code) await this.process();
     const tester = find();
     if (!tester || tester.status !== "accepted" || !tester.code) return null;
-    this.update(tester.id, { shownAt: this.now().toISOString() });
+    this.markShown(tester);
     return { code: tester.code, link: `${this.joinUrl}?code=${encodeURIComponent(tester.code)}` };
+  }
+
+  /**
+   * E26-S11 iteration 4: a private key for the person accepted in this request; only its hash is kept.
+   * Their browser holds it and trades it for their own link later (`linkForClaim`).
+   */
+  issueClaim(email: string): string | null {
+    const state = this.read();
+    const key = email.toLowerCase();
+    const tester = state.testers.find((t) => t.email.toLowerCase() === key);
+    if (!tester || tester.status !== "accepted") return null;
+    const claim = randomBytes(24).toString("base64url");
+    tester.claimHash = hashClaim(claim);
+    this.write(state);
+    return claim;
+  }
+
+  /** The link for a browser's private key: null when unknown, `link: null` while the code is still being made. */
+  linkForClaim(claim: string): { link: string | null } | null {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(claim)) return null;
+    const wanted = Buffer.from(hashClaim(claim), "hex");
+    const tester = this.read().testers.find(
+      (t) => t.status === "accepted" && typeof t.claimHash === "string" && t.claimHash.length === 64 && timingSafeEqual(Buffer.from(t.claimHash, "hex"), wanted),
+    );
+    if (!tester) return null;
+    if (!tester.code) {
+      void this.process();
+      return { link: null };
+    }
+    if (!tester.shownAt) this.markShown(tester);
+    return { link: `${this.joinUrl}?code=${encodeURIComponent(tester.code)}` };
+  }
+
+  private markShown(tester: TesterRecord): void {
+    this.update(tester.id, { shownAt: this.now().toISOString(), ...(tester.waiting === WAITING_FOR_MAIL ? { waiting: LINK_SHOWN } : {}) });
   }
 
   /** Accepted people still without a code: ids only, so the code command never sees an email. */
@@ -436,7 +484,10 @@ export class TesterFlow {
         }
       }
       if (!mailReady(this.sendMail)) {
-        if (tester.waiting !== WAITING_FOR_MAIL) this.update(tester.id, { waiting: WAITING_FOR_MAIL });
+        // E26-S11 iteration 4: once the link was shown on screen nothing waits on mail; email stays optional.
+        const shown = Boolean(this.read().testers.find((t) => t.id === tester.id)?.shownAt);
+        const waiting = shown ? LINK_SHOWN : WAITING_FOR_MAIL;
+        if (tester.waiting !== waiting) this.update(tester.id, { waiting });
         continue;
       }
       const codeAt = new Date(this.read().testers.find((t) => t.id === tester.id)?.codeAt ?? this.now().toISOString());

@@ -237,7 +237,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(hostile).not.toContain("cloud.zenod.dev/join");
     const plain = render("/testers").replace(/\s+/g, " ");
     expect(plain).not.toContain("Start with your code");
-    expect(plain).toContain("a personal link right after applying, with a code inside that works once");
+    expect(plain).toContain("a personal tester link right here after applying, with a code inside that works once");
   });
 
   it("fixes the walk's sign-up path defects on /pricing and /connect (ZAL-A13)", () => {
