@@ -414,6 +414,12 @@ export interface EngineOptions {
    */
   readSyncTtlMs?: number;
   /**
+   * T7-F3: how long a memory read waits for the vault lock before it reports
+   * "filing in progress". Other readers and a read-sync pull hold it only briefly;
+   * a long filing still turns the read away. Default 3 s.
+   */
+  readLockWaitMs?: number;
+  /**
    * Optional LLM cost instrumentation. Estimates are based on prompt text
    * before the provider call; provider-side tool schema overhead and billing
    * tokenizers may differ, but the briefing share is measured consistently.
@@ -452,6 +458,8 @@ function boundedConcurrency(limit: number): <T>(task: () => Promise<T>) => Promi
 export { LONG_MEMORY_SEGMENT_CHARS, segmentLongMemoryContent } from "./sourcePassages.js";
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
+const DEFAULT_READ_LOCK_WAIT_MS = 3_000;
+const MEMORY_FILING_BUSY_TEXT = "Memory filing is in progress. Please retry your question shortly.";
 const MAX_BRIEFING_MEANING_PAGES = 80;
 const MAX_BRIEFING_LOG_FILES = 20;
 const MAX_BRIEFING_ATTACHMENTS = 40;
@@ -742,9 +750,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
     })), "background");
   }
 
+  // T7-F3: concurrent answers share one in-flight probe instead of locking each
+  // other out, and a probe waits briefly for a short holder (another probe, a
+  // read-sync pull). Before this, 2-3 parallel answers all hit a false "busy"
+  // after their model call was billed. A probe joined while it holds the lock
+  // still reads the current revision: no writer can commit until it releases.
+  let sharedRevisionProbe: Promise<VaultRevision> | undefined;
   async function safeReadRevision(): Promise<VaultRevision> {
     assertVault(repo);
-    return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); }, 0);
+    if (sharedRevisionProbe) return sharedRevisionProbe;
+    sharedRevisionProbe = withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); },
+      options.readLockWaitMs ?? DEFAULT_READ_LOCK_WAIT_MS)
+      .finally(() => { sharedRevisionProbe = undefined; });
+    return sharedRevisionProbe;
+  }
+
+  /** T7-F3: true when a long writer (filing) holds the vault, so a memory answer would be thrown away. */
+  async function vaultReadBusy(): Promise<boolean> {
+    if (!repo) return false;
+    try { await safeReadRevision(); return false; }
+    catch (error) { if (error instanceof VaultWriteBusyError) return true; throw error; }
   }
 
   /**
@@ -910,10 +935,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // Parallel tools in one turn share only the in-flight revision probe. They
     // must not mistake each other's brief lock for a background filing writer.
     let revisionProbe: Promise<VaultRevision> | undefined;
+    // T7-F3: once this turn met a busy vault its answer is the retry line, so later
+    // reads fail at once instead of each waiting for the lock again.
+    let busySeen = false;
+    const filingBusy = () => new Error("filing_in_progress: Memory filing is in progress. Please retry shortly; no coherent source was read.");
     const readRevision = (): Promise<VaultRevision> => {
+      if (busySeen) return Promise.reject(filingBusy());
       if (revisionProbe) return revisionProbe;
       revisionProbe = safeReadRevision().catch(error => {
-        if (error instanceof VaultWriteBusyError) { onReadBusy?.(); throw new Error("filing_in_progress: Memory filing is in progress. Please retry shortly; no coherent source was read."); }
+        if (error instanceof VaultWriteBusyError) { busySeen = true; onReadBusy?.(); throw filingBusy(); }
         throw error;
       }).finally(() => { revisionProbe = undefined; });
       return revisionProbe;
@@ -2966,6 +2996,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // E15-Q4: a cancelled ask (caller hang-up or time limit) starts no further model call.
     const stillWanted = () => { if (askOptions.signal?.aborted) throw new AnswerCancelledError(answerCancelReason(askOptions.signal)); };
     stillWanted();
+    // T7-F3: a memory question on a vault a filing holds can only end in the retry
+    // line, so say it before the model call and its charge, not after.
+    if (await vaultReadBusy()) return { text: MEMORY_FILING_BUSY_TEXT, sources: [] };
     let result = await llm.answer(answerInput, askTools);
     // Some providers ignore the forced first tool round and answer from the briefing
     // map alone; the host then refuses that unread prose. Retry once, search first.
@@ -3724,7 +3757,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       required: (readPaths: string[]) => readBusy || attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {
-        if (readBusy) return { text: "Memory filing is in progress. Please retry your question shortly.", sources: [] };
+        if (readBusy) return { text: MEMORY_FILING_BUSY_TEXT, sources: [] };
         // Projection and source evidence must still describe the same local snapshot.
         // An explicit key/date read supersedes the automatic page projection,
         // regardless of tool order. Never mix current auto facts into historical scope.
