@@ -29,14 +29,14 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-11T18:46Z Delivery Manager roll-up (run_c136ba80): T1, E26-S2, E26-S5, E26-S7, E26-S13 approved by Jordi ; E26-S11 one-click mail consent built, on staging 57ea1252, waits for a promote, then its ask E26-A9 is posted ; E26-S15 tester quick start built and merged 9013340, waits for the staging roll and promote ; T2 welcome email built, live but off, waits on the mail key from E26-S11 ; E26-S3 watches the first stranger, none yet
-Result: strangers can apply on zenod.dev/testers, the server accepts the first 10 itself and makes each a code; nobody can be emailed yet because the mail key waits on a promote; the quick start and welcome email are built and wait the same way
-Evidence: [full tester picture](http://vps3.taild81fbb.ts.net:8921/e26-s2/) · [e26-s11](evidence/e26-s11-2026-11-11.md) · [e26-s15](evidence/e26-s15-2026-11-11.md) · [e26-t2](evidence/e26-t2-2026-11-10.md)
-Waiting on: Jordi: infra-vps/EPIC-2-A50 (resume promotes; carries E26-S11 and E26-S15 to production)
+Last attempted: 2026-11-12T23:56Z Delivery Manager (run_107f9627 follow-up): E26-S11 iteration 4 live on production e0100de1: an accepted applicant sees their personal link on zenod.dev/testers right away, no email and no key (#1649 95ef3ee0, #1650 e0100de1 withdraw), proven with a test application that was then withdrawn ; zenod-social told recruiting can start (desk note 490468c) ; E26-S15 and E26-S18 approved ; E26-S3 watches the first stranger
+Result: tester invites are open: a stranger applies on zenod.dev/testers, gets their own link on screen, signs up at 0 euro with no card; first 10 places; email is an optional extra (parked)
+Evidence: [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/)
+Waiting on: the first stranger to apply (zenod-social recruits) ; Jordi's review of E26-S11
 Approved work: none
-Next action: on EPIC-2-A50 yes the M12 timer promotes; then post E26-A9 (one-click mail consent), switch the welcome email on (T2), and E26-S3 watches the first stranger sign up
+Next action: E26-S3 watches the first real applicant end to end, including WhatsApp linking for a new account (EPIC-7 E7-3)
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
-Verified at: 2026-11-11T18:46Z (EPIC-26 ledger and Waiting on read)
+Verified at: 2026-11-12T23:56Z (production health ok e0100de1; zenod.dev/testers 200)
 
 ## Waiting on
 

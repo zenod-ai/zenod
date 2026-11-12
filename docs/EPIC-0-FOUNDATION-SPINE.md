@@ -43,7 +43,7 @@ The steps are [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) A0–A5; these ar
 ## Current State
 
 Status: active
-Phase: production runs b4cf52b since 2026-11-12T03:49Z (gate passed): the Drive vault fix, Anthropic for testers, the mail key flow and the tester quick start are live; workers now prove each on production, then the mail consent ask goes to Jordi and the first invites follow
+Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger applies on zenod.dev/testers, sees their own link on screen, signs up at 0 euro with no card, no email or key needed; zenod-social recruits; the first real tester is what moves the root goal now
 - [ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md) milestone A (active): production up; the launch work runs in EPIC-7 (testers) and EPIC-6 (health page).
 - [EPIC-7](EPIC-7-REAL-USER-TEST.md) real-user test (active): T0–T6 live, keys rotated, secret guard in place; T7 rehearsal waits on one Google sign-in (E7-A15); leaked third-party keys roll from one page (E7-A14).
 - [EPIC-6](EPIC-6-HEALTH-DASHBOARD.md) health page: S1 inventory in review since 2026-10-25; S2–S6 wait for Jordi to accept S1 and stamp S2/S3.
@@ -53,9 +53,9 @@ Phase: production runs b4cf52b since 2026-11-12T03:49Z (gate passed): the Drive 
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; trial token waits on the same sign-in (E7-A15).
 Last attempted: 2026-11-12T03:55Z DM run_c6fa2e13: infra-vps restored Zenod promotes (A50 round 2, Jordi: "stop it" meant EpicBooks, not Zenod); flagged promote-now (D36, FYI E7-A22), the M12 timer promoted b4cf52b at 03:49Z ; started T7-F1 + T7 round 5, E7-S3, S41, E26-S11 (posts E26-A9), E26-S15 on production ; earlier: M3 closed clean, M7 still slow (M14 drafted), M9 folded per Jordi E94-A2, S42 merged
 Result: production b4cf52b healthy (gate demo 96/100/1.7, private 94.1/98.2/3.1); a stranger can apply and sign up at 0 euro; whether a new tester can save, and Claude on production, are being proved now; no outside tester yet
-Waiting on: five workers on production checks (T7-F1/T7, E7-S3, S41, E26-S11, E26-S15) ; then Jordi: E26-A9 mail consent (posted by E26-S11) ; infra-vps Mac ticket E2-M1 (tester-watch install)
+Waiting on: the first stranger to apply (zenod-social recruiting) ; Jordi's reviews (E7-S3 iteration 3 pending, E10-S1, E26-S11)
 Monitoring: S30 12 Nov check: Jordi's vault efc4268 still holds 0 Right place / Wrong place answers (script: too_few, need 20 with 5 wrong and 5 right); 500 filings now ca… · next check 2026-11-15T18:00:00.000Z
-Next action: integrate the five production checks; post E26-A9; then T8 go or no-go and the first invites
+Next action: EPIC-26 E26-S3 watches the first real tester end to end, incl. WhatsApp linking (EPIC-7 E7-3)
 Verified at: 2026-11-12T03:55Z (production health ok b4cf52b; promote log ~/zenod-eval/promotions.jsonl)
 
 ## Spine Map
