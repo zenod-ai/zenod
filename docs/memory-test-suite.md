@@ -42,14 +42,14 @@ Live-model checks made today are listed on the dashboard as recorded results, wi
 
 ## The live tier: the real model on a fixed slice (E15-Q3)
 
-The stand-in shows what Zenod's code does; the live tier shows how a real model files and answers. [`live.mjs`](../scripts/memory-eval/live.mjs) puts DeepSeek V4.1 Flash, built with the same client production uses for its background route (`createBrainLlm`, provider `deepseek`), in the stand-in's place.
+The stand-in shows what Zenod's code does; the live tier shows how a real model files and answers. Since E7-S3 iteration 3 (2026-11-12) it runs the models production runs: **Claude Haiku 5.5 files, Claude Sonnet 5.5 answers**. [`live.mjs`](../scripts/memory-eval/live.mjs) `stagingLive` sends each model call to `zenod-staging`'s `POST /api/credit/eval-call`, which makes it on staging's own Anthropic credit route under that account's monthly cap and returns the result and its price. No model key is on VPS3: the Anthropic key is per-app and stays in staging (Jordi 2026-11-12: "DO NOT CREATE A DUPLICATE KEY"). The endpoint exists only where the host sets `ZENOD_EVAL_RELAY=on` (staging; production never). Before that, the tier ran DeepSeek V4.1 Flash on a separate zenod-tests key (`--live-provider deepseek`, still in the code for history, no longer in the nightly).
 
 - **Slice.** Jordi's 20 judged questions (`rq01`–`rq20`) and the 8 notes behind the placements he judged, on a throwaway copy of his vault. The agent store-and-find suite stays on the stand-in. The stand-in runs the same slice on the same code right after, so the dashboard shows both side by side.
 - **Answers.** On top of the three numbers, each question checks that the model's own answer carries the expected facts. In the live tier, an answer that leaves them out counts as a failed operation in the error rate.
 - **Cache.** Every model call is stored under a hash of what was sent, with run-specific parts (new Log anchors, dates, clock times, weekdays, temp paths) replaced by placeholders and swapped back on replay. A rerun on unchanged input makes no model call and costs nothing; replayed calls report the first run's model time.
-- **Caps.** No call starts once this run's spend plus 1 cent per call in flight could pass the run cap (default $0.25), or the month's spend in the ledger `~/zenod-eval/live/spend.jsonl` could pass the month cap (default $3). An item whose call was refused counts as not run, never as passed or failed.
-- **Key.** `zenod-tests/DEEPSEEK_API_KEY`, a test key separate from production's, put in the run's environment by `secret run` in memory only. Without it the step is skipped. Production's own key is per-app and never used for tests.
-- **When.** In the nightly job, after the offline runs: once per production roll or day, outside DeepSeek's peak hours (01–04 and 06–10 UTC on weekdays, double price).
+- **Caps.** No call starts once this run's spend plus 1 cent per call in flight could pass the run cap ($0.60 for Claude), or the month's spend in the ledger `~/zenod-eval/live-claude/spend.jsonl` could pass the month cap ($2). Staging stops at its own $3 a month (`ZENOD_CREDIT_MONTHLY_USD`) whatever the client does. An item whose call was refused counts as not run, never as passed or failed.
+- **Key.** None here. The run reads only the staging test tenant's token (`~/.config/zenod-staging/tenant-token`, 0600).
+- **When.** In the nightly job, after the offline runs, once a week (a Claude run costs about 45 cents, mostly Sonnet answers), or with `nightly.sh --force`.
 - **By hand, with no key:** `--model live --live-stub` runs the stand-in behind the same cache and caps at a fixed fake price, to prove the wiring.
 
 ## When it runs

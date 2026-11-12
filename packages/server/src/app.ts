@@ -60,7 +60,7 @@ import {
 import { buildDriveTools } from "./driveTools.js";
 import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } from "./transcribe.js";
 import { transcriptPath } from "./executionTranscript.js";
-import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
+import { CREDIT_EVAL_METHODS, NotConfiguredError, Runtime, testGithub, testProviderKey, type CreditEvalMethod } from "./runtime.js";
 import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
 import { backgroundHealth } from "./backgroundRoute.js";
 import {
@@ -2261,6 +2261,27 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode ?? null;
       return c.json({ ok: false, provider: "anthropic", status, error: String((error as Error).message ?? error).slice(0, 300) }, 502);
+    }
+  });
+
+  // E7-S3 iteration 3: the memory test suite's live tier makes its model calls here, on this account's
+  // Anthropic credit and cap, so the nightly check tests Claude with the key staging already holds.
+  // Off unless the host sets ZENOD_EVAL_RELAY=on (staging only; production never does): 404 otherwise.
+  app.post("/api/credit/eval-call", async (c) => {
+    if (process.env.ZENOD_EVAL_RELAY !== "on") return c.json({ error: "not found" }, 404);
+    const body = (await c.req.json().catch(() => null)) as { method?: string; args?: unknown } | null;
+    const method = body?.method;
+    if (!method || !(CREDIT_EVAL_METHODS as readonly string[]).includes(method) || !Array.isArray(body?.args) || body.args.length < 1) {
+      return c.json({ error: `method must be one of ${CREDIT_EVAL_METHODS.join(", ")} with args` }, 400);
+    }
+    try {
+      const result = await runtime.creditEvalCall(method as CreditEvalMethod, body.args);
+      if (!result) return c.json({ error: "this account is not on the Anthropic credit" }, 404);
+      return c.json({ ok: true, provider: "anthropic", ...result });
+    } catch (error) {
+      const status = (error as { statusCode?: number }).statusCode ?? null;
+      const name = (error as Error).name ?? "Error";
+      return c.json({ ok: false, provider: "anthropic", name, status, error: String((error as Error).message ?? error).slice(0, 300) }, 502);
     }
   });
 

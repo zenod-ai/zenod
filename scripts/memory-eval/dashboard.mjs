@@ -135,7 +135,7 @@ const pairRec = liveRec ? [...liveRuns].reverse().find((r) => r.model === "stand
 const usd = (v) => `$${Number(v ?? 0).toFixed(v >= 0.01 ? 2 : 4)}`;
 let liveHtml;
 if (!liveRec) {
-  liveHtml = `<div class="bl"><p><b>Live AI model checks: built, waiting for the test key.</b> As soon as the test DeepSeek key is in, the next run files your 8 judged notes and answers your 20 questions with the real model, and the result shows here next to the stand-in. Each run is capped at ${usd(0.25)} and the month at ${usd(3)}; a rerun on unchanged input costs nothing.</p></div>`;
+  liveHtml = `<div class="bl"><p><b>Live AI model checks: waiting for the first weekly run.</b> Once a week the check files your 8 judged notes on Claude Haiku and answers your 20 questions on Claude Sonnet, the models Zenod runs, through the test copy of Zenod and its own capped allowance, and the result shows here next to the stand-in.</p></div>`;
 } else {
   const L = liveRec, S = pairRec;
   const ans = L.retrieval.answersRight;
@@ -145,7 +145,7 @@ if (!liveRec) {
   liveHtml = `<div class="bl"><p><b>Live AI model on your notes (${esc(L.model)}, ${esc(L.at.slice(0, 16).replace("T", " "))} UTC, code ${esc(L.sha)}): ${ans ? `${ans.ok} of ${ans.of} answers carried the right facts; ` : ""}${esc(headlineParts.join(", "))}. This run cost ${usd(L.live.spentUsd)}, ${L.live.calls.cached} of ${L.live.calls.cached + L.live.calls.live} model calls came from the cache.</b></p></div>
 <table><tr><th>Number</th><th>Stand-in, same slice</th><th>Live model</th><th>Live vs stand-in</th><th>Live, in counts</th></tr>${METRICS.map(line).join("")}
 <tr><td><b>Answers with the right facts</b></td><td class="muted">the stand-in never answers</td><td>${ans ? `${ans.ok} of ${ans.of}` : "–"}</td><td></td><td class="muted">the model's own answer contains the expected facts of the question</td></tr></table>
-<p class="muted">Slice: your 20 judged questions and the 8 notes behind the placements you judged, on a throwaway copy of your vault. Spend: ${usd(L.live.spentUsd)} this run (cap ${usd(L.live.runCapUsd)}), ${usd(L.live.monthSpentUsd)} this month (cap ${usd(L.live.monthCapUsd)})${L.live.notRun ? `; ${L.live.notRun} items not run because a cap was reached` : ""}.${L.live.calls.failed ? ` ${L.live.calls.failed} model calls failed${L.live.failures ? `: ${esc(Object.entries(L.live.failures).sort((a, b) => b[1] - a[1]).map(([why, n]) => `${n} × ${why}`).join("; "))}` : ""}.` : ""} Filing runs on the model production uses for filing; answers on the same model, where production chat uses another.</p>`;
+<p class="muted">Slice: your 20 judged questions and the 8 notes behind the placements you judged, on a throwaway copy of your vault. Spend: ${usd(L.live.spentUsd)} this run (cap ${usd(L.live.runCapUsd)}), ${usd(L.live.monthSpentUsd)} this month (cap ${usd(L.live.monthCapUsd)})${L.live.notRun ? `; ${L.live.notRun} items not run because a cap was reached` : ""}.${L.live.calls.failed ? ` ${L.live.calls.failed} model calls failed${L.live.failures ? `: ${esc(Object.entries(L.live.failures).sort((a, b) => b[1] - a[1]).map(([why, n]) => `${n} × ${why}`).join("; "))}` : ""}.` : ""} ${/claude/i.test(L.model) ? "Filing on Claude Haiku and answers on Claude Sonnet, as Zenod runs them, made inside the test copy of Zenod on its own capped allowance with the key it already holds." : "Filing runs on the model production then used for filing; answers on the same model."}</p>`;
 }
 
 const newest = last("demo", "ingestionSuccess")?.demo ?? last("real", "ingestionSuccess")?.real;

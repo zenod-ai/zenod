@@ -304,6 +304,10 @@ function subscriberPublicBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
 }
 
+/** E7-S3 iteration 3: the model calls the memory test suite's live tier may make on the credit route. */
+export const CREDIT_EVAL_METHODS = ["classify", "composePage", "reconcile", "streamMemoryChat"] as const;
+export type CreditEvalMethod = (typeof CREDIT_EVAL_METHODS)[number];
+
 export class Runtime {
   readonly settings: Settings;
   readonly credentialVault: CredentialVault;
@@ -1563,6 +1567,42 @@ export class Runtime {
     return { ...result, model: route.model, askModel: route.askModel, costUsd: Math.round(costUsd * 1e6) / 1e6, ms: Date.now() - started };
   }
 
+  /**
+   * E7-S3 iteration 3: one model call of the memory test suite's live tier (scripts/memory-eval/live.mjs),
+   * made here on this account's Anthropic credit so the nightly check measures Claude without the key
+   * ever leaving this host (Jordi 2026-11-12: no new or copied key). Filing calls (classify, composePage,
+   * reconcile) run on the filing model, the answer call (streamMemoryChat) on the answer model, as
+   * production. Stateless: nothing is written to the vault; usage goes to the ledger under the credit cap.
+   * Null when the account is not on the route.
+   */
+  async creditEvalCall(method: CreditEvalMethod, args: unknown[]): Promise<{ out: unknown; model: string; costUsd: number; inputTokens: number; outputTokens: number; ms: number } | null> {
+    if (!this.creditRoute) return null;
+    const route = this.creditRoute;
+    const answer = method === "streamMemoryChat";
+    const feature: UsageFeature = answer ? "chat" : "filing";
+    let usage = { costUsd: 0, inputTokens: 0, outputTokens: 0 };
+    const llm = this.creditLlm({
+      feature,
+      ...(answer ? { answers: true, chatOnAskModel: true } : {}),
+      onUsage: (report) => {
+        this.usageStore.record(report, Date.now(), feature);
+        if (report.status === "failed") return;
+        usage = {
+          costUsd: usage.costUsd + (report.providerCostUsd ?? estimateCostUsd(report)),
+          inputTokens: usage.inputTokens + report.inputTokens,
+          outputTokens: usage.outputTokens + report.outputTokens,
+        };
+      },
+    });
+    const started = Date.now();
+    let out: unknown;
+    if (method === "classify") out = await llm.classify(args[0] as Parameters<BrainLlm["classify"]>[0]);
+    else if (method === "composePage") out = await llm.composePage(args[0] as Parameters<BrainLlm["composePage"]>[0]);
+    else if (method === "reconcile") out = await llm.reconcile!(args[0] as Parameters<NonNullable<BrainLlm["reconcile"]>>[0]);
+    else out = await llm.streamMemoryChat!(args[0] as { system: string; prompt: string }, () => {});
+    return { out, model: answer ? route.askModel : route.model, costUsd: Math.round(usage.costUsd * 1e7) / 1e7, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ms: Date.now() - started };
+  }
+
   /** The stop once this account's credit spend reaches its monthly cap; null while it may run. Fails open. */
   private creditBlock(now: number = Date.now(), feature: UsageFeature = "chat"): { message: string; resetsAt: string; reason: "allowance" | "share" } | null {
     const route = this.creditRoute;
@@ -1594,7 +1634,7 @@ export class Runtime {
    * model for answers. Checked against the credit cap (and the feature's rules) before each call and
    * logged in the usage ledger as provider anthropic, apart from paid spend.
    */
-  private creditLlm(options: { answers?: boolean; onUsage?: (report: LlmUsageReport) => void; feature?: UsageFeature } = {}): BrainLlm {
+  private creditLlm(options: { answers?: boolean; chatOnAskModel?: boolean; onUsage?: (report: LlmUsageReport) => void; feature?: UsageFeature } = {}): BrainLlm {
     const route = this.creditRoute!;
     const check = () => {
       const feature = options.feature ?? currentFeature() ?? "chat";
@@ -1605,7 +1645,7 @@ export class Runtime {
       provider: "anthropic",
       apiKey: route.apiKey,
       askModel: options.answers ? route.askModel : route.model,
-      chatModel: route.model,
+      chatModel: options.chatOnAskModel ? route.askModel : route.model,
       classifyModel: route.model,
       visionModel: route.model,
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
