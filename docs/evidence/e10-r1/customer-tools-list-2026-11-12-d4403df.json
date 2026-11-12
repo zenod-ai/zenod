@@ -1,0 +1,533 @@
+{
+  "meta": {
+    "credential": "the account own connection token from Settings, Connect AI apps (canonical tenant token, not zmt_); value never printed or stored",
+    "account": "operations@alpha9.io Zenod account (agent-owned T7 test account)",
+    "endpoint": "https://cloud.zenod.dev/mcp",
+    "productionSha": "d4403df"
+  },
+  "initStatus": 200,
+  "server": {
+    "name": "zenod",
+    "version": "0.0.1"
+  },
+  "protocol": "2025-06-18",
+  "listStatus": 200,
+  "tools": [
+    {
+      "name": "chat_with_zenod",
+      "title": "Chat with zenod",
+      "description": "Send a message to this agent's chat, the same conversation it holds on the web and in WhatsApp, and return its reply. The agent answers with its own tools; for Zenod that is the user's memory vault. A conversationKey keeps a separate multi-turn conversation. Messaging channels can pass an idempotencyKey to run the turn as a background job, whose reply get_task_result returns; resending the same key returns the same job, not a second reply.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The message to send, in natural language"
+          },
+          "surface": {
+            "description": "Surface label to run as. Defaults to mcp.",
+            "type": "string",
+            "enum": [
+              "cli",
+              "mcp",
+              "whatsapp",
+              "web",
+              "drive"
+            ]
+          },
+          "conversationKey": {
+            "description": "Stable key that keeps one multi-turn conversation separate from others",
+            "type": "string",
+            "minLength": 1
+          },
+          "testRunId": {
+            "description": "Caller-supplied id that groups related turns in the chat audit",
+            "type": "string",
+            "minLength": 1
+          },
+          "idempotencyKey": {
+            "description": "Stable message key from a messaging channel; when present, the turn runs as a background job and get_task_result returns its reply",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "search_memory",
+      "title": "Search memory",
+      "description": "Search the user's memory vault and return matching notes and captured entries, each with its vault path, capture time, source and evidence reference. A query matches literal words in titles and text; filters narrow results by source, content type and capture date, and order sorts them by newest, oldest or relevance. Without a query, entries are listed by filters alone. Each entry's capturedAt is the original capture time; Log headings can show the later processing time. Entries are paginated: hasMore and nextCursor return the next page for the same query, filters and order, until the vault changes or the server restarts. Note hits are a separate ranked top 20 (hitLimit narrows it, e.g. to the top 5) that ignores entry filters; each note hit has its rank, a matchPercent from 1 to 100 (half how much of the query it contains, weighted by word rarity, half its strength relative to the best hit; relative to this query, not a probability), its vault url (GitHub or Google Drive) and appPath, the path that opens it in the Zenod app. Each result carries its place in the memory tree, and its evidence reference opens with get_memory.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Optional literal words to match in titles and text, e.g. 'travel insurance'. Without a query, entries are listed by filters and order alone.",
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceId": {
+            "description": "Exact stable source/provider identifier for entries.",
+            "type": "string",
+            "minLength": 1
+          },
+          "cursor": {
+            "description": "nextCursor from the previous page. Valid with the same query, filters and order, until the vault changes or the server restarts.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "source": {
+            "description": "Optional structural source filter.",
+            "type": "string",
+            "enum": [
+              "cli",
+              "mcp",
+              "whatsapp",
+              "telegram",
+              "web",
+              "drive",
+              "selftest"
+            ]
+          },
+          "contentType": {
+            "description": "Optional structural content-type filter.",
+            "type": "string",
+            "enum": [
+              "text",
+              "voice_note",
+              "audio",
+              "image",
+              "screenshot",
+              "pdf",
+              "document",
+              "link"
+            ]
+          },
+          "capturedAfter": {
+            "description": "Optional inclusive ISO-8601 lower bound for the source capture time.",
+            "type": "string",
+            "minLength": 1
+          },
+          "capturedBefore": {
+            "description": "Optional inclusive ISO-8601 upper bound for the source capture time.",
+            "type": "string",
+            "minLength": 1
+          },
+          "order": {
+            "description": "Ordering. Defaults to relevance for text queries and newest for structural entry queries.",
+            "type": "string",
+            "enum": [
+              "newest",
+              "oldest",
+              "relevance"
+            ]
+          },
+          "limit": {
+            "description": "Maximum entry page size. Defaults to 20. Note hits retain their independent ranked top-20 contract.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "hitLimit": {
+            "description": "Maximum ranked note hits, e.g. 5 for the top five. Defaults to 20.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_memory",
+      "title": "Get memory",
+      "description": "Read one memory: a vault note by its vault-relative path (for example Areas/Insurance.md), or one captured entry by the exact evidence reference that search_memory returns (for example Log/2026-08-01.md#^e-123abc). An evidence reference returns only that entry, with its source, content type, capture time and source URL, without neighboring entries from the same daily log. A path returns the note's text, frontmatter and place in the memory tree.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Vault-relative path, e.g. Areas/Insurance.md, or an exact evidence reference, e.g. Log/2026-08-01.md#^e-123abc"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "memory_cloud",
+      "title": "Memory cloud",
+      "description": "Follow the strong links in the user's memory. Each memory (a vault page or a captured entry) links to others with a strength from 0 to 1, set by how it was filed, cited, linked and placed in the memory tree. Starting from a question's best matching memories (query) or from one memory (path), this walks the links and multiplies their strengths along each path, keeping every memory whose path stays at or above the threshold (default 0.8): 1.0, then 0.9, then 0.95 gives 0.855, kept. Returns the memories strongest first, each with its node id, strength, hops, the path walked and its evidence reference for get_memory, plus the links between them. Suited to gathering what is closely tied to a topic without reading weakly related notes.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "A question or topic: the cloud grows from its best matching memories.",
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "description": "Or one memory to start from: a vault path (Areas/House.md) or an evidence reference (Log/2026-08-01.md#^e-123abc).",
+            "type": "string",
+            "minLength": 1
+          },
+          "threshold": {
+            "description": "Keep a memory while the multiplied link strength along its path stays at or above this (0 to 1). Defaults to 0.8.",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxNodes": {
+            "description": "At most this many memories, the starting ones included. Defaults to 12.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "store_memory",
+      "title": "Store memory",
+      "description": "Save something the user wants remembered, such as a fact, decision, event or preference, to their vault. Zenod records the exact words as evidence in the dated Log, files the meaning onto the right page or pages with citations back to that evidence, and saves the change to the user's GitHub repository or Google Drive. Filing completes in every case: anything uncertain is noted in the vault for later review, not returned as a question. Runs in the background: the call returns a jobId at once, and get_task_result with that jobId returns the receipt (evidence reference, pages touched, saved revision, links and filing disposition) when the job is done.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The memory to store, as the user expressed it"
+          },
+          "hints": {
+            "description": "Optional filing hints, e.g. 'belongs to the housing project'",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verbatim": {
+            "description": "Force verbatim evidence recording (exact words preserved)",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "Structural origin of the memory. Defaults to mcp when the caller does not know it.",
+            "type": "string",
+            "enum": [
+              "cli",
+              "mcp",
+              "whatsapp",
+              "telegram",
+              "web",
+              "drive",
+              "selftest"
+            ]
+          },
+          "contentType": {
+            "description": "Structural content type, independent of the memory's subject.",
+            "type": "string",
+            "enum": [
+              "text",
+              "voice_note",
+              "audio",
+              "image",
+              "screenshot",
+              "pdf",
+              "document",
+              "link"
+            ]
+          },
+          "capturedAt": {
+            "description": "Original source timestamp in ISO-8601 form.",
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceId": {
+            "description": "Stable source/provider entry identifier.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "idempotencyKey": {
+            "description": "Optional caller-stable key. Retries return the original durable job and receipt.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "ingest_memory",
+      "title": "Ingest memory artifact",
+      "description": "Queue a file or link for the user's memory: audio and voice notes, screenshots and images, PDFs and documents, or web links, given as a fetchable URL or a handle the caller has already staged. Zenod archives the original, transcribes or extracts its content, records that as evidence and files the meaning into the vault. Google Drive file references are not accepted on Zenod Hosted, where Drive is the archive. Runs in the background: the call returns a jobId at once, and get_task_result returns the receipt (archived original, transcript or extraction, evidence reference, pages touched, saved revision and links) or a structured error.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "contentType": {
+            "description": "Audio only: voice_note for a recorded voice message, audio for any other audio attachment; unset when unknown.",
+            "type": "string",
+            "enum": [
+              "voice_note",
+              "audio"
+            ]
+          },
+          "mediaType": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "screenshot",
+              "image",
+              "pdf",
+              "document",
+              "link"
+            ],
+            "description": "Artifact class: audio, screenshot, image, pdf, document or link."
+          },
+          "artifactUrl": {
+            "description": "Fetchable URL for the raw artifact. The URL is treated as evidence, not as memory text.",
+            "type": "string",
+            "format": "uri"
+          },
+          "bytesRef": {
+            "description": "Opaque reference to bytes already staged by the caller/transport, such as an object-store key or channel media handle. Hosted Drive file references are rejected.",
+            "type": "string",
+            "minLength": 1
+          },
+          "filename": {
+            "description": "Original filename, if known.",
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceHint": {
+            "description": "Where this came from, e.g. 'Claude upload', 'WhatsApp' or 'Drive'.",
+            "type": "string",
+            "minLength": 1
+          },
+          "contentHint": {
+            "description": "User-provided context for filing/digesting, e.g. 'remember the renewal date shown here'.",
+            "type": "string",
+            "minLength": 1
+          },
+          "providedTranscript": {
+            "description": "Optional transcript already produced by the authenticated channel transport. Empty when transcription was intentionally skipped.",
+            "type": "string"
+          },
+          "transcriptionProvider": {
+            "description": "Provider label for an authenticated channel-supplied transcript.",
+            "type": "string",
+            "minLength": 1
+          },
+          "audioDurationSeconds": {
+            "description": "Best-effort probed audio duration supplied by the channel transport.",
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcriptionDisposition": {
+            "description": "Whether to use the supplied transcript or archive audio without another transcription attempt.",
+            "type": "string",
+            "enum": [
+              "provided",
+              "skip_duration_limit",
+              "skip_unavailable"
+            ]
+          },
+          "senderTimestamp": {
+            "description": "Original sender/source timestamp, preferably ISO-8601.",
+            "type": "string",
+            "minLength": 1
+          },
+          "hints": {
+            "description": "Optional filing hints for the eventual memory digest.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "idempotencyKey": {
+            "description": "Optional caller-stable key. Retries return the original durable media job and receipt.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "mediaType"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_ingest_result",
+      "title": "Get ingest result",
+      "description": "Check an audio ingest job from the Google Drive inbox by its jobId. Returns its progress while queued or running, then the receipt (archived original, transcript evidence, pages touched, commit and links) or a structured error.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The jobId returned by ingest_memory"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "ask_brain",
+      "title": "Ask the brain",
+      "description": "Answer a free-form question from the user's memory, such as 'what do I know about X?' or 'when does my policy renew?'. Zenod reads across the vault with a read-only research loop and returns a written answer that cites the vault pages and source links it used. Suited to questions that span several notes; slower than search_memory because it runs a language model.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The question, in natural language"
+          },
+          "contextRefs": {
+            "description": "Exact tenant-local evidence refs to ground first, e.g. Log/2026-06-11.md#^e-7f3a2c",
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^Log\\/\\d{4}-\\d{2}-\\d{2}\\.md#\\^e-[0-9a-f]{6}$"
+            }
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_task_result",
+      "title": "Get task result",
+      "description": "Check a background job started by another Zenod tool, such as store_memory or ingest_memory, by its jobId. Returns its status: queued or running while in progress; done with the job's result (for a save: the evidence reference, pages touched and saved revision; for an ingest: the media receipt or error); error with a message; or interrupted when a server restart stopped the job, in which case the original call can be sent again. Jobs run one at a time, so a queued job may wait behind earlier ones.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "ticket_id": {
+            "description": "The canonical ticket_id returned by an async tool",
+            "type": "string",
+            "minLength": 1
+          },
+          "jobId": {
+            "description": "Compatibility alias for ticket_id",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "capturedAt": "2026-11-12T10:17:54.174Z"
+}
