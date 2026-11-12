@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { describe, expect, it } from "vitest";
 import { mountTesterApplications, TESTER_APPLICATIONS_FILE } from "../src/testerApplications.js";
-import { localMinter, TesterFlow } from "../src/testerFlow.js";
+import { LINK_SHOWN, localMinter, TesterFlow } from "../src/testerFlow.js";
 import { clientAddress } from "../src/zenodUnit.js";
 
 function setup() {
@@ -76,7 +76,7 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     const handle = await apply("u/my_reddit");
     expect(handle.status).toBe(400);
     expect(await handle.json()).toEqual({ error: expect.stringMatching(/email/) });
-    expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted" });
+    expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted", claim: expect.stringMatching(/^[A-Za-z0-9_-]{32}$/) });
     expect(await (await apply("second@example.com")).json()).toEqual({ ok: true, status: "waitlist" });
     expect(flow.snapshot().testers.map((t) => t.email)).toEqual(["first@example.com", "second@example.com"]);
   });
@@ -96,6 +96,37 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     expect(first.status).toBe("accepted");
     expect(first.code).toMatch(/^ZT-/);
     expect(first.link).toBe(`https://cloud.zenod.dev/join?code=${first.code}`);
-    expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted" });
+    expect(await (await apply("first@example.com")).json()).toEqual({ ok: true, status: "accepted", again: true });
+  });
+
+  it("gives the applicant's browser a private key that shows only their own link again (E26-S11 iteration 4)", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "zenod-testers-claim-"));
+    const flow = new TesterFlow({ dataDir, cap: 5, mint: localMinter });
+    const app = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterApplications(app, { dataDir, clientAddress, flow });
+    const post = (path: string, body: unknown) =>
+      app.request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.11" },
+        body: JSON.stringify(body),
+      });
+    const first = (await (await post("/api/public/testers/apply", { use: "Voice notes on my walks", contact: "first@example.com" })).json()) as {
+      link: string;
+      claim: string;
+    };
+    const second = (await (await post("/api/public/testers/apply", { use: "Voice notes on my walks", contact: "second@example.com" })).json()) as {
+      link: string;
+      claim: string;
+    };
+    expect(first.claim).not.toBe(second.claim);
+    expect(await (await post("/api/public/testers/link", { claim: first.claim })).json()).toEqual({ ok: true, link: first.link });
+    expect(await (await post("/api/public/testers/link", { claim: second.claim })).json()).toEqual({ ok: true, link: second.link });
+    expect((await post("/api/public/testers/link", { claim: "A".repeat(32) })).status).toBe(404);
+    expect((await post("/api/public/testers/link", { claim: "" })).status).toBe(404);
+    expect((await post("/api/public/testers/link", {})).status).toBe(404);
+    // Only the hash is kept on the server, never the key itself.
+    expect(readFileSync(join(dataDir, "tester-flow.json"), "utf8")).not.toContain(first.claim);
+    // No mail sender: once the link was on screen, nothing waits on mail.
+    expect(flow.snapshot().testers[0]).toMatchObject({ waiting: LINK_SHOWN });
   });
 });
