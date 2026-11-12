@@ -132,7 +132,7 @@
     {
      "id": "tester-link-on-screen",
      "title": "Get your tester link the moment you apply",
-     "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside. Open it, sign in, and checkout shows 0 euros with no card. Helpers are still being built, so they stay off while Zenod works as your memory.",
+     "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside. Open it, sign in, and checkout shows 0 euros with no card.",
      "rows": [
       "U7",
       "E26-S14"
@@ -143,9 +143,10 @@
     {
      "id": "tester-quick-start",
      "title": "A quick start that ticks itself off",
-     "text": "New testers see one card above Chat with the few things that make Zenod theirs: send a WhatsApp, add Zenod to Claude or Codex, give it something to keep and ask for it back. Each step ticks off by itself when Zenod sees it happen, and a score in the header shows how far you are.",
+     "text": "New testers see one card above Chat with the few things that make Zenod theirs: send a WhatsApp, add Zenod to Claude or Codex, give it something to keep, ask for it back and choose one helper. Each step ticks off by itself when Zenod sees it happen, and a score in the header shows how far you are.",
      "rows": [
-      "E26-S15"
+      "E26-S15",
+      "E26-S18"
      ],
      "since": "2026-11-12",
      "draft": true
@@ -265,6 +266,17 @@
       "E14-S36"
      ],
      "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "helpers-for-testers",
+     "title": "Helpers are open for testers too",
+     "text": "Testers can switch on a helper, like a weekly recap of what they saved, from the Helpers tab. Every helper starts off, runs inside the tester's monthly allowance with a small limit of its own, and switching one on ticks the last step of the quick start.",
+     "rows": [
+      "E7-A21",
+      "E26-S18"
+     ],
+     "since": "2026-11-12",
      "draft": true
     }
    ]
