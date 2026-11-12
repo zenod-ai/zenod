@@ -132,4 +132,14 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
     if (!found) return c.json({ error: "not found" }, 404);
     return c.json({ ok: true, link: found.link });
   });
+
+  // E26-S11 iteration 4: the applicant withdraws with the same private key; their code is switched off.
+  app.post("/api/public/testers/withdraw", bodyLimit({ maxSize: 1024 }), async (c) => {
+    const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+    const claim = typeof body?.claim === "string" ? body.claim : "";
+    const result = claim && options.flow ? await options.flow.withdraw(claim) : null;
+    if (!result) return c.json({ error: "not found" }, 404);
+    if (result === "failed") return c.json({ error: "Could not withdraw just now. Please try again later." }, 502);
+    return c.json({ ok: true });
+  });
 }

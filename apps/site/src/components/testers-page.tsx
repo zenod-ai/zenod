@@ -21,12 +21,14 @@ import { countSignup } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
 import {
   fetchTesterLink,
+  forgetTester,
   inviteCodeFromSearch,
   joinUrl,
   rememberedTester,
   rememberTester,
   submitTesterApplication,
   TESTERS_QUESTION,
+  withdrawTester,
   type TesterApplyStatus,
 } from "@/lib/testers";
 
@@ -35,8 +37,19 @@ type Status = "idle" | "sending" | "sent" | "error";
 // E26-S11 iteration 4 (Jordi, 2026-11-12: "test with testers, not with fucking API keys"): the
 // tester link on screen is the way in. This browser keeps it, so coming back to this page shows it
 // again; a slow code is fetched with the browser's own private key, never by email address.
-function TesterLink({ link }: { link: string }) {
+function TesterLink({ link, claim, onWithdrawn }: { link: string; claim: string | null; onWithdrawn: () => void }) {
   const [copied, setCopied] = React.useState(false);
+  const [withdrawError, setWithdrawError] = React.useState<string | null>(null);
+  const withdraw = async () => {
+    if (!claim || !window.confirm("Withdraw your application? Your tester link stops working.")) return;
+    try {
+      await withdrawTester(claim);
+      forgetTester();
+      onWithdrawn();
+    } catch (error) {
+      setWithdrawError(error instanceof Error ? error.message : "Could not withdraw just now.");
+    }
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -64,6 +77,15 @@ function TesterLink({ link }: { link: string }) {
         works once, only for you, for 14 days. Sign in with Google or GitHub,
         and checkout shows €0 with no card.
       </p>
+      {claim ? (
+        <p className="pp-fine">
+          Changed your mind?{" "}
+          <button className="pp-linkish" type="button" onClick={withdraw}>
+            Withdraw my application
+          </button>
+          {withdrawError ? <span className="pp-error"> {withdrawError}</span> : null}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -144,7 +166,16 @@ function ApplyForm() {
             </p>
           </>
         ) : link ? (
-          <TesterLink link={link} />
+          <TesterLink
+            link={link}
+            claim={claim}
+            onWithdrawn={() => {
+              setLink(null);
+              setClaim(null);
+              setOutcome(null);
+              setStatus("idle");
+            }}
+          />
         ) : claim ? (
           <>
             <h3>You're in. Your tester link is being made.</h3>

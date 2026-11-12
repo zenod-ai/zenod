@@ -5,6 +5,7 @@
 // browser keeps it (plus a private key that fetches it again), so no email is needed.
 export const TESTERS_APPLY_PATH = "/api/public/testers/apply";
 export const TESTERS_LINK_PATH = "/api/public/testers/link";
+export const TESTERS_WITHDRAW_PATH = "/api/public/testers/withdraw";
 const STORE_KEY = "zenod.tester";
 export const TESTERS_QUESTION = "How are you going to be using Zenod Memory?";
 
@@ -76,6 +77,14 @@ function browserStore(): Store | null {
   }
 }
 
+export function forgetTester(store: Store | null = browserStore()): void {
+  try {
+    (store as Storage | null)?.removeItem?.(STORE_KEY);
+  } catch {
+    // nothing kept
+  }
+}
+
 export function rememberTester(value: RememberedTester, store: Store | null = browserStore()): void {
   try {
     store?.setItem(STORE_KEY, JSON.stringify(value));
@@ -108,4 +117,17 @@ export async function fetchTesterLink(claim: string, fetcher: typeof fetch = fet
   if (!response.ok) return null;
   const payload = (await response.json().catch(() => ({}))) as { link?: unknown };
   return typeof payload.link === "string" && JOIN_LINK.test(payload.link) ? payload.link : null;
+}
+
+/** E26-S11 iteration 4: withdraws this browser's own application; its code is switched off. */
+export async function withdrawTester(claim: string, fetcher: typeof fetch = fetch): Promise<void> {
+  const response = await fetcher(TESTERS_WITHDRAW_PATH, {
+    method: "POST",
+    credentials: "omit",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ claim }),
+  });
+  if (response.ok || response.status === 404) return;
+  const payload = (await response.json().catch(() => ({}))) as { error?: unknown };
+  throw new Error(typeof payload.error === "string" ? payload.error : "Could not withdraw just now. Please try again later.");
 }

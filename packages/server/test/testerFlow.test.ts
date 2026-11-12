@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TesterMarks } from "../src/testerMarks.js";
 import { COUNT_DEFINITIONS } from "../src/publicCounts.js";
 import {
+  stripeRetirer,
   generateTesterCode,
   localMinter,
   mountTesterFlowRoutes,
@@ -441,5 +442,24 @@ describe("free time on the operator page (E26-S5 round 3)", () => {
     const outsider = withFreeTime(false);
     expect((await post(outsider.app, "subscription=sub_A1")).status).toBe(404);
     expect(outsider.extended).toEqual([]);
+  });
+
+  it("stripeRetirer finds a code by its text and switches it off (E26-S11 iteration 4)", async () => {
+    const calls: unknown[] = [];
+    const stripe = {
+      promotionCodes: {
+        list: async (params: { code: string; limit: number }) => {
+          calls.push(["list", params]);
+          return { data: [{ id: "promo_1", code: params.code, active: true }] };
+        },
+        update: async (id: string, params: { active: boolean }) => {
+          calls.push(["update", id, params]);
+          return { active: params.active };
+        },
+      },
+    };
+    await stripeRetirer(stripe)!("ZT-ABCD2345");
+    expect(calls).toEqual([["list", { code: "ZT-ABCD2345", limit: 1 }], ["update", "promo_1", { active: false }]]);
+    expect(stripeRetirer(null)).toBeNull();
   });
 });

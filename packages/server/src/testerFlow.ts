@@ -108,7 +108,12 @@ export interface TesterFlowOptions {
   now?: () => Date;
   /** EPIC-23 U7: our own test applications (testerMarks.ts) are accepted without taking a place. */
   isTest?: (email: string) => boolean;
+  /** E26-S11 iteration 4: switches a Stripe code off when its applicant withdraws. */
+  retire?: RetireCode | null;
 }
+
+/** Switches one Stripe promotion code off, by its code text; throws when Stripe refuses. */
+export type RetireCode = (code: string) => Promise<void>;
 
 export function normalizeTesterEmail(value: string): string | null {
   const email = value.trim().replace(/^mailto:/i, "");
@@ -171,6 +176,7 @@ interface PromotionCodeCreator {
       metadata: Record<string, string>;
     }): Promise<{ code: string; id?: string; livemode?: boolean }>;
     update?(id: string, params: { active: boolean }): Promise<{ active?: boolean }>;
+    list?(params: { code: string; limit: number }): Promise<{ data: Array<{ id: string; code?: string; active?: boolean }> }>;
   };
   coupons?: {
     retrieve?(id: string): Promise<{ id: string; valid?: boolean; livemode?: boolean; percent_off?: number | null }>;
@@ -215,6 +221,21 @@ export function stripeThenLocalMinter(stripe: PromotionCodeCreator, now?: () => 
       console.warn("[testers] Stripe did not make the code, made here instead:", describeStripeError(error));
       return { code: generateTesterCode(), source: "local" };
     }
+  };
+}
+
+/** E26-S11 iteration 4: finds a Stripe promotion code by its text and switches it off (it can never be used again). */
+export function stripeRetirer(stripe: PromotionCodeCreator | null): RetireCode | null {
+  const list = stripe?.promotionCodes?.list?.bind(stripe.promotionCodes);
+  const update = stripe?.promotionCodes?.update?.bind(stripe.promotionCodes);
+  if (!list || !update) return null;
+  return async (code) => {
+    const found = await list({ code, limit: 1 });
+    const promo = found.data.find((p) => p.code === undefined || p.code === code);
+    if (!promo) return;
+    if (promo.active === false) return;
+    const after = await update(promo.id, { active: false });
+    if (after.active !== false) throw new Error("Stripe did not switch the code off");
   };
 }
 
@@ -387,11 +408,7 @@ export class TesterFlow {
 
   /** The link for a browser's private key: null when unknown, `link: null` while the code is still being made. */
   linkForClaim(claim: string): { link: string | null } | null {
-    if (!/^[A-Za-z0-9_-]{20,64}$/.test(claim)) return null;
-    const wanted = Buffer.from(hashClaim(claim), "hex");
-    const tester = this.read().testers.find(
-      (t) => t.status === "accepted" && typeof t.claimHash === "string" && t.claimHash.length === 64 && timingSafeEqual(Buffer.from(t.claimHash, "hex"), wanted),
-    );
+    const tester = this.findByClaim(claim);
     if (!tester) return null;
     if (!tester.code) {
       void this.process();
@@ -403,6 +420,39 @@ export class TesterFlow {
 
   private markShown(tester: TesterRecord): void {
     this.update(tester.id, { shownAt: this.now().toISOString(), ...(tester.waiting === WAITING_FOR_MAIL ? { waiting: LINK_SHOWN } : {}) });
+  }
+
+  /**
+   * E26-S11 iteration 4: the applicant withdraws with their browser's private key. Their code is switched
+   * off first (Stripe) or simply dropped (made here), then their place is freed. Unknown key: null.
+   */
+  async withdraw(claim: string): Promise<"withdrawn" | "failed" | null> {
+    const tester = this.findByClaim(claim);
+    if (!tester) return null;
+    if (tester.code && tester.codeSource === "stripe") {
+      if (!this.options.retire) return "failed";
+      try {
+        await this.options.retire(tester.code);
+      } catch (error) {
+        console.warn("[testers] could not switch a withdrawn code off:", describeStripeError(error));
+        return "failed";
+      }
+    }
+    const state = this.read();
+    state.testers = state.testers.filter((t) => t.id !== tester.id);
+    this.write(state);
+    console.log("[testers] an applicant withdrew; their code is off");
+    return "withdrawn";
+  }
+
+  private findByClaim(claim: string): TesterRecord | null {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(claim)) return null;
+    const wanted = Buffer.from(hashClaim(claim), "hex");
+    return (
+      this.read().testers.find(
+        (t) => t.status === "accepted" && typeof t.claimHash === "string" && t.claimHash.length === 64 && timingSafeEqual(Buffer.from(t.claimHash, "hex"), wanted),
+      ) ?? null
+    );
   }
 
   /** Accepted people still without a code: ids only, so the code command never sees an email. */
@@ -537,6 +587,7 @@ export function testerFlowFromEnv(
       : env.ZENOD_TESTER_MINT === "stripe" ? stripeMinter(stripe)
       : stripeThenLocalMinter(stripe),
     sendMail: mailerFromEnv(env, { dataDir }),
+    retire: stripeRetirer(stripe),
     ...(isTest ? { isTest } : {}),
   });
 }
