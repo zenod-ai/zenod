@@ -30,14 +30,14 @@ Goal sentence: Zenod answers questions about your memory well, tested on your ow
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-11 roll-up: Q0 done (cheap test model plan, fed his E15-A5 and E15-A6 answers) ; Q1 done (first check of his real questions, its fixes started elsewhere) ; Q2 done (memory test suite and dashboard live, approved 8 Nov) ; Q3 done (live DeepSeek checks in the suite, approved 10 Nov) ; Q4 done (cost hygiene and faster filing, approved 9 Nov) ; E15-S1 done ("who are you?" answered directly, approved 9 Nov) ; E15-S2 done (private notes marked at filing, approved 9 Nov) ; E15-S3 done without a card (his failed chat is fixed by EPIC-14 S29, approved 10 Nov) ; Q6 done without a card (filing format failures are fixed by EPIC-24 M8) ; Q5 draft (one capped key per app, waits for Jordi to start it)
-Result: every row but one is closed: the memory test suite runs live model checks on his notes, his three numbers stand at 93.8 / 96.2 / 1.6 (ingestion, retrieval, errors), and the remaining filing format failures are EPIC-24 M8's work
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody (no open ask; Q5 is a draft Jordi starts when he wants it)
+Last attempted: 2026-11-12T08:00Z Delivery Manager roll-up (run_881c3b9f): Q0 to Q4 done (the memory test suite runs live checks on his notes) ; Q6 done through EPIC-24 M8 ; Q5 draft for Jordi ; Q7 drafted 2026-11-12 from E7-S3 iteration 2: production now files on Claude Haiku and answers on Claude Sonnet, but the question set still uses a free stand-in and the nightly check DeepSeek, so nothing tests Claude yet; no new key asked, per Jordi's "DO NOT CREATE A DUPLICATE KEY" (E94-A2)
+Result: on the code production runs (2026-11-12): demo set 96 / 100 / 1.7 unchanged, his private set 94.1 / 96.5 / 3.1 (retrieval was 98.2; one older note now ranks below new ones); the checks do not yet run on Claude
+Evidence: [E7-S3 iteration 2](evidence/e7-s3-2026-11-12.md) · http://vps3.taild81fbb.ts.net:8921/e7-s3/#iteration-2
+Waiting on: nobody (Q5 and Q7 are drafts Jordi starts)
 Approved work: none
-Next action: none due here: EPIC-24 M8 fixes the filing format failures; Q5 starts only when Jordi starts it from the goal
-Source revision: uncommitted scaffold
-Verified at: 2026-11-11T04:40Z
+Next action: none due here: Q7 starts when Jordi starts it, reusing the keys we have
+Source revision: production b4cf52b
+Verified at: 2026-11-12T08:00Z (EPIC-15 ledger and E7-S3 iteration 2 evidence read)
 
 ## Non-Goals
 
