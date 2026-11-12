@@ -3,8 +3,8 @@
   "name": "dev.zenod/memory",
   "title": "Zenod — the AI librarian of your memory",
   "description": "Keeps your memory: WhatsApp, voice or any AI tool over MCP, Markdown you own, recall with sources",
-  "version": "0.2.0",
-  "websiteUrl": "https://zenod.dev/connect",
+  "version": "0.2.1",
+  "websiteUrl": "https://zenod.dev",
   "icons": [
     {
       "src": "https://zenod.dev/brand/zenod-icon.svg",
