@@ -31,15 +31,15 @@ Goal sentence: Five real people use production Zenod as ordinary users, capped a
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-11T22:01Z DM run_84c12717: Jordi approved E7-S1 and started E7-S3 (this build on production, first real Claude calls); E7-S3 recorded blocked on infra-vps/EPIC-2-A50 since production updates are paused (timer logs `paused`), infra-vps told by desk note d17b6e6 ; 2026-11-11T10:37Z Delivery Manager roll-up (run_cd3490c1) of the 2026-11-11 rows: T7 round 4 on production d9ebdd6 (05:28–05:46Z) ; T7-F1 Drive vault fix ; T7-F2 tester-watch ; E7-S1 round 2 Anthropic for testers
-Result: a stranger can sign in with Google and check out at 0 euro with no card on production (T7 round 4) ; a new tester's Google Drive vault then fails to set up, so memory, saving and the cap step could not be proved yet ; the vault fix T7-F1 (c99504ae) and E7-S1 round 2 (Anthropic for every tester, in review) are healthy on staging e0b6d80 ; T7-F2 tester-watch is built, its install is the infra-vps Mac ticket E2-M1 Jordi approved (EPIC-2-A49)
-Evidence: [T7 round 4](evidence/epic7-t7-r4-2026-11-11.md) · [T7-F1](evidence/e7-t7-f1-2026-11-11.md) · [E7-S1](evidence/e7-s1-2026-11-11.md) · earlier: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md)
-Waiting on: Jordi: infra-vps/EPIC-2-A50 (resume gated promotes; carries T7-F1 and the E7-S1 build, which he approved 2026-11-11, to production: E7-S3) ; infra-vps Mac ticket E2-M1 (tester-watch install for T7-F2; EPIC-2-A49 approved 2026-11-11, not yet run)
+Last attempted: 2026-11-12T11:30Z Delivery Manager roll-up (run_4b3e4bd6): T7 rehearsal approved by Jordi 2026-11-12 (sign-in, 0 euro checkout, Drive vault, keep and read back, saves from an AI app, the cap; WhatsApp moved to the first real tester by his E7-A23) ; T7-F1 Drive vault fix and T7-F3 billing fix live on production d4403df since 08:49Z ; E7-1 cap proven and ticked ; T12 go or no-go answered Go by the Delivery Manager (E7-A24, settled by Jordi's E7-A23): invite as soon as the mail sender is live ; E7-S3 Claude on production in his review (iteration 2: newest Haiku, 0 failures, memory and answers checked) ; T7-F2 tester-watch waits on infra-vps/EPIC-2-A49 Mac run ; T7-F4, T7-F5, T9-T11, E7-S2 draft
+Result: everything a stranger does is proven on production except WhatsApp linking for a new account, which the first real tester proves; invites start as soon as the mail sender is live (EPIC-26 E26-A11, the Cloudflare key)
+Evidence: [T7 rehearsal](http://vps3.taild81fbb.ts.net:8921/e7-t7/) · [readiness](http://vps3.taild81fbb.ts.net:8921/t12-go/) · [E7-S3](http://vps3.taild81fbb.ts.net:8921/e7-s3/) · [T7-F3](evidence/e7-t7-f3-2026-11-12.md)
+Waiting on: Jordi: EPIC-26 E26-A11 (Cloudflare key, the mail sender) ; his review of E7-S3 ; infra-vps/EPIC-2-A49 Mac run (tester-watch, T7-F2)
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
-Next action: on EPIC-2-A50 yes the M12 timer promotes e0b6d80 to production ; then T7 round 5 proves a new tester can save a memory and hit the cap ; then T8 go or no-go for inviting
+Next action: when E26-A11 lands: the mail sender goes live, the first invites go out (T9 via zenod-social), EPIC-26 E26-S3 watches the first stranger incl. WhatsApp linking (E7-3)
 Monitoring: Drive OAuth readiness proof renewed 2026-11-11 (E26-A5, look at 03:48:45Z) until 2027-02-09 · next check 2027-02-02 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
 Source revision: see git log
-Verified at: 2026-11-11T10:37Z (EPIC-7 ledger rows T7, T7-F1, T7-F2, E7-S1 read)
+Verified at: 2026-11-12T11:30Z (EPIC-7 ledger and asks read; production health ok d4403df)
 
 ## Waiting on
 
