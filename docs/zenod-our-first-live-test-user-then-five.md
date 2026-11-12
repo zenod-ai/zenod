@@ -31,14 +31,14 @@ Goal sentence: One real test user on Zenod and stable as soon as possible, then 
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-11 00:13Z U5 ready check for full promotion on production: Jordi as tester zero, the standard question set, the tester path and helpers at launch
-Result: not ready yet, two blockers, both asked already: a stranger gets no tester code (E26-A3) and no email with the link (E26-A6). Green: Jordi's memories go in from WhatsApp, EpicTeam and MCP, get filed and read back; the same questions run on every change against the run before (93.8 / 100 / 1.6 on his notes); testers now start with helpers off (E23-A2), live 7d40f51
+Last attempted: 2026-11-12T01:33Z Delivery Manager roll-up (run_f1c89d10): U1, U5, U6 done (U5 and U6 approved by Jordi 2026-11-11: Jordi as tester zero works, the readiness question fixed on production) ; U2 replaced by EPIC-26 E26-S2 ; U4 done ; U7 folded into EPIC-7 E7-S1, approved 2026-11-11 (testers on Anthropic) ; U3 draft
+Result: Jordi as tester zero works on production; the remaining launch blockers now sit in EPIC-26 (mail key E26-S11 on staging) and EPIC-7 (Drive vault fix T7-F1, Anthropic build E7-S3), all waiting for the next promote
 Evidence: [e23-u5](evidence/e23-u5-2026-11-10.md), page http://vps3.taild81fbb.ts.net:8921/e23-u5/ ; earlier [e23-u1](evidence/e23-u1-2026-11-09.md), page http://vps3.taild81fbb.ts.net:8921/e23-u1/
-Waiting on: nobody
+Waiting on: Jordi: infra-vps/EPIC-2-A50 (promote of the mail key, the Drive vault fix and the Anthropic build)
 Approved work: none
-Next action: once E26-A3 (Stripe code permission) and E26-A6 (mail key) are done from the Mac list, Zenod is ready for full promotion (U5): tell the social desk, then watch the first stranger sign up live; E23-A1 (a named first tester) can run in parallel
+Next action: on EPIC-2-A50 yes: promote, E26-A9 mail consent, T7 round 5; then Zenod is ready for full promotion and the first stranger is watched live (EPIC-26 E26-S3)
 Source revision: main (see git log)
-Verified at: 2026-11-11T00:13Z (cloud health ok 7d40f51, helper roster after the roll, tester-watch no alerts, memory tests 29872f6)
+Verified at: 2026-11-12T01:33Z (EPIC-23 ledger, EPIC-26 and EPIC-7 Current States read)
 
 ## Waiting on
 

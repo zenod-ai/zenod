@@ -30,14 +30,14 @@ Goal sentence: The errors Jordi is hitting are fixed today, and the team hears o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-11 M13 done (no confirm), worker run_82d2344f, integrated by the Delivery Manager: Zenod held both of Jordi's 10 Nov notes whole (23:34Z note 1,103 words in vault commit 3291cc0, one-hour note 9,623 words); the cut he saw was on alpha9's Team desk at about 3,000 characters (told them, agent_team b1cb63e64); the transcriber now re-runs a note in 10-minute pieces when it comes back short, #1640 7b2df5a, ci green, staging only until infra-vps/EPIC-2-A50 ; 2026-11-10 stamped ready on Jordi's ask and planned; M1 and M2 dispatched
-Result: created, not started
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Last attempted: 2026-11-12T01:33Z Delivery Manager roll-up (run_f1c89d10): M1, M2, M10 approved by Jordi ; M4, M5, M6, M8, M11, M12, M13 closed as plumbing or folded ; M3 (out-of-memory on a DeepSeek filing) and M7 (search speed after new notes) had overdue checks, rechecks started now (workers run_580395be, run_f09c6b92) ; M9 (background work on Claude Haiku) waits for its key ; staging carries #1640 transcript guard, production d9ebdd6 waits on infra-vps/EPIC-2-A50
+Result: Jordi's errors from 10 Nov are fixed and six alarms watch for new ones; a separate staging and a gated hourly promote exist; filing on production is stable since the memory raise, pending M3's recheck; search speed pending M7's recheck
+Evidence: [M1](evidence/e24-m1-2026-11-10.md) · [M3](evidence/e24-m3-2026-11-10.md) · [M7](evidence/e24-m7-2026-11-10.md) · [M12](evidence/e24-m12-2026-11-11.md) · [M13](evidence/e24-m13-2026-11-11.md)
+Waiting on: M3 and M7 rechecks (workers running) ; Jordi: infra-vps/EPIC-2-A50 for production promotes
 Approved work: none
-Next action: M1 finds and fixes today's errors; M2 builds the alerts
-Source revision: uncommitted scaffold
-Verified at: 2026-11-10
+Next action: integrate M3 and M7 rechecks; on EPIC-2-A50 yes the M12 timer promotes staging to production; then E24-3, the week-long watch
+Source revision: production d9ebdd6, staging e0b6d80 and later
+Verified at: 2026-11-12T01:33Z (EPIC-24 ledger read)
 
 ## Waiting on
 
