@@ -132,10 +132,11 @@
     {
      "id": "tester-link-on-screen",
      "title": "Get your tester link the moment you apply",
-     "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside. Open it, sign in, and checkout shows 0 euros with no card.",
+     "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside, ready to open or copy. Nothing to wait for by email: come back to the page in the same browser and the link is still there. Open it, sign in, and checkout shows 0 euros with no card.",
      "rows": [
       "U7",
-      "E26-S14"
+      "E26-S14",
+      "E26-S11"
      ],
      "since": "2026-11-11",
      "draft": true
