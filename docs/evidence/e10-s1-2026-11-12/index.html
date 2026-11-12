@@ -1,2 +1,65 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Zenod listings: iteration 2</title></head>
-<body><p>Iteration 2 of the Zenod listings fix is being written. The live page is at http://vps3.taild81fbb.ts.net:8921/e10-s1/.</p></body></html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zenod listings: the backwards address, iteration 2</title>
+<style>
+body{background:#f6f1e7;color:#1d1b17;font:16px/1.5 "Instrument Sans",system-ui,sans-serif;margin:0}
+main{max-width:900px;margin:0 auto;padding:32px 20px 60px}
+h1{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:32px;line-height:1.2;margin:0 0 12px}
+h2{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:22px;margin:30px 0 8px}
+p{margin:6px 0}.lead{font-size:18px}
+.box{border:1px solid #1d1b17;border-radius:6px;padding:14px 18px;margin:16px 0;background:#fbf8f1}
+.box b{color:#1f5c3d}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin-top:8px}
+td,th{border-top:1px solid #d8cfbd;padding:7px 6px;text-align:left;vertical-align:top}th{font-weight:600}
+.ok{color:#1f5c3d;font-weight:600}.wait{color:#8a5a00;font-weight:600}
+img{max-width:100%;border:1px solid #d8cfbd;border-radius:6px;margin:6px 0}
+a{color:#1f5c3d}code{background:#ece4d3;padding:0 4px;border-radius:3px}
+.small{font-size:13.5px;color:#5b5548}
+</style></head><body><main>
+<p class="small">EPIC-10 · Zenod in every MCP directory · iteration 2 · 12 November 2026</p>
+<h1>Iteration 2: Zenod has a new name in the MCP Registry, and the backwards address is gone from every listing except one old Glama page that Glama has been asked to delete.</h1>
+<div class="box">
+<p><b>Before:</b> the official MCP Registry listed Zenod under zenod.dev written backwards, and Glama copied it into its pages.</p>
+<p><b>Now:</b> the registry lists Zenod as <code>io.github.zenod-ai/zenod</code>, title <b>Zenod</b>, website <a href="https://zenod.dev">zenod.dev</a>. The old entry is deleted. Glama hid its old page from search, and we asked Glama to delete it. Nothing was kept.</p>
+<p><b>Guard:</b> our build now fails if the backwards form appears in anything people read.</p>
+</div>
+
+<h2>Where it came from</h2>
+<p class="lead">On 2 November an agent (the EPIC-10 planning worker) chose the registry name when it wrote the directory plan. The registry lets you prove you own a website. If you do, it writes your name with the address turned around, so zenod.dev became "dev" then "zenod". The agent picked that option because it looked like our own domain and because the registry only searches names, so the word "memory" in it would help people find us. The other option, a name tied to our GitHub, was written down only as a fallback.</p>
+<p>On 7 November a second agent published it, with your yes to publishing in the free directories (E10-A1). That question asked about publishing and the wording. It never showed you the name itself or how it would look on a listing. Nobody checked how a person would read it. Glama then copied the name into its web addresses and its "by" line, so it looked like a wrong address for Zenod.</p>
+<p>Iteration 1 this afternoon changed the words around the name and wrongly kept the name. This iteration removes it.</p>
+
+<h2>What changed today</h2>
+<p>We moved Zenod to the registry's other kind of name, the one tied to our GitHub organisation. Our own GitHub build proves we own it, so it needs no reversed address. Then we set every version of the old entry to <b>deleted</b>. That hides it from the registry and tells every directory that copies the registry to drop it.</p>
+
+<h2>Every place, before and after</h2>
+<table><tr><th>Where</th><th>Before</th><th>After</th><th>Checked live</th></tr>
+<tr><td>Official MCP Registry</td><td>Zenod listed under zenod.dev written backwards, three versions</td><td class="ok">Listed as <code>io.github.zenod-ai/zenod</code>, title Zenod, website zenod.dev. All three old versions set to deleted and gone from the registry</td><td class="small">16:28Z</td></tr>
+<tr><td>Glama search for zenod</td><td>showed Zenod under zenod.dev written backwards</td><td class="ok">the old page no longer appears in Glama search</td><td class="small">16:42Z</td></tr>
+<tr><td>Glama old connector page</td><td>title and address used zenod.dev written backwards</td><td class="wait">marked deprecated with the note "Zenod has moved" and a pointer to zenod.dev. <b>Removal requested 12 November 2026</b>, Glama support case GLM-38: delete the page and its addresses</td><td class="small">16:40Z</td></tr>
+<tr><td>Glama page for our GitHub repo</td><td>linked to the old connector page</td><td class="wait"><b>Removal requested 12 November 2026</b> in the same case GLM-38: link the new connector instead</td><td class="small">16:42Z</td></tr>
+<tr><td>Glama new connector</td><td>did not exist</td><td class="wait">Glama copies new registry entries on its own. Not there yet at 16:42Z. The next listing check confirms it</td><td class="small">16:42Z</td></tr>
+<tr><td>mcp.so submission</td><td>its registry line named zenod.dev written backwards</td><td class="ok">says listed as Zenod, <code>io.github.zenod-ai/zenod</code>, website zenod.dev</td><td class="small">16:25Z</td></tr>
+<tr><td>awesome-mcp-servers request</td><td>its registry line named zenod.dev written backwards</td><td class="ok">says listed as Zenod, <code>io.github.zenod-ai/zenod</code></td><td class="small">16:25Z</td></tr>
+<tr><td>Our four GitHub pull requests about the listing</td><td>titles or text named zenod.dev written backwards</td><td class="ok">reworded</td><td class="small">16:31Z</td></tr>
+<tr><td>Our public GitHub repo, every file</td><td>about 70 lines in the plan, cards, evidence notes, a test, a server label and the publish step</td><td class="ok">zero. 28 old screenshots that showed it were removed</td><td class="small">16:28Z</td></tr>
+<tr><td>Our team's plan pages (spines)</td><td>seven lines still name zenod.dev written backwards</td><td class="wait"><b>Handed to the Delivery Manager today</b> to reword. Only he writes those lines</td><td class="small">16:45Z</td></tr>
+<tr><td>zenod.dev, zenod.dev/connect, cloud.zenod.dev</td><td>already clean</td><td class="ok">checked, none</td><td class="small">16:21Z</td></tr>
+<tr><td>GitHub repo About box, the Gemini extension repo</td><td>already clean</td><td class="ok">checked, none</td><td class="small">16:21Z</td></tr>
+<tr><td>PulseMCP, mcp.so site, MCP Market, Smithery, GitHub's MCP list</td><td>Zenod not listed there</td><td class="ok">checked, nothing to remove</td><td class="small">16:30Z</td></tr>
+<tr><td>Social team files and unsent posts</td><td>a listing table and a registry screenshot with zenod.dev written backwards</td><td class="wait"><b>Handed to the social team today</b> to reword and retire the screenshot. Tonight's post already says Zenod and zenod.dev</td><td class="small">16:24Z</td></tr>
+<tr><td>Our DNS record note at Cloudflare</td><td>named zenod.dev written backwards</td><td class="ok">renamed</td><td class="small">16:29Z</td></tr>
+<tr><td>A label inside the Phylax server image</td><td>named zenod.dev written backwards</td><td class="ok">renamed in the code. The next image build carries the new label</td><td class="small">16:28Z</td></tr>
+</table>
+<p class="small">Glama is the only directory that copied the old name. Its own setting can only deprecate a page, which hides it from search but leaves it reachable by its old address, so we asked Glama's team to delete it.</p>
+<p class="small">Two things cannot be edited by anyone: old git commits in our public repo, and GitHub's "edited" history on the issue and pull requests. Changing past commits would mean rewriting the shared history of the repo, which we do not do. No page or listing shows the old text.</p>
+
+<h2>What you see now</h2>
+<p><a href="https://registry.modelcontextprotocol.io/?q=zenod">Official MCP Registry, search "zenod"</a>: Zenod appears as <code>io.github.zenod-ai/zenod</code>, and the old entry is gone.</p>
+<img src="registry-new.png" alt="Official MCP Registry search for zenod showing io.github.zenod-ai/zenod v1.0.0">
+<p><a href="https://glama.ai/mcp/connectors?query=zenod">Glama search for zenod</a>: the old page is gone from results.</p>
+<img src="glama-search.png" alt="Glama connector search for zenod with no result under the old name">
+
+<h2>The guard</h2>
+<p>A check now runs first in every build of the Zenod repo and before every registry publish. It fails if zenod.dev written backwards shows up in the listing file, the website, cards, evidence pages, code or tests. The registry publish also refuses a listing whose title is not Zenod or whose website is not https://zenod.dev.</p>
+<p class="small">EPIC-10 row E10-S1, iteration 2. Registry change: pull request 1648, published 16:27Z, old name deleted 16:28Z.</p>
+</main></body></html>
