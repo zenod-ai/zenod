@@ -43,7 +43,7 @@ The steps are [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) A0–A5; these ar
 ## Current State
 
 Status: active
-Phase: the tester door is open on production d9ebdd6 (sign-up at 0 euro, no card, own code, proved 2026-11-11 by T7 round 4), but a new tester's Google Drive vault fails, so testers cannot save yet; the fix (T7-F1) and the move to the Anthropic API (E7-S1) are in work; every production change now waits on infra-vps EPIC-2-A50 (Jordi resumes the promotes he stopped for VPS1 load). One line per child (detail stays in each child):
+Phase: production runs b4cf52b since 2026-11-12T03:49Z (gate passed): the Drive vault fix, Anthropic for testers, the mail key flow and the tester quick start are live; workers now prove each on production, then the mail consent ask goes to Jordi and the first invites follow
 - [ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md) milestone A (active): production up; the launch work runs in EPIC-7 (testers) and EPIC-6 (health page).
 - [EPIC-7](EPIC-7-REAL-USER-TEST.md) real-user test (active): T0–T6 live, keys rotated, secret guard in place; T7 rehearsal waits on one Google sign-in (E7-A15); leaked third-party keys roll from one page (E7-A14).
 - [EPIC-6](EPIC-6-HEALTH-DASHBOARD.md) health page: S1 inventory in review since 2026-10-25; S2–S6 wait for Jordi to accept S1 and stamp S2/S3.
@@ -51,12 +51,12 @@ Phase: the tester door is open on production d9ebdd6 (sign-up at 0 euro, no card
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): plan done, customer tool list and zenod.dev/connect kit live; publishing to free directories waits on E10-A1 (snoozed to 2026-11-05).
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; trial token waits on the same sign-in (E7-A15).
-Last attempted: 2026-11-11 DM run_285a0f57: M13 started (Jordi's 23:34Z voice note may be cut by the transcriber; worker run_82d2344f) ; EPIC-2-A49 approved by Jordi, tester-watch install now waits on infra-vps Mac ticket E2-M1 ; DM run_05913d54: V7 closed (call_7415c108 in the Log after agent_team's resend, calls 32 of 32), no server-ready rows to start ; 07:30Z roll-up: ZAL active (launch runs in EPIC-7, EPIC-26, EPIC-23) ; EPIC-7 active (T7 round 4 on production: sign-up at 0 euro passes, Drive vault fails, T7-F1 fix running; T7-F2 tester-watch built, install waits on infra-vps/EPIC-2-A49; E7-S1 round 2 moves testers to the Anthropic API) ; EPIC-26 active (tester door open, E26-S11 mail key and E26-S15 quick start built, wait for a promote) ; EPIC-23 active (U7 folded into E7-S1) ; EPIC-24 active (M10 closed by Jordi, M12 hourly gated promote timer live, M11 fixes the gate on his newest notes) ; EPIC-14 active (S36 card in review, S41 round 2 wires the Anthropic key per his E14-A11 feedback) ; EPIC-25 active (social kit in review, E25-S1-M1 on his Mac list) ; EPIC-21 active (all rows closed; V7 done, every call since 2 Nov in the Log) ; EPIC-12, EPIC-15 rolled up 04:40Z ; EPIC-6 review ; EPIC-9 review ; EPIC-8, EPIC-13 draft
-Result: production d9ebdd6 healthy; a stranger can apply, get their own code and sign up at 0 euro with no card; saving fails for a new Drive vault until T7-F1 ships; no outside tester yet
-Waiting on: Jordi: infra-vps/EPIC-2-A50 (resume gated hourly promotes; carries T7-F1, E26-S11, E26-S15, V7 to production) ; infra-vps Mac ticket E2-M1 (EPIC-2-A49 approved by Jordi 2026-11-11; the tester-watch install runs on his Mac, not yet run)
+Last attempted: 2026-11-12T03:55Z DM run_c6fa2e13: infra-vps restored Zenod promotes (A50 round 2, Jordi: "stop it" meant EpicBooks, not Zenod); flagged promote-now (D36, FYI E7-A22), the M12 timer promoted b4cf52b at 03:49Z ; started T7-F1 + T7 round 5, E7-S3, S41, E26-S11 (posts E26-A9), E26-S15 on production ; earlier: M3 closed clean, M7 still slow (M14 drafted), M9 folded per Jordi E94-A2, S42 merged
+Result: production b4cf52b healthy (gate demo 96/100/1.7, private 94.1/98.2/3.1); a stranger can apply and sign up at 0 euro; whether a new tester can save, and Claude on production, are being proved now; no outside tester yet
+Waiting on: five workers on production checks (T7-F1/T7, E7-S3, S41, E26-S11, E26-S15) ; then Jordi: E26-A9 mail consent (posted by E26-S11) ; infra-vps Mac ticket E2-M1 (tester-watch install)
 Monitoring: E10-R4 recheck done (7e568bc1). Glama connector live but unclaimed and unscored (waits E7-A15). Gemini CLI gallery data not refreshed zenod-g… · next check 2026-11-12T09:00:00.000Z
-Next action: T7-F1 fixes the Drive vault and E7-S1 moves testers to Anthropic; on EPIC-2-A50 the M12 timer promotes them; then T7 round 5 proves a tester can save, and the first invites go out
-Verified at: 2026-11-11T07:30Z (child Current States and ledgers read; production health ok on d9ebdd6)
+Next action: integrate the five production checks; post E26-A9; then T8 go or no-go and the first invites
+Verified at: 2026-11-12T03:55Z (production health ok b4cf52b; promote log ~/zenod-eval/promotions.jsonl)
 
 ## Spine Map
 
