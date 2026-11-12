@@ -31,14 +31,14 @@ Zenod is listed in Anthropic's MCP directory, Google's, and every other MCP list
 
 Owner: Delivery manager
 Status: active
-Last attempted: 2026-11-10 roll-up: R2 connect kit and R3 official MCP Registry done ; R4 self-serve directories active, recheck 2026-11-12 (Gemini gallery refresh, mcp.so queue, MCP Market needs a normal browser) ; R1, R9, R10 blocked ; R5..R8 draft ; child EPIC-11 WebMCP active, S1 done, its trial token (S2) waits on the team sign-in E7-A18
-Result: Zenod is in the official MCP Registry and the connect kit is live; Glama lists Zenod unclaimed and unscored until the team sign-in
+Last attempted: 2026-11-12T06:31Z Delivery Manager roll-up (run_862e3b50): R2 connect kit and R3 official MCP Registry done ; R11 Glama listing claimed (ownership by DNS on zenod.dev) with a test profile, in Jordi's review (7787ddca) ; R1 customer tool list capture unblocked by the team sign-in and started (run_ebe5cb42) ; GitHub repo About box set 2026-11-12 (description, website, topics) ; R4 self-serve directories active ; R9, R10 date or dependency gated ; R5..R8 and R12 (tagged release) draft ; child docs/EPIC-11-WEBMCP-ON-ZENOD-DEV.md (active, own Delivery Manager): WebMCP tools shipped 2026-11-02, its trial token (S2) can now use the team sign-in
+Result: Zenod is in the official MCP Registry, the connect kit is live, Glama is claimed with a health-check profile, and the repo About box points to zenod.dev
 Evidence: [P1 plan](epic10/P1-mcp-directory-plan.md), [server.json](epic10/server.json)
-Waiting on: EPIC-7/E7-A18 (needs Mac agent: the team sign-in) for the Glama claim, R1 and EPIC-11 S2 ; R4 recheck 2026-11-12 ; R9 on 2026-12-07
+Waiting on: Jordi's review of R11 (Glama) ; R1 worker running ; R9 on 2026-12-07
 Approved work: none
-Next action: R4 recheck on 2026-11-12; claim Glama once the team sign-in is done
+Next action: integrate R1; R4 recheck of Gemini gallery and mcp.so; EPIC-11 S2 trial token by its own Delivery Manager now that the team sign-in exists
 Source revision: uncommitted scaffold
-Verified at: 2026-11-10T07:00Z
+Verified at: 2026-11-12T06:31Z (EPIC-10 ledger and EPIC-11 Current State read)
 
 ## Waiting on
 
