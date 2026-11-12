@@ -72,7 +72,7 @@ import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./qu
 import { mountTesterFlowRoutes, testerFlowFromEnv, testerMail, type TesterFlow } from "./testerFlow.js";
 import { MailGrantStore, googleMailClientFromEnv, mailSenderFromEnv } from "./mailGrant.js";
 import { mountMailSenderRoutes } from "./mailSenderPage.js";
-import { mailerFromEnv } from "./zenodMail.js";
+import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
@@ -1409,6 +1409,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           void offerMailer?.process();
         },
         welcomeOn: env.ZENOD_WELCOME_MAIL === "1",
+        ...(cloudflareMailConfigured(env) ? { provider: "cloudflare" as const } : {}),
         secure: env.NODE_ENV === "production",
       });
     }

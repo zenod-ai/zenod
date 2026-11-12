@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { MailGrantStore } from "../src/mailGrant.js";
-import { GMAIL_API_OFF, gmailMailer, mailerFromEnv, mailReady, mimeMessage, type ZenodMail } from "../src/zenodMail.js";
+import { GMAIL_API_OFF, cloudflareMailConfigured, cloudflareMailer, gmailMailer, mailerFromEnv, mailReady, mimeMessage, type ZenodMail } from "../src/zenodMail.js";
 
 const MASTER = "a".repeat(64);
 const MAIL: ZenodMail = { to: "ada@example.test", subject: "You're in — Zenod", text: "Hi Ada,\nwelcome", html: "<p>Hi Ada</p>" };
@@ -97,5 +97,42 @@ describe("Zenod mail sender (EPIC-26 T2, S11)", () => {
     expect(mailReady(mailerFromEnv({ RESEND_API_KEY: "re_x" }))).toBe(true);
     // A Google client without the vault key cannot store a grant, so it is not the sender.
     expect(mailerFromEnv({ GOOGLE_OAUTH_CLIENT_ID: "c", GOOGLE_OAUTH_CLIENT_SECRET: "s" }, { dataDir: tmpdir() })).toBeNull();
+  });
+
+  it("sends through Cloudflare Email Service first when its token and account are set, never echoing an error body", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zenod-mail-cf-"));
+    const env = {
+      CLOUDFLARE_EMAIL_API_TOKEN: "cf-tok", CLOUDFLARE_ACCOUNT_ID: "acc1",
+      GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "csecret", CHASSIS_VAULT_MASTER_KEY: MASTER,
+    };
+    expect(cloudflareMailConfigured(env)).toBe(true);
+    expect(cloudflareMailConfigured({ CLOUDFLARE_EMAIL_API_TOKEN: "x" })).toBe(false);
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return new Response(JSON.stringify({ success: true, errors: [], result: { delivered: ["ada@example.test"], permanent_bounces: [], queued: [] } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const send = mailerFromEnv(env, { dataDir: dir, fetchImpl });
+    expect(mailReady(send)).toBe(true);
+    await send!(MAIL);
+    expect(calls[0]!.url).toBe("https://api.cloudflare.com/client/v4/accounts/acc1/email/sending/send");
+    expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe("Bearer cf-tok");
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+      from: { address: "jordi@zenod.dev", name: "Jordi at Zenod" },
+      to: "ada@example.test",
+      subject: MAIL.subject,
+      text: MAIL.text,
+      html: MAIL.html,
+      reply_to: "jordi@zenod.dev",
+    });
+
+    const refused = (async () => new Response(JSON.stringify({ success: false, errors: [{ code: 10105, message: "secret detail" }] }), { status: 403 })) as unknown as typeof fetch;
+    const error = await cloudflareMailer("acc1", "t", { name: "J", address: "j@zenod.dev" }, undefined, refused)(MAIL).catch((e: Error) => e);
+    expect(String(error)).toContain("mail provider answered 403 (cloudflare 10105)");
+    expect(String(error)).not.toContain("secret detail");
+
+    const bounced = (async () => new Response(JSON.stringify({ success: true, result: { delivered: [], permanent_bounces: ["ada@example.test"], queued: [] } }), { status: 200 })) as unknown as typeof fetch;
+    await expect(cloudflareMailer("acc1", "t", { name: "J", address: "j@zenod.dev" }, undefined, bounced)(MAIL)).rejects.toThrow(/permanent bounce/);
+    await expect(cloudflareMailer("acc1", "t", { name: "J", address: "j@zenod.dev" }, undefined, fetchImpl)({ ...MAIL, to: "a@b.test\r\nBcc: x@y.test" })).rejects.toThrow();
   });
 });

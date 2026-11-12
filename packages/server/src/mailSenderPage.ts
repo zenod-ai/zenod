@@ -38,6 +38,8 @@ export interface MailSenderRoutesOptions {
   onConnected?: () => void;
   /** Whether the welcome and end-of-test emails are switched on (ZENOD_WELCOME_MAIL=1). */
   welcomeOn: boolean;
+  /** Set when Zenod sends through Cloudflare Email Service: no Google step is needed. */
+  provider?: "cloudflare";
   secure: boolean;
   fetchImpl?: typeof fetch;
   now?: () => Date;
@@ -108,7 +110,10 @@ export function mailSenderPage(options: MailSenderRoutesOptions, noticeKey = "")
   const sender = escapeHtml(options.sender);
   const canStart = Boolean(options.client) && options.store.available;
   const connectButton = `<form method="post" action="/admin/mail/connect"><button class="btn go" type="submit"${canStart ? "" : " disabled"}>Connect mail sender</button></form>`;
-  const state = status.connected
+  const state = options.provider === "cloudflare"
+    ? `<p><span class="state on">Ready.</span> Zenod sends as <b>${sender}</b> through Cloudflare. Nobody needs to sign in or connect anything.</p>
+<div class="row"><form method="post" action="/admin/mail/test"><button class="btn go" type="submit">Send me a test</button></form></div>`
+    : status.connected
     ? `<p><span class="state on">Connected.</span> Zenod sends as <b>${escapeHtml(status.email ?? "")}</b>, since ${escapeHtml(when(status.connectedAt))}.</p>
 <div class="row"><form method="post" action="/admin/mail/test"><button class="btn go" type="submit">Send me a test</button></form>
 <form method="post" action="/admin/mail/disconnect"><button class="btn" type="submit">Disconnect</button></form></div>`
@@ -122,8 +127,8 @@ export function mailSenderPage(options: MailSenderRoutesOptions, noticeKey = "")
 <h1>Mail sender</h1>
 ${notice ? `<p class="notice">${escapeHtml(notice)}${enable}</p>` : ""}
 <div class="where">
-<p><b>What this does.</b> Zenod emails each accepted tester their personal link from <b>${sender}</b>, through Gmail. Replies land in your inbox.</p>
-<p><b>What Google lets it do.</b> Send email as that address, nothing else. Zenod cannot read, delete or change your mail. The permission is kept encrypted on Zenod's server, and Disconnect withdraws it at Google.</p>
+<p><b>What this does.</b> Zenod emails each accepted tester their personal link from <b>${sender}</b>, through ${options.provider === "cloudflare" ? "Cloudflare" : "Gmail"}. Replies land in your inbox.</p>
+${options.provider === "cloudflare" ? "" : `<p><b>What Google lets it do.</b> Send email as that address, nothing else. Zenod cannot read, delete or change your mail. The permission is kept encrypted on Zenod's server, and Disconnect withdraws it at Google.</p>`}
 <p><b>Where this is.</b> Inside Zenod, at cloud.zenod.dev/admin/mail. Only your GitHub sign-in opens it.</p>
 </div>
 <h2>Status</h2>

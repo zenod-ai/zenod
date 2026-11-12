@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { describe, expect, it, vi } from "vitest";
 import { GMAIL_SEND_SCOPE, MAIL_GRANT_FILE, MailGrantStore } from "../src/mailGrant.js";
-import { gmailApiEnableUrl, mountMailSenderRoutes } from "../src/mailSenderPage.js";
+import { gmailApiEnableUrl, mailSenderPage, mountMailSenderRoutes } from "../src/mailSenderPage.js";
 import { GMAIL_API_OFF, type ZenodMail } from "../src/zenodMail.js";
 
 const MASTER = "b".repeat(64);
@@ -168,5 +168,17 @@ describe("Connect mail sender (EPIC-26 S11)", () => {
     expect(gmailApiEnableUrl(undefined)).toBe("https://console.cloud.google.com/apis/library/gmail.googleapis.com");
     const test = await t.app.request("/admin/mail/test", { method: "POST", headers: t.same });
     expect(test.headers.get("location")).toBe("/admin/mail?mail=api_off");
+  });
+
+  it("with Cloudflare as the sender shows Ready, no Google connect step, and keeps Send me a test", () => {
+    const store = new MailGrantStore(mkdtempSync(join(tmpdir(), "zenod-mail-cf-page-")), MASTER);
+    const html = mailSenderPage({
+      isAdmin: () => true, store, client: null, sender: "jordi@zenod.dev", preview: () => PREVIEW,
+      send: async () => {}, welcomeOn: false, provider: "cloudflare", secure: true,
+    });
+    expect(html).toContain("through Cloudflare");
+    expect(html).toContain("Send me a test");
+    expect(html).not.toContain("Connect mail sender");
+    expect(html).not.toContain("What Google lets it do");
   });
 });

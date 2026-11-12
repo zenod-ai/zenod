@@ -2,6 +2,10 @@
 // welcome after checkout, the end-of-test offer) goes through `SendMail`; which provider
 // sits behind it is decided here from the env, once.
 //
+//   CLOUDFLARE_EMAIL_API_TOKEN + CLOUDFLARE_ACCOUNT_ID set -> Cloudflare Email Service
+//   (E26-S11 iteration 3), from ZENOD_MAIL_SENDER (default jordi@zenod.dev, zenod.dev
+//   onboarded for sending in Cloudflare), replies to ZENOD_MAIL_REPLY_TO (default the
+//   sender). Always ready: no human consent. The Google path below stays as fallback.
 //   GOOGLE_OAUTH_CLIENT_ID/SECRET set -> Gmail API as ZENOD_MAIL_SENDER (default
 //   jordi@zenod.dev), through the one gmail.send consent Jordi gives on
 //   cloud.zenod.dev/admin/mail (E26-S11, mailGrant.ts). Until he connects it the sender
@@ -127,6 +131,45 @@ export function resendMailer(apiKey: string, from: string, replyTo?: string, fet
   };
 }
 
+/** Cloudflare Email Service REST send (developers.cloudflare.com/email-service/api/send-emails/rest-api/). */
+export function cloudflareMailer(
+  accountId: string,
+  apiToken: string,
+  from: { name: string; address: string },
+  replyTo?: string,
+  fetchImpl: typeof fetch = fetch,
+): SendMail {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/email/sending/send`;
+  return async (mail) => {
+    const response = await fetchImpl(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: { address: headerSafe(from.address), name: headerSafe(from.name) },
+        to: headerSafe(mail.to),
+        subject: headerSafe(mail.subject),
+        text: mail.text,
+        html: mail.html,
+        ...(replyTo ? { reply_to: headerSafe(replyTo) } : {}),
+      }),
+    });
+    // Never echo the body; keep only Cloudflare's numeric error codes and the bounce outcome.
+    const body = (await response.json().catch(() => null)) as
+      | { success?: boolean; errors?: Array<{ code?: number }>; result?: { permanent_bounces?: string[] } }
+      | null;
+    if (!response.ok || body?.success === false) {
+      const codes = (body?.errors ?? []).map((e) => e.code).filter((c) => typeof c === "number");
+      throw new Error(`mail provider answered ${response.status}${codes.length ? ` (cloudflare ${codes.join(",")})` : ""}`);
+    }
+    if (body?.result?.permanent_bounces?.length) throw new Error("mail provider reported a permanent bounce");
+  };
+}
+
+/** True when Zenod sends through Cloudflare Email Service (both settings present). */
+export function cloudflareMailConfigured(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env.CLOUDFLARE_EMAIL_API_TOKEN?.trim() && env.CLOUDFLARE_ACCOUNT_ID?.trim());
+}
+
 /**
  * The sender production uses, or null when Zenod has no way to send. With Zenod's Google
  * client and a data dir it is the Gmail sender, ready once Jordi has connected it.
@@ -136,6 +179,18 @@ export function mailerFromEnv(
   options: { dataDir?: string; fetchImpl?: typeof fetch } = {},
 ): SendMail | null {
   const fetchImpl = options.fetchImpl ?? fetch;
+  if (cloudflareMailConfigured(env)) {
+    const cfToken = env.CLOUDFLARE_EMAIL_API_TOKEN!.trim();
+    const cfAccount = env.CLOUDFLARE_ACCOUNT_ID!.trim();
+    const address = mailSenderFromEnv(env);
+    return cloudflareMailer(
+      cfAccount,
+      cfToken,
+      { name: env.ZENOD_MAIL_SENDER_NAME?.trim() || DEFAULT_MAIL_SENDER_NAME, address },
+      env.ZENOD_MAIL_REPLY_TO?.trim() || address,
+      fetchImpl,
+    );
+  }
   const client = googleMailClientFromEnv(env);
   if (client && options.dataDir) {
     const store = new MailGrantStore(options.dataDir, env.CHASSIS_VAULT_MASTER_KEY);
