@@ -30,12 +30,12 @@ Goal sentence: The errors Jordi is hitting are fixed today, and the team hears o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-12T01:33Z Delivery Manager roll-up (run_f1c89d10): M1, M2, M10 approved by Jordi ; M4, M5, M6, M8, M11, M12, M13 closed as plumbing or folded ; M3 (out-of-memory on a DeepSeek filing) and M7 (search speed after new notes) had overdue checks, rechecks started now (workers run_580395be, run_f09c6b92) ; M9 (background work on Claude Haiku) waits for its key ; staging carries #1640 transcript guard, production d9ebdd6 waits on infra-vps/EPIC-2-A50
+Last attempted: 2026-11-12T01:33Z Delivery Manager roll-up (run_f1c89d10): M1, M2, M10 approved by Jordi ; M4, M5, M6, M8, M11, M12, M13 closed as plumbing or folded ; M3 closed after a clean 36.5 h recheck (no crash, 62 DeepSeek filings incl. a 15-in-a-row burst, memory peak 330 of 640 MiB, 278 of 278 notes filed once, 8befee9d) ; M7 rechecked: new notes no longer slow search, but a typical search still takes 1.8 s (GitHub pull ~1.1 s, VPS1 overloaded), stays active, M14 drafted (7a00466a) ; M9 folded into E7-S1 and S41 per Jordi E94-A2, no duplicate key ; staging carries #1640 transcript guard, production d9ebdd6 waits on infra-vps/EPIC-2-A50
 Result: Jordi's errors from 10 Nov are fixed and six alarms watch for new ones; a separate staging and a gated hourly promote exist; filing on production is stable since the memory raise, pending M3's recheck; search speed pending M7's recheck
 Evidence: [M1](evidence/e24-m1-2026-11-10.md) · [M3](evidence/e24-m3-2026-11-10.md) · [M7](evidence/e24-m7-2026-11-10.md) · [M12](evidence/e24-m12-2026-11-11.md) · [M13](evidence/e24-m13-2026-11-11.md)
-Waiting on: M3 and M7 rechecks (workers running) ; Jordi: infra-vps/EPIC-2-A50 for production promotes
+Waiting on: M7 recheck after VPS1 load drops ; Jordi: infra-vps/EPIC-2-A50 for production promotes
 Approved work: none
-Next action: integrate M3 and M7 rechecks; on EPIC-2-A50 yes the M12 timer promotes staging to production; then E24-3, the week-long watch
+Next action: on EPIC-2-A50 yes the M12 timer promotes staging to production; then E24-3, the week-long watch
 Source revision: production d9ebdd6, staging e0b6d80 and later
 Verified at: 2026-11-12T01:33Z (EPIC-24 ledger read)
 
