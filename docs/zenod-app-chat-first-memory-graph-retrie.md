@@ -32,14 +32,14 @@ Goal sentence: Cloud Zenod opens on a chat with your memory and shows it as a gr
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-11 roll-up: the graph, retrieval and answer rows S1 to S3, S8, S11, S13 to S25, S27, S29, S31 to S33 done and approved ; S21 done (45 real questions graded, approved 10 Nov) ; S35 done (named day and missed recall question fixed, approved 10 Nov) ; S36 done ("what did I say yesterday" answers from the right day, approved 11 Nov) ; S38 in review (day questions answered in his own time zone) ; S30 monitoring (confidence tuning waits on 20+ of his Right place and Wrong place answers, next check 12 Nov 18:00Z) ; S4, S5, S7, S9, S12, S26, S28, S34 and S37 draft, each waiting for Jordi to start it
-Result: retrieval is at 96.2 with named-day and yesterday questions answering from the right day; the time zone fix S38 is ready for his judgment
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody (S38 card in review with Jordi; S30 monitoring for his Right place and Wrong place answers, no ask)
+Last attempted: 2026-11-12T18:11Z Delivery Manager roll-up (run_73f26beb): the graph, retrieval and answer rows S1 to S3, S8, S11, S13 to S25, S27, S29, S31 to S33, S35, S36 done and approved ; S38 (named-day questions in his time zone) approved by Jordi 2026-11-11 ; S30 confidence calibration rechecked now (worker run_b6b6b9ae), waiting for 20+ of his Right place and Wrong place answers, and any tuning ships only after the engine freeze ends 2026-11-24 ; S4, S5, S7, S9, S12, S26, S28, S34, S37 draft
+Result: retrieval is right for named-day and yesterday questions in his time zone; production d4403df answers on Claude Sonnet; the confidence number waits for his corrections before it can be tuned
+Evidence: [S30](http://vps3.taild81fbb.ts.net:8921/e12-s30/) · [E7-S3 production answers](http://vps3.taild81fbb.ts.net:8921/e7-s3/)
+Waiting on: his Right place and Wrong place answers (S30), no ask ; the engine freeze until 2026-11-24 (EPIC-22)
 Approved work: none
-Next action: Jordi judges the S38 card (an evening question about yesterday lists the notes he sent that day); S30 reruns on his vault at 2026-11-12T18:00Z
-Source revision: uncommitted scaffold
-Verified at: 2026-11-11T04:40Z
+Next action: integrate the S30 recheck; nothing else due until his corrections arrive or the freeze ends
+Source revision: production d4403df
+Verified at: 2026-11-12T18:11Z (EPIC-12 ledger read)
 
 ## Non-Goals
 
