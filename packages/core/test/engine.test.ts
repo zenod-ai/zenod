@@ -2424,19 +2424,63 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect((await engine().lint()).errors).toEqual([]);
   });
 
-  it("returns an explicit retry response promptly when a writer holds the vault lock", async () => {
-    const e=engine();let release!:()=>void;let locked!:()=>void;
+  it("returns an explicit retry response promptly, before any model call, when a writer holds the vault lock", async () => {
+    // T7-F3: a filing holds the vault, so the answer could only be thrown away; no model call is made or billed.
+    const e=createEngine({repo,llm,state,readLockWaitMs:200});let release!:()=>void;let locked!:()=>void;
     const ready=new Promise<void>(r=>{locked=r;});const hold=new Promise<void>(r=>{release=r;});
     // Separate async chain: the read must not inherit the writer's ownership.
     const writer=withVaultWriteLock(repo.path,async()=>{locked();await hold;});await ready;
+    llm.answerOverride=async ()=>({text:"Invented answer must not escape the busy guard",readPaths:[]});
+    const calls=llm.answerInputs.length;
+    try {
+      const answers=await Promise.race([Promise.all([1,2,3].map(()=>e.ask("What does my insurance note say?"))),new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("read blocked behind filing")),2000))]);
+      for (const answer of answers) { expect(answer.text).toBe("Memory filing is in progress. Please retry your question shortly.");expect(answer.sources).toEqual([]); }
+      expect(llm.answerInputs.length).toBe(calls);
+    } finally {release();await writer;}
+  });
+
+  it("a read that meets a filing mid-answer still says retry and fails later reads at once", async () => {
+    const e=createEngine({repo,llm,state,readLockWaitMs:100});let release!:()=>void;let locked!:()=>void;
+    const ready=new Promise<void>(r=>{locked=r;});const hold=new Promise<void>(r=>{release=r;});
+    let writer:Promise<void>|undefined;
     llm.answerOverride=async (_input,tools)=>{
+      writer=withVaultWriteLock(repo.path,async()=>{locked();await hold;});await ready;
       await expect(tools.readNote!("Areas/Insurance.md")).rejects.toThrow("filing_in_progress");
+      const started=performance.now();
+      await expect(tools.readNote!("Areas/Insurance.md")).rejects.toThrow("filing_in_progress");
+      expect(performance.now()-started).toBeLessThan(50);
       return {text:"Invented answer must not escape the busy guard",readPaths:[]};
     };
     try {
-      const answer=await Promise.race([e.ask("What does my insurance note say?"),new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("read blocked behind filing")),2000))]);
-      expect(answer.text).toBe("Memory filing is in progress. Please retry your question shortly.");expect(answer.sources).toEqual([]);
+      const answer=await e.ask("What does my insurance note say?");
+      expect(answer.text).toBe("Memory filing is in progress. Please retry your question shortly.");
     } finally {release();await writer;}
+  });
+
+  it("2-3 parallel answers on a briefly held vault keep every billed answer (T7-F3)", async () => {
+    // T7 round 5: parallel chat_with_zenod answers each locked the others (and a read-sync
+    // pull) out, so every paid answer was swapped for the retry line. A short holder must wait.
+    const e=createEngine({repo,llm,state});
+    const busy="Memory filing is in progress. Please retry your question shortly.";
+    llm.answerOverride=async (_input,tools)=>{
+      for (let i=0;i<3;i++) await tools.readNote!("Areas/Insurance.md");
+      return {text:"Your travel insurance is with Axa (Areas/Insurance.md).",readPaths:["Areas/Insurance.md"]};
+    };
+    let release!:()=>void;let locked!:()=>void;
+    const ready=new Promise<void>(r=>{locked=r;});
+    // A brief holder, like another answer's probe or a read-sync pull.
+    const holder=withVaultWriteLock(repo.path,async()=>{locked();await new Promise<void>(r=>{release=r;setTimeout(r,300);});});await ready;
+    const calls=llm.answerInputs.length;
+    const answers=await Promise.all([
+      e.ask("What does my insurance note say?"),
+      e.ask("Who is my travel insurer?"),
+      e.chat("What does my insurance note say?","web",{conversationKey:"t7f3-a"}),
+      e.chat("When does my travel insurance end?","web",{conversationKey:"t7f3-b"}),
+    ]);
+    release();await holder;
+    const texts=answers.map(answer=>answer.text);
+    for (const text of texts) expect(text).not.toContain(busy);
+    expect(llm.answerInputs.length-calls).toBe(4);
   });
 
   it.each(["classify: structured_output_invalid", "classify: provider_error"])("keeps the existing window/retry budget and compacts only malformed output (%s)", async error => {
