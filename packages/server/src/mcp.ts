@@ -585,13 +585,13 @@ export function buildMcpServer(
     {
       title: `Chat with ${agentName}`,
       description:
-        "Send a natural-language prompt through this agent's engine.chat loop (the same loop used by web and WhatsApp) — the agent reasons with its own tools and returns a reply. For a backlog agent this engages its backlog brain (query/triage/create/edit issues); for a memory agent, the vault. Supports an explicit conversationKey/testRunId for isolated multi-turn sessions and self-tests. Channel callers may supply an idempotencyKey to enqueue a durable job and poll get_task_result, preventing a foreground timeout after a mutation from becoming a false failure or duplicate replay.",
+        "Send a message to this agent's chat, the same conversation it holds on the web and in WhatsApp, and return its reply. The agent answers with its own tools; for Zenod that is the user's memory vault. A conversationKey keeps a separate multi-turn conversation. Messaging channels can pass an idempotencyKey to run the turn as a background job, whose reply get_task_result returns; resending the same key returns the same job, not a second reply.",
       inputSchema: {
-        message: z.string().min(1).describe("Natural-language prompt to send to the agent"),
+        message: z.string().min(1).describe("The message to send, in natural language"),
         surface: z.enum(["cli", "mcp", "whatsapp", "web", "drive"]).optional().describe("Surface label to run as. Defaults to mcp."),
-        conversationKey: z.string().min(1).optional().describe("Stable key for multi-turn test context"),
-        testRunId: z.string().min(1).optional().describe("Optional caller-supplied test run grouping id"),
-        idempotencyKey: z.string().min(1).max(512).optional().describe("Stable channel message key; when present, enqueue durable chat and poll get_task_result"),
+        conversationKey: z.string().min(1).optional().describe("Stable key that keeps one multi-turn conversation separate from others"),
+        testRunId: z.string().min(1).optional().describe("Caller-supplied id that groups related turns in the chat audit"),
+        idempotencyKey: z.string().min(1).max(512).optional().describe("Stable message key from a messaging channel; when present, the turn runs as a background job and get_task_result returns its reply"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
