@@ -129,4 +129,33 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     // No mail sender: once the link was on screen, nothing waits on mail.
     expect(flow.snapshot().testers[0]).toMatchObject({ waiting: LINK_SHOWN });
   });
+
+  it("lets the applicant withdraw with their private key: the Stripe code is switched off and the place freed", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "zenod-testers-withdraw-"));
+    const retired: string[] = [];
+    let refuse = false;
+    const flow = new TesterFlow({
+      dataDir,
+      cap: 5,
+      mint: async () => ({ code: "ZT-STRIPE01", source: "stripe" as const }),
+      retire: async (code) => {
+        if (refuse) throw new Error("stripe down");
+        retired.push(code);
+      },
+    });
+    const app = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterApplications(app, { dataDir, clientAddress, flow });
+    const post = (path: string, body: unknown) =>
+      app.request(path, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.12" }, body: JSON.stringify(body) });
+    const first = (await (await post("/api/public/testers/apply", { use: "Voice notes on my walks", contact: "first@example.com" })).json()) as { claim: string };
+    expect((await post("/api/public/testers/withdraw", { claim: "B".repeat(32) })).status).toBe(404);
+    refuse = true;
+    expect((await post("/api/public/testers/withdraw", { claim: first.claim })).status).toBe(502);
+    expect(flow.snapshot().testers).toHaveLength(1);
+    refuse = false;
+    expect(await (await post("/api/public/testers/withdraw", { claim: first.claim })).json()).toEqual({ ok: true });
+    expect(retired).toEqual(["ZT-STRIPE01"]);
+    expect(flow.snapshot().testers).toEqual([]);
+    expect((await post("/api/public/testers/link", { claim: first.claim })).status).toBe(404);
+  });
 });

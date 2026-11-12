@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchTesterLink, rememberedTester, rememberTester, submitTesterApplication } from "./testers";
+import { fetchTesterLink, forgetTester, withdrawTester, rememberedTester, rememberTester, submitTesterApplication } from "./testers";
 
 const answer = (status: number, body: unknown) =>
   (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
@@ -46,5 +46,14 @@ describe("testers apply form (EPIC-26 S2)", () => {
     expect(await fetchTesterLink(claim, answer(200, { ok: true, link }))).toBe(link);
     expect(await fetchTesterLink(claim, answer(200, { ok: true, link: null }))).toBeNull();
     expect(await fetchTesterLink(claim, answer(404, { error: "not found" }))).toBeNull();
+  });
+
+  it("withdraws with the browser's key and forgets what it kept", async () => {
+    await expect(withdrawTester("abcdefghijklmnopqrstuvwxyz_-0123", answer(200, { ok: true }))).resolves.toBeUndefined();
+    await expect(withdrawTester("abcdefghijklmnopqrstuvwxyz_-0123", answer(404, { error: "not found" }))).resolves.toBeUndefined();
+    await expect(withdrawTester("abcdefghijklmnopqrstuvwxyz_-0123", answer(502, { error: "Could not withdraw just now." }))).rejects.toThrow("Could not withdraw");
+    const box = new Map<string, string>([["zenod.tester", "{}"]]);
+    forgetTester({ getItem: (k: string) => box.get(k) ?? null, setItem: (k: string, v: string) => void box.set(k, v), removeItem: (k: string) => void box.delete(k) } as unknown as Storage);
+    expect(box.size).toBe(0);
   });
 });
