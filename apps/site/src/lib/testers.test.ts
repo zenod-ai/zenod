@@ -53,7 +53,7 @@ describe("testers apply form (EPIC-26 S2)", () => {
     await expect(withdrawTester("abcdefghijklmnopqrstuvwxyz_-0123", answer(404, { error: "not found" }))).resolves.toBeUndefined();
     await expect(withdrawTester("abcdefghijklmnopqrstuvwxyz_-0123", answer(502, { error: "Could not withdraw just now." }))).rejects.toThrow("Could not withdraw");
     const box = new Map<string, string>([["zenod.tester", "{}"]]);
-    forgetTester({ getItem: (k) => box.get(k) ?? null, setItem: (k, v) => void box.set(k, v), removeItem: (k: string) => void box.delete(k) } as unknown as Storage);
+    forgetTester({ getItem: (k: string) => box.get(k) ?? null, setItem: (k: string, v: string) => void box.set(k, v), removeItem: (k: string) => void box.delete(k) } as unknown as Storage);
     expect(box.size).toBe(0);
   });
 });
