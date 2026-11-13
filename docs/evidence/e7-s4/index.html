@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Does the tester cap count answers at their real price?</title><link rel="stylesheet" href="/_shell/shell.css"></head>
+<body data-page-shell>
+<main class="ps-page">
+<header class="ps-head"><p class="ps-kicker">E7-S4 · 2026-11-13</p><h1>Does the tester cap count answers at their real price?</h1></header>
+<p class="ps-punch">Almost: production counts every answer by its formula, but prices Sonnet 5.5&#x27;s cached input at double, so the cap ran 4% high. Fixed in change 1652, live with the next promote.</p>
+<figure class="ps-diagram"><ol class="ps-boxes" data-shape="line"><li><b>Tester asks a question</b></li><li><b>Claude Sonnet 5.5 answers</b></li><li><b>Tokens</b>input, cached, output</li><li><b>Zenod prices them</b></li><li><b>Cap rises by that amount</b></li></ol></figure>
+<div class="ps-body">
+<h2>Answer by answer, on production</h2>
+<p>Production <code>zenod-mt</code> ran <code>e0100de1</code>, which holds the earlier cap fix. Four answers from the agents' test account, 13 Nov 02:45 to 02:51 UTC. All four answers ran on Claude Sonnet 5.5. Tokens come from production's own usage lines. The counted amount is how much the account's chat spend rose.</p>
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Input, of which cached</th><th>Output</th><th>Counted</th><th>Real price</th><th>Match</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>What is the test word?</td><td>21,587, 6,269 cached</td><td>318</td><td>$0.03507</td><td>$0.03444</td><td>✗ +1.8%</td></tr>
+<tr><td>2</td><td>Which birds did I save?</td><td>15,506, 14,482 cached</td><td>345</td><td>$0.00839</td><td>$0.00695</td><td>✗ +20.8%</td></tr>
+<tr><td>3</td><td>Test word, asked again</td><td>97,105, 35,513 cached</td><td>642</td><td>$0.13671</td><td>$0.13316</td><td>✗ +2.7%</td></tr>
+<tr><td>4</td><td>Test word, retried</td><td>39,138, 27,020 cached</td><td>476</td><td>$0.03440</td><td>$0.03170</td><td>✗ +8.5%</td></tr>
+<tr><td></td><td><b>All four</b></td><td></td><td></td><td><b>$0.2146</b></td><td><b>$0.2062</b></td><td><b>+4.0%</b></td></tr>
+</tbody></table>
+<p>Real price uses Anthropic's list prices for Sonnet 5.5: $2 per million input, $10 per million output, $0.10 per million cached input. Each counted amount equals Zenod's own formula to the last digit, so nothing was lost or doubled. The one difference is cached input, which Zenod priced at $0.20 per million.</p>
+<h2>The fix</h2>
+<p>Each Claude model now has its own cached-input price: Sonnet 5.5 and Opus 5.5 at 5% of input, the rest at 10%. Opus 5.5 also gets its own $4 and $20 price, and Haiku 5.5 gets its higher price for prompts over 100,000 tokens. A test pins these four production answers at their real prices. <a href="https://github.com/zenod-ai/zenod/pull/1652">Change 1652</a>. It reaches production with the next promote, then one more answer is checked.</p>
+<h2>Seen on the way</h2>
+<ul>
+<li>✗ Answers 1 and 4 came back as "Memory filing is in progress" and were still charged. These were single questions, one at a time, on a build that holds the earlier fix for this. Handed to the Delivery Manager.</li>
+<li>✗ Answer 3 kept the chat waiting 125 seconds and the browser got a timeout page. Its cost was counted 80 seconds later.</li>
+<li>Haiku 5.5 made no calls in this window, so only its price table was checked, against Anthropic's list.</li>
+<li>Spend: $0.21 real, just over the $0.20 limit, because answer 3 read 97,000 tokens.</li>
+</ul>
+
+</div>
+<p class="ps-foot">E7-S4 keeps this page · one shared page shell (E75-S5)</p>
+</main>
+</body></html>
