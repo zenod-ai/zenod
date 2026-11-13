@@ -14,7 +14,8 @@ Integration policy: main-direct
 
 Five real people use production Zenod as ordinary users, capped and never charged, before Zenod goes truly live.
 
-Goal sentence: Five real people use production Zenod as ordinary users, capped and never charged, before Zenod goes truly live.
+Goal sentence: Five testers use Zenod every week.
+Goal sentence before agent_team E40-A5 (Jordi 2026-11-13, "A yes, build as shown"; the objectives screen, agent_team E40-S20): Five real people use production Zenod as ordinary users, capped and never charged, before Zenod goes truly live.
 
 ## Serves
 
