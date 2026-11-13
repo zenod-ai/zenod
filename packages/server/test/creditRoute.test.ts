@@ -55,15 +55,43 @@ describe("credit route config", () => {
   });
 
   it("prices Claude Haiku 5.5 at its own rate", () => {
-    const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-haiku-5-5", inputTokens: 1_000_000, outputTokens: 1_000_000, cachedInputTokens: 0, cacheCreationInputTokens: 0 });
-    expect(usd).toBeCloseTo(0.6, 6);
+    const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-haiku-5-5", inputTokens: 100_000, outputTokens: 100_000, cachedInputTokens: 0, cacheCreationInputTokens: 0 });
+    expect(usd).toBeCloseTo(0.06, 6);
+  });
+
+  it("prices a Claude Haiku 5.5 prompt over 100K tokens at the long-prompt rate", () => {
+    const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-haiku-5-5", inputTokens: 200_000, outputTokens: 10_000, cachedInputTokens: 0, cacheCreationInputTokens: 0 });
+    // 200,000 x $0.50 + 10,000 x $2.50, per million
+    expect(usd).toBeCloseTo(0.125, 6);
+  });
+
+  it("counts production's cached Sonnet 5.5 answers at Anthropic's price (E7-S4, 2026-11-13)", () => {
+    // [llm-usage] lines on zenod-mt e0100de1; cache reads bill at $0.10 per million on Sonnet 5.5.
+    const answers: Array<[number, number, number, number]> = [
+      [21_587, 318, 6_269, 0.0344429],
+      [15_506, 345, 14_482, 0.0069462],
+      [97_105, 642, 35_513, 0.1331553],
+      [39_138, 476, 27_020, 0.031698],
+    ];
+    for (const [input, output, read, real] of answers) {
+      const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-sonnet-5-5", inputTokens: input, outputTokens: output, cachedInputTokens: read, cacheCreationInputTokens: 0 });
+      expect(usd).toBeCloseTo(real, 7);
+    }
+  });
+
+  it("keeps Sonnet 5 cache reads at a tenth of input and prices Opus 5.5 at its own rate", () => {
+    const sonnet5 = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-sonnet-5", inputTokens: 10_000, outputTokens: 0, cachedInputTokens: 10_000, cacheCreationInputTokens: 0 });
+    expect(sonnet5).toBeCloseTo(0.002, 7);
+    const opus55 = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-opus-5-5", inputTokens: 20_000, outputTokens: 1_000, cachedInputTokens: 10_000, cacheCreationInputTokens: 0 });
+    // 10,000 x $4 + 10,000 x $0.20 + 1,000 x $20, per million
+    expect(opus55).toBeCloseTo(0.062, 7);
   });
 
   it("prices a cached Sonnet 5.5 answer once: the input total already holds cache reads and writes", () => {
     // Production 2026-11-12 04:03:44Z, a tester's answer: input 57,235 (total), cache read 29,185, write 3,713, output 977.
     const usd = estimateCostUsd({ operation: "answer", provider: "anthropic", model: "claude-sonnet-5-5", inputTokens: 57_235, outputTokens: 977, cachedInputTokens: 29_185, cacheCreationInputTokens: 3_713 });
-    // 24,337 uncached x $2 + 29,185 read x $0.20 + 3,713 write x $2.50 + 977 out x $10, per million
-    expect(usd).toBeCloseTo(0.0735635, 6);
+    // 24,337 uncached x $2 + 29,185 read x $0.10 + 3,713 write x $2.50 + 977 out x $10, per million
+    expect(usd).toBeCloseTo(0.070645, 6);
   });
 });
 
