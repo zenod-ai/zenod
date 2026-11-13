@@ -138,6 +138,29 @@ export interface AppOptions {
   walletFleetAllowlist?: readonly string[];
   /** Unit-owned conversation state handled before the ported chat/model path. */
   chatInterceptor?: ChatTurnInterceptor;
+  /** T7-F7: how long POST /api/chat waits before it answers "still working" (tests shorten it). */
+  chatReplyDeadlineMs?: number;
+}
+
+/** T7-F7: under the edge's 100 s timeout, so a slow answer never shows the edge's own error page. */
+export const CHAT_REPLY_DEADLINE_MS = 90_000;
+export const CHAT_STILL_WORKING_TEXT =
+  "This answer is taking longer than usual. It is still being written and will appear in your chat history in a minute or two.";
+
+function chatReplyDeadlineMs(options: AppOptions): number {
+  return options.chatReplyDeadlineMs ?? CHAT_REPLY_DEADLINE_MS;
+}
+
+/** True when `pending` has not settled within `ms`; a late failure is logged, never left unhandled. */
+async function raceChatDeadline(pending: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = await Promise.race([
+    pending.then(() => false, () => false),
+    new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(true), ms); }),
+  ]);
+  clearTimeout(timer);
+  if (late) pending.catch((error) => console.error("[chat] late reply failed:", error));
+  return late;
 }
 
 const MAX_WEB_VOICE_NOTE_BYTES = 50 * 1024 * 1024;
@@ -2767,12 +2790,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const cleanSlate = await handleCleanSlateChat(message, runtime);
     if (cleanSlate) return c.json(cleanSlate);
     const engine = await runtime.getEngine();
-    const reply = await engine.handleTasking({
+    const pending = engine.handleTasking({
       text: message,
       surface: "web",
       conversationKey: "default",
       ...(intercepted?.contextNote ? { contextNote: intercepted.contextNote } : {}),
     });
+    // T7-F7: the edge drops a request at 100 s and shows its own timeout page. Answer before that with a clear
+    // line; the turn keeps running and its reply lands in the chat history (handleTasking stores it).
+    const late = await raceChatDeadline(pending, chatReplyDeadlineMs(options));
+    if (late) return c.json({ text: CHAT_STILL_WORKING_TEXT, sources: [], actions: [], pending: true });
+    const reply = await pending;
     return c.json({ text: reply.text, sources: reply.sources ?? [], actions: reply.actions, ...(reply.coverage ? { coverage: reply.coverage } : {}) });
   });
 

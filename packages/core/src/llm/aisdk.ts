@@ -226,6 +226,14 @@ export const MIN_MAX_STEPS = 2;
 export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
 export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
+/**
+ * T7-F7: what one answer's tool loop may read and how long it may run. Each round re-sends the whole
+ * context, so a repeat question on production ran 8 rounds, read 97K input tokens and took 125 s (the edge
+ * shows its timeout page at 100 s). Once the next round would pass the token budget, or the loop has run
+ * the time budget, the next round is the final one: it answers from what was read so far.
+ */
+export const ANSWER_INPUT_TOKEN_BUDGET = 48_000;
+export const ANSWER_TIME_BUDGET_MS = 45_000;
 const COUNCIL_TOOL_SUFFIX_RE = /__[0-9a-f]{16}$/i;
 const READ_ONLY_STATUS_TEXT = "Read-only answer — no action was performed.";
 
@@ -1493,6 +1501,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     if (input.abortSignal?.aborted) throw new AnswerCancelledError(answerCancelReason(input.abortSignal));
     // E15-Q4: what finished steps used, so a cancelled loop still logs what it was billed.
     const finished = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, steps: 0 };
+    // T7-F7: the input the last round sent; the next one re-sends at least as much.
+    let lastStepInputTokens = 0;
+    const loopStartedMs = Date.now();
+    const loopBudgetSpent = () =>
+      finished.inputTokens + lastStepInputTokens > ANSWER_INPUT_TOKEN_BUDGET || Date.now() - loopStartedMs > ANSWER_TIME_BUDGET_MS;
     const cancelled = (): AnswerCancelledError => {
       if (finished.steps > 0) this.reportUsage("answer", this.askModelId, finished, undefined, { errorCode: "answer_cancelled" });
       else this.reportUsage("answer", this.askModelId, undefined, undefined, { status: "failed", errorCode: "answer_cancelled" });
@@ -2150,15 +2163,14 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         ...messages,
       ] as ModelMessage[],
       stopWhen: [stepCountIs(this.maxSteps), () => submittedAnswer !== undefined],
-      ...(input.abortSignal ? {
-        abortSignal: input.abortSignal,
-        onStepFinish: ({ usage }: { usage: { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined } }) => {
-          finished.steps += 1;
-          finished.inputTokens += usage.inputTokens ?? 0;
-          finished.outputTokens += usage.outputTokens ?? 0;
-          finished.cachedInputTokens += usage.cachedInputTokens ?? 0;
-        },
-      } : {}),
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+      onStepFinish: ({ usage }: { usage: { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined } }) => {
+        finished.steps += 1;
+        finished.inputTokens += usage.inputTokens ?? 0;
+        finished.outputTokens += usage.outputTokens ?? 0;
+        finished.cachedInputTokens += usage.cachedInputTokens ?? 0;
+        lastStepInputTokens = usage.inputTokens ?? 0;
+      },
       // Some models omit the collision suffix from a long discovered MCP name.
       // Repair only that one exact, unique omission before any tool event or
       // execution. The selected tool's schema and host authorization still run.
@@ -2167,13 +2179,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       // recovery/judge call. Other action and conversation paths retain prose.
       prepareStep: ({ stepNumber }: { stepNumber: number }) => {
         submissionAllowedThisStep = supportRead && !authoritativePeerResult;
-        finalAnswerStep = stepNumber >= this.maxSteps-1;
+        finalAnswerStep = stepNumber >= this.maxSteps-1 || (stepNumber > 0 && loopBudgetSpent());
         if (input.answerSupportContract && supportRead && !authoritativePeerResult) {
-          if(input.answerSupportScope!=="memory_only") return stepNumber>=this.maxSteps-1
+          if(input.answerSupportScope!=="memory_only") return finalAnswerStep
             ? {activeTools:["submit_memory_answer"],toolChoice:"auto" as const}
             : {activeTools:[...ordinaryAnswerTools,"submit_memory_answer"],toolChoice:"required" as const};
           const activeTools: Array<"submit_memory_answer"|"search_vault"|"read_note"|"list_pages"|"read_facts"|"search_entries"> = ["submit_memory_answer"];
-          if (stepNumber < this.maxSteps-1) {
+          if (!finalAnswerStep) {
             if(tools.searchVault) activeTools.push("search_vault","read_note","list_pages");
             if(tools.readFacts) activeTools.push("read_facts");
             if(tools.searchEntries) activeTools.push("search_entries");
@@ -2191,7 +2203,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           const reads = [tools.readNote && "read_note", tools.readFacts && "read_facts", tools.searchEntries && "search_entries"].filter(Boolean) as string[];
           if (reads.length) return {activeTools:reads,toolChoice:"required" as const};
         }
-        return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(stepNumber >= this.maxSteps-1 ? {toolChoice:"none" as const} : {}) };
+        return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(finalAnswerStep ? {toolChoice:"none" as const} : {}) };
       },
       tools: {
         ...(input.answerSupportContract ? {
