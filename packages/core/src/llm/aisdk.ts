@@ -16,7 +16,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { decodeSupportedAnswer } from "./answerSupportProtocol.js";
 import { DEEPSEEK_BASE_URL, deepseekCostUsd } from "./deepseek.js";
-import { claude5Fetch, claude5Model } from "./claude5.js";
+import { bindsThinkingToTools, claude5Fetch, claude5Model } from "./claude5.js";
 import { classificationSourceUnits } from "./classificationSourceUnits.js";
 import { AnswerCursorAliases } from "./answerCursors.js";
 import { ANSWER_SUPPORT_INSTRUCTION } from "../engine/answerSupport.js";
@@ -293,6 +293,19 @@ export function trimToolResults(messages: readonly ModelMessage[], excessChars: 
     content[part.part] = { ...original, output: { type: "text", value: `${kept}${TOOL_RESULT_TRIM_MARKER}` } };
   }
   return out;
+}
+
+/**
+ * T7-F10: a thinking block is valid only under the exact history it was made after. When a round rewrites an
+ * earlier message (T7-F9's tool-result trim), the blocks of every later assistant message no longer verify, so
+ * drop just those: a block may be left out from the back, never edited (claude-api skill, preserved thinking).
+ */
+export function dropThinkingAfterEdit(original: readonly ModelMessage[], edited: readonly ModelMessage[]): ModelMessage[] {
+  const first = edited.findIndex((message, index) => JSON.stringify(message) !== JSON.stringify(original[index]));
+  if (first < 0) return [...edited];
+  return edited.map((message, index) => index > first && message.role === "assistant" && Array.isArray(message.content)
+    ? { ...message, content: message.content.filter((part) => part.type !== "reasoning") } as ModelMessage
+    : message);
 }
 
 function hostPeerActionResult(result: string): string {
@@ -1577,6 +1590,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       const failed = submittedAnswer ? submittedAnswer.supportProtocolError !== undefined : supportRead;
       return failed ? { status: "failed", errorCode: "answer_protocol_failure" } : {};
     };
+    // T7-F10: a round the provider refused ends the answer with an error, but the rounds before it were paid.
+    // Record them, as "failed" so the allowance leaves them out (production: ~$0.03 a round, in no usage record).
+    const roundFailed = (error: unknown): void => {
+      console.warn(`[answer-round] failed after step=${finished.steps} total_input=${finished.inputTokens} elapsed_ms=${Date.now() - loopStartedMs} error=${extractErrorMessage(error).slice(0, 200)}`);
+      this.reportUsage("answer", this.askModelId, finished.steps > 0 ? finished : undefined, undefined, { status: "failed", errorCode: "answer_round_failed" });
+    };
     const cancelled = (): AnswerCancelledError => {
       if (finished.steps > 0) this.reportUsage("answer", this.askModelId, finished, undefined, { errorCode: "answer_cancelled" });
       else this.reportUsage("answer", this.askModelId, undefined, undefined, { status: "failed", errorCode: "answer_cancelled" });
@@ -2223,6 +2242,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       .filter(Boolean)
       .join("\n\n");
     let ordinaryAnswerTools: string[] = [];
+    // T7-F10: on models that bind thinking to the tools list, every round sends the whole list and the round's
+    // limits (search first, read before submitting, only submit in the final round) are enforced here instead.
+    const fixedToolsList = this.provider === "anthropic" && bindsThinkingToTools(this.askModelId);
+    let allowedThisStep: ReadonlySet<string> | undefined;
     const config = {
       model: this.model(this.askModelId),
       maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
@@ -2259,14 +2282,16 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         if (outgoing && stepNumber > 0) {
           nextRoundTokens = roundTokens(outgoing);
           if (nextRoundTokens > ANSWER_ROUND_INPUT_TOKEN_BUDGET) {
+            const untrimmed = outgoing;
             outgoing = trimToolResults(outgoing, (nextRoundTokens - ANSWER_ROUND_INPUT_TOKEN_BUDGET) * ANSWER_CHARS_PER_TOKEN);
+            if (fixedToolsList) outgoing = dropThinkingAfterEdit(untrimmed, outgoing);
             nextRoundTokens = roundTokens(outgoing);
           }
         }
         if (outgoing) lastStepSentChars = messagesChars(outgoing);
         submissionAllowedThisStep = supportRead && !authoritativePeerResult;
         finalAnswerStep = stepNumber >= this.maxSteps-1 || (stepNumber > 0 && loopBudgetSpent(nextRoundTokens));
-        const choice = (() => {
+        const narrowed: { activeTools?: string[]; toolChoice?: "required" | "none" } = (() => {
         // T7-F9: once memory was read, prose in the final round is always thrown away as "missing_submission"
         // (production: "The model did not submit a valid memory-answer selection"), so that round must submit.
         if (input.answerSupportContract && supportRead && !authoritativePeerResult) {
@@ -2294,6 +2319,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         }
         return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(finalAnswerStep ? {toolChoice:"none" as const} : {}) };
         })();
+        allowedThisStep = fixedToolsList && narrowed.activeTools ? new Set(narrowed.activeTools) : undefined;
+        const choice = fixedToolsList ? (narrowed.toolChoice ? { toolChoice: narrowed.toolChoice } : {}) : narrowed;
         return outgoing && outgoing !== stepMessages ? { ...choice, messages: outgoing } : choice;
       },
       tools: {
@@ -2455,6 +2482,19 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       };
     }
 
+    // T7-F10: the tools list stays whole on these models, so a call outside this round's limits gets an error
+    // result the model can act on, never a different tools list.
+    if (fixedToolsList) {
+      for (const [name, definition] of Object.entries(config.tools)) {
+        if (!definition.execute) continue;
+        const execute = definition.execute;
+        definition.execute = async (args, options) => {
+          if (!allowedThisStep || allowedThisStep.has(name)) return execute(args, options);
+          return `ERROR: ${name} is not available in this round. ${finalAnswerStep ? "This is the final round: call submit_memory_answer now." : `Available now: ${[...allowedThisStep].join(", ")}.`}`;
+        };
+      }
+    }
+
     // streamText executes a tool as soon as its tool-call chunk arrives, before
     // later chunks reveal whether the same model step contains a second proposal.
     // The public streaming lifecycle exposes no pre-execution end-of-step barrier,
@@ -2499,6 +2539,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       } catch (error) {
         if (error instanceof AnswerCancelledError) throw error;
         if (input.abortSignal?.aborted) throw cancelled();
+        roundFailed(error);
         throw error;
       }
       if (input.abortSignal?.aborted) throw cancelled();
@@ -2553,6 +2594,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     });
     } catch (error) {
       if (input.abortSignal?.aborted) throw cancelled();
+      roundFailed(error);
       throw error;
     }
     this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata, protocolFailureUsage());

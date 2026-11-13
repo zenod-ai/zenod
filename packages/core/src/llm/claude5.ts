@@ -26,6 +26,17 @@ export function isClaude5(modelId: string): boolean {
   return CLAUDE5.test(modelId);
 }
 
+/**
+ * T7-F10: models with preserved thinking bind each thinking block to the tools list it was made under, and
+ * refuse a request that replays the block under another list ("The tools list differs from the one this block
+ * was created with", kind=tools_changed). Their answer loop must send one tools list every round.
+ */
+const BINDS_THINKING_TO_TOOLS = /claude-(?:sonnet|opus|haiku)-5-5|claude-(?:fable|mythos)-5-[1-9]/;
+
+export function bindsThinkingToTools(modelId: string): boolean {
+  return BINDS_THINKING_TO_TOOLS.test(modelId);
+}
+
 /** The call options a Claude 5 model accepts, from what the SDK was asked for. */
 export function claude5Params(modelId: string, params: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
   if (!isClaude5(modelId)) return params;
