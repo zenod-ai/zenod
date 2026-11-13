@@ -108,7 +108,25 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
   };
 }
 
-export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[]): MemoryEntry[] {
+/** Where the lean receipts come from (TaskJobStore / TaskJobQueue); `recent` is the older full-history fallback. */
+export interface CaptureReceiptSource {
+  captureReceipts?(evidenceRef?: string): TaskJob[];
+  captureContent?(id: string): { content?: string; contentHint?: string } | null;
+  recent?(limit?: number): TaskJob[];
+}
+
+/**
+ * EPIC-24 M15: the finished capture receipts a merge needs, without putting the whole job history on the heap.
+ * Lean receipts carry no note text; `loadContent` reads it for the few entries the vault does not hold yet.
+ */
+export function captureReceiptsFor(source: CaptureReceiptSource | undefined, evidenceRef?: string): { jobs: TaskJob[]; loadContent?: (id: string) => { content?: string; contentHint?: string } | null } {
+  if (source?.captureReceipts) {
+    return { jobs: source.captureReceipts(evidenceRef), ...(source.captureContent ? { loadContent: (id: string) => source.captureContent!(id) } : {}) };
+  }
+  return { jobs: source?.recent?.(Number.MAX_SAFE_INTEGER) ?? [] };
+}
+
+export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[], loadContent?: (id: string) => { content?: string; contentHint?: string } | null): MemoryEntry[] {
   const vaultByRef = new Map(entries.map((entry) => [entry.evidenceRef, entry]));
   const winningReceipts = new Map<string, TaskJob>();
   for (const job of [...jobs].sort((a, b) => a.updatedAt - b.updatedAt || a.id.localeCompare(b.id))) {
@@ -120,22 +138,27 @@ export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[]): Mem
   for (const [evidenceRef, job] of winningReceipts) {
     // Only immutable vault evidence is an authoritative base. An older derived
     // receipt must not make its content/title sticky under newer metadata.
-    const derived = entryFromJob(job, vaultByRef.get(evidenceRef));
+    const base = vaultByRef.get(evidenceRef);
+    // A lean receipt has no note text: read it only when the vault does not hold this evidence yet.
+    const full = !base && loadContent && job.input.content === undefined && job.input.contentHint === undefined
+      ? { ...job, input: { ...job.input, ...(loadContent(job.id) ?? {}) } }
+      : job;
+    const derived = entryFromJob(full, base);
     if (derived) byRef.set(evidenceRef, derived);
   }
   return [...byRef.values()];
 }
 
-export async function searchMemoryEntryPage(engine: BrainEngine, taskJobs: { recent?(limit?: number): TaskJob[] } | undefined, input: EntrySearchInput): Promise<EntrySearchResult> {
+export async function searchMemoryEntryPage(engine: BrainEngine, taskJobs: CaptureReceiptSource | undefined, input: EntrySearchInput): Promise<EntrySearchResult> {
   const vaultEntries = await engine.searchEntries({ limit: null });
-  const jobs = taskJobs?.recent?.(Number.MAX_SAFE_INTEGER) ?? [];
-  const page = paginateMemoryEntries(mergeMemoryEntries(vaultEntries, jobs), {
+  const { jobs, loadContent } = captureReceiptsFor(taskJobs);
+  const page = paginateMemoryEntries(mergeMemoryEntries(vaultEntries, jobs, loadContent), {
     ...input, order: input.order ?? "newest", limit: input.limit ?? 20,
   }, memoryScope(engine), input.cursor);
   return { entries: memoryEntrySummaries(page.entries), pagination: {
     hasMore: page.hasMore, nextCursor: page.nextCursor, snapshot: page.snapshot,
     matchedEntries: page.matchedEntries, scannedEntries: page.scannedEntries, scannedVaultEntries: vaultEntries.length,
-    scannedReceiptJobs: jobs.length, receiptEnrichmentAvailable: Boolean(taskJobs?.recent),
+    scannedReceiptJobs: jobs.length, receiptEnrichmentAvailable: Boolean(taskJobs?.captureReceipts || taskJobs?.recent),
     scope: "all-local-vault-evidence-and-retained-tenant-receipts",
   } };
 }

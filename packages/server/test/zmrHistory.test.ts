@@ -129,7 +129,9 @@ it("enriches old retained receipts before filtering and isolates tenant stores",
     connection = await connect(engine, jobs);
     const page = await search(connection.client, { query: "original amber", source: "whatsapp", contentType: "voice_note", sourceId: "legacy-old", capturedAfter: "2026-01-01T08:00:00Z", capturedBefore: "2026-01-01T08:00:00Z" });
     expect(page.entries).toHaveLength(1); expect(page.entries[0]).toMatchObject({ evidenceRef: legacy, provider: "google_drive", revisionId: "receipt-revision", url: result.evidenceUrl });
-    expect(page.pagination.scannedEntries).toBe(657); expect(page.pagination.scannedReceiptJobs).toBe(653);
+    expect(page.pagination.scannedEntries).toBe(657);
+    // EPIC-24 M15: only finished capture receipts are read (the two done stores), never the 651 pending jobs' full rows.
+    expect(page.pagination.scannedReceiptJobs).toBe(2);
     expect((await search(connection.client, { sourceId: "foreign" })).entries).toEqual([]);
     const exact = await connection.client.callTool({ name: "get_memory", arguments: { path: legacy } });
     expect(exact.structuredContent).toMatchObject({ entry: { sourceId: "legacy-old", revisionId: "receipt-revision" } });
