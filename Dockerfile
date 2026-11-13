@@ -72,6 +72,10 @@ WORKDIR /app
 # no way to distinguish two builds (#532). Defaults to "unknown" for builds that
 # don't pass it (e.g. a plain `docker build .` with no build-arg).
 ARG GIT_SHA=unknown
+# EPIC-24 M15: Node's default heap stops near 330 MB whatever the container allows, so zenod-mt's
+# 640 MiB never reached JavaScript. 448 MB lets the heap use it and leaves ~190 MiB for code, buffers
+# and SQLite. A Dokploy env NODE_OPTIONS overrides this. Rollback: remove this line (docs/DEPLOYMENTS.md).
+ENV NODE_OPTIONS=--max-old-space-size=448
 ENV NODE_ENV=production \
     PORT=8080 \
     ZENOD_DATA_DIR=/data \

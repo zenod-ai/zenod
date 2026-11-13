@@ -27,7 +27,7 @@ import {
 } from "./subscribers.js";
 import { createVoiceNoteForwardServer, FORWARD_MAX_BODY_BYTES } from "./voiceNoteForward.js";
 import { openZenodSqlite } from "./sqlite.js";
-import { mergeMemoryEntries } from "./memoryEntryCatalog.js";
+import { captureReceiptsFor, mergeMemoryEntries } from "./memoryEntryCatalog.js";
 import type { MemoryEntry } from "zenod";
 
 /**
@@ -609,7 +609,8 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
       const engine = await auth.runtime.getEngine();
       const stored = await engine.getEntry(id);
       // Same view as get_memory: a capture still being enriched reads from its task job.
-      entry = mergeMemoryEntries([stored], auth.runtime.taskJobQueue.recent(Number.MAX_SAFE_INTEGER))
+      const receipts = captureReceiptsFor(auth.runtime.taskJobQueue, stored.evidenceRef);
+      entry = mergeMemoryEntries([stored], receipts.jobs, receipts.loadContent)
         .find((candidate) => candidate.evidenceRef === stored.evidenceRef) ?? stored;
     } catch {
       return notFound();
@@ -663,7 +664,8 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
     try {
       const engine = await auth.runtime.getEngine();
       const stored = await engine.searchEntries({ contentType: "voice_note", capturedAfter: new Date(floor).toISOString(), order: "oldest", limit: null });
-      entries = mergeMemoryEntries(stored, auth.runtime.taskJobQueue.recent(Number.MAX_SAFE_INTEGER));
+      const receipts = captureReceiptsFor(auth.runtime.taskJobQueue);
+      entries = mergeMemoryEntries(stored, receipts.jobs, receipts.loadContent);
     } catch {
       return apiError(c, 503, "memory_unavailable", "The workspace memory is not available right now; try again later.");
     }

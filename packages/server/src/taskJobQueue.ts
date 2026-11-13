@@ -124,6 +124,15 @@ export class TaskJobQueue {
     return this.store.recent(limit);
   }
 
+  /** EPIC-24 M15: lean finished capture receipts (TaskJobStore.captureReceipts). */
+  captureReceipts(evidenceRef?: string): TaskJob[] {
+    return this.store.captureReceipts(evidenceRef);
+  }
+
+  captureContent(id: string): { content?: string; contentHint?: string } | null {
+    return this.store.captureContent(id);
+  }
+
   /** Fail closed before durable admission or source/provider access. */
   admit(kind: TaskJobKind, input: TaskJobInput): TaskJobAdmissionRejection | null {
     if (

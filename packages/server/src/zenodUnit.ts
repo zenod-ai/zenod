@@ -372,6 +372,8 @@ function registerZenodTools(
       enqueue: (kind, input, idempotencyKey) => runtime.taskJobQueue.enqueue(kind, input, idempotencyKey),
       get: (id) => runtime.taskJobQueue.get(id),
       recent: (limit) => runtime.taskJobQueue.recent(limit),
+      captureReceipts: (evidenceRef) => runtime.taskJobQueue.captureReceipts(evidenceRef),
+      captureContent: (id) => runtime.taskJobQueue.captureContent(id),
       admit: (kind, input) => runtime.taskJobQueue.admit(kind, input),
       hostedArchiveOnlyDrive: settings.googleDriveOAuthAuthority().mode === "hosted-managed",
     },

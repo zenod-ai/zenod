@@ -552,6 +552,73 @@ export class TaskJobStore {
     });
   }
 
+  /**
+   * EPIC-24 M15: this tenant's finished capture receipts (`store`, `media_ingest`, status done), lean.
+   * Each job carries only what a memory entry reads from its receipt (evidence ref, URL, revision and the
+   * input's metadata), never the note text: that comes from the vault, or from `captureContent` for the one
+   * job whose evidence is not in the vault yet. Loading every job in full (`recent(MAX_SAFE_INTEGER)`) put the
+   * whole job history on the heap at once and ran production out of memory (13 Nov 2026).
+   */
+  captureReceipts(evidenceRef?: string): TaskJob[] {
+    const rows = this.db.prepare(`SELECT * FROM (
+        SELECT id, kind, idempotency_key, status, attempts, created_at, updated_at,
+          CASE WHEN json_type(result_json, '$.evidenceRef') = 'text' THEN json_extract(result_json, '$.evidenceRef')
+               WHEN json_type(result_json, '$.digest.evidenceRef') = 'text' THEN json_extract(result_json, '$.digest.evidenceRef') END AS evidence_ref,
+          CASE WHEN json_type(result_json, '$.evidenceUrl') = 'text' THEN json_extract(result_json, '$.evidenceUrl')
+               WHEN json_type(result_json, '$.digest.evidenceUrl') = 'text' THEN json_extract(result_json, '$.digest.evidenceUrl') END AS evidence_url,
+          CASE WHEN json_type(result_json, '$.revision') = 'object' THEN json_extract(result_json, '$.revision')
+               WHEN json_type(result_json, '$.digest.revision') = 'object' THEN json_extract(result_json, '$.digest.revision') END AS revision_json,
+          json_extract(input_json, '$.source') AS source, json_extract(input_json, '$.sourceHint') AS source_hint,
+          json_extract(input_json, '$.contentType') AS content_type, json_extract(input_json, '$.mediaType') AS media_type,
+          json_extract(input_json, '$.capturedAt') AS captured_at, json_extract(input_json, '$.senderTimestamp') AS sender_timestamp,
+          json_extract(input_json, '$.sourceId') AS source_id, json_type(input_json, '$.verbatim') AS verbatim
+        FROM task_jobs
+        WHERE tenant_id=? AND status='done' AND kind IN ('store', 'media_ingest')
+          AND result_json IS NOT NULL AND json_valid(result_json) AND json_valid(input_json)
+      ) WHERE evidence_ref IS NOT NULL${evidenceRef === undefined ? "" : " AND evidence_ref=?"}`)
+      .all(...(evidenceRef === undefined ? [this.tenantId] : [this.tenantId, evidenceRef])) as Array<Record<string, string | number | null>>;
+    const text = (value: string | number | null | undefined) => (typeof value === "string" ? value : undefined);
+    return rows.map((row) => {
+      const input: TaskJobInput = {};
+      const set = <K extends keyof TaskJobInput>(key: K, value: TaskJobInput[K] | undefined) => { if (value !== undefined) input[key] = value; };
+      set("source", text(row.source) as TaskJobInput["source"]);
+      set("sourceHint", text(row.source_hint));
+      set("contentType", text(row.content_type) as TaskJobInput["contentType"]);
+      set("mediaType", text(row.media_type) as TaskJobInput["mediaType"]);
+      set("capturedAt", text(row.captured_at));
+      set("senderTimestamp", text(row.sender_timestamp) as TaskJobInput["senderTimestamp"]);
+      set("sourceId", text(row.source_id));
+      if (row.verbatim === "true" || row.verbatim === "false") input.verbatim = row.verbatim === "true";
+      const result: Record<string, unknown> = { evidenceRef: row.evidence_ref };
+      if (typeof row.evidence_url === "string") result.evidenceUrl = row.evidence_url;
+      if (typeof row.revision_json === "string") result.revision = JSON.parse(row.revision_json);
+      return {
+        id: String(row.id),
+        kind: row.kind as TaskJobKind,
+        idempotencyKey: text(row.idempotency_key) ?? null,
+        claimToken: null,
+        input,
+        status: "done",
+        result: result as unknown as TaskJobResult,
+        error: null,
+        attempts: Number(row.attempts ?? 0),
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+      };
+    });
+  }
+
+  /** EPIC-24 M15: the note text of one capture job, for an entry whose evidence is not in the vault yet. */
+  captureContent(id: string): { content?: string; contentHint?: string } | null {
+    const row = this.db.prepare(`SELECT json_extract(input_json, '$.content') AS content, json_extract(input_json, '$.contentHint') AS content_hint
+      FROM task_jobs WHERE tenant_id=? AND id=? AND json_valid(input_json)`).get(this.tenantId, id) as { content: unknown; content_hint: unknown } | undefined;
+    if (!row) return null;
+    return {
+      ...(typeof row.content === "string" ? { content: row.content } : {}),
+      ...(typeof row.content_hint === "string" ? { contentHint: row.content_hint } : {}),
+    };
+  }
+
   recent(limit = 25): TaskJob[] {
     const rows = this.db
       .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`)
