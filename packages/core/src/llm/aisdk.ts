@@ -249,6 +249,8 @@ const MIN_TRIMMED_TOOL_RESULT_CHARS = 2_000;
 const TOOL_RESULT_TRIM_MARKER = "\n[trimmed: the rest of this tool result was dropped to keep this answer within its input budget]";
 const COUNCIL_TOOL_SUFFIX_RE = /__[0-9a-f]{16}$/i;
 const READ_ONLY_STATUS_TEXT = "Read-only answer — no action was performed.";
+/** T7-F11: told to the model in a final answer round, which it cannot otherwise tell apart from the others. */
+export const FINAL_ROUND_NOTE = "FINAL ROUND: this is the last round of this answer. Call submit_memory_answer now with the supports you have already read (an empty selection if they do not answer). Any other tool call is refused.";
 
 function messagesChars(messages: readonly ModelMessage[]): number {
   return JSON.stringify(messages).length;
@@ -2246,6 +2248,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // limits (search first, read before submitting, only submit in the final round) are enforced here instead.
     const fixedToolsList = this.provider === "anthropic" && bindsThinkingToTools(this.askModelId);
     let allowedThisStep: ReadonlySet<string> | undefined;
+    let stepToolMs = 0;
+    let lastStepEndedMs = loopStartedMs;
     const config = {
       model: this.model(this.askModelId),
       maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
@@ -2266,7 +2270,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         lastStepInputTokens = usage.inputTokens ?? 0;
         // E7-S4: one content-free line per round, so a long answer shows which round read what and when
         // (production b5234d29: one answer read 118K tokens in 231 s and the summed usage line hid the rounds).
-        console.warn(`[answer-round] step=${finished.steps} input=${usage.inputTokens ?? 0} output=${usage.outputTokens ?? 0} cache_read=${usage.cachedInputTokens ?? 0} total_input=${finished.inputTokens} elapsed_ms=${Date.now() - loopStartedMs} final=${finalAnswerStep}`);
+        const endedMs = Date.now();
+        console.warn(`[answer-round] step=${finished.steps} input=${usage.inputTokens ?? 0} output=${usage.outputTokens ?? 0} cache_read=${usage.cachedInputTokens ?? 0} total_input=${finished.inputTokens} elapsed_ms=${endedMs - loopStartedMs} round_ms=${endedMs - lastStepEndedMs} tool_ms=${stepToolMs} final=${finalAnswerStep}`);
+        lastStepEndedMs = endedMs;
+        stepToolMs = 0;
       },
       // Some models omit the collision suffix from a long discovered MCP name.
       // Repair only that one exact, unique omission before any tool event or
@@ -2321,6 +2328,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         })();
         allowedThisStep = fixedToolsList && narrowed.activeTools ? new Set(narrowed.activeTools) : undefined;
         const choice = fixedToolsList ? (narrowed.toolChoice ? { toolChoice: narrowed.toolChoice } : {}) : narrowed;
+        // T7-F11: with the whole tools list offered (T7-F10) and tool_choice sent as auto, the model cannot see
+        // that a round chosen by the token or time budget is the last one. On production 4011d6ae it read in
+        // that round, got the refusal, and a second final round ran (81,358 input tokens instead of 57,389).
+        // Say so in the round itself, after every earlier message, so no thinking signature or cache prefix moves.
+        if (fixedToolsList && finalAnswerStep && outgoing && allowedThisStep?.size === 1 && allowedThisStep.has("submit_memory_answer")) {
+          outgoing = [...outgoing, { role: "user", content: FINAL_ROUND_NOTE }];
+        }
         return outgoing && outgoing !== stepMessages ? { ...choice, messages: outgoing } : choice;
       },
       tools: {
@@ -2493,6 +2507,17 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           return `ERROR: ${name} is not available in this round. ${finalAnswerStep ? "This is the final round: call submit_memory_answer now." : `Available now: ${[...allowedThisStep].join(", ")}.`}`;
         };
       }
+    }
+
+    // T7-F11: time spent in tools per round, so a slow round shows whether the model or a tool (a Drive read)
+    // took the time. Tools of one round can run at once, so this is their summed time.
+    for (const definition of Object.values(config.tools)) {
+      if (!definition.execute) continue;
+      const execute = definition.execute;
+      definition.execute = async (args, options) => {
+        const started = Date.now();
+        try { return await execute(args, options); } finally { stepToolMs += Date.now() - started; }
+      };
     }
 
     // streamText executes a tool as soon as its tool-call chunk arrives, before

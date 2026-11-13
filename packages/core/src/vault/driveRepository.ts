@@ -325,6 +325,10 @@ export class DriveVaultRepository implements VaultRepository {
    */
   private readonly settledJournals = new Set<string>();
   private readonly verifiedTombstones = new Set<string>();
+  /** T7-F11: bundles (id, md5, checksum, head) already proven cold-cloneable, so a read's revision probe skips them. */
+  private readonly verifiedBundles = new Set<string>();
+  /** The bundle file metadata the last authority check read (validateManifestControlAuthority). */
+  private checkedBundleFile: DriveVaultFile | undefined;
   private readonly stateDir: string;
   private readonly now: () => Date;
   private readonly idFactory: () => string;
@@ -810,6 +814,7 @@ export class DriveVaultRepository implements VaultRepository {
       || bundle.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
       || bundle.appProperties?.[ROLE_PROPERTY] !== BUNDLE_ROLE
     ) throw new Error("Drive vault bundle is outside its bound Git folder");
+    this.checkedBundleFile = bundle;
   }
 
   private async validateManifestAuthority(file: DriveVaultFile, manifest: DriveVaultManifest): Promise<Record<string, DriveVaultFile>> {
@@ -1043,10 +1048,20 @@ export class DriveVaultRepository implements VaultRepository {
   async currentPublishedRevision(requiredAncestor?: string): Promise<VaultRevision> {
     const manifestFile = await this.options.client.getFile(this.manifestFile.id);
     await this.loadManifest(manifestFile);
+    this.checkedBundleFile = undefined;
     await this.validateManifestAuthority(manifestFile, this.manifest);
+    // T7-F11: every memory read probes this revision. Downloading the whole bundle and cloning it each time
+    // took seconds per read on production (an answer's reads and its source re-checks ran one after another).
+    // A bundle whose Drive md5 is unchanged since it was verified for this manifest is the same bytes, so it is
+    // not downloaded again. A probe that must prove a local ancestor (a filing pull) still verifies in full.
+    const checked = this.checkedBundleFile as DriveVaultFile | undefined; // set by the authority check above
+    const verifiedKey = !requiredAncestor && checked?.id === this.manifest.bundle.fileId && checked.md5Checksum
+      ? JSON.stringify([checked.id, checked.md5Checksum, this.manifest.bundle.checksum, this.manifest.commitSha]) : null;
+    if (verifiedKey && this.verifiedBundles.has(verifiedKey)) return this.revision([]);
     const bundle = await this.options.client.download(this.manifest.bundle.fileId);
     if (sha256(bundle) !== this.manifest.bundle.checksum) throw new Error("Drive Git bundle checksum mismatch");
     await this.verifyBundleData(bundle, this.manifest.commitSha, requiredAncestor);
+    if (verifiedKey && md5(bundle) === checked!.md5Checksum) this.verifiedBundles.add(verifiedKey);
     return this.revision([]);
   }
 
