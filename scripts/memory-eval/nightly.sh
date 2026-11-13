@@ -53,17 +53,20 @@ nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset private --vault "
 # route and its own monthly cap (POST /api/credit/eval-call, live.mjs stagingLive): no model key on this host,
 # only the staging test tenant's token (~/.config/zenod-staging/tenant-token, 0600). Jordi 2026-11-12: no new
 # key; the DeepSeek tier this replaced (zenod-tests key) is retired, production no longer runs on DeepSeek.
-# A Claude run costs about 45 cents (Sonnet answers), so it runs once a week, or with --force; cached calls
-# cost nothing; caps: 60 cents a run, 2 dollars a month here, 3 dollars a month on staging's side.
+# A full Claude run costs about 65 cents (20 Sonnet answers about 58, filing on Haiku about 7), so it runs once a
+# week, or with --force; cached calls cost nothing; caps: 90 cents a run (60 cut the 12 Nov run short: 6 of 8
+# notes never filed), 3 dollars a month here, 3 dollars a month on staging's side.
 live_stamp="$EVAL/history/.last-live-claude"
 if [ "${1:-}" = "--force" ] || ! { [ -f "$live_stamp" ] && [ $(( $(date +%s) - $(cut -d' ' -f2 "$live_stamp") )) -lt $(( ${ZENOD_LIVE_EVERY_DAYS:-7} * 86400 )) ]; }; then
   slice=(--checkout "$build" --dataset private --vault "$EVAL/vaults/$rev" --vault-rev "$rev" --questions "$EVAL/real-questions.jsonl"
     --judged "$HOME/zenod-feedback/landing-feedback.jsonl" --slice rq --skip agent --sha "$sha" --label "$label" --append "$EVAL/history/live.jsonl")
-  if nice -n 10 node "$suite/run.mjs" "${slice[@]}" --model live --live-provider staging \
-       --live-dir "$EVAL/live-claude" --live-run-cap "${ZENOD_LIVE_RUN_CAP:-0.6}" --live-month-cap "${ZENOD_LIVE_MONTH_CAP:-2}" \
-       --out "$EVAL/runs/live-$sha.json" 2>&1 | grep -E '^(live|ingestion)'; then
+  if out=$(nice -n 10 node "$suite/run.mjs" "${slice[@]}" --model live --live-provider staging \
+       --live-dir "$EVAL/live-claude" --live-run-cap "${ZENOD_LIVE_RUN_CAP:-0.9}" --live-month-cap "${ZENOD_LIVE_MONTH_CAP:-3}" \
+       --out "$EVAL/runs/live-$sha.json" 2>&1 | grep -E '^(live|ingestion)'); then
+    echo "$out"
     nice -n 10 node "$suite/run.mjs" "${slice[@]}" --out "$EVAL/runs/live-standin-$sha.json" 2>&1 | grep '^ingestion' || true
-    echo "$sha $(date +%s)" > "$live_stamp"
+    # A run the caps cut short is recorded but does not count as the week's run: the next night tries again.
+    if grep -q ' 0 refused by the caps' <<<"$out"; then echo "$sha $(date +%s)" > "$live_stamp"; else echo "live: cut short by a cap, retried next run"; fi
   else echo "live: Claude via staging skipped (staging down or the run failed)"; fi
 fi
 
