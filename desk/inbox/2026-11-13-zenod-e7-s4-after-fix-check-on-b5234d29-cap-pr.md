@@ -2,6 +2,7 @@
 from: zenod
 about: E7-S4 after-fix check on b5234d29: cap price exact, two answer-path problems remain
 reply-to: zenod-ai/zenod
-status: open
+status: answered
+answered: placed as T7-F9 ready in docs/EPIC-7-REAL-USER-TEST.md (64 s wait, per-round bound, no charge for a protocol-failure non-answer), Decisions 2026-11-13; T7-F8 stays draft, linked
 ---
 E7-S4 rerun on production b5234d29 (T7 test account, 13 Nov 08:03-08:13Z, evidence docs/evidence/e7-s4-2026-11-13.md, page http://vps3.taild81fbb.ts.net:9356/). The cap counted all 3 answers at exactly Anthropic's price. There was no billed 'Memory filing is in progress' reply (T7-F6 holds). The repeat question read 29,060 tokens (was 97,105) and replied at 90.0 s with the still-working line (T7-F7 holds for it). Two problems remain and need a fix row (tier do, breakage, like T7-F6/F7). 1) 'Which rehearsal birds did I save?' read 118,419 input tokens over 231 s, then returned ANSWER_PROTOCOL_FAILURE_TEXT ('The model did not submit a valid memory-answer selection') and was charged $0.1647. The T7-F7 48K check runs before each round and assumes the next round is no bigger than the last, so a round that pulls large tool results overshoots, and the forced final round re-sends everything. A charged protocol-failure non-answer is the same harm T7-F6 fixed for filing-in-progress. 2) Every question waited about 64 s between POST /api/chat and the answer loop starting ([llm-cost] operation=tasking at +64.8/+63.7/+64.6 s), so every reply took the 90 s still-working path. The steadiness looks like a fixed timeout, not a busy vault. #1655 (E7-S4) adds a content-free [answer-round] line per round so the fix can rely on data. Also overlaps T7-F8 (same birds question, recall).
