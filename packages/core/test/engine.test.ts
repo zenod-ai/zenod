@@ -2457,6 +2457,31 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     } finally {release();await writer;}
   });
 
+  it("a single chat answer is kept when its own entry search pulls the vault meanwhile (T7-F6)", async () => {
+    // E7-S4 on production: one question at a time, billed, then "Memory filing is in progress". The answer's
+    // search_entries went through engine.searchEntries, whose read-sync pull holds the vault lock for seconds on
+    // a Drive vault; the answer's parallel read_note gave up after the probe wait and the paid answer was dropped.
+    const busy="Memory filing is in progress. Please retry your question shortly.";
+    const pull=repo.pullForFiling.bind(repo);
+    repo.pullForFiling=async()=>{await new Promise(r=>setTimeout(r,400));return pull();};
+    const page={entries:[],pagination:{hasMore:false,nextCursor:null,snapshot:"t7f6",matchedEntries:0,scannedEntries:0,scannedVaultEntries:0,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"all-local-vault-evidence"}};
+    // Production wires entrySearch to engine.searchEntries (server memoryEntryCatalog.ts), which syncs first.
+    const e:ReturnType<typeof createEngine>=createEngine({repo,llm,state,readLockWaitMs:100,readSyncTtlMs:0,
+      entrySearch:async()=>{await e.searchEntries!({limit:null});return page as never;}});
+    llm.answerOverride=async (_input,tools)=>{
+      const search=tools.searchEntries!({query:"insurance"} as never);
+      await new Promise(r=>setTimeout(r,50));
+      // A tool error goes back to the model, which still writes (and is billed for) its answer.
+      await tools.readNote!("Areas/Insurance.md").catch(error=>String(error));
+      await search;
+      return {text:"Your travel insurance is with Axa (Areas/Insurance.md).",readPaths:["Areas/Insurance.md"]};
+    };
+    const calls=llm.answerInputs.length;
+    const reply=await e.handleTasking({text:"What does my insurance note say?",surface:"web",conversationKey:"t7f6"});
+    expect(reply.text).not.toContain(busy);
+    expect(llm.answerInputs.length-calls).toBe(1);
+  });
+
   it("2-3 parallel answers on a briefly held vault keep every billed answer (T7-F3)", async () => {
     // T7 round 5: parallel chat_with_zenod answers each locked the others (and a read-sync
     // pull) out, so every paid answer was swapped for the retry line. A short holder must wait.

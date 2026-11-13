@@ -756,11 +756,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // after their model call was billed. A probe joined while it holds the lock
   // still reads the current revision: no writer can commit until it releases.
   let sharedRevisionProbe: Promise<VaultRevision> | undefined;
+  let readSyncInFlight: Promise<void> | undefined;
   async function safeReadRevision(): Promise<VaultRevision> {
     assertVault(repo);
     if (sharedRevisionProbe) return sharedRevisionProbe;
-    sharedRevisionProbe = withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); },
-      options.readLockWaitMs ?? DEFAULT_READ_LOCK_WAIT_MS)
+    // T7-F6: a read-sync pull is a short read-side holder (seconds on a Drive vault), never a filing:
+    // wait for it, then probe, so an answer's own search_entries pull cannot make its reads "busy".
+    const pull = readSyncInFlight;
+    sharedRevisionProbe = (pull ? pull.catch(() => {}) : Promise.resolve())
+      .then(() => withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); },
+        options.readLockWaitMs ?? DEFAULT_READ_LOCK_WAIT_MS))
       .finally(() => { sharedRevisionProbe = undefined; });
     return sharedRevisionProbe;
   }
@@ -826,11 +831,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // background filing stall replies for minutes (#96). lastSyncMs is left
     // untouched so the next idle read retries the pull.
     if (queue.busy) return;
-    await queue.run(async () => {
+    const sync = queue.run(async () => {
       if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
       await (repo.pullForFiling ? repo.pullForFiling() : repo.pull()).catch(() => {});
       lastSyncMs = now().getTime();
     }, "interactive", { lockWaitMs: 0 }).catch(error => { if (!(error instanceof VaultWriteBusyError)) throw error; });
+    readSyncInFlight = sync;
+    try { await sync; } finally { if (readSyncInFlight === sync) readSyncInFlight = undefined; }
   }
 
   function estimateTokens(text: string): number {
