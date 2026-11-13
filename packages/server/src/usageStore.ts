@@ -60,10 +60,23 @@ export function readFeatureSpend(path: string, since: number): Record<UsageFeatu
  * families (e.g. deepseek-v4-pro before deepseek). Mirrors the web
  * model-catalog (apps/web/src/lib/model-catalog.ts); pricing as of 2026-06.
  */
-const PRICING: Array<{ match: (model: string) => boolean; input: number; output: number }> = [
-  // Anthropic — the current generation (claude-api skill table, 2026-11-03) before the families
-  { match: (m) => m.includes("haiku-5"), input: 0.1, output: 0.5 },
+const PRICING: Array<{
+  match: (model: string) => boolean;
+  input: number;
+  output: number;
+  /** Cache-read price as a share of the input price (default 0.1). */
+  cacheRead?: number;
+  /** A higher rate for one request whose prompt is longer than `above` tokens. */
+  longPrompt?: { above: number; input: number; output: number };
+}> = [
+  // Anthropic — the current generation (claude-api skill table, 2026-11-03) before the families.
+  // E7-S4: Sonnet 5.5 and Opus 5.5 bill cache reads at 0.05x input ($0.10 and $0.20 per million),
+  // not 0.1x; production 2026-11-13 counted a cached Sonnet 5.5 answer up to 21% over its price.
+  // Haiku 5.5 bills $0.50 / $2.50 for a prompt over 100K tokens.
+  { match: (m) => m.includes("haiku-5"), input: 0.1, output: 0.5, longPrompt: { above: 100_000, input: 0.5, output: 2.5 } },
+  { match: (m) => m.includes("sonnet-5-5") || m.includes("sonnet-5.5"), input: 2, output: 10, cacheRead: 0.05 },
   { match: (m) => m.includes("sonnet-5"), input: 2, output: 10 },
+  { match: (m) => m.includes("opus-5-5") || m.includes("opus-5.5"), input: 4, output: 20, cacheRead: 0.05 },
   { match: (m) => m.includes("opus"), input: 5, output: 25 },
   { match: (m) => m.includes("sonnet"), input: 3, output: 15 },
   { match: (m) => m.includes("haiku"), input: 1, output: 5 },
@@ -97,9 +110,12 @@ function providerClause(filter?: ProviderFilter): [string, string[]] {
   return "only" in filter ? [" AND provider = ?", [filter.only]] : [" AND provider != ?", [filter.except]];
 }
 
-function priceFor(model: string): { input: number; output: number } | null {
+function priceFor(model: string, promptTokens: number): { input: number; output: number; cacheRead: number } | null {
   const id = model.toLowerCase();
-  return PRICING.find((p) => p.match(id)) ?? null;
+  const p = PRICING.find((row) => row.match(id));
+  if (!p) return null;
+  const long = p.longPrompt && promptTokens > p.longPrompt.above ? p.longPrompt : null;
+  return { input: long?.input ?? p.input, output: long?.output ?? p.output, cacheRead: p.cacheRead ?? 0.1 };
 }
 
 /**
@@ -116,7 +132,7 @@ export function estimateCostUsd(report: LlmUsageReport): number {
     const hit = report.cachedInputTokens;
     return deepseekCostUsd({ model: report.model, hitTokens: hit, missTokens: Math.max(0, report.inputTokens - hit), outputTokens: report.outputTokens, at: Date.UTC(2026, 0, 3) });
   }
-  const rate = priceFor(report.model);
+  const rate = priceFor(report.model, report.inputTokens);
   if (!rate) return 0;
   // E7-S3: the AI SDK's inputTokens is the total, cache reads and writes included (as the DeepSeek
   // branch above already reads it), so only the rest bills at the full input rate. Counting the total
@@ -124,7 +140,7 @@ export function estimateCostUsd(report: LlmUsageReport): number {
   const uncached = Math.max(0, report.inputTokens - report.cachedInputTokens - report.cacheCreationInputTokens);
   const usd =
     (uncached * rate.input +
-      report.cachedInputTokens * rate.input * 0.1 +
+      report.cachedInputTokens * rate.input * rate.cacheRead +
       report.cacheCreationInputTokens * rate.input * 1.25 +
       report.outputTokens * rate.output) /
     1_000_000;
