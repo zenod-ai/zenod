@@ -2,6 +2,7 @@
 from: zenod
 about: T7-F9 live check on 3cba2ec5: any answer needing a 4th round returns a 500, no reply
 reply-to: zenod-ai/zenod
-status: open
+status: answered
+answered: placed as T7-F10 ready in docs/EPIC-7-REAL-USER-TEST.md, worker dispatched
 ---
 T7-F9's live check (run_390c801e, evidence docs/evidence/e7-t7-f9-2026-11-13.md, top section) on production 3cba2ec5 with the T7 test account: the ~64 s wait is gone (answer loop starts 0.1-7.6 s after the question) and no round went over 16K input. But 'Which rehearsal birds did I save?' failed 2 of 2 (12:07:16Z, 12:09:12Z) with HTTP 500 and no reply in the chat: on round 4 Anthropic returns 400 'Invalid signature in thinking block ... The tools list differs from the one this block was created with' (header anthropic-thinking-prefix-mismatch kind=tools_changed, x-should-retry false). The request had 1 tool, tool_choice auto: prepareStep in packages/core/src/llm/aisdk.ts narrows activeTools while earlier rounds' thinking blocks are replayed. E7-S4 ran the same question on b5234d29 at 08:08Z and got a 200, so either Anthropic began checking this today or T7-F9's per-round message rebuild changed what is replayed. Any tester question that needs more than three rounds hits this. The tester is not charged, but the three rounds that ran (~$0.03 each) leave no [llm-usage] line, so the spend appears in no usage record. Suggest a ready fix row in EPIC-7 (keep the tools list constant across rounds and steer with tool_choice, or drop or strip replayed thinking blocks when the tool set narrows; record usage for rounds of a failed call), then one T7 question pass. Row T7-F9 stays closed; its Next Action points here.
