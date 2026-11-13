@@ -93,7 +93,7 @@ describe("E7-S4 answer round log", () => {
       captured.config.onStepFinish({ usage: { inputTokens: 40_000, outputTokens: 120, cachedInputTokens: 14_000 } });
       const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[answer-round]"));
       expect(lines).toHaveLength(2);
-      expect(lines[0]).toMatch(/^\[answer-round\] step=1 input=15000 output=90 cache_read=4000 total_input=15000 elapsed_ms=\d+ final=false$/);
+      expect(lines[0]).toMatch(/^\[answer-round\] step=1 input=15000 output=90 cache_read=4000 total_input=15000 elapsed_ms=\d+ round_ms=\d+ tool_ms=\d+ final=false$/);
       expect(lines[1]).toMatch(/step=2 input=40000 .* total_input=55000 /);
       expect(lines.join(" ")).not.toContain("secret");
     } finally {

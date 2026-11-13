@@ -3777,11 +3777,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const useFactAnswer = explicitFactReadAttempts > 0 || automatic.length > 0 || relevantAutomaticFailure;
         const finalFactWarnings = [...factReadWarnings, ...(relevantAutomaticFailure
           ? ["A relevant page fact projection failed or exceeded the four-note budget; current state is not established for that page."] : [])];
-        let factSnapshotChanged = false;
-        for (const read of [...factReads, ...automatic]) {
-          try { if (await tools.readFacts!(read.input) !== read.result) factSnapshotChanged = true; }
-          catch { factSnapshotChanged = true; }
-        }
+        // T7-F11: the re-checks run together, so they share one vault revision probe. One after another, each
+        // probed the Drive vault again (production 4011d6ae: 25 s between the last round and the reply).
+        const factSnapshotChanged = (await Promise.all([...factReads, ...automatic].map(async read => {
+          try { return await tools.readFacts!(read.input) !== read.result; }
+          catch { return true; }
+        }))).some(Boolean);
         if (factSnapshotChanged) factSources.length = 0;
         // Sources must come from successful host reads, never model-supplied readPaths or search hits.
         const sources = [
@@ -3831,16 +3832,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
         } else if (result.supportProtocolError) {
           text = ANSWER_PROTOCOL_FAILURE_TEXT;
         } else if (result.supportSelections !== undefined) {
-          let selectedSnapshotChanged = factSnapshotChanged;
-          for (const view of supportRegistry.selectedViews(result.supportSelections)) {
-            const input = { path: view.path, ...(view.key ? { key: view.key } : {}), ...(view.mode === "historical" ? { asOf: view.asOf } : {}) };
-            try { if (JSON.stringify(JSON.parse(await tools.readFacts!(input))) !== JSON.stringify(view)) selectedSnapshotChanged = true; }
-            catch { selectedSnapshotChanged = true; }
-          }
-          for (const passage of supportRegistry.selectedPassages(result.supportSelections)) {
-            try { if ((JSON.parse(await tools.readNote!(passage.readPath, { maxChars: 256 })) as NotePassage).version !== passage.version) selectedSnapshotChanged = true; }
-            catch { selectedSnapshotChanged = true; }
-          }
+          const selections = result.supportSelections;
+          const selectedSnapshotChanged = factSnapshotChanged || (await Promise.all([
+            ...supportRegistry.selectedViews(selections).map(async view => {
+              const input = { path: view.path, ...(view.key ? { key: view.key } : {}), ...(view.mode === "historical" ? { asOf: view.asOf } : {}) };
+              try { return JSON.stringify(JSON.parse(await tools.readFacts!(input))) !== JSON.stringify(view); }
+              catch { return true; }
+            }),
+            ...supportRegistry.selectedPassages(selections).map(async passage => {
+              try { return (JSON.parse(await tools.readNote!(passage.readPath, { maxChars: 256 })) as NotePassage).version !== passage.version; }
+              catch { return true; }
+            }),
+          ])).some(Boolean);
           text = selectedSnapshotChanged ? "The selected source snapshot changed during this question. Repeat its source/fact reads before answering." : supportRegistry.render(result.supportSelections, result.analysisText).text;
         } else if (useFactAnswer) {
           text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."

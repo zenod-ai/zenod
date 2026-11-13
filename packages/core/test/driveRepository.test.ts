@@ -1392,3 +1392,35 @@ describe("T7-F9: an answer starts without re-reading the vault's whole Drive his
     expect(await readFile(join(workdir, "index.md"), "utf8")).toBe("# Index\n\nEdited in Drive.\n");
   });
 });
+
+describe("T7-F11: a memory read's revision probe on a Drive vault", { timeout: 120_000 }, () => {
+  // Production 4011d6ae (13 Nov 2026 14:52Z): every read_note and every source re-check after the answer loop
+  // probed the published revision, and each probe downloaded the whole Git bundle and cold-cloned it. An
+  // answer's reads took about 10 s a round, and its re-checks left 25 s between the last round and the reply.
+  it("does not download and clone an unchanged bundle again, but verifies a new or changed one", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("t7f11-probe");
+    const repo = await open(drive, workdir);
+    const created = await ensureSchemaV1(repo.path);
+    await repo.commitAndPublish(`schema: v1 — add ${created.join(", ")}`);
+    let downloads = 0;
+    const download = drive.download.bind(drive);
+    drive.download = async (id: string) => { downloads += 1; return download(id); };
+    await repo.currentRevision();
+    downloads = 0;
+    const again = await repo.currentRevision();
+    // main: 2 (the manifest and the whole bundle, then a cold clone); now only the manifest.
+    expect(downloads).toBe(1);
+    await writeVaultFile(workdir, "Log/2026-11-13.md", "# heron\n");
+    const published = await repo.commitAndPublish("filing heron");
+    downloads = 0;
+    const next = await repo.currentRevision();
+    expect(downloads).toBe(2); // a new bundle is downloaded and verified once
+    expect(next.commitSha).toBe(published.commitSha);
+    expect(next.commitSha).not.toBe(again.commitSha);
+    // A bundle changed in Drive under the same manifest is downloaded again and refused.
+    const bundle = [...drive.files.values()].find((file) => file.appProperties?.["zenodVaultRole"] === "bundle" || file.name.endsWith(".bundle"))!;
+    drive.externalEdit(bundle.id, "not a bundle");
+    await expect(repo.currentRevision()).rejects.toThrow(/checksum mismatch/);
+  });
+});

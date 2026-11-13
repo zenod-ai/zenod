@@ -109,3 +109,45 @@ describe("T7-F10: an answer that needs a fourth round on Claude Sonnet 5.5", () 
     expect(dropThinkingAfterEdit(history, [...history])).toEqual(history);
   });
 });
+
+// T7-F11, production 4011d6ae (T7-F10 live check, 13 Nov 2026 14:52Z and 14:55Z): two of three answers ran two
+// final rounds in a row. The token budget made round 3 (or 4) the final one, but every tool is offered and
+// tool_choice goes out as auto, so the model could not tell: it read again, got "not available in this round",
+// and only submitted in a second final round (81,358 and 74,037 input tokens instead of 57,389 and 55,357).
+describe("T7-F11: a final round chosen by the token budget on Claude Sonnet 5.5", () => {
+  it("tells the model it is the final round, so it submits there and no second final round runs", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // A model that submits once a request tells it this is the final round, and keeps reading otherwise.
+    const requests: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      requests.push(body);
+      const last = body.messages.at(-1);
+      const told = JSON.stringify(last.content).includes("final round") || JSON.stringify(last.content).includes("FINAL ROUND");
+      const call = told || requests.length > 6 ? submit : read(`Notes/Bird-${requests.length}.md`);
+      const toolsList = JSON.stringify((body.tools ?? []).map((tool: any) => tool.name));
+      return new Response(JSON.stringify({
+        id: `msg_${requests.length}`, type: "message", role: "assistant", model: body.model,
+        content: [{ type: "thinking", thinking: "", signature: `sig:${toolsList}` }, { type: "tool_use", id: `toolu_${requests.length}`, name: call.name, input: call.input }],
+        stop_reason: "tool_use", stop_sequence: null,
+        // 12K, 15K, 18K: after round 3 the next round would pass the 48K answer budget, so round 4 is final.
+        usage: { input_tokens: 9_000 + 3_000 * requests.length, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      }), { headers: { "content-type": "application/json" } });
+    }));
+    const usage: LlmUsageReport[] = [];
+    const result = await sonnet(8, usage).answer(birds, tools);
+    const rounds = warn.mock.calls.map((call) => String(call[0])).filter((line) => line.startsWith("[answer-round] step="));
+    warn.mockRestore();
+    // main: round 4 reads, is refused, and round 5 is a second final round (5 rounds, 12K+15K+18K+21K+24K).
+    expect(rounds.filter((line) => line.endsWith("final=true"))).toHaveLength(1);
+    expect(requests).toHaveLength(4);
+    expect(result.supportSelections).toEqual([{ id, mode: "current" }]);
+    expect(usage.filter((report) => report.operation === "answer")).toEqual([expect.objectContaining({ status: "succeeded", inputTokens: 12_000 + 15_000 + 18_000 + 21_000 })]);
+    // The note is the last message of the final round only; every earlier message, and the tools list, stay as they were.
+    expect(requests.slice(0, 3).some((body) => JSON.stringify(body.messages).includes("FINAL ROUND"))).toBe(false);
+    expect(JSON.stringify(requests[3].messages.at(-1))).toContain("FINAL ROUND");
+    expect(new Set(requests.map((body) => JSON.stringify(body.tools.map((tool: any) => tool.name)))).size).toBe(1);
+    // Each round line says how long the round took and how much of it was tools.
+    expect(rounds[0]).toMatch(/ round_ms=\d+ tool_ms=\d+ final=false$/);
+  });
+});
