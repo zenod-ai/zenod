@@ -1314,3 +1314,81 @@ function packetBody(packet: { source: unknown; version: string; bodyChars: numbe
   expect(body.length).toBe(packet.bodyChars);
   return body;
 }
+
+
+describe("T7-F9: an answer starts without re-reading the vault's whole Drive history", { timeout: 120_000 }, () => {
+  // Production b5234d29 (13 Nov 2026): every chat question waited about 64 s before
+  // the answer loop began. The turn's read sync (pullForFiling) downloaded every
+  // committed transaction journal (each holding a whole Git bundle) four times and
+  // every vault file three times, so the wait grew with each filing; every read
+  // tool's revision check downloaded every vault file again (/api/vault 5-13 s).
+  function countCalls(drive: FakeDrive) {
+    const counts = { download: 0, getFile: 0, list: 0 };
+    const download = drive.download.bind(drive);
+    const getFile = drive.getFile.bind(drive);
+    const listFiles = drive.listFiles.bind(drive);
+    drive.download = async (id: string) => { counts.download += 1; return download(id); };
+    drive.getFile = async (id: string) => { counts.getFile += 1; return getFile(id); };
+    drive.listFiles = async (options?: Parameters<FakeDrive["listFiles"]>[0]) => { counts.list += 1; return listFiles(options); };
+    return { counts, reset: () => Object.assign(counts, { download: 0, getFile: 0, list: 0 }) };
+  }
+
+  async function vaultWithHistory(name: string, filings: number) {
+    const drive = new FakeDrive();
+    const workdir = await temp(name);
+    const repo = await open(drive, workdir);
+    const created = await ensureSchemaV1(repo.path);
+    await repo.commitAndPublish(`schema: v1 — add ${created.join(", ")}`);
+    for (let day = 1; day <= filings; day += 1) {
+      await writeVaultFile(workdir, `Log/2026-11-${String(day).padStart(2, "0")}.md`, `# Day ${day}\n\n${"rehearsal note ".repeat(100)}\n`);
+      await repo.commitAndPublish(`filing ${day}`);
+    }
+    return { drive, workdir, repo };
+  }
+
+  it("starts the answer loop after a bounded Drive read that does not grow with past filings", async () => {
+    const { drive, repo } = await vaultWithHistory("t7f9-start", 12);
+    const state = new SqliteStateStore(":memory:");
+    const { counts, reset } = countCalls(drive);
+    const beforeAnswer: Array<typeof counts> = [];
+    const llm: BrainLlm = {
+      async classify() { throw new Error("not used"); },
+      async composePage() { throw new Error("not used"); },
+      async describeImage() { return "image"; },
+      async answer() { beforeAnswer.push({ ...counts }); return { text: "The test word is heron.", readPaths: [] }; },
+      async work() { return { text: "No work" }; },
+      async extractBacklog() { return { candidates: [] }; },
+    };
+    try {
+      const engine = createEngine({ repo, llm, state, readSyncTtlMs: 0 });
+      await engine.handleTasking({ text: "What is the T7 rehearsal test word?", surface: "web", conversationKey: "default" });
+      reset();
+      await engine.handleTasking({ text: "What is the T7 rehearsal test word? Tell me again.", surface: "web", conversationKey: "default" });
+      const second = beforeAnswer[1]!;
+      // main: 110 downloads (every journal and vault file, several times) and 56 folder listings before the answer began.
+      expect(second.download).toBeLessThanOrEqual(6);
+      expect(second.list).toBeLessThanOrEqual(40);
+    } finally {
+      state.close();
+    }
+  });
+
+  it("checks the published revision for a read without downloading every vault file", async () => {
+    const { drive, repo } = await vaultWithHistory("t7f9-probe", 12);
+    const { counts, reset } = countCalls(drive);
+    await repo.currentRevision();
+    reset();
+    await repo.currentRevision();
+    // main: 18 downloads (manifest, bundle and every vault file); now the manifest and the bundle.
+    expect(counts.download).toBeLessThanOrEqual(2);
+  });
+
+  it("still imports an edit made in Drive after the faster read sync", async () => {
+    const { drive, workdir, repo } = await vaultWithHistory("t7f9-import", 3);
+    await repo.pullForFiling();
+    const page = [...drive.files.values()].find((file) => file.name === "index.md")!;
+    drive.externalEdit(page.id, "# Index\n\nEdited in Drive.\n");
+    await repo.pullForFiling();
+    expect(await readFile(join(workdir, "index.md"), "utf8")).toBe("# Index\n\nEdited in Drive.\n");
+  });
+});

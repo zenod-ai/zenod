@@ -68,7 +68,8 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   const result=await llm(2).answer(mixed,tools,undefined,undefined,{create_item:{description:"Create item",run:action}});
   expect(action).not.toHaveBeenCalled();
   expect(result.supportSelections).toEqual([{id,mode:"current"}]);
-  expect(requests).toHaveLength(2);expect(requests[1].tool_choice).toBe("auto");
+  // T7-F9: once memory was read the final mixed round must submit; prose there was always a protocol failure.
+  expect(requests).toHaveLength(2);expect(requests[1].tool_choice).toBe("required");
   expect(requests[1].tools.map((t:any)=>t.function.name)).toEqual(["submit_memory_answer"]);
  });
  it("requires submission for host-pinned evidence even without a model read",async()=>{
