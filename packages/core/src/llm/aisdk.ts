@@ -234,8 +234,66 @@ export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
  */
 export const ANSWER_INPUT_TOKEN_BUDGET = 48_000;
 export const ANSWER_TIME_BUDGET_MS = 45_000;
+/**
+ * T7-F9: what one round may send. T7-F7's check assumed the next round is no bigger than the last, but each
+ * round re-sends every tool result read so far: on production one answer read 118,419 tokens and its forced
+ * final round re-sent all of it. Each round is now measured before it is sent (the last round's real input
+ * plus what was added since); one that would pass this budget has its largest tool results trimmed to fit,
+ * the final round included.
+ */
+export const ANSWER_ROUND_INPUT_TOKEN_BUDGET = 24_000;
+/** JSON tool results run about 3 to 4 characters per token; 3 over-counts slightly, the safe side. */
+const ANSWER_CHARS_PER_TOKEN = 3;
+/** A trimmed tool result keeps at least this much of its start. */
+const MIN_TRIMMED_TOOL_RESULT_CHARS = 2_000;
+const TOOL_RESULT_TRIM_MARKER = "\n[trimmed: the rest of this tool result was dropped to keep this answer within its input budget]";
 const COUNCIL_TOOL_SUFFIX_RE = /__[0-9a-f]{16}$/i;
 const READ_ONLY_STATUS_TEXT = "Read-only answer — no action was performed.";
+
+function messagesChars(messages: readonly ModelMessage[]): number {
+  return JSON.stringify(messages).length;
+}
+
+/**
+ * T7-F9: cut the largest tool results (water-filling, none below MIN_TRIMMED_TOOL_RESULT_CHARS) until about
+ * `excessChars` are gone. Returns new message objects and leaves the SDK's history untouched; every tool call
+ * keeps a result, so the call/result pairing the provider requires still holds.
+ */
+export function trimToolResults(messages: readonly ModelMessage[], excessChars: number): ModelMessage[] {
+  type Part = { message: number; part: number; text: string };
+  const parts: Part[] = [];
+  messages.forEach((message, messageIndex) => {
+    if (message.role !== "tool" || !Array.isArray(message.content)) return;
+    message.content.forEach((part, partIndex) => {
+      if (part.type !== "tool-result") return;
+      const output = part.output as { type: string; value?: unknown };
+      const text = output.type === "text" && typeof output.value === "string" ? output.value
+        : output.type === "json" ? JSON.stringify(output.value) : null;
+      if (text !== null && text.length > MIN_TRIMMED_TOOL_RESULT_CHARS) parts.push({ message: messageIndex, part: partIndex, text });
+    });
+  });
+  if (excessChars <= 0 || parts.length === 0) return [...messages];
+  // The highest level L with sum(max(0, size - L)) >= excess; every part above L is cut to L.
+  const sizes = parts.map((part) => part.text.length).sort((left, right) => right - left);
+  let level = MIN_TRIMMED_TOOL_RESULT_CHARS;
+  let above = 0;
+  for (let index = 0; index < sizes.length; index += 1) {
+    above += sizes[index]!;
+    const floor = Math.max(sizes[index + 1] ?? 0, MIN_TRIMMED_TOOL_RESULT_CHARS);
+    const candidate = Math.floor((above - excessChars) / (index + 1));
+    if (candidate >= floor) { level = candidate; break; }
+  }
+  const out = messages.map((message) => message.role === "tool" && Array.isArray(message.content)
+    ? { ...message, content: [...message.content] } : message) as ModelMessage[];
+  for (const part of parts) {
+    if (part.text.length <= level) continue;
+    const content = (out[part.message] as { content: unknown[] }).content;
+    const original = content[part.part] as Record<string, unknown>;
+    const kept = part.text.slice(0, Math.max(0, level - TOOL_RESULT_TRIM_MARKER.length));
+    content[part.part] = { ...original, output: { type: "text", value: `${kept}${TOOL_RESULT_TRIM_MARKER}` } };
+  }
+  return out;
+}
 
 function hostPeerActionResult(result: string): string {
   let value: unknown;
@@ -1503,9 +1561,22 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const finished = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, steps: 0 };
     // T7-F7: the input the last round sent; the next one re-sends at least as much.
     let lastStepInputTokens = 0;
+    // T7-F9: how much the last round actually sent, so the next round is measured, not assumed.
+    let lastStepSentChars = 0;
     const loopStartedMs = Date.now();
-    const loopBudgetSpent = () =>
-      finished.inputTokens + lastStepInputTokens > ANSWER_INPUT_TOKEN_BUDGET || Date.now() - loopStartedMs > ANSWER_TIME_BUDGET_MS;
+    const loopBudgetSpent = (nextRoundTokens: number) =>
+      finished.inputTokens + nextRoundTokens > ANSWER_INPUT_TOKEN_BUDGET || Date.now() - loopStartedMs > ANSWER_TIME_BUDGET_MS;
+    /** T7-F9: a round's input, estimated from the last round's real count plus what was added since. */
+    const roundTokens = (outgoing: readonly ModelMessage[]) =>
+      lastStepInputTokens + Math.ceil(Math.max(0, messagesChars(outgoing) - lastStepSentChars) / ANSWER_CHARS_PER_TOKEN);
+    // T7-F9: an answer that ends without a valid memory-answer submission reaches the user only as
+    // ANSWER_PROTOCOL_FAILURE_TEXT, a non-answer. Its usage is still recorded, as "failed", which the
+    // allowance and spend sums leave out, so the tester is not charged for it (production: $0.1647).
+    const protocolFailureUsage = (): { status?: "failed"; errorCode?: string } => {
+      if (!input.answerSupportContract || authoritativePeerResult) return {};
+      const failed = submittedAnswer ? submittedAnswer.supportProtocolError !== undefined : supportRead;
+      return failed ? { status: "failed", errorCode: "answer_protocol_failure" } : {};
+    };
     const cancelled = (): AnswerCancelledError => {
       if (finished.steps > 0) this.reportUsage("answer", this.askModelId, finished, undefined, { errorCode: "answer_cancelled" });
       else this.reportUsage("answer", this.askModelId, undefined, undefined, { status: "failed", errorCode: "answer_cancelled" });
@@ -2102,7 +2173,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // below), so usable tool-calling rounds = maxSteps - 1.
     const toolRounds = Math.max(1, this.maxSteps - 1);
     const budgetNote = input.answerSupportContract ? [
-      `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; the final round allows submission or ordinary prose but no action tools. A completed authoritative action may return its receipt as prose."}`,
+      `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; once a source was read the final round permits only submission (select supported content or an empty selection if insufficient), never action tools or prose. A completed authoritative action may return its receipt as prose."}`,
       "Submission ends this turn immediately. For opinions or recommendations, submit analysisText plus the actual source premises; outside prose is discarded. Use null for source-only answers. For requested source summaries, the host renders your cited summaryText; summaryText:null deliberately renders verbatim evidence or canonical fact wording. Write the summary inside the submission, not as closing prose afterward.",
     ].join(" ") : [
       `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
@@ -2180,12 +2251,27 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       experimental_repairToolCall: repairConnectedPeerToolCall,
       // Typed memory completion occupies the existing final round, not a
       // recovery/judge call. Other action and conversation paths retain prose.
-      prepareStep: ({ stepNumber }: { stepNumber: number }) => {
+      prepareStep: ({ stepNumber, messages: stepMessages }: { stepNumber: number; messages?: ModelMessage[] }) => {
+        // T7-F9: measure the round about to be sent and trim its largest tool results if it would pass the
+        // per-round budget. The SDK rebuilds each round from its untrimmed history, so this runs every round.
+        let outgoing = stepMessages;
+        let nextRoundTokens = lastStepInputTokens;
+        if (outgoing && stepNumber > 0) {
+          nextRoundTokens = roundTokens(outgoing);
+          if (nextRoundTokens > ANSWER_ROUND_INPUT_TOKEN_BUDGET) {
+            outgoing = trimToolResults(outgoing, (nextRoundTokens - ANSWER_ROUND_INPUT_TOKEN_BUDGET) * ANSWER_CHARS_PER_TOKEN);
+            nextRoundTokens = roundTokens(outgoing);
+          }
+        }
+        if (outgoing) lastStepSentChars = messagesChars(outgoing);
         submissionAllowedThisStep = supportRead && !authoritativePeerResult;
-        finalAnswerStep = stepNumber >= this.maxSteps-1 || (stepNumber > 0 && loopBudgetSpent());
+        finalAnswerStep = stepNumber >= this.maxSteps-1 || (stepNumber > 0 && loopBudgetSpent(nextRoundTokens));
+        const choice = (() => {
+        // T7-F9: once memory was read, prose in the final round is always thrown away as "missing_submission"
+        // (production: "The model did not submit a valid memory-answer selection"), so that round must submit.
         if (input.answerSupportContract && supportRead && !authoritativePeerResult) {
           if(input.answerSupportScope!=="memory_only") return finalAnswerStep
-            ? {activeTools:["submit_memory_answer"],toolChoice:"auto" as const}
+            ? {activeTools:["submit_memory_answer"],toolChoice:"required" as const}
             : {activeTools:[...ordinaryAnswerTools,"submit_memory_answer"],toolChoice:"required" as const};
           const activeTools: Array<"submit_memory_answer"|"search_vault"|"read_note"|"list_pages"|"read_facts"|"search_entries"> = ["submit_memory_answer"];
           if (!finalAnswerStep) {
@@ -2207,6 +2293,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           if (reads.length) return {activeTools:reads,toolChoice:"required" as const};
         }
         return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(finalAnswerStep ? {toolChoice:"none" as const} : {}) };
+        })();
+        return outgoing && outgoing !== stepMessages ? { ...choice, messages: outgoing } : choice;
       },
       tools: {
         ...(input.answerSupportContract ? {
@@ -2414,7 +2502,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         throw error;
       }
       if (input.abortSignal?.aborted) throw cancelled();
-      this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata);
+      this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata, protocolFailureUsage());
       if (!text.trim() && !submittedAnswer && !(input.answerSupportContract && supportRead)) {
         const response = await result.response;
         text = await this.recoverEmptyAnswer(
@@ -2467,7 +2555,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       if (input.abortSignal?.aborted) throw cancelled();
       throw error;
     }
-    this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
+    this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata, protocolFailureUsage());
     let text = result.text;
     if (!text.trim() && !submittedAnswer && !(input.answerSupportContract && supportRead)) {
       text = await this.recoverEmptyAnswer(

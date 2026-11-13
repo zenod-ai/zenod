@@ -29,6 +29,8 @@ const GIT_FOLDER_ROLE = "git-folder";
 const CONTROL_FOLDER_ROLE = "control-folder";
 const TRANSACTIONS_FOLDER_ROLE = "transactions-folder";
 const DELETED_FOLDER_ROLE = "deleted-folder";
+/** T7-F9: folder listings a snapshot runs at once (sequential listing made each read sync slow). */
+const SNAPSHOT_LIST_CONCURRENCY = 8;
 
 export interface DriveVaultFile {
   id: string;
@@ -191,6 +193,16 @@ function sha256(data: Buffer | string): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
+function md5(data: Buffer): string {
+  return createHash("md5").update(data).digest("hex");
+}
+
+function settledJournalKey(file: DriveVaultFile): string | null {
+  if (!file.md5Checksum) return null;
+  const properties = Object.entries(file.appProperties ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify([file.id, file.md5Checksum, file.name, file.parents ?? [], properties]);
+}
+
 function operationIdFor(transactionId: string, kind: MutationKind, path: string, destinationPath?: string): string {
   return sha256(`${transactionId}:${kind}:${path}:${destinationPath ?? ""}`).slice(0, 32);
 }
@@ -304,6 +316,15 @@ export class DriveVaultRepository implements VaultRepository {
   private controlFolderId!: string;
   private transactionsFolderId!: string;
   private deletedFolderId!: string;
+  /**
+   * T7-F9: committed journals already validated, keyed by their Drive identity and
+   * content md5. Every filing leaves one (holding a whole bundle), and each pull
+   * downloaded and re-validated all of them twice, so a read sync grew with the
+   * vault's history. A committed journal is never executed again, and its checks
+   * read only its file and content: a changed journal has a new key and is checked.
+   */
+  private readonly settledJournals = new Set<string>();
+  private readonly verifiedTombstones = new Set<string>();
   private readonly stateDir: string;
   private readonly now: () => Date;
   private readonly idFactory: () => string;
@@ -772,15 +793,18 @@ export class DriveVaultRepository implements VaultRepository {
       || file.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
       || file.appProperties?.[ROLE_PROPERTY] !== MANIFEST_ROLE
     ) throw new Error("Drive vault manifest is outside its bound control folder");
-    const control = await this.options.client.getFile(this.controlFolderId);
+    // T7-F9: the three reads are independent; checked in the same order as before.
+    const [control, gitFolder, bundle] = await Promise.all([
+      this.options.client.getFile(this.controlFolderId),
+      this.options.client.getFile(this.gitFolderId),
+      this.options.client.getFile(manifest.bundle.fileId),
+    ]);
     if (control.mimeType !== FOLDER_MIME || control.parents?.length !== 1 || control.parents[0] !== this.rootFolderId) {
       throw new Error("Drive vault control folder is outside its bound root");
     }
-    const gitFolder = await this.options.client.getFile(this.gitFolderId);
     if (gitFolder.mimeType !== FOLDER_MIME || gitFolder.parents?.length !== 1 || gitFolder.parents[0] !== this.rootFolderId) {
       throw new Error("Drive vault Git folder is outside its bound root");
     }
-    const bundle = await this.options.client.getFile(manifest.bundle.fileId);
     if (
       bundle.name !== BUNDLE_NAME || bundle.parents?.length !== 1 || bundle.parents[0] !== this.gitFolderId
       || bundle.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
@@ -788,18 +812,18 @@ export class DriveVaultRepository implements VaultRepository {
     ) throw new Error("Drive vault bundle is outside its bound Git folder");
   }
 
-  private async validateManifestAuthority(file: DriveVaultFile, manifest: DriveVaultManifest): Promise<void> {
+  private async validateManifestAuthority(file: DriveVaultFile, manifest: DriveVaultManifest): Promise<Record<string, DriveVaultFile>> {
     await this.validateManifestControlAuthority(file, manifest);
 
     const normalized = new Set<string>();
     const fileIds = new Set<string>([file.id, manifest.bundle.fileId]);
-    const snapshot = await this.remoteSnapshot();
+    const listing = await this.remoteListing();
     for (const [path, entry] of Object.entries(manifest.files)) {
       const safe = normalizePath(path);
       if (safe !== path || normalized.has(safe) || fileIds.has(entry.fileId)) throw new Error(`Drive vault manifest path identity is invalid at ${path}`);
       normalized.add(safe);
       fileIds.add(entry.fileId);
-      if (snapshot[path]?.file.id !== entry.fileId || snapshot[path]?.file.mimeType !== entry.mimeType) {
+      if (listing[path]?.id !== entry.fileId || listing[path]?.mimeType !== entry.mimeType) {
         throw new Error(`Drive vault manifest file is outside its exact path at ${path}`);
       }
     }
@@ -814,11 +838,16 @@ export class DriveVaultRepository implements VaultRepository {
         if (archived.parents?.length !== 1 || archived.parents[0] !== this.deletedFolderId || archived.name !== tombstone.archivedName) {
           throw new Error(`Drive vault tombstone is outside its archive at ${path}`);
         }
+        // T7-F9: an archived file whose md5 is unchanged since its checksum matched is not downloaded again.
+        const verified = archived.md5Checksum ? `${archived.id}:${archived.md5Checksum}:${tombstone.checksum}` : null;
+        if (verified && this.verifiedTombstones.has(verified)) continue;
         if (sha256(await this.options.client.download(archived.id)) !== tombstone.checksum) {
           throw new Error(`Drive vault tombstone checksum mismatch at ${path}`);
         }
+        if (verified) this.verifiedTombstones.add(verified);
       }
     }
+    return listing;
   }
 
   private async configureGit(): Promise<void> {
@@ -876,22 +905,50 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private async remoteSnapshot(): Promise<Record<string, { file: DriveVaultFile; data: Buffer }>> {
-    const output: Record<string, { file: DriveVaultFile; data: Buffer }> = {};
-    const walk = async (folderId: string, prefix: string): Promise<void> => {
-      for (const file of await this.listChildren(folderId)) {
+  /**
+   * T7-F9: every ordinary file's metadata, no content. Folders are listed in
+   * parallel (at most SNAPSHOT_LIST_CONCURRENCY at once); entries keep the old
+   * depth-first order, so a duplicate path resolves exactly as before.
+   */
+  private async remoteListing(): Promise<Record<string, DriveVaultFile>> {
+    let active = 0;
+    const waiting: Array<() => void> = [];
+    const limited = async <T>(run: () => Promise<T>): Promise<T> => {
+      if (active >= SNAPSHOT_LIST_CONCURRENCY) await new Promise<void>((resolve) => waiting.push(resolve));
+      active += 1;
+      try { return await run(); } finally { active -= 1; waiting.shift()?.(); }
+    };
+    const walk = async (folderId: string, prefix: string): Promise<Array<[string, DriveVaultFile]>> => {
+      const parts: Array<Array<[string, DriveVaultFile]> | Promise<Array<[string, DriveVaultFile]>>> = [];
+      for (const file of await limited(() => this.listChildren(folderId))) {
         if (!prefix && (file.id === this.gitFolderId || file.id === this.controlFolderId)) continue;
         const path = prefix ? `${prefix}/${file.name}` : file.name;
-        if (file.mimeType === FOLDER_MIME) await walk(file.id, path);
-        else output[normalizePath(path)] = { file, data: await this.options.client.download(file.id) };
+        parts.push(file.mimeType === FOLDER_MIME ? walk(file.id, path) : [[path, file]]);
       }
+      return (await Promise.all(parts)).flat();
     };
-    await walk(this.rootFolderId, "");
+    const output: Record<string, DriveVaultFile> = {};
+    for (const [path, file] of await walk(this.rootFolderId, "")) output[normalizePath(path)] = file;
     return output;
   }
 
-  private async importExternalEdits(): Promise<void> {
-    const snapshot = await this.remoteSnapshot();
+  /**
+   * Every ordinary file with its bytes. T7-F9: a file whose Drive md5 equals the
+   * local clone's copy is that content, so it is read locally, not downloaded
+   * again on every pull and revision check (a read sync took about 64 s).
+   */
+  private async remoteSnapshot(listing?: Record<string, DriveVaultFile>): Promise<Record<string, { file: DriveVaultFile; data: Buffer }>> {
+    const output: Record<string, { file: DriveVaultFile; data: Buffer }> = {};
+    for (const [path, file] of Object.entries(listing ?? await this.remoteListing())) {
+      const local = file.md5Checksum ? await readFile(join(this.path, path)).catch(() => null) : null;
+      const data = local && md5(local) === file.md5Checksum ? local : await this.options.client.download(file.id);
+      output[path] = { file, data };
+    }
+    return output;
+  }
+
+  private async importExternalEdits(listing?: Record<string, DriveVaultFile>): Promise<void> {
+    const snapshot = await this.remoteSnapshot(listing);
     const paths = new Set([...Object.keys(snapshot), ...Object.keys(this.manifest.files)]);
     let changed = false;
     const changes: FileChange[] = [];
@@ -971,11 +1028,16 @@ export class DriveVaultRepository implements VaultRepository {
 
   async pull(): Promise<void> {
     await this.recoverTransactions();
+    await this.pullFromAuthority();
+  }
+
+  private async pullFromAuthority(): Promise<void> {
     const manifestFile = await this.options.client.getFile(this.manifestFile.id);
     await this.loadManifest(manifestFile);
-    await this.validateManifestAuthority(manifestFile, this.manifest);
+    // T7-F9: the import reads the same listing the authority check just took (one walk, not two).
+    const listing = await this.validateManifestAuthority(manifestFile, this.manifest);
     if (!(await this.materializeFromAuthority())) throw new Error("filing_local_changes_require_recovery");
-    await this.importExternalEdits();
+    await this.importExternalEdits(listing);
   }
 
   async currentPublishedRevision(requiredAncestor?: string): Promise<VaultRevision> {
@@ -1009,7 +1071,8 @@ export class DriveVaultRepository implements VaultRepository {
     // A clean older published ancestor may advance; an unpublished local commit
     // must be recovered through its exact receipt plan before materialization.
     await this.currentPublishedRevision(head);
-    await this.pull();
+    // T7-F9: recovery ran a moment ago under the same lock; running it twice per pull doubled its Drive reads.
+    await this.pullFromAuthority();
   }
 
   /** Durable Drive IDs discovered or created during bootstrap; safe for the tenant binding record. */
@@ -1991,9 +2054,20 @@ export class DriveVaultRepository implements VaultRepository {
     return parent;
   }
 
+  private isSettledJournal(file: DriveVaultFile): boolean {
+    const key = settledJournalKey(file);
+    return key !== null && this.settledJournals.has(key);
+  }
+
+  private settleJournal(file: DriveVaultFile, journal: DriveJournal): void {
+    const key = settledJournalKey(file);
+    if (key && journal.bootstrap !== true && journal.state === "committed") this.settledJournals.add(key);
+  }
+
   private async preflightRecovery(remote: DriveVaultFile[]): Promise<void> {
     for (const file of remote) {
       if (file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-")) continue;
+      if (this.isSettledJournal(file)) continue;
       const journal = await this.options.client.download(file.id)
         .then((data) => JSON.parse(data.toString("utf8")) as DriveJournal)
         .catch(() => null);
@@ -2004,6 +2078,7 @@ export class DriveVaultRepository implements VaultRepository {
       }
       await this.validateExecutableJournal(file, journal);
       await this.validateRecoveryManifest(journal);
+      this.settleJournal(file, journal);
     }
   }
 
@@ -2015,10 +2090,10 @@ export class DriveVaultRepository implements VaultRepository {
   private async validateRecoveryManifest(journal: DriveJournal): Promise<void> {
     const finalized = this.manifest.revisionId === journal.transactionId && this.manifest.commitSha === journal.targetCommitSha;
     if (finalized || journal.state === "committed" || journal.state === "failed") return;
-    const snapshot = await this.remoteSnapshot();
+    const listing = await this.remoteListing();
     for (const [path, entry] of Object.entries(this.manifest.files)) {
-      const actual = snapshot[path];
-      if (actual?.file.id === entry.fileId && actual.file.mimeType === entry.mimeType) continue;
+      const actual = listing[path];
+      if (actual?.id === entry.fileId && actual.mimeType === entry.mimeType) continue;
       const transition = journal.mutations.find((mutation) => mutation.fileId === entry.fileId
         && mutation.path === path && (mutation.kind === "move" || mutation.kind === "delete"));
       if (!transition) throw new Error(`Drive vault manifest file is outside its exact path before recovery at ${path}`);
@@ -2077,6 +2152,7 @@ export class DriveVaultRepository implements VaultRepository {
           retryable: false, transactionId, paths: [`${CONTROL_FOLDER}/${TRANSACTIONS_FOLDER}/${transactionId}.json`],
         });
       }
+      if (this.isSettledJournal(file)) continue;
       const journal = await this.options.client.download(file.id)
         .then((data) => JSON.parse(data.toString("utf8")) as DriveJournal)
         .catch(() => null);
@@ -2085,6 +2161,12 @@ export class DriveVaultRepository implements VaultRepository {
         await this.validateBootstrapJournal(file, journal);
         const bundle = await this.options.client.getFile(this.manifest.bundle.fileId);
         await this.validateBootstrapManifestReplayState(journal, bundle);
+        // T7-F9: once the manifest has moved past it, a committed bootstrap journal's check reads
+        // only stable ids and its own content, so it is not downloaded and checked again unchanged.
+        if (journal.state === "committed" && this.manifest.revisionId !== journal.transactionId) {
+          const key = settledJournalKey(file);
+          if (key) this.settledJournals.add(key);
+        }
         if (journal.state !== "committed") {
           if (this.manifest.revisionId !== journal.transactionId || this.manifest.commitSha !== journal.targetCommitSha) {
             throw new Error("Drive bootstrap journal conflicts with manifest authority");
@@ -2108,6 +2190,7 @@ export class DriveVaultRepository implements VaultRepository {
         continue;
       }
       await this.validateExecutableJournal(file, journal);
+      this.settleJournal(file, journal);
       if (journal.state === "failed" && await this.resumeFalseTerminalFailure(file, journal)) {
         await this.validateExecutableJournal(file, journal);
         await this.validateRecoveryManifest(journal);
