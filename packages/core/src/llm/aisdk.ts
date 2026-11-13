@@ -2170,6 +2170,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         finished.outputTokens += usage.outputTokens ?? 0;
         finished.cachedInputTokens += usage.cachedInputTokens ?? 0;
         lastStepInputTokens = usage.inputTokens ?? 0;
+        // E7-S4: one content-free line per round, so a long answer shows which round read what and when
+        // (production b5234d29: one answer read 118K tokens in 231 s and the summed usage line hid the rounds).
+        console.warn(`[answer-round] step=${finished.steps} input=${usage.inputTokens ?? 0} output=${usage.outputTokens ?? 0} cache_read=${usage.cachedInputTokens ?? 0} total_input=${finished.inputTokens} elapsed_ms=${Date.now() - loopStartedMs} final=${finalAnswerStep}`);
       },
       // Some models omit the collision suffix from a long discovered MCP name.
       // Repair only that one exact, unique omission before any tool event or

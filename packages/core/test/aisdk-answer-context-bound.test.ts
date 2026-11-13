@@ -80,3 +80,24 @@ describe("T7-F7 answer context bound", () => {
     expect(run.rounds).toBeLessThan(8);
   });
 });
+
+describe("E7-S4 answer round log", () => {
+  it("logs one content-free line per round with its input, elapsed time and whether it was the final round", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 8 });
+      await llm.answer({ question: "secret question text", vaultBriefing: "brief", conversation: [] }, readTools);
+      captured.config.prepareStep({ stepNumber: 0 });
+      captured.config.onStepFinish({ usage: { inputTokens: 15_000, outputTokens: 90, cachedInputTokens: 4_000 } });
+      captured.config.prepareStep({ stepNumber: 1 });
+      captured.config.onStepFinish({ usage: { inputTokens: 40_000, outputTokens: 120, cachedInputTokens: 14_000 } });
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[answer-round]"));
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toMatch(/^\[answer-round\] step=1 input=15000 output=90 cache_read=4000 total_input=15000 elapsed_ms=\d+ final=false$/);
+      expect(lines[1]).toMatch(/step=2 input=40000 .* total_input=55000 /);
+      expect(lines.join(" ")).not.toContain("secret");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
