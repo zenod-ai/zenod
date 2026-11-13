@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Glama: old page gone, new Zenod listing live</title><link rel="stylesheet" href="/_shell/shell.css"></head>
+<body data-page-shell>
+<main class="ps-page">
+<header class="ps-head"><p class="ps-kicker">E10-S2 · 2026-11-13</p><h1>Glama: old page gone, new Zenod listing live</h1></header>
+<p class="ps-punch">The old Glama page with the backwards address now sends people to the new Zenod listing, which shows up in Glama search as Healthy with the Z logo and zenod.dev.</p>
+<figure class="ps-diagram"><ol class="ps-boxes" data-shape="line"><li><b>Old page, backwards address</b></li><li><b>301 redirect</b></li><li><b>New listing Zenod, Healthy</b></li><li><b>Found by search zenod</b></li></ol></figure>
+<div class="ps-body">
+<section>
+<h2>What we checked</h2>
+<table>
+<tr><th>Check</th><th>Result</th><th></th></tr>
+<tr><td>Old Glama page with the backwards address</td><td>Gone. It sends every visitor to the new Zenod page with a permanent 301 redirect. Its other addresses answer 404, and a search for the old namespace finds nothing.</td><td>✓</td></tr>
+<tr><td>New listing in Glama search for "zenod"</td><td>Zenod, by io.github.zenod-ai, with the Z logo, Healthy, 8 tools</td><td>✓</td></tr>
+<tr><td>Website on the listing</td><td>Operator Zenod, website <a href="https://zenod.dev">https://zenod.dev</a>, guide <a href="https://zenod.dev/connect">zenod.dev/connect</a></td><td>✓</td></tr>
+<tr><td>Repo page on Glama links to it</td><td><a href="https://glama.ai/mcp/servers/zenod-ai/zenod">glama.ai/mcp/servers/zenod-ai/zenod</a> shows "Server Listing: Zenod" and links to the new page</td><td>✓</td></tr>
+</table>
+</section>
+<section>
+<h2>1. The old address now opens the new page</h2>
+<p>We opened the old Glama address, the one with zenod.dev written backwards, in a browser that was not signed in. It landed on <a href="https://glama.ai/mcp/connectors/io.github.zenod-ai/zenod">glama.ai/mcp/connectors/io.github.zenod-ai/zenod</a>, which shows Ownership verified and Healthy.</p>
+<img src="old-url-redirect.png" alt="The old Glama address opens the new Zenod page, Healthy" style="max-width:100%">
+</section>
+<section>
+<h2>2. Glama search for "zenod" shows the new listing</h2>
+<p><a href="https://glama.ai/mcp/connectors?query=zenod">Search Glama for zenod</a></p>
+<img src="search-zenod.png" alt="Glama search for zenod shows Zenod with the Z logo" style="max-width:100%">
+</section>
+<section>
+<h2>3. Publisher details on the listing</h2>
+<img src="publisher.png" alt="Publisher details: Zenod, https://zenod.dev, first party" style="max-width:100%">
+</section>
+<section>
+<h2>4. The repo page on Glama links to the new listing</h2>
+<img src="server-page-link.png" alt="Glama server page for zenod-ai/zenod" style="max-width:100%">
+</section>
+<section>
+<h2>What the team did to get it Healthy</h2>
+<p>When Glama first created the new listing, nobody had claimed it and it showed Unhealthy, because it had no test login. At 02:26 UTC on 13 November we claimed it with a DNS record on cloud.zenod.dev, the same method as the old listing. We then gave Glama a new key that can only list tools, made on the team's test account. Glama reported Healthy at 02:28. We also added the Z logo and the publisher details again. The old key was revoked because the page that used it no longer exists.</p>
+<p>Glama has not yet replied to our support request about the old page, but the old page already redirects, so no further message was sent.</p>
+</section>
+
+</div>
+<p class="ps-foot">E10-S2 keeps this page · one shared page shell (E75-S5)</p>
+</main>
+</body></html>
