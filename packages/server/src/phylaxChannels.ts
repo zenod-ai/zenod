@@ -2323,10 +2323,50 @@ export interface PhylaxDeliveryReceipt {
   at: string;
 }
 
+/** EPIC-20 A3: a decoded notify picture; only WhatsApp sends it (as one image with the text as caption). */
+export interface PhylaxNotifyImage {
+  data: Buffer;
+  mimetype: string;
+}
+
+/** Decoded size cap for notify's imageBase64 (about 1 MB). */
+export const PHYLAX_NOTIFY_IMAGE_MAX_BYTES = 1_048_576;
+const NOTIFY_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+
+/** Validate and decode notify's optional picture; throws a clear tool error when it is unusable. */
+export function decodeNotifyImage(imageBase64: string | undefined, imageMimeType: string | undefined): PhylaxNotifyImage | undefined {
+  if (imageBase64 === undefined || imageBase64 === "") return undefined;
+  const mimetype = (imageMimeType ?? "image/png").trim().toLowerCase();
+  if (!(NOTIFY_IMAGE_MIME_TYPES as readonly string[]).includes(mimetype)) {
+    throw new PhylaxChannelError("invalid_input", `imageMimeType must be one of ${NOTIFY_IMAGE_MIME_TYPES.join(", ")}`);
+  }
+  const compact = imageBase64.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) {
+    throw new PhylaxChannelError("invalid_input", "imageBase64 is not valid base64");
+  }
+  // Check the size before decoding so an oversize upload never allocates its buffer.
+  const approxBytes = Math.floor((compact.length * 3) / 4);
+  if (approxBytes > PHYLAX_NOTIFY_IMAGE_MAX_BYTES + 2) {
+    throw new PhylaxChannelError(
+      "invalid_input",
+      `imageBase64 is too large: about ${approxBytes} bytes, the limit is ${PHYLAX_NOTIFY_IMAGE_MAX_BYTES} bytes (1 MB)`,
+    );
+  }
+  const data = Buffer.from(compact, "base64");
+  if (data.length === 0) throw new PhylaxChannelError("invalid_input", "imageBase64 decoded to an empty image");
+  if (data.length > PHYLAX_NOTIFY_IMAGE_MAX_BYTES) {
+    throw new PhylaxChannelError(
+      "invalid_input",
+      `imageBase64 is too large: ${data.length} bytes, the limit is ${PHYLAX_NOTIFY_IMAGE_MAX_BYTES} bytes (1 MB)`,
+    );
+  }
+  return { data, mimetype };
+}
+
 export interface PhylaxTenantDelivery {
-  send(channel: PhylaxPortedChannel, recipient: string, text: string): Promise<PhylaxDeliveryReceipt>;
+  send(channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage): Promise<PhylaxDeliveryReceipt>;
   status(): Promise<Record<string, unknown>> | Record<string, unknown>;
-  notify?(text: string): Promise<PhylaxDeliveryReceipt[]>;
+  notify?(text: string, image?: PhylaxNotifyImage): Promise<PhylaxDeliveryReceipt[]>;
   /** Tenant-filtered reader backed by Phylax's authoritative transport store. */
   readConversationTranscript?: ConversationTranscriptReader;
 }
@@ -2372,13 +2412,31 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
     "notify",
     {
       title: "Notify through configured channels",
-      description: "Send a tenant notification through configured channel preferences and return every delivery receipt.",
-      inputSchema: { text: z.string().min(1) },
+      description: "Send a tenant notification through configured channel preferences and return every delivery receipt. With imageBase64, WhatsApp sends one image with the text as its caption; other channels send the text only.",
+      inputSchema: {
+        text: z.string().min(1),
+        imageBase64: z.string().optional().describe(
+          "Optional picture, base64 (no data: prefix), up to 1 MB decoded. WhatsApp sends it as one image message with text as the caption; other channels send text only.",
+        ),
+        imageMimeType: z.string().optional().describe("MIME type of imageBase64: image/png (default), image/jpeg or image/webp."),
+      },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ text }) => {
+    async ({ text, imageBase64, imageMimeType }) => {
       if (!delivery.notify) throw new PhylaxChannelError("delivery_error", "tenant notification preferences are not configured");
-      return deliveryToolResult(await delivery.notify(text));
+      let image: PhylaxNotifyImage | undefined;
+      try {
+        image = decodeNotifyImage(imageBase64, imageMimeType);
+      } catch (error) {
+        // A clear, caller-fixable message; the chassis would mask a thrown error.
+        if (!(error instanceof PhylaxChannelError)) throw error;
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `${error.code}: ${error.message}` }],
+          structuredContent: { status: "error", error: { code: error.code, message: error.message } },
+        };
+      }
+      return deliveryToolResult(await (image ? delivery.notify(text, image) : delivery.notify(text)));
     },
   );
   server.registerTool(

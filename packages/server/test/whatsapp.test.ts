@@ -47,6 +47,7 @@ vi.mock("@whiskeysockets/baileys", async (importOriginal) => {
 class FakeSocket implements SocketLike {
   readonly emitter = new EventEmitter();
   readonly sent: Array<{ jid: string; text: string }> = [];
+  readonly contents: Array<Parameters<SocketLike["sendMessage"]>[1]> = [];
   readonly receipts: Array<{ keys: Array<{ id?: string | null; remoteJid?: string | null }>; type: string }> = [];
   readonly presence: Array<{ type: string; jid?: string }> = [];
   user = { id: "34600000000:1@s.whatsapp.net" };
@@ -57,8 +58,9 @@ class FakeSocket implements SocketLike {
     },
   };
 
-  async sendMessage(jid: string, content: { text: string }) {
-    this.sent.push({ jid, text: content.text });
+  async sendMessage(jid: string, content: Parameters<SocketLike["sendMessage"]>[1]) {
+    this.contents.push(content);
+    this.sent.push({ jid, text: "text" in content ? content.text : content.caption ?? "" });
     return { key: { id: `sent_${this.sent.length}` } };
   }
 
@@ -964,6 +966,38 @@ describe("WhatsAppGateway", () => {
         outboundProviderId: "sent_1",
         outboundStatus: "sent",
       });
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sends a notify picture as ONE image message with the text as its caption (EPIC-20 A3)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-image-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+      const withImage = await gateway.sendText("34611111111", "Key result turned green", undefined, "alpha", { data: png, mimetype: "image/png" });
+      const plain = await gateway.sendText("34611111111", "Plain text as before", undefined, "alpha");
+
+      expect(withImage.sentMessageId).toBeTruthy();
+      expect(plain.sentMessageId).toBeTruthy();
+      expect(socket.contents).toEqual([
+        { image: png, caption: "Key result turned green", mimetype: "image/png" },
+        { text: "Plain text as before" },
+      ]);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

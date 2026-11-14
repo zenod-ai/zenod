@@ -15,6 +15,7 @@ import {
   normalizePhylaxVoiceJobDeadlineMs,
   phylaxWhatsAppPaths,
   registerPhylaxChannelTools,
+  PHYLAX_NOTIFY_IMAGE_MAX_BYTES,
   type PhylaxDownstreamCall,
   type PhylaxTranscriptionFailure,
 } from "../src/phylaxChannels.js";
@@ -2731,6 +2732,74 @@ describe("PhylaxChannelsOrgan", () => {
   });
 });
 describe("Phylax MCP channel tools", () => {
+  it("notify takes an optional picture: listed in its schema, passed to delivery, oversize refused (EPIC-20 A3)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-notify-image-"));
+    dirs.push(dataDir);
+    const tenantStore = createMemoryTenantStore([{ token: "alpha-token", tenant: { id: "alpha", name: "Alpha" } }]);
+    const calls: Array<{ text: string; image?: { data: Buffer; mimetype: string } }> = [];
+    const unit = createUnit({
+      name: "phylax",
+      tenantAuth: { store: tenantStore },
+      storage: { dataDir },
+      conduct: { toolKinds: { read: ["channel_status"], mutate: ["send_message", "notify"] } },
+      tools(server) {
+        registerPhylaxChannelTools(server, {
+          async send(channel, recipient) {
+            return { channel, recipient, sentMessageId: "provider-1", status: "sent", at: "2026-07-11T00:00:00.000Z" };
+          },
+          async notify(text, image) {
+            calls.push(image ? { text, image } : { text });
+            return [{ channel: "whatsapp", recipient: "34611111111", sentMessageId: `wa-${calls.length}`, status: "sent", at: "2026-07-11T00:00:00.000Z" }];
+          },
+          status() {
+            return {};
+          },
+        });
+      },
+    });
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
+    });
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("test server did not bind");
+    const client = new Client({ name: "phylax-test", version: "1" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${address.port}/mcp/alpha-token`)));
+    try {
+      const tools = await client.listTools();
+      const notifyTool = tools.tools.find((tool) => tool.name === "notify");
+      expect(Object.keys(notifyTool?.inputSchema.properties ?? {})).toEqual(expect.arrayContaining(["text", "imageBase64", "imageMimeType"]));
+      expect(notifyTool?.inputSchema.required).toEqual(["text"]);
+
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const pictured = await client.callTool({ name: "notify", arguments: { text: "lights", imageBase64: png.toString("base64") } });
+      expect(pictured.isError).not.toBe(true);
+      expect(pictured.structuredContent).toMatchObject({ evidence: [{ kind: "message_delivery", id: "wa-1", status: "sent" }] });
+      expect(calls[0]).toEqual({ text: "lights", image: { data: png, mimetype: "image/png" } });
+
+      const jpeg = await client.callTool({ name: "notify", arguments: { text: "jpeg", imageBase64: png.toString("base64"), imageMimeType: "image/jpeg" } });
+      expect(jpeg.isError).not.toBe(true);
+      expect(calls[1]?.image?.mimetype).toBe("image/jpeg");
+
+      const plain = await client.callTool({ name: "notify", arguments: { text: "text as before" } });
+      expect(plain.isError).not.toBe(true);
+      expect(calls[2]).toEqual({ text: "text as before" });
+
+      const oversize = await client.callTool({
+        name: "notify",
+        arguments: { text: "too big", imageBase64: Buffer.alloc(PHYLAX_NOTIFY_IMAGE_MAX_BYTES + 1024).toString("base64") },
+      });
+      expect(oversize.isError).toBe(true);
+      expect(JSON.stringify(oversize.content)).toContain("too large");
+
+      const badMime = await client.callTool({ name: "notify", arguments: { text: "gif", imageBase64: png.toString("base64"), imageMimeType: "image/gif" } });
+      expect(badMime.isError).toBe(true);
+      expect(calls).toHaveLength(3);
+    } finally {
+      await client.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("registers delivery, health, and the authoritative transcript through conduct", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-tools-"));
     dirs.push(dataDir);
