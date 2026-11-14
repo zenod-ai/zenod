@@ -455,7 +455,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
   useScenes();
   return (
     <div className="pp">
-      <Nav customer={customer} />
+      <Nav customer={customer} menu />
       <main id="top">
         <section className="pp-hero" aria-labelledby="hero-title">
           <div className="pp-hero-text">
@@ -476,6 +476,11 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
               <a className="pp-btn" href="/connect">
                 Connect your AI tool
               </a>
+            </p>
+            {/* EPIC-7 T13: phone visitors had no way to the tester page above the footer. */}
+            <p className="pp-fine pp-hero-testers">
+              We are letting in our first ten testers: a free month, no card
+              needed. <a href="/testers">Become a tester</a>
             </p>
           </div>
           <figure className="pp-hero-shot">
