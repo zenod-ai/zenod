@@ -17,7 +17,7 @@ import logPhone from "@/assets/shots/log-phone.webp";
 import graphLive from "@/assets/shots/graph-live.webp";
 import graphLivePhone from "@/assets/shots/graph-live-phone.webp";
 import { WhatsappScene } from "@/components/paper-landing";
-import { countSignup } from "@/lib/counter";
+import { countSignup, currentVisitSource } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
 import {
   fetchTesterLink,
@@ -139,6 +139,8 @@ function ApplyForm() {
         use: String(form.get("use") ?? ""),
         contact: String(form.get("contact") ?? ""),
         website: String(form.get("website") ?? ""),
+        name: String(form.get("name") ?? ""),
+        source: currentVisitSource(),
       });
       countSignup();
       setOutcome(result.status);
@@ -218,6 +220,15 @@ function ApplyForm() {
         minLength={10}
         maxLength={2000}
         placeholder="For example: voice notes on my walks, and Claude Code saving what we work out on my side project."
+      />
+      <label htmlFor="tester-name">Your first name (optional)</label>
+      <input
+        id="tester-name"
+        name="name"
+        type="text"
+        maxLength={40}
+        autoComplete="given-name"
+        placeholder="Alex"
       />
       <label htmlFor="tester-contact">Your email</label>
       <input

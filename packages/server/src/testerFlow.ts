@@ -592,7 +592,7 @@ export function testerFlowFromEnv(
   });
 }
 
-function bearerMatches(header: string | undefined, token: string | undefined): boolean {
+export function bearerMatches(header: string | undefined, token: string | undefined): boolean {
   const expected = token?.trim();
   if (!expected || expected.length < 32 || !header?.startsWith("Bearer ")) return false;
   const given = Buffer.from(header.slice(7).trim());

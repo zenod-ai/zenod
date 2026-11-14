@@ -59,6 +59,23 @@ export function signupUrl(storage: Pick<Storage, "getItem"> | null): string {
   return `${COUNTER_URL}?${params}`
 }
 
+/**
+ * E26-S21: where this visit came from, for the tester form: the ?s= post id (kept for the visit) or the
+ * referring host. Nothing else about the visitor.
+ */
+export function visitSource(location: Pick<Location, "search" | "hostname">, referrer: string, storage: Pick<Storage, "getItem" | "setItem"> | null): string | null {
+  return campaign(location.search, storage) ?? referringHost(referrer, location.hostname)
+}
+
+/** The same, read in the browser. */
+export function currentVisitSource(): string | null {
+  try {
+    return visitSource(window.location, document.referrer, sessionStore())
+  } catch {
+    return null
+  }
+}
+
 function sessionStore(): Storage | null {
   try {
     return window.sessionStorage

@@ -1633,6 +1633,18 @@ export class ZenodPhylaxAdapter {
     };
   }
 
+  /** E26-S21: the account's WhatsApp state only ("verified", "off" …), read from Phylax; null when unknown. */
+  async whatsappState(accountId: string): Promise<string | null> {
+    const binding = this.row(accountId);
+    if (!binding || binding.state !== "active") return null;
+    try {
+      const status = structured(await this.remote.call(this.token(binding), "phylax_management_v1_channel_status", {}));
+      return projectHostedChannels(status.channels)?.whatsapp.state ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async channels(
     tenant: HostedChannelCustomerTenant,
     action?: {
