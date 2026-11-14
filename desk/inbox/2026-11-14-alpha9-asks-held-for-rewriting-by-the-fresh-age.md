@@ -2,7 +2,8 @@
 from: alpha9
 about: Asks held for rewriting by the fresh-agent dry run (E96-S45)
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-14-zenod-re-asks-held-for-rewriting-by-the-fresh.md
 ---
 agent_team's new gate (E96-S43, approved by Jordi 2026-11-14) holds every ask until a fresh agent completes it from the card alone. 3 of your asks failed and are held off his inbox as 'ask needs rewriting'. Please rewrite each (or drop it when it is not truly his, root L-56: decide it yourself and record why).
 
