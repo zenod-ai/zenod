@@ -1,0 +1,46 @@
+{
+  "row": "E26-S26",
+  "card": "docs/cards/E26-S26.md",
+  "cardSha": "af9e2b6a310dcb49",
+  "inputs": {
+    "card": "af9e2b6a310dcb49",
+    "page": "13ef92e1f6b5f590",
+    "rules": "81f13cf19bfdd388",
+    "words": "fa549a677564c98d"
+  },
+  "checkedAt": "2026-11-14T11:00:54Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Yes: build and switch it on\\",
+      "where": "the card's source",
+      "status": "declared",
+      "how": "Card says the switch is at test and the thank-you email waits for Allow (declared ✗); welcome sent to own number and video page shown on screenshots."
+    }
+  ],
+  "visual": {
+    "pass": false,
+    "problems": [
+      "https://cloud.zenod.dev/admin/mail answered 404 at 390 px",
+      "https://cloud.zenod.dev/admin/mail answered 404 at 1280 px"
+    ],
+    "breaches": [],
+    "summary": "Pages load with titles, no sideways overflow; the welcome phone frame, email, video page and where-it-stands table are shown, though the 390 px first screen shows a large empty phone frame area."
+  },
+  "pass": false,
+  "held": [
+    "failed the visual check: https://cloud.zenod.dev/admin/mail answered 404 at 390 px; https://cloud.zenod.dev/admin/mail answered 404 at 1280 px"
+  ],
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9002/",
+      "file": "E26-S26-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9002/",
+      "file": "E26-S26-1280.webp"
+    }
+  ]
+}
