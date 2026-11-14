@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { pageViewUrl, signupUrl } from "./counter"
+import { pageViewUrl, signupUrl, visitSource } from "./counter"
 
 function memoryStorage() {
   const values = new Map<string, string>()
@@ -28,5 +28,19 @@ describe("alpha9 visits and sign-ups counter (ZAL-A13)", () => {
     expect(next.searchParams.get("s")).toBe("P-0145")
     expect(Object.fromEntries(new URL(signupUrl(storage)).searchParams)).toEqual({ h: "zenod.dev", e: "signup", s: "P-0145" })
     expect(Object.fromEntries(new URL(signupUrl(null)).searchParams)).toEqual({ h: "zenod.dev", e: "signup" })
+  })
+})
+
+describe("visitSource (E26-S21)", () => {
+  const memory = () => {
+    const kept = new Map<string, string>()
+    return { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v) }
+  }
+  it("prefers the post id from the link, then the one kept for the visit, then the referring host", () => {
+    const store = memory()
+    expect(visitSource({ search: "?s=P-0219", hostname: "zenod.dev" }, "https://www.reddit.com/r/x", store)).toBe("P-0219")
+    expect(visitSource({ search: "", hostname: "zenod.dev" }, "https://www.reddit.com/r/x", store)).toBe("P-0219")
+    expect(visitSource({ search: "", hostname: "zenod.dev" }, "https://www.reddit.com/r/x", memory())).toBe("www.reddit.com")
+    expect(visitSource({ search: "", hostname: "zenod.dev" }, "https://zenod.dev/", memory())).toBeNull()
   })
 })

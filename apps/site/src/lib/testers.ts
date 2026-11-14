@@ -27,14 +27,20 @@ const JOIN_LINK = /^https:\/\/cloud\.zenod\.dev\/join\?code=[A-Za-z0-9_-]{3,40}$
 
 /** EPIC-26 S2: the server answers accepted (first ten) or waitlist; U7: with the link to open now. */
 export async function submitTesterApplication(
-  input: { use: string; contact: string; website: string },
+  input: { use: string; contact: string; website: string; name?: string; source?: string | null },
   fetcher: typeof fetch = fetch,
 ): Promise<TesterApplyResult> {
   const response = await fetcher(TESTERS_APPLY_PATH, {
     method: "POST",
     credentials: "omit",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      use: input.use,
+      contact: input.contact,
+      website: input.website,
+      ...(input.name?.trim() ? { name: input.name.trim().slice(0, 40) } : {}),
+      ...(input.source ? { source: input.source } : {}),
+    }),
   });
   const payload = (await response.json().catch(() => ({}))) as { error?: unknown; status?: unknown; link?: unknown; claim?: unknown; again?: unknown };
   if (response.ok) {

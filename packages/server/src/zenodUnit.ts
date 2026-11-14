@@ -67,6 +67,7 @@ import {
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
+import { cachedWhatsAppState, mountTesterApplicants, tenantFirstSave } from "./testerApplicants.js";
 import { setHelpersBuilding } from "./personaRunner.js";
 import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./quickStart.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, testerMail, type TesterFlow } from "./testerFlow.js";
@@ -1531,6 +1532,18 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
     mountPublicCounts(app, counts);
     counts.start();
+    // E26-S21: who applied, from where and how far they got, for the team console only (token-gated).
+    mountTesterApplicants(app, {
+      token: env.ZENOD_APPLICANTS_READ_TOKEN,
+      sources: {
+        applications: () => readApplications(storage.dataDir),
+        testers: () => flow.snapshot().testers,
+        accounts: () => customer.accounts.list(),
+        firstSave: (tenantId) => tenantFirstSave(join(storage.dataDir, tenantId, "tasks.sqlite")),
+        ...(zenodPhylax ? { whatsapp: cachedWhatsAppState((accountId) => zenodPhylax.whatsappState(accountId)) } : {}),
+        isTest: (contact, use) => marks.isTest(contact, use),
+      },
+    });
   }
   // EPIC-24 M2: the cloud app reports its own errors (class, route, status only) for the health page.
   if (agent.name === "zenod") mountClientErrorReports(app, { clientAddress });

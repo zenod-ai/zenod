@@ -11,6 +11,7 @@ import type { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { bodyLimit } from "hono/body-limit";
 import { normalizeTesterEmail, type TesterFlow, type TesterStatus } from "./testerFlow.js";
+import { cleanApplicantName, cleanApplicantSource } from "./testerApplicants.js";
 
 export const TESTER_APPLICATIONS_FILE = "tester-applications.jsonl";
 const USE_MIN = 10;
@@ -32,6 +33,10 @@ export interface TesterApplication {
   at: string;
   use: string;
   contact: string;
+  /** E26-S21: the first name or handle they chose to give (optional). */
+  name?: string;
+  /** E26-S21: the ?s= post id of the link they came by, or the referring host (optional). */
+  source?: string;
 }
 
 function clean(value: unknown, max: number): string {
@@ -81,7 +86,9 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
     if (recent.size > 5000) recent.clear();
     dayCount += 1;
 
-    const record: TesterApplication = { at: at.toISOString(), use, contact };
+    const name = cleanApplicantName(body.name);
+    const source = cleanApplicantSource(body.source);
+    const record: TesterApplication = { at: at.toISOString(), use, contact, ...(name ? { name } : {}), ...(source ? { source } : {}) };
     try {
       mkdirSync(options.dataDir, { recursive: true });
       appendFileSync(path, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
