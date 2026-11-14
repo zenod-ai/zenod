@@ -193,7 +193,8 @@ export class TesterOnboarding {
   whatsappWelcome(accountId: string): "tester" | null {
     const account = this.options.account(accountId);
     if (!account || !this.eligible(account)) return null;
-    if (this.read().accounts[accountId]?.linkedAt) return null;
+    const record = this.read().accounts[accountId];
+    if (record?.linkedAt && record.whatsapp !== "skipped" && record.whatsapp !== "failed") return null;
     this.patch(accountId, { armedAt: this.now().toISOString() });
     return "tester";
   }
@@ -232,9 +233,15 @@ export class TesterOnboarding {
   async testSend(account: CustomerAccount): Promise<{ whatsapp: string; mail: string }> {
     if (this.mode() === "off") return { whatsapp: "off", mail: "off" };
     const existing = this.read().accounts[account.account_id];
-    if (existing?.linkedAt) return { whatsapp: "already sent", mail: "already sent" };
+    if (existing?.linkedAt && existing.whatsapp === "sent") return { whatsapp: "already sent", mail: "already sent" };
     const whatsapp = await this.options.sendWelcome(account, `tester-welcome-${account.account_id}`);
-    const mail = this.queueThanks(account);
+    // A welcome that did not go out (no linked WhatsApp) marks nothing and queues no mail, so it can be retried.
+    if (whatsapp !== "sent") {
+      this.patch(account.account_id, { linkedAt: undefined, via: undefined, whatsapp });
+      return { whatsapp, mail: "not queued" };
+    }
+    const email = accountEmail(account);
+    const mail = email && this.thanks.hasAddress(email) ? "already queued" : this.queueThanks(account);
     this.patch(account.account_id, { linkedAt: this.now().toISOString(), via: "test send", whatsapp, mail });
     return { whatsapp, mail };
   }

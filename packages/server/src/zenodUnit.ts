@@ -1445,12 +1445,25 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       });
       app.post("/api/ops/testers/onboarding/test-send", async (c) => {
         if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);
-        const body = await c.req.json<{ email?: unknown }>().catch(() => null);
+        const body = await c.req.json<{ email?: unknown; accountId?: unknown }>().catch(() => null);
         const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-        const account = email
-          ? customer.accounts.list().find((entry) => accountEmail(entry)?.toLowerCase() === email
-            || entry.github_email?.trim().toLowerCase() === email) ?? null
-          : null;
+        const accountId = typeof body?.accountId === "string" ? body.accountId.trim() : "";
+        const matches = accountId
+          ? customer.accounts.list().filter((entry) => entry.account_id === accountId)
+          : email
+            ? customer.accounts.list().filter((entry) => accountEmail(entry)?.toLowerCase() === email
+              || entry.github_email?.trim().toLowerCase() === email)
+            : [];
+        // One person can hold two accounts with one email: the welcome goes to the one whose WhatsApp is linked.
+        let account = matches[0] ?? null;
+        if (matches.length > 1) {
+          for (const entry of matches) {
+            if ((await (zenodPhylax?.whatsappState(entry.account_id) ?? Promise.resolve(null))) === "verified") {
+              account = entry;
+              break;
+            }
+          }
+        }
         if (!account) return c.json({ error: "no account with that email" }, 404);
         return c.json(await onboarding.testSend(account));
       });

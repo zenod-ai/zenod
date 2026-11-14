@@ -119,4 +119,23 @@ describe("tester onboarding (E26-S26)", () => {
     expect(sent).toHaveLength(1);
     expect(await onboarding.testSend(ours)).toEqual({ whatsapp: "already sent", mail: "already sent" });
   });
+
+  it("a test send that could not reach WhatsApp marks nothing, queues no mail and can be retried", async () => {
+    const { onboarding, sent, sendWelcome } = await setup("test");
+    const ours = account("ourtest-1", "zenod-test@example.org");
+    sendWelcome.mockResolvedValueOnce("skipped" as never);
+    expect(await onboarding.testSend(ours)).toEqual({ whatsapp: "skipped", mail: "not queued" });
+    expect(onboarding.status().linked).toBe(0);
+    expect(await onboarding.testSend(ours)).toEqual({ whatsapp: "sent", mail: "queued" });
+    await onboarding.thanks.process();
+    expect(sent).toHaveLength(1);
+  });
+
+  it("one person with two accounts on one email gets one thank-you mail", async () => {
+    const { onboarding, sent } = await setup("test");
+    expect(await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"))).toEqual({ whatsapp: "sent", mail: "queued" });
+    expect(await onboarding.testSend(account("ourtest-2", "Zenod-Test@example.org"))).toEqual({ whatsapp: "sent", mail: "already queued" });
+    await onboarding.thanks.process();
+    expect(sent).toHaveLength(1);
+  });
 });
