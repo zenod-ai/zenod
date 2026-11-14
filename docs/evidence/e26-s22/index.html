@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tester onboarding: one WhatsApp message and one thank-you email</title><link rel="stylesheet" href="/_shell/shell.css">
+<style>
+[data-page-shell] .ps-boxes > li.opt { border-style: dashed; border-color: var(--line); }
+.mocks { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
+.mocks > figure { margin: 0; min-width: 0; max-width: 100%; }
+.mocks figcaption { font: 500 .85rem/1.4 var(--sans); color: var(--muted); margin-top: .6rem; max-width: 24rem; }
+/* phone at 390 px */
+.phone { width: 390px; max-width: 100%; box-sizing: border-box; border: 10px solid #18211c; border-radius: 38px; background: #efe7da; overflow: hidden; }
+.phone .bar { background: #1f4d3a; color: #f6f2e9; padding: .8rem 1rem; font: 600 1rem/1.2 var(--sans); display: flex; gap: .6rem; align-items: center; }
+.phone .bar i { width: 2rem; height: 2rem; border-radius: 50%; background: #f6f2e9; color: #1f4d3a; display: grid; place-items: center; font: 700 1rem var(--serif); font-style: normal; }
+.phone .bar small { display: block; font-weight: 400; opacity: .8; font-size: .75rem; }
+.phone .chat { padding: 1rem .8rem 1.4rem; display: flex; flex-direction: column; gap: .55rem; min-height: 26rem; }
+.msg { max-width: 82%; padding: .55rem .7rem .4rem; border-radius: 10px; font: 400 .95rem/1.4 var(--sans); color: #18211c; box-shadow: 0 1px 0 rgba(0,0,0,.08); }
+.msg.out { align-self: flex-end; background: #d9f0c8; }
+.msg.in { align-self: flex-start; background: #fff; }
+.msg.new { outline: 2px solid #1f4d3a; }
+.msg a { color: #1f4d3a; font-weight: 600; word-break: break-all; }
+.msg .t { display: block; text-align: right; font-size: .7rem; color: #4a554e; }
+.linkcard { margin: .4rem 0 .3rem; border-left: 3px solid #1f4d3a; background: #f6f2e9; padding: .4rem .55rem; font-size: .82rem; }
+.linkcard b { display: block; font-family: var(--serif); font-size: .95rem; }
+/* email */
+.mail { width: 36rem; max-width: 100%; box-sizing: border-box; background: #fffdf8; border: 1px solid #18211c; border-radius: 6px; overflow: hidden; }
+.mail .hdr { padding: .8rem 1.1rem; border-bottom: 1px solid #c9c1ae; font: 400 .88rem/1.6 var(--sans); color: #4a554e; }
+.mail .hdr b { color: #18211c; font-weight: 600; }
+.mail .hdr .subj { font: 500 1.2rem/1.3 var(--serif); color: #18211c; margin-top: .3rem; }
+.mail .bd { padding: 1.1rem 1.2rem 1.4rem; font: 400 1rem/1.6 Georgia, serif; color: #18211c; }
+.mail .bd p { margin: 0 0 .85rem; }
+.mail .bd ul { margin: 0 0 .9rem; padding-left: 1.1rem; }
+.mail .bd a { color: #1f4d3a; }
+/* five features + storyboard */
+.five { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem; counter-reset: f; }
+.five li { flex: 1 1 11rem; border: 1px solid #18211c; border-radius: 4px; background: #fffdf8; padding: .75rem .9rem; font: 400 .9rem/1.4 var(--sans); color: #4a554e; counter-increment: f; }
+.five li::before { content: counter(f); display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: #1f4d3a; color: #f6f2e9; font: 600 .8rem var(--sans); margin-bottom: .35rem; }
+.five li b { display: block; font: 500 1.05rem/1.25 var(--serif); color: #18211c; }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr)); gap: .9rem; }
+.frame { margin: 0; }
+.frame .scr { aspect-ratio: 9 / 16; max-height: 22rem; width: 100%; box-sizing: border-box; background: #f6f2e9; border: 1px solid #18211c; border-radius: 6px; padding: 1rem .8rem; display: flex; flex-direction: column; justify-content: center; gap: .55rem; position: relative; overflow: hidden; }
+.frame .scr .z { position: absolute; top: .55rem; left: .7rem; font: 700 .95rem var(--serif); color: #1f4d3a; }
+.frame .scr .n { position: absolute; top: .55rem; right: .7rem; font: 500 .7rem var(--sans); color: #4a554e; }
+.frame .scr h3 { font: 500 1.25rem/1.2 var(--serif); margin: 0; color: #18211c; }
+.frame .scr .pic { border: 1px solid #c9c1ae; background: #fffdf8; border-radius: 4px; padding: .5rem; font: 400 .75rem/1.35 var(--sans); color: #4a554e; }
+.frame .scr .pic b { color: #1f4d3a; }
+.frame .scr .cap { position: absolute; bottom: .7rem; left: .7rem; right: .7rem; font: 500 .72rem/1.3 var(--sans); color: #18211c; background: rgba(255,253,248,.92); border-radius: 3px; padding: .3rem .4rem; }
+.frame figcaption { font: 400 .78rem/1.35 var(--sans); color: #4a554e; margin-top: .35rem; }
+.facts { width: 100%; border-collapse: collapse; font: 400 .92rem/1.45 var(--sans); }
+.facts th, .facts td { text-align: left; vertical-align: top; padding: .55rem .6rem; border-bottom: 1px solid #c9c1ae; }
+.facts th { font: 500 1rem/1.3 var(--serif); color: #18211c; width: 9rem; }
+.facts code { font-size: .82rem; }
+.decide { border: 2px solid #1f4d3a; border-radius: 6px; padding: 1rem 1.2rem; background: #fffdf8; }
+.decide h3 { font: 500 1.35rem/1.3 var(--serif); margin: 0 0 .7rem; }
+.decide ol { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+.decide li { flex: 1 1 12rem; border: 1px solid #18211c; border-radius: 4px; padding: .6rem .8rem; font: 400 .88rem/1.4 var(--sans); color: #4a554e; }
+.decide li.rec { border-color: #1f4d3a; box-shadow: inset 0 0 0 1px #1f4d3a; }
+.decide li b { display: block; font: 600 .98rem/1.3 var(--sans); color: #18211c; }
+@media (max-width: 720px) { .mocks > figure { width: 100%; } .phone, .mail { width: 100%; } .phone { border-width: 6px; border-radius: 26px; } .board { grid-template-columns: 1fr 1fr; gap: .6rem; } .frame .scr { max-height: 17rem; padding: .8rem .55rem; } .frame .scr h3 { font-size: 1rem; } .frame .scr .cap { font-size: .62rem; } .frame .scr .pic { font-size: .66rem; } .facts th { width: auto; display: block; border-bottom: 0; padding-bottom: 0; } .facts td { display: block; } }
+</style></head>
+<body data-page-shell data-page-kind="proposal">
+<main class="ps-page">
+<header class="ps-head"><p class="ps-kicker">E26-S22 · 2026-11-14 · proposal for Jordi</p><h1>Tester onboarding: one WhatsApp message and one thank-you email</h1></header>
+<p class="ps-punch" data-part="bottom line">When a new tester links WhatsApp, Zenod sends at once one WhatsApp message with a link to a 60-second video of five things to try, and one thank-you email from you with the call offer inside. Nothing goes out until you say yes.</p>
+<figure class="ps-diagram"><ol class="ps-boxes" data-shape="line"><li><b>Applies</b>zenod.dev/testers</li><li class="arrow" aria-hidden="true">→</li><li><b>Signs up</b>0 euro, no card</li><li class="arrow" aria-hidden="true">→</li><li><b>Links WhatsApp</b>sends the one-time code</li><li class="arrow" aria-hidden="true">→</li><li class="on"><b>WhatsApp message</b>at once: a link to the 60 s video, not the file</li><li class="arrow" aria-hidden="true">→</li><li class="on"><b>Thank-you email</b>same moment, from you, call offer inside</li><li class="arrow" aria-hidden="true">→</li><li class="opt"><b>Day 3: not sent</b>a separate call mail is the other option; we fold it into the first email</li></ol></figure>
+<div class="ps-body">
+
+<section class="ps-part" data-part="mock-ups"><h2>Mock-ups: exactly what the tester gets</h2>
+<div class="mocks">
+<figure>
+<div class="phone" aria-label="WhatsApp on a 390 px phone">
+<div class="bar"><i>Z</i><div>Zenod<small>the Zenod number</small></div></div>
+<div class="chat">
+<div class="msg out">483 920<span class="t">10:41 ✓✓</span></div>
+<div class="msg in new">Your WhatsApp is linked. Thank you for testing Zenod!<br><br>Here is a 1-minute video of five things to try first:<br><a href="https://zenod.dev/start">https://zenod.dev/start</a>
+<div class="linkcard"><b>Start with Zenod in one minute</b>zenod.dev · video, 60 s</div>
+Then send me your first voice note, right here.<span class="t">10:41</span></div>
+<div class="msg out">🎤 0:14<span class="t">10:43 ✓✓</span></div>
+<div class="msg in">Saved.<span class="t">10:43</span></div>
+</div></div>
+<figcaption>One message, one link. It replaces today's "Your WhatsApp number is verified. Return to Zenod to finish setup." The video opens in the browser, so nothing heavy goes over the phone network.</figcaption>
+</figure>
+<figure>
+<div class="mail" aria-label="the thank-you email">
+<div class="hdr"><b>From:</b> Jordi at Zenod &lt;jordi@zenod.dev&gt;<br><b>To:</b> the tester's sign-up address<br><b>Reply goes to:</b> jordi@zenod.dev<div class="subj">Thank you for testing Zenod</div></div>
+<div class="bd">
+<p>Hi Ana,</p>
+<p>Thank you for becoming a Zenod tester. We're truly grateful, and keen to learn from your experience.</p>
+<p>You can write to me at any time at <a href="mailto:jordi@zenod.dev">jordi@zenod.dev</a>, or just reply to this email. Broken, confusing or great: I read every message.</p>
+<p>If you're open to it, I'd also be happy to have a quick call in a few days to hear how it's going. No pressure at all. Reply "call" and we'll find a time.</p>
+<p>A few useful links:</p>
+<ul>
+<li>Your Zenod app: <a href="https://cloud.zenod.dev/app">cloud.zenod.dev/app</a></li>
+<li>Connect Zenod to Claude or ChatGPT: <a href="https://zenod.dev/connect">zenod.dev/connect</a></li>
+<li>WhatsApp how-to and the 1-minute video: <a href="https://zenod.dev/start">zenod.dev/start</a></li>
+<li>The tester page: <a href="https://zenod.dev/testers">zenod.dev/testers</a></li>
+</ul>
+<p>Thanks again,<br>Jordi<br>Zenod</p>
+</div></div>
+<figcaption>Sent the moment WhatsApp links. "Ana" is the first name the tester gave; with none it opens "Hi,". The call offer sits in this one email, as in your note, so nobody gets a second mail on day 3.</figcaption>
+</figure>
+</div>
+</section>
+
+<section class="ps-part" data-part="five features"><h2>The five things to try first, all live on production today</h2>
+<ol class="five">
+<li><b>Drop a voice note</b>on WhatsApp, the way you'd leave yourself one. Zenod answers Saved.</li>
+<li><b>Find your own copy</b>word for word, in your Google Drive or GitHub, in the Log folder.</li>
+<li><b>Ask it back</b>in the app's chat: "what did I say about…?"</li>
+<li><b>Use it from Claude or ChatGPT</b>add Zenod once at zenod.dev/connect, then ask there.</li>
+<li><b>See your memory graph</b>your notes as topics and links, in the app.</li>
+</ol>
+<p>Helpers are left out: testers start with them off, and the video only shows what works for them on day one.</p>
+</section>
+
+<section class="ps-part" data-part="video"><h2>The video: 60 seconds, seven frames, at zenod.dev/start</h2>
+<div class="board">
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">0–6 s</span><h3>Thank you for testing Zenod.</h3><div class="pic">Your memory, kept by voice. <b>Five things in one minute.</b></div><span class="cap">"Thanks for testing Zenod. Here are five things to try."</span></div><figcaption>1 · Welcome</figcaption></figure>
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">6–16 s</span><h3>1. Drop a voice note.</h3><div class="pic">WhatsApp → Zenod<br>🎤 0:14 → <b>Saved.</b></div><span class="cap">"Talk to Zenod on WhatsApp like a note to yourself."</span></div><figcaption>2 · Voice note</figcaption></figure>
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">16–26 s</span><h3>2. It's yours, word for word.</h3><div class="pic">Drive › Zenod › Log ›<br><b>2026-11-14.md</b> every word you said</div><span class="cap">"A copy lands in your own Drive or GitHub."</span></div><figcaption>3 · Your own copy</figcaption></figure>
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">26–36 s</span><h3>3. Ask it back.</h3><div class="pic">"What did I say about the trip?"<br>→ <b>the answer, with the note it came from</b></div><span class="cap">"Ask in the app and get your own words back."</span></div><figcaption>4 · Ask it back</figcaption></figure>
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">36–46 s</span><h3>4. From Claude or ChatGPT.</h3><div class="pic">zenod.dev/connect → add once<br><b>Claude reads your memory</b></div><span class="cap">"Add Zenod once, and your AI knows what you told it."</span></div><figcaption>5 · Any AI app</figcaption></figure>
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">46–54 s</span><h3>5. See the graph.</h3><div class="pic">○ Work — ○ Trip<br>&nbsp;&nbsp;╲ <b>○ Ideas</b> ╱</div><span class="cap">"Your notes grow into topics you can see."</span></div><figcaption>6 · Memory graph</figcaption></figure>
+<figure class="frame"><div class="scr"><span class="z">Z</span><span class="n">54–60 s</span><h3>Send your first note now.</h3><div class="pic"><b>zenod.dev</b><br>reply any time: jordi@zenod.dev</div><span class="cap">"Send your first voice note now. We read every reply."</span></div><figcaption>7 · Close</figcaption></figure>
+</div>
+<p>How it is made: these seven frames are the base. After your yes the team animates them in the house paper style with the brand zenod, a local voice and captions, as real screen captures from a test account. No paid service. Vertical 9:16 for phones. The page zenod.dev/start holds the video and, under it, the WhatsApp how-to in four lines.</p>
+</section>
+
+<section class="ps-part" data-part="the changes"><h2>The changes: where each piece starts, what it costs, how it stops</h2>
+<p>Four small builds inside Zenod, one switch for all of them.</p>
+<table class="facts">
+<tr><th>WhatsApp message</th><td>Starts where Zenod confirms a new WhatsApp link, the first time only: <code>packages/server/src/phylaxUnit.ts</code>, <code>verifyInbound</code>. The confirmation reply gets the new text. Repeat codes send nothing new. This is a chat change, so it ships only on your yes in your own words (rule L-6). It rolls the WhatsApp companion once.</td></tr>
+<tr><th>Thank-you email</th><td>Same moment, same place, queued once per account through Zenod's mailer (<code>welcomeMail.ts</code>, built in E26-T2, off today). It replaces the "You're in" welcome after sign-up (<code>zenodUnit.ts</code>, <code>onCheckoutWelcome</code>), so a tester gets one mail, not two.</td></tr>
+<tr><th>Sender</th><td>Jordi at Zenod &lt;jordi@zenod.dev&gt;, replies to jordi@zenod.dev. Zenod's sender is built, but no sender is switched on in production today: the Cloudflare route was parked when you said no more keys. The build switches on the Google route Zenod already has, which sends from your own mailbox. It needs that mailbox connected once: one Allow from you at cloud.zenod.dev/admin/mail, about a minute, no key; the build's card brings the link. Until then the email waits in Zenod's queue and the WhatsApp half runs alone.</td></tr>
+<tr><th>zenod.dev/start</th><td>A new page on the site: the video plus a four-line WhatsApp how-to. The video file is served by the site, so it streams in the browser.</td></tr>
+<tr><th>Cost</th><td>0 euro a tester. The WhatsApp message goes from the number Zenod already runs; the email from your mailbox, inside Google's free daily limit. The video is made with the team's own render tool.</td></tr>
+<tr><th>Switch off</th><td>One setting, <code>ZENOD_TESTER_ONBOARDING=0</code>, stops both the next minute: the WhatsApp reply goes back to today's text, queued emails are dropped. Mails already sent cannot be taken back.</td></tr>
+</table>
+</section>
+
+<section class="ps-part" data-part="implications"><h2>Implications</h2>
+<ul class="ps-list">
+<li>Every tester gets a message and a mail in your name, so their replies come to jordi@zenod.dev and someone has to answer them.</li>
+<li>"A quick call" is a promise: you or the team takes the call when a tester replies "call".</li>
+<li>Only testers who link WhatsApp get the email. Someone who signs up and stops before linking gets nothing; that drop shows on your per-tester WhatsApp report (E26-S21).</li>
+</ul>
+</section>
+
+<section class="ps-part ps-rec" data-part="our recommendation"><h2>Our recommendation</h2>
+<p>Yes, for every new tester, as shown: one WhatsApp message and one email at the moment WhatsApp links, the call offer inside the email, no day-3 mail. About two days of work: the video, the start page, the message and the mail. The first one goes to a test account of ours, and you see it before any tester does.</p>
+<div class="decide" data-part="decision">
+<h3>Do we send this to every new tester?</h3>
+<ol>
+<li class="rec"><b>Yes: build and switch it on</b>The team builds it, shows you the video and a test send, then switches it on. Recommended.</li>
+<li><b>Change it: tell us what</b>Say what to change in the text, the features or the timing. We redo this page.</li>
+<li><b>Not now: park it</b>Testers keep today's flow: the verified reply and no email.</li>
+</ol>
+</div>
+</section>
+
+<p class="ps-punch ps-bottom" data-part="bottom line, again">When a new tester links WhatsApp, Zenod sends at once one WhatsApp message with a link to a 60-second video of five things to try, and one thank-you email from you with the call offer inside. Nothing goes out until you say yes.</p>
+</div>
+<p class="ps-foot">E26-S22 keeps this page · one shared page shell (E75-S5) · Jordi's voice note 2026-11-14 03:22Z</p>
+</main>
+</body></html>
