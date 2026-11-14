@@ -34,7 +34,7 @@ Status: active
 Last attempted: 2026-11-13 06:10Z ticket worker run_0ee2419e: E10-S3 to review — Glama scores the new listing io.github.zenod-ai/zenod A 4/5 (8 tools, all A), same as the old one; no fix needed
 Result: Zenod is in the official MCP Registry, the connect kit is live, Glama is claimed with a health-check profile, and the repo About box points to zenod.dev
 Evidence: [P1 plan](epic10/P1-mcp-directory-plan.md), [server.json](epic10/server.json)
-Waiting on: Jordi's review of R11 (Glama) ; R1 worker running ; R9 on 2026-12-07
+Waiting on: nobody (R11 folded into E10-S1, approved; E10-S3 in his review as a card; E10-S4 waits on an awesome-mcp-servers maintainer; R9 on 2026-12-07)
 Approved work: none
 Next action: integrate R1; R4 recheck of Gemini gallery and mcp.so; EPIC-11 S2 trial token by its own Delivery Manager now that the team sign-in exists
 Source revision: uncommitted scaffold
