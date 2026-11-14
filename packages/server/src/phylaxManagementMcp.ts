@@ -439,7 +439,7 @@ function registerChannelMutationTools(
               now: at,
             });
             const sharedNumber = input.channel === "whatsapp"
-              ? dependencies.runtime.whatsapp.status().linkedNumber
+              ? dependencies.runtime.whatsapp.sharedNumber()
               : null;
             if (!applied || (input.channel === "whatsapp" && !sharedNumber)) {
               return { state: "unknown" as const };
@@ -481,7 +481,7 @@ function registerChannelMutationTools(
                 return mutationFailure(input.operationId, operation, "binding_conflict", "Disconnect the current sender first.");
               }
               dependencies.settings.assertPhoneAvailable(tenantId, identity);
-              const sharedNumber = dependencies.runtime.whatsapp.status().linkedNumber;
+              const sharedNumber = dependencies.runtime.whatsapp.sharedNumber();
               if (!sharedNumber) return mutationFailure(input.operationId, operation, "channels_unavailable", "WhatsApp transport is unavailable.");
               const registration = dependencies.settings.registerPhone(
                 tenantId,

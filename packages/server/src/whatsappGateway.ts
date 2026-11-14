@@ -713,6 +713,17 @@ export class WhatsAppGateway {
     return join(this.options.dataDir, "session");
   }
 
+  /**
+   * EPIC-7 T13: the shared number a person messages to link their WhatsApp, in full (`+<digits>`), or null while no
+   * number is linked. status() masks it (••••1234) for display; the link challenge needs the whole number, because a
+   * masked one cannot be messaged and fails the challenge check in Zenod (the first real tester got "Channels are
+   * temporarily unavailable" on 2026-11-13). It is Zenod's own public number, never a user's.
+   */
+  sharedNumber(): string | null {
+    const digits = normalizeWhatsAppIdentifier(this.socket?.user?.id ?? this.options.settings.getRaw("whatsapp_linked_jid"));
+    return /^\d{8,15}$/.test(digits) ? `+${digits}` : null;
+  }
+
   status(): WhatsAppStatus {
     const settings = this.options.settings.whatsappSettings();
     // Disabling the binding is an explicit operator reset boundary. Do not let

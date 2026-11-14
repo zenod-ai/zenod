@@ -473,7 +473,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       // Durable last transcription failure so settings/status can show e.g.
       // "OpenRouter credit exhausted — add credits" without reading logs.
       transcriptionFailure: runtime.whatsappStore.latestVoiceFailure(tenantId),
-      phylaxNumber: runtime.whatsapp.status().linkedNumber,
+      phylaxNumber: runtime.whatsapp.sharedNumber() ?? runtime.whatsapp.status().linkedNumber,
       mcp: token
         ? {
             url: `${(env.CUSTOMER_APP_URL || "https://phylax.zenod.dev").replace(/\/$/, "")}/mcp/${token}`,
@@ -606,8 +606,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       const registration = tenantSettings.registerPhone(tenantId, body.phoneNumber ?? "", body.numberId);
       return c.json({
         ...registration,
-        phylaxNumber: runtime.whatsapp.status().linkedNumber,
-        instruction: `WhatsApp ${registration.keyword} to ${runtime.whatsapp.status().linkedNumber ?? "the Phylax number"}`,
+        phylaxNumber: runtime.whatsapp.sharedNumber() ?? runtime.whatsapp.status().linkedNumber,
+        instruction: `WhatsApp ${registration.keyword} to ${runtime.whatsapp.sharedNumber() ?? "the Phylax number"}`,
       });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : "invalid phone number" }, 400);

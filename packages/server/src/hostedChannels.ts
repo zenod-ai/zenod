@@ -1004,7 +1004,7 @@ export function mountPhylaxHostedChannelRoutes(
               };
             }
             input.settings.assertPhoneAvailable(tenantId, sender);
-            const sharedNumber = input.runtime.whatsapp.status().linkedNumber;
+            const sharedNumber = input.runtime.whatsapp.sharedNumber();
             if (!sharedNumber) throw new Error("transport unavailable");
             input.settings.update(tenantId, {
               downstreamUrl: body.downstreamUrl as string,

@@ -43,8 +43,23 @@ function connectedTransportStatus<
     ...status,
     enabled: true,
     state: "connected",
-    linkedNumber: "+34 699 000 111",
+    // Like the real gateway: status() masks the shared number (EPIC-7 T13).
+    linkedNumber: "••••0111",
   };
+}
+
+/** A connected shared WhatsApp session: status() masked, sharedNumber() in full, as WhatsAppGateway answers. */
+function fakeConnectedWhatsApp(runtime: {
+  whatsapp: {
+    status(): { state: string; linkedNumber: string | null };
+    sharedNumber(): string | null;
+  };
+}) {
+  const status = vi
+    .spyOn(runtime.whatsapp, "status")
+    .mockReturnValue(connectedTransportStatus(runtime.whatsapp.status()) as never);
+  vi.spyOn(runtime.whatsapp, "sharedNumber").mockReturnValue("+34 699 000 111");
+  return status;
 }
 
 describe("Hosted Zenod channel adapter", () => {
@@ -175,9 +190,8 @@ describe("Hosted Zenod channel adapter", () => {
         ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
       },
     });
-    const transportStatus = vi.spyOn(unit.phylaxRuntime.whatsapp, "status");
     const baseline = unit.phylaxRuntime.whatsapp.status();
-    transportStatus.mockReturnValue(connectedTransportStatus(baseline));
+    const transportStatus = fakeConnectedWhatsApp(unit.phylaxRuntime);
     const sharedDisconnect = vi.spyOn(
       unit.phylaxRuntime.whatsapp,
       "disconnect",
@@ -219,9 +233,11 @@ describe("Hosted Zenod channel adapter", () => {
           whatsapp: {
             state: "awaiting_code",
             senderHint: "••••1111",
-            sharedNumber: "+34 699 000 111",
+            sharedNumber: "••••0111",
           },
         },
+        // EPIC-7 T13: the code goes to a number the person can message, in full.
+        challenge: { sharedNumber: "+34 699 000 111" },
         mutation: {
           operationId: "challenge-alpha",
           operation: "whatsapp.challenge",
@@ -783,9 +799,7 @@ describe("Hosted Zenod channel adapter", () => {
           ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
         },
       });
-      vi.spyOn(unit.phylaxRuntime.whatsapp, "status").mockReturnValue(
-        connectedTransportStatus(unit.phylaxRuntime.whatsapp.status()),
-      );
+      fakeConnectedWhatsApp(unit.phylaxRuntime);
       const effect = vi.spyOn(unit.phylaxTenantSettings, sideEffect);
       const app = new Hono();
       mountHostedChannelsCustomerRoutes(app, {
@@ -916,9 +930,7 @@ describe("Hosted Zenod channel adapter", () => {
         ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
       },
     });
-    vi.spyOn(unit.phylaxRuntime.whatsapp, "status").mockReturnValue(
-      connectedTransportStatus(unit.phylaxRuntime.whatsapp.status()),
-    );
+    fakeConnectedWhatsApp(unit.phylaxRuntime);
     const challenge = async (operationId: string) => {
       const response = await unit.app.request(
         "/internal/zenod/channels/tenant-life/whatsapp/challenge",
@@ -1025,9 +1037,7 @@ describe("Hosted Zenod channel adapter", () => {
       downstreamToken: "alpha-memory-token",
     });
     const first = create();
-    vi.spyOn(first.phylaxRuntime.whatsapp, "status").mockReturnValue(
-      connectedTransportStatus(first.phylaxRuntime.whatsapp.status()),
-    );
+    fakeConnectedWhatsApp(first.phylaxRuntime);
     const initial = await first.app.request(
       "/internal/zenod/channels/tenant-restart/whatsapp/challenge",
       { method: "POST", headers: authorization(), body },
@@ -1065,9 +1075,7 @@ describe("Hosted Zenod channel adapter", () => {
 
     const second = create();
     try {
-      vi.spyOn(second.phylaxRuntime.whatsapp, "status").mockReturnValue(
-        connectedTransportStatus(second.phylaxRuntime.whatsapp.status()),
-      );
+      fakeConnectedWhatsApp(second.phylaxRuntime);
       const replay = await second.app.request(
         "/internal/zenod/channels/tenant-restart/whatsapp/challenge",
         { method: "POST", headers: authorization(), body },
@@ -1103,9 +1111,7 @@ describe("Hosted Zenod channel adapter", () => {
         },
       });
     const first = create();
-    vi.spyOn(first.phylaxRuntime.whatsapp, "status").mockReturnValue(
-      connectedTransportStatus(first.phylaxRuntime.whatsapp.status()),
-    );
+    fakeConnectedWhatsApp(first.phylaxRuntime);
     const whatsappChallenge = await first.app.request(
       "/internal/zenod/channels/tenant-replay/whatsapp/challenge",
       {
