@@ -384,7 +384,9 @@ function registerChannelMutationTools(
         operationId,
         expectedRevision: revision,
         channel: z.enum(["whatsapp", "telegram"]),
-        identity: z.string().trim().min(1).max(160),
+        // Optional for WhatsApp only: re-issuing a code falls back to the
+        // tenant's stored pending number (E26-S23). Telegram still requires it.
+        identity: z.string().trim().min(1).max(160).optional(),
       },
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -395,9 +397,13 @@ function registerChannelMutationTools(
         return errorResult("binding_required", error instanceof Error ? error.message : "Binding is unavailable.");
       }
       const operation = (input.channel === "whatsapp" ? "whatsapp.challenge" : "telegram.connect") as HostedChannelMutationName;
-      const identity = input.channel === "whatsapp"
-        ? normalizeHostedPhone(input.identity)
-        : normalizeHostedTelegram(input.identity);
+      const rawIdentity = input.identity
+        ?? (input.channel === "whatsapp" ? dependencies.settings.get(tenantId).phoneNumber : null);
+      const identity = !rawIdentity
+        ? null
+        : input.channel === "whatsapp"
+          ? normalizeHostedPhone(rawIdentity)
+          : normalizeHostedTelegram(rawIdentity);
       if (!identity) return errorResult("invalid_request", "Channel identity is invalid.");
       const code = hostedChannelChallengeCode(
         dependencies.challengeSecret,
