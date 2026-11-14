@@ -1,35 +1,40 @@
 {
   "row": "E26-S26",
   "card": "docs/cards/E26-S26.md",
-  "cardSha": "af9e2b6a310dcb49",
+  "cardSha": "c8985a327d45902f",
   "inputs": {
-    "card": "af9e2b6a310dcb49",
-    "page": "13ef92e1f6b5f590",
+    "card": "c8985a327d45902f",
+    "page": "9985f3d714cb2254",
     "rules": "81f13cf19bfdd388",
     "words": "fa549a677564c98d"
   },
-  "checkedAt": "2026-11-14T11:00:54Z",
+  "checkedAt": "2026-11-14T11:02:22Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Yes: build and switch it on\\",
       "where": "the card's source",
-      "status": "declared",
-      "how": "Card says the switch is at test and the thank-you email waits for Allow (declared ✗); welcome sent to own number and video page shown on screenshots."
+      "status": "met",
+      "how": "The card shows the built welcome sent to own number at 10:56 UTC, switch at test, and the thank-you email declared as waiting for Allow; Jordi's yes is reflected in the build."
     }
   ],
   "visual": {
     "pass": false,
     "problems": [
-      "https://cloud.zenod.dev/admin/mail answered 404 at 390 px",
-      "https://cloud.zenod.dev/admin/mail answered 404 at 1280 px"
+      "The zenod.dev/start page at 390 px shows only the first frame of the video with a 0:00 / 1:00 player, so the five things are not visible on the first screen; the video itself is not shown playing. (rule 6)"
     ],
-    "breaches": [],
-    "summary": "Pages load with titles, no sideways overflow; the welcome phone frame, email, video page and where-it-stands table are shown, though the 390 px first screen shows a large empty phone frame area."
+    "breaches": [
+      {
+        "rule": 6,
+        "width": 390,
+        "what": "The zenod.dev/start page at 390 px shows only the first frame of the video with a 0:00 / 1:00 player, so the five things are not visible on the first screen; the video itself is not shown playing."
+      }
+    ],
+    "summary": "The welcome page, email preview, video page and status table all render at both widths without sideways overflow; the page delivers the result and the card's delivered lines match what is shown."
   },
   "pass": false,
   "held": [
-    "failed the visual check: https://cloud.zenod.dev/admin/mail answered 404 at 390 px; https://cloud.zenod.dev/admin/mail answered 404 at 1280 px"
+    "failed the visual check: The zenod.dev/start page at 390 px shows only the first frame of the video with a 0:00 / 1:00 player, so the five things are not visible on the first screen; the video itself is not shown playing. (rule 6)"
   ],
   "shots": [
     {
