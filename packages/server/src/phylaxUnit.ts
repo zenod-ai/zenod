@@ -84,6 +84,7 @@ import {
 import type { CustomerLayerOptions } from "./customerLayer.js";
 import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
+import { PhylaxWhatsAppWelcome } from "./phylaxWhatsAppWelcome.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
@@ -170,6 +171,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
   });
   const hostedChannelAudit = new HostedChannelMutationAuditStore(storage.dataDir);
+  // E26-S26: the tester welcome Zenod arms with the one-time code, sent as the verification reply.
+  const whatsappWelcome = new PhylaxWhatsAppWelcome(storage.dataDir);
   const allowanceLedger = new PhylaxAllowanceLedger(
     join(storage.dataDir, "phylax-allowance.sqlite"),
   );
@@ -246,6 +249,10 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
           sender,
           tenantSettings.bindingRevision(verified.settings.tenantId, channel),
         );
+      }
+      if (verified && !verified.replayed && channel === "whatsapp") {
+        const welcome = whatsappWelcome.take(verified.settings.tenantId);
+        if (welcome) return welcome;
       }
       return verified
         ? channel === "whatsapp"
@@ -345,6 +352,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         ledger: allowanceLedger,
         usageMeter,
         challengeSecret: artifactCapabilitySecret,
+        welcome: whatsappWelcome,
       });
       registerTenantChannelTools(server, context, runtime, tenantSettings);
       options.registerAdditionalTools?.(server, context);

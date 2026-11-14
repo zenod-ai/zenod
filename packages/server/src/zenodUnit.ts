@@ -75,6 +75,8 @@ import { MailGrantStore, googleMailClientFromEnv, mailSenderFromEnv } from "./ma
 import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
+import { TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
+import { bearerMatches } from "./testerFlow.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
 import { OFFER_LINK_TTL_MS, offerMailerFromEnv, signedOfferUrl } from "./endOfTestOffer.js";
@@ -946,6 +948,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   // EPIC-26 T2: one welcome email per account after checkout (off until its switch and key are set).
   const welcomeMailer = agent.name === "zenod" ? welcomeMailerFromEnv(storage.dataDir, env) : null;
   welcomeMailer?.start();
+  // EPIC-26 E26-S26: set with the mail sender routes below.
+  let testerOnboarding: TesterOnboarding | null = null;
   const customer = createCustomerLayer(
     {
       dataDir: storage.dataDir,
@@ -1395,6 +1399,59 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       const mailSender = mailSenderFromEnv(env);
       const mail = mailerFromEnv(env, { dataDir: storage.dataDir });
       const appUrl = (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "");
+      // EPIC-26 E26-S26: the tester welcome at the WhatsApp link (one message, one thank-you mail), one switch.
+      const onboardingMarks = new TesterMarks(storage.dataDir, teamEmailsFromEnv(env));
+      const findAccount = (accountId: string) => customer.accounts.list().find((account) => account.account_id === accountId) ?? null;
+      const onboarding = new TesterOnboarding({
+        dataDir: storage.dataDir,
+        envMode: parseOnboardingMode(env.ZENOD_TESTER_ONBOARDING) ?? "off",
+        sendMail: mail,
+        account: findAccount,
+        isTester: (account) => {
+          if (account.fully_discounted && account.free_until) return true;
+          const email = account.stripe_email?.trim().toLowerCase() ?? "";
+          return email !== "" && (testerFlow?.snapshot().testers ?? []).some((tester) =>
+            tester.status === "accepted" && tester.email.toLowerCase() === email);
+        },
+        isTest: (account) => {
+          const email = accountEmail(account);
+          return Boolean(email && onboardingMarks.isTest(email));
+        },
+        firstName: (email) => {
+          const key = email.trim().toLowerCase();
+          const application = (readApplications(storage.dataDir) as Array<{ contact?: unknown; name?: unknown }>)
+            .filter((entry) => typeof entry.contact === "string" && entry.contact.trim().toLowerCase() === key).pop();
+          return typeof application?.name === "string" ? application.name : null;
+        },
+        whatsappState: (accountId) => zenodPhylax?.whatsappState(accountId) ?? Promise.resolve(null),
+        sendWelcome: (account, operationId) => zenodPhylax?.sendTesterWelcome(account, operationId) ?? Promise.resolve("skipped"),
+      });
+      testerOnboarding = onboarding;
+      zenodPhylax?.setWhatsAppWelcome((accountId) => onboarding.whatsappWelcome(accountId));
+      onboarding.start();
+      app.get("/api/ops/testers/onboarding", (c) => {
+        if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);
+        return c.json(onboarding.status());
+      });
+      app.post("/api/ops/testers/onboarding", async (c) => {
+        if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);
+        const body = await c.req.json<{ mode?: unknown; by?: unknown }>().catch(() => null);
+        const mode = parseOnboardingMode(body?.mode);
+        if (!mode) return c.json({ error: `mode must be one of ${TESTER_ONBOARDING_MODES.join(", ")}` }, 400);
+        onboarding.setMode(mode, typeof body?.by === "string" && body.by.trim() ? `ops: ${body.by.trim()}` : "ops");
+        return c.json(onboarding.status());
+      });
+      app.post("/api/ops/testers/onboarding/test-send", async (c) => {
+        if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);
+        const body = await c.req.json<{ email?: unknown }>().catch(() => null);
+        const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+        const account = email
+          ? customer.accounts.list().find((entry) => accountEmail(entry)?.toLowerCase() === email
+            || entry.github_email?.trim().toLowerCase() === email) ?? null
+          : null;
+        if (!account) return c.json({ error: "no account with that email" }, 404);
+        return c.json(await onboarding.testSend(account));
+      });
       mountMailSenderRoutes(app, {
         isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)),
         store: new MailGrantStore(storage.dataDir, env.CHASSIS_VAULT_MASTER_KEY),
@@ -1407,11 +1464,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           await mail(message);
         },
         onConnected: () => {
+          void testerOnboarding?.thanks.process();
           void testerFlow?.process();
           void welcomeMailer?.process();
           void offerMailer?.process();
         },
         welcomeOn: env.ZENOD_WELCOME_MAIL === "1",
+        onboarding: {
+          status: () => onboarding.status(),
+          setMode: (mode: TesterOnboardingMode) => onboarding.setMode(mode, "Jordi on /admin/mail"),
+          preview: () => testerThanksMail("tester@example.com", "Ana"),
+        },
         ...(cloudflareMailConfigured(env) ? { provider: "cloudflare" as const } : {}),
         secure: env.NODE_ENV === "production",
       });
@@ -1739,6 +1802,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => welcomeMailer?.stop()),
           Promise.resolve().then(() => testerMonthEnd?.stop()),
           Promise.resolve().then(() => offerMailer?.stop()),
+          Promise.resolve().then(() => testerOnboarding?.stop()),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => subscriberApi.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),
