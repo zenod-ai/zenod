@@ -378,6 +378,25 @@ export class TesterFlow {
   }
 
   /**
+   * E26-S25: a Stripe promotion code from a tester's personal link went on this account's checkout, so the
+   * account is that applicant's. Records the link (first account only, as Stripe allows one use) and returns
+   * true when the code is one of ours; the applicants read then counts the account as the applicant, even
+   * when the email typed at checkout differs from the one on the form.
+   */
+  linkStripeCode(code: string, accountId: string): boolean {
+    const state = this.read();
+    const key = code.trim().toUpperCase();
+    const tester = state.testers.find((t) => t.status === "accepted" && t.codeSource === "stripe" && t.code?.toUpperCase() === key);
+    if (!tester) return false;
+    if (!tester.redeemedBy) {
+      tester.redeemedBy = accountId;
+      tester.redeemedAt = this.now().toISOString();
+      this.write(state);
+    }
+    return true;
+  }
+
+  /**
    * U7: the personal link to show on screen for a person accepted just now, once their code exists.
    * Only for an application made in this request, so typing someone else's email never shows theirs.
    */

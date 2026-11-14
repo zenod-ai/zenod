@@ -184,6 +184,8 @@ export interface CustomerLayerOptions {
    * Asked only when Stripe holds no promotion code with that name; it binds the code to this account.
    */
   testerCoupon?: (code: string, accountId: string) => string | null;
+  /** E26-S25: a tester's Stripe promotion code went on this account's checkout (testerFlow.ts `linkStripeCode`). */
+  testerStripeCodeUsed?: (code: string, accountId: string) => void;
   /**
    * Optional route capabilities for product-specific customer surfaces.
    *
@@ -2334,6 +2336,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const checkoutInvite: CheckoutInvite = { promotionCodeId, couponId, welcome: true, signedUp: invite.signedUp };
       try {
         session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product, checkoutInvite);
+        if (promotionCodeId && invite.code) {
+          try {
+            options.testerStripeCodeUsed?.(invite.code, accountId);
+          } catch (error) {
+            console.error("tester code link failed:", error instanceof Error ? error.name : "Error");
+          }
+        }
       } catch (error) {
         if (!promotionCodeId && !couponId) throw error;
         console.error("invite checkout with code failed, retrying without it:", error instanceof Error ? error.name : "Error");

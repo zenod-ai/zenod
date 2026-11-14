@@ -99,6 +99,8 @@ export interface ApplicantSources {
   applications: () => Array<{ at?: unknown; contact?: unknown; use?: unknown; name?: unknown; source?: unknown }>;
   testers: () => TesterRecord[];
   accounts: () => CustomerAccount[];
+  /** E26-S25: the verified emails the account's owner signed in with (Google, GitHub); [] when unknown. */
+  signInEmails?: (account: CustomerAccount) => string[];
   /** Comped accounts (ZENOD_COMPED_ACCOUNT_IDS), counted nowhere, as in /api/public/counts. */
   comped?: ReadonlySet<string>;
   /** When the tenant's first finished save happened (epoch ms), or null. */
@@ -109,6 +111,27 @@ export interface ApplicantSources {
 }
 
 const LINKED = new Set(["verified", "degraded", "paused"]);
+
+/** E26-S25: an account's verified sign-in emails (lower case), read once per call from the identity records. */
+export function signInEmailsByUser(
+  identities: () => Array<{ user_id: string; email: string | null; email_verified: boolean }>,
+): (account: CustomerAccount) => string[] {
+  let byUser: Map<string, string[]> | null = null;
+  let readAt = 0;
+  return (account) => {
+    if (!byUser || Date.now() - readAt > 1000) {
+      byUser = new Map();
+      readAt = Date.now();
+      for (const identity of identities()) {
+        if (!identity.email_verified || !identity.email) continue;
+        const list = byUser.get(identity.user_id) ?? [];
+        list.push(identity.email.trim().toLowerCase());
+        byUser.set(identity.user_id, list);
+      }
+    }
+    return byUser.get(account.user_id) ?? [];
+  };
+}
 
 /** A first name or handle as the applicant gave it; never anything that reads as an email or phone number. */
 export function cleanApplicantName(value: unknown): string | null {
@@ -198,9 +221,14 @@ export async function listApplicants(sources: ApplicantSources, nowMs: number, s
   }
 
   const finished = sources.accounts().filter((account) => account.checkout_completed_at);
+  // The account is the applicant's when their code is linked to it (redeemedBy), else when its checkout email
+  // or a verified sign-in email is the one on the form (E26-S25: a tester signed in with the form's address
+  // and typed another one at checkout, and was counted twice).
+  const signInEmails = sources.signInEmails ?? (() => []);
   const accountFor = (key: string, tester: TesterRecord | undefined): CustomerAccount | undefined =>
     (tester?.redeemedBy ? finished.find((account) => account.account_id === tester.redeemedBy) : undefined) ??
-    finished.find((account) => (account.stripe_email ?? "").toLowerCase() === key);
+    finished.find((account) => (account.stripe_email ?? "").toLowerCase() === key) ??
+    finished.find((account) => signInEmails(account).includes(key));
 
   const order = [...people.values()].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const numberOf = new Map(order.map((person, index) => [person.key, index + 1]));
