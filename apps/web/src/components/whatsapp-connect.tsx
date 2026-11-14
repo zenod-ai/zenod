@@ -79,6 +79,20 @@ function statusLabel(status: WhatsAppStatus | null): string {
   return "Disconnected"
 }
 
+/** Clock time a one-time code stops working, like "14:32". */
+function codeExpiryTime(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+/** "until 14:32 (25 min left)": when the code stops working, in plain words. */
+function codeExpiryText(expiresAt: number, now: number): string {
+  const minutes = Math.max(1, Math.ceil((expiresAt - now) / 60_000))
+  return `until ${codeExpiryTime(expiresAt)} (${minutes} min left)`
+}
+
 function parseAllowlist(value: string): string[] {
   return value
     .split(/[,\n]/)
@@ -618,6 +632,15 @@ export function HostedWhatsAppConnect({
     "challenge" | "test" | "disconnect" | null
   >(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [otherNumber, setOtherNumber] = React.useState(false)
+  const [now, setNow] = React.useState(() => Date.now())
+
+  const expiresAt = initial?.whatsapp.verificationExpiresAt ?? null
+  React.useEffect(() => {
+    if (expiresAt === null) return
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [expiresAt])
 
   const publish = React.useCallback(
     (next: HostedChannelsResponse) => {
@@ -664,6 +687,8 @@ export function HostedWhatsAppConnect({
       )
       publish(result.channels)
       setChallenge(result.challenge)
+      setOtherNumber(false)
+      setNow(Date.now())
       toast.success("WhatsApp verification started")
     } catch (err) {
       if (
@@ -672,6 +697,8 @@ export function HostedWhatsAppConnect({
       )
         clearHostedChannelOperation("whatsapp.challenge")
       setError(errorMessage(err))
+      // The held number may be gone once a code ran out: let them type it.
+      if (expired) setOtherNumber(true)
     } finally {
       setBusy(null)
     }
@@ -744,14 +771,26 @@ export function HostedWhatsAppConnect({
 
   const status = initial?.whatsapp ?? null
   const connected = status?.state === "verified"
-  const awaiting = status?.state === "awaiting_code"
   const preservedBinding =
     connected || status?.state === "degraded" || status?.state === "paused"
+  // A code that ran out: the number is still held but no longer waiting.
+  // Checked against this browser's clock too, so the page says so the
+  // moment it happens instead of on the next refresh.
+  const expired =
+    !preservedBinding &&
+    Boolean(status?.senderHint) &&
+    expiresAt !== null &&
+    expiresAt <= now
+  const awaiting = status?.state === "awaiting_code" && !expired
+  const showNumberField =
+    !preservedBinding && !awaiting && (!expired || otherNumber)
   const controlState: ChannelState = !status
     ? "loading"
     : status.state === "verified"
       ? "connected"
-      : status.state
+      : expired
+        ? "off"
+        : status.state
 
   return (
     <ChannelControlCard
@@ -766,7 +805,27 @@ export function HostedWhatsAppConnect({
       hideIdentity
       actions={
         <>
-          {!preservedBinding && !awaiting && (
+          {expired && !otherNumber && (
+            <>
+              <Button
+                type="button"
+                onClick={() => void createChallenge(true)}
+                disabled={busy !== null}
+              >
+                {busy === "challenge" ? <Spinner /> : <RefreshCwIcon />}
+                Get a new code
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setOtherNumber(true)}
+                disabled={busy !== null}
+              >
+                Use a different number
+              </Button>
+            </>
+          )}
+          {showNumberField && (
             <Button
               type="button"
               onClick={() => void createChallenge()}
@@ -793,7 +852,7 @@ export function HostedWhatsAppConnect({
                 onClick={() => void createChallenge(true)}
                 disabled={busy !== null}
               >
-                Issue new code
+                Get a new code
               </Button>
               <Button
                 type="button"
@@ -868,8 +927,12 @@ export function HostedWhatsAppConnect({
               Message <strong>{challenge.code}</strong> to{" "}
               <strong>{challenge.sharedNumber}</strong>.
             </span>
+            {expiresAt !== null && (
+              <span>The code works {codeExpiryText(expiresAt, now)}.</span>
+            )}
             <span>
-              Keep this page open. Zenod will confirm the sender automatically.
+              Keep this page open. It changes to connected when your code
+              arrives.
             </span>
           </AlertDescription>
         </Alert>
@@ -878,10 +941,23 @@ export function HostedWhatsAppConnect({
       {awaiting && !challenge && (
         <Alert>
           <SendIcon />
-          <AlertTitle>Verification is still waiting</AlertTitle>
+          <AlertTitle>Waiting for your code</AlertTitle>
           <AlertDescription>
-            For safety, Zenod does not store the one-time code. Show the same
-            code again, issue a new one, or cancel this setup.
+            {expiresAt !== null
+              ? `Send it from your phone. It works ${codeExpiryText(expiresAt, now)}. `
+              : "Send it from your phone. "}
+            Lost it? Show it again or get a new one.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {expired && (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>Your code ran out</AlertTitle>
+          <AlertDescription>
+            Codes work for 30 minutes. Get a new code and send it from your
+            phone.
           </AlertDescription>
         </Alert>
       )}
@@ -908,19 +984,35 @@ export function HostedWhatsAppConnect({
         </Alert>
       )}
 
-      {status?.senderHint && (
+      {status?.senderHint && preservedBinding && (
         <FieldValue
           label="Verified sender"
           value={status.senderHint}
+          detail={`Last message ${timeAgo(status.lastInboundAt)}`}
+        />
+      )}
+
+      {status?.senderHint && awaiting && (
+        <FieldValue
+          label="Waiting for a code from"
+          value={status.senderHint}
           detail={
-            preservedBinding
-              ? `Last message ${timeAgo(status.lastInboundAt)}`
-              : "Verification is not complete yet"
+            expiresAt !== null
+              ? `Not verified yet. The code works ${codeExpiryText(expiresAt, now)}.`
+              : "Not verified yet."
           }
         />
       )}
 
-      {!preservedBinding && !awaiting && (
+      {status?.senderHint && expired && !otherNumber && (
+        <FieldValue
+          label="Your number"
+          value={status.senderHint}
+          detail={`Not verified yet. The code ran out at ${codeExpiryTime(expiresAt!)}.`}
+        />
+      )}
+
+      {showNumberField && (
         <Field>
           <FieldLabel htmlFor="hosted-whatsapp-sender">
             Your WhatsApp sender number
