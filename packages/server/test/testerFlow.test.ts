@@ -153,6 +153,12 @@ describe("tester flow (EPIC-26 S2)", () => {
     expect(flow.snapshot().testers[0]).toMatchObject({ codeSource: "stripe" });
     // A Stripe code is Stripe's to check at checkout: Zenod's own coupon path never honours it.
     expect(flow.redeem(flow.snapshot().testers[0]!.code!, "acct_a")).toBeNull();
+    // E26-S25: but its use at checkout links the account to the applicant, first account only.
+    const stripeCode = flow.snapshot().testers[0]!.code!;
+    expect(flow.linkStripeCode(stripeCode.toLowerCase(), "acct_a")).toBe(true);
+    expect(flow.linkStripeCode(stripeCode, "acct_b")).toBe(true);
+    expect(flow.snapshot().testers[0]).toMatchObject({ redeemedBy: "acct_a" });
+    expect(flow.linkStripeCode("ZT-NOTOURS1", "acct_a")).toBe(false);
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const refusing = vi.fn(async () => {

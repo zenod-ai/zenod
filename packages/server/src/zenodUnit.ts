@@ -67,7 +67,7 @@ import {
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
 import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
-import { cachedWhatsAppState, mountTesterApplicants, tenantFirstSave } from "./testerApplicants.js";
+import { cachedWhatsAppState, mountTesterApplicants, signInEmailsByUser, tenantFirstSave } from "./testerApplicants.js";
 import { setHelpersBuilding } from "./personaRunner.js";
 import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./quickStart.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, testerMail, type TesterFlow } from "./testerFlow.js";
@@ -962,6 +962,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       tenantStore,
       // EPIC-23 U7: codes Zenod made itself; the tester flow is created further down.
       testerCoupon: (code, accountId) => testerFlow?.redeem(code, accountId) ?? null,
+      // E26-S25: a Stripe tester code links the account to its applicant, whatever email checkout got.
+      testerStripeCodeUsed: (code, accountId) => void testerFlow?.linkStripeCode(code, accountId),
       // EPIC-26 S15: the quick start's step 2, from the chassis' OAuth sign-ins to this tenant.
       quickStartAssistantSignIn: (tenantId) => {
         const signIn = oauthStore.firstSignInForTenant(tenantId);
@@ -1539,6 +1541,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         applications: () => readApplications(storage.dataDir),
         testers: () => flow.snapshot().testers,
         accounts: () => customer.accounts.list(),
+        signInEmails: signInEmailsByUser(() => customer.identities.snapshot().identities),
         comped,
         firstSave: (tenantId) => tenantFirstSave(join(storage.dataDir, tenantId, "tasks.sqlite")),
         ...(zenodPhylax ? { whatsapp: cachedWhatsAppState((accountId) => zenodPhylax.whatsappState(accountId)) } : {}),

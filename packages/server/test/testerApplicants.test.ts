@@ -13,6 +13,7 @@ import {
   cleanApplicantSource,
   listApplicants,
   mountTesterApplicants,
+  signInEmailsByUser,
   tenantFirstSave,
   type ApplicantSources,
 } from "../src/testerApplicants.js";
@@ -165,6 +166,36 @@ it("names the other tester-code accounts so the list matches signed_up in the pu
   expect(today.summary.line).toBe("1 applicant, 1 other account (our own test)");
   expect(today.summary.signed_up).toBe(1);
   expect(today.applicants[0]!.source).toBe("P-0219");
+});
+
+it("E26-S25: counts a tester who signed in with the form's email and typed another at checkout as one person", async () => {
+  // 13 Nov: applied 20:33Z, signed in with Google on the same address 20:35Z, checkout with a second gmail
+  // 20:36Z on a Stripe code (no redeemedBy then). The read showed 1 applicant + 1 other account.
+  const base: ApplicantSources = {
+    applications: () => [{ at: "2026-11-13T20:33:19Z", contact: "ana@mail.net", use: "voice notes", source: null }],
+    testers: () => [tester("tid-ana", "ana@mail.net", "accepted", { codeSource: "stripe", code: "ZT-X6HEZY2F" })],
+    accounts: () => [account("acc-ana", { stripe_email: "other.address@mail.net", checkout_completed_at: "2026-11-13T20:36:31Z" })],
+    firstSave: () => null,
+  };
+  const before = await listApplicants(base, NOW);
+  expect(before.summary).toMatchObject({ applicants: 1, applicants_signed_up: 0, other_accounts: 1, signed_up: 1 });
+
+  const identities = [
+    { user_id: "u-acc-ana", email: "Ana@mail.net", email_verified: true },
+    { user_id: "u-acc-ana", email: "unverified@mail.net", email_verified: false },
+  ];
+  const after = await listApplicants({ ...base, signInEmails: signInEmailsByUser(() => identities) }, NOW);
+  expect(after.summary).toMatchObject({ applicants: 1, applicants_signed_up: 1, other_accounts: 0, signed_up: 1, line: "1 applicant" });
+  expect(after.applicants[0]).toMatchObject({ number: 1, step: "signed_up", reached: { signed_up: "2026-11-13T20:36:31.000Z" } });
+
+  // An unverified sign-in email never links; the Stripe code link (redeemedBy) does on its own.
+  const unverified = await listApplicants({ ...base, signInEmails: signInEmailsByUser(() => [{ ...identities[0]!, email_verified: false }]) }, NOW);
+  expect(unverified.summary.applicants_signed_up).toBe(0);
+  const linked = await listApplicants({
+    ...base,
+    testers: () => [tester("tid-ana", "ana@mail.net", "accepted", { codeSource: "stripe", code: "ZT-X6HEZY2F", redeemedBy: "acc-ana" })],
+  }, NOW);
+  expect(linked.summary).toMatchObject({ applicants_signed_up: 1, other_accounts: 0 });
 });
 
 it("keeps the email off the public counts", async () => {
