@@ -7,6 +7,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Footer, Nav, PaperLanding } from "@/components/paper-landing";
 import { TestersPage } from "@/components/testers-page";
+import { StartPage } from "@/components/start-page";
 import { ConnectPage } from "@/components/connect-page";
 import { NotFoundPage } from "@/components/not-found-page";
 import {
@@ -343,6 +344,13 @@ function SiteApp() {
   if (path === "/testers")
     return (
       <TestersPage
+        nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" />}
+        footer={<Footer />}
+      />
+    );
+  if (path === "/start")
+    return (
+      <StartPage
         nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" />}
         footer={<Footer />}
       />

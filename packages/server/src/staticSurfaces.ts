@@ -134,6 +134,9 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
   // that MCP directories link to.
   app.get("/brand/*", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/connect", publicHostOnly(staticFile({ root: siteRoot, path: "connect.html", ...noCache })));
+  // Tester start page (E26-S26): the one-minute video, its poster and the how-to.
+  app.get("/start", publicHostOnly(staticFile({ root: siteRoot, path: "start.html", ...noCache })));
+  app.get("/start/*", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   if (options.webDist) {
     app.get("/", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
     app.get("/account", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
