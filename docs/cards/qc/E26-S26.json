@@ -1,41 +1,31 @@
 {
   "row": "E26-S26",
   "card": "docs/cards/E26-S26.md",
-  "cardSha": "c8985a327d45902f",
+  "cardSha": "005893b91b451db2",
   "inputs": {
-    "card": "c8985a327d45902f",
-    "page": "9985f3d714cb2254",
+    "card": "005893b91b451db2",
+    "page": "5538cfebeb294a27",
     "rules": "81f13cf19bfdd388",
     "words": "fa549a677564c98d"
   },
-  "checkedAt": "2026-11-14T11:02:22Z",
+  "checkedAt": "2026-11-14T11:03:03Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Yes: build and switch it on\\",
       "where": "the card's source",
       "status": "met",
-      "how": "The card shows the built welcome sent to own number at 10:56 UTC, switch at test, and the thank-you email declared as waiting for Allow; Jordi's yes is reflected in the build."
+      "how": "The card says switch on for the welcome and it is live: welcome sent to own number, switch at test, thank-you email queued until Allow. Requested 'build and switch it on' is shown as test state, with welcome sent; partial but declared on the card with a ✗ line for the email."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "The zenod.dev/start page at 390 px shows only the first frame of the video with a 0:00 / 1:00 player, so the five things are not visible on the first screen; the video itself is not shown playing. (rule 6)"
-    ],
-    "breaches": [
-      {
-        "rule": 6,
-        "width": 390,
-        "what": "The zenod.dev/start page at 390 px shows only the first frame of the video with a 0:00 / 1:00 player, so the five things are not visible on the first screen; the video itself is not shown playing."
-      }
-    ],
-    "summary": "The welcome page, email preview, video page and status table all render at both widths without sideways overflow; the page delivers the result and the card's delivered lines match what is shown."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both screens open with the punchline box under the h1, show the phone welcome and the email side by side, the video frames, and a where-it-stands table; no sideways overflow and the text fits at 390 px."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: The zenod.dev/start page at 390 px shows only the first frame of the video with a 0:00 / 1:00 player, so the five things are not visible on the first screen; the video itself is not shown playing. (rule 6)"
-  ],
+  "pass": true,
+  "held": [],
   "shots": [
     {
       "width": 390,
