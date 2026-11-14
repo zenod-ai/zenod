@@ -237,9 +237,7 @@ describe("Hosted Zenod channels", () => {
       }
     )
     render(<HostedChannelsPanel />)
-    expect(
-      await screen.findByText("Verification is still waiting")
-    ).not.toBeNull()
+    expect(await screen.findByText("Waiting for your code")).not.toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Show code again" }))
     expect(await screen.findByText("42-otter")).not.toBeNull()
     expect(mocks.api).toHaveBeenCalledWith("/api/channels/whatsapp/challenge", {
@@ -247,9 +245,113 @@ describe("Hosted Zenod channels", () => {
       body: { operationId: "reload-safe-operation" },
     })
     expect(
-      screen.getByRole("button", { name: "Issue new code" })
+      screen.getByRole("button", { name: "Get a new code" })
     ).not.toBeNull()
     expect(screen.getByRole("button", { name: "Cancel setup" })).not.toBeNull()
+  })
+
+  it("never calls a number that is waiting for its code a verified sender, and shows when the code runs out", async () => {
+    const awaiting: HostedChannelsResponse = {
+      ...off,
+      whatsapp: {
+        ...off.whatsapp,
+        state: "awaiting_code",
+        senderHint: "••••0199",
+        verificationExpiresAt: Date.now() + 25 * 60_000,
+      },
+    }
+    mocks.api.mockResolvedValue(awaiting)
+    const { container } = render(<HostedChannelsPanel />)
+    expect(await screen.findByText("Waiting for your code")).not.toBeNull()
+    expect(screen.getByText("Waiting for a code from")).not.toBeNull()
+    expect(screen.getByText("••••0199")).not.toBeNull()
+    expect(container.textContent).not.toMatch(/Verified sender/)
+    expect(container.textContent).toMatch(
+      /Not verified yet\. The code works until \d{1,2}:\d{2}.*\(25 min left\)/
+    )
+    expect(screen.queryByText("Your code ran out")).toBeNull()
+  })
+
+  it("says the code ran out and gets a new one in one tap", async () => {
+    const expired: HostedChannelsResponse = {
+      ...off,
+      whatsapp: {
+        ...off.whatsapp,
+        state: "off",
+        senderHint: "••••0199",
+        verificationExpiresAt: Date.now() - 60_000,
+        revision: "wa-expired-1",
+      },
+    }
+    const fresh: HostedChannelsResponse = {
+      ...off,
+      whatsapp: {
+        ...off.whatsapp,
+        state: "awaiting_code",
+        senderHint: "••••0199",
+        verificationExpiresAt: Date.now() + 30 * 60_000,
+        revision: "wa-fresh-1",
+      },
+    }
+    mocks.api.mockImplementation(
+      (path: string, request?: { method?: string }) => {
+        if (path === "/api/channels" && !request)
+          return Promise.resolve(expired)
+        if (
+          path === "/api/channels/whatsapp/challenge" &&
+          request?.method === "POST"
+        ) {
+          return Promise.resolve({
+            channels: fresh,
+            challenge: {
+              code: "17-heron",
+              sharedNumber: "+34 699 000 111",
+              expiresAt: Date.now() + 30 * 60_000,
+            },
+            mutation: {
+              operationId: "challenge-expired-1",
+              operation: "whatsapp.challenge",
+              outcome: "succeeded",
+              at: Date.now(),
+            },
+          })
+        }
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    const { container } = render(<HostedChannelsPanel />)
+    expect(await screen.findByText("Your code ran out")).not.toBeNull()
+    expect(container.textContent).not.toMatch(/Verified sender/)
+    expect(container.textContent).toMatch(/The code ran out at \d{1,2}:\d{2}/)
+    expect(screen.queryByLabelText("Your WhatsApp sender number")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Get a new code" }))
+    expect(await screen.findByText("17-heron")).not.toBeNull()
+    expect(mocks.api).toHaveBeenCalledWith("/api/channels/whatsapp/challenge", {
+      method: "POST",
+      body: { operationId: expect.any(String) },
+    })
+    expect(screen.queryByText("Your code ran out")).toBeNull()
+    expect(container.textContent).toMatch(/\(30 min left\)/)
+  })
+
+  it("lets a tester whose code ran out type a different number", async () => {
+    mocks.api.mockResolvedValue({
+      ...off,
+      whatsapp: {
+        ...off.whatsapp,
+        state: "off",
+        senderHint: "••••0199",
+        verificationExpiresAt: Date.now() - 60_000,
+      },
+    })
+    render(<HostedChannelsPanel />)
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Use a different number" })
+    )
+    expect(screen.getByLabelText("Your WhatsApp sender number")).not.toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Create one-time code" })
+    ).not.toBeNull()
   })
 
   it("preserves a degraded binding instead of rendering a new sender form", async () => {
