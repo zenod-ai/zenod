@@ -62,12 +62,12 @@ mine = [d for d in DG if any(ex['id'] in json.dumps(d) for _ in [0])]
 quote = ' '.join(ex['tr'].split()[:70]) + ' …'
 ba = f'''<h2>One note, before and after</h2>
 <p>Your note of {esc(ex['date'])} from {esc(ex['ch'])}, about {ex['words']} words. Its opening words: <i>“{esc(quote)}”</i></p>
-<table><tr><th style="width:50%">Before: what your memory holds today</th><th>After: the three passes</th></tr><tr><td>
+<div style="display:flex;flex-wrap:wrap;gap:16px"><div style="flex:1 1 300px;min-width:0;border:1px solid #c9c1ae;border-radius:8px;padding:12px 16px"><h3>Before: what your memory holds today</h3>
 <p>{len(ex['pages_live'])} page links:</p><ul>{''.join(f'<li>{esc(p)}</li>' for p in ex['pages_live'][:10]) or '<li>none</li>'}</ul>
-<p>Mostly your words quoted under a sentence title, not joined to other notes.</p></td><td>
+<p>Mostly your words quoted under a sentence title, not joined to other notes.</p></div><div style="flex:1 1 300px;min-width:0;border:2px solid #1f4d3a;border-radius:8px;padding:12px 16px"><h3>After: the three passes</h3>
 <p><b>Pass 1:</b> {esc(r1.get('gist',''))}</p><ul>{''.join(f"<li>[{esc(it.get('kind',''))}] {esc(it.get('text',''))} <i>“{esc(it.get('quote',''))}”</i></li>" for it in r1.get('items', [])[:8])}</ul>
 <p><b>Pass 2:</b> part of {', '.join(f"<b>{esc(T[i]['name'])}</b> ({len(T[i]['notes'])} notes, {esc(T[i]['first'])} to {esc(T[i]['last'])})" for i in nthreads[ex['id']])}.</p>
-<p><b>Pass 3:</b> {esc(mine[0].get('headline','')) if mine else 'read in the ' + mon(ex['date'][:7]) + ' digest'}</p></td></tr></table>'''
+<p><b>Pass 3:</b> {esc(mine[0].get('headline','')) if mine else 'read in the ' + mon(ex['date'][:7]) + ' digest'}</p></div></div>'''
 
 # ---- over time ----
 arcs = {a.get('thread'): a.get('arc') for a in OV.get('thread_arcs', [])}
