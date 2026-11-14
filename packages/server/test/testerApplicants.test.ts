@@ -18,6 +18,7 @@ import {
 } from "../src/testerApplicants.js";
 import { mountTesterApplications } from "../src/testerApplications.js";
 import type { TesterRecord } from "../src/testerFlow.js";
+import { looksLikeOurTest } from "../src/testerMarks.js";
 
 // E26-S21: who applied, from where and how far they got, for the team console only.
 
@@ -64,7 +65,7 @@ function sources(patch: Partial<ApplicantSources> = {}): ApplicantSources {
     ],
     firstSave: (tenantId) => (tenantId === "t-acc-dee" ? Date.UTC(2026, 10, 14, 3, 30) : null),
     whatsapp: async (accountId) => (accountId === "acc-cy" || accountId === "acc-dee" ? "verified" : "awaiting_code"),
-    isTest: (contact, use) => contact.endsWith("@zenod.dev") || /\bTEST\b/.test(use),
+    isTest: (contact, use) => looksLikeOurTest(contact, use),
     ...patch,
   };
 }
@@ -86,19 +87,19 @@ it("answers 401 without a token, with a wrong token and when no token is set", a
   expect(short.status).toBe(401);
 });
 
-it("with the right token lists each real applicant, newest first, with no email, phone or what they wrote", async () => {
+it("with the right token lists each real applicant, newest first, with the email they gave and never what they wrote", async () => {
   const response = await appWith(sources()).request("/api/private/testers/applicants", { headers: { Authorization: `Bearer ${TOKEN}` } });
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   const body = await response.json() as { schema: string; applicants: Array<Record<string, unknown>>; test_applications: number };
-  expect(body.schema).toBe("zenod-applicants/v1");
+  expect(body.schema).toBe("zenod-applicants/v2");
   expect(body.test_applications).toBe(1);
-  expect(body.applicants.map((a) => [a.name, a.source, a.step, a.status])).toEqual([
-    [null, null, "applied", "waitlist"],
-    ["Dee", null, "first_save", "accepted"],
-    ["@cy_dev", null, "whatsapp_linked", "accepted"],
-    [null, "reddit.com", "accepted", "accepted"],
-    ["Ana", "P-0219", "signed_up", "accepted"],
+  expect(body.applicants.map((a) => [a.email, a.name, a.source, a.step, a.status])).toEqual([
+    ["late@mail.net", null, null, "applied", "waitlist"],
+    ["dee@mail.net", "Dee", null, "first_save", "accepted"],
+    ["cy@mail.net", "@cy_dev", null, "whatsapp_linked", "accepted"],
+    ["bo@mail.net", null, "reddit.com", "accepted", "accepted"],
+    ["ana@mail.net", "Ana", "P-0219", "signed_up", "accepted"],
   ]);
   const ana = body.applicants[4]!;
   expect(ana).toMatchObject({
@@ -108,8 +109,69 @@ it("with the right token lists each real applicant, newest first, with no email,
   expect(body.applicants[1]!.reached).toMatchObject({ whatsapp_linked: true, first_save: "2026-11-14T03:30:00.000Z" });
   expect(new Set(body.applicants.map((a) => a.id)).size).toBe(5);
   const text = JSON.stringify(body);
-  expect(text).not.toMatch(/mail\.net|zenod\.dev|Jordi|voice notes|claude code|tid-|acc-|t-acc/);
-  expect(text).not.toMatch(/@(?!cy_dev)/);
+  // Our own test application stays out, and so does what anyone wrote or any internal id.
+  expect(text).not.toMatch(/jordi@zenod\.dev|voice notes|claude code|tid-|acc-|t-acc/);
+});
+
+it("says plainly whether each entry is a new person or one already counted", async () => {
+  const all = await listApplicants(sources(), NOW);
+  const ana = all.applicants.find((a) => a.email === "ana@mail.net")!;
+  // Ana sent the form twice: one person, counted once, applicant 1 of 5.
+  expect(ana).toMatchObject({ number: 1, times_applied: 2, last_applied: "2026-11-13T21:00:00.000Z", new_since: null });
+  expect(ana.counted).toBe("Applicant 1 of 5, already counted, sent the form 2 times (one person)");
+  expect(all.applicants.find((a) => a.email === "late@mail.net")!.counted).toBe("Applicant 5 of 5, first application");
+
+  // The console passes its last read: who applied after it is new, everyone else was already counted.
+  const app = appWith(sources());
+  const since = await app.request("/api/private/testers/applicants?since=2026-11-14T02:30:00Z", { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const body = await since.json() as { applicants: Array<{ email: string; new_since: boolean; counted: string }> };
+  expect(body.applicants.map((a) => [a.email, a.new_since])).toEqual([
+    ["late@mail.net", true], ["dee@mail.net", true], ["cy@mail.net", false], ["bo@mail.net", false], ["ana@mail.net", false],
+  ]);
+  expect(body.applicants[0]!.counted).toBe("Applicant 5 of 5, new");
+  expect(body.applicants[2]!.counted).toBe("Applicant 3 of 5, already counted");
+  const bad = await app.request("/api/private/testers/applicants?since=yesterday", { headers: { Authorization: `Bearer ${TOKEN}` } });
+  expect(bad.status).toBe(400);
+});
+
+it("names the other tester-code accounts so the list matches signed_up in the public counts", async () => {
+  const withOthers = sources({
+    accounts: () => [
+      ...sources().accounts(),
+      // Our T7 rehearsal: a tester code, an alpha9.io email, no real application.
+      account("acc-t7", { stripe_email: "operations+t7r3@alpha9.io", checkout_completed_at: "2026-11-11T05:40:00Z" }),
+      // Someone handed a code directly, no form.
+      account("acc-direct", { stripe_email: "friend@mail.net", checkout_completed_at: "2026-11-12T10:00:00Z", github_login: "friend-gh" }),
+      account("acc-comped", { stripe_email: "comp@mail.net" }),
+      account("acc-paying", { stripe_email: "pay@mail.net", fully_discounted: false, free_until: null }),
+    ],
+    comped: new Set(["acc-comped"]),
+  });
+  const doc = await listApplicants(withOthers, NOW);
+  expect(doc.other_accounts.map((o) => [o.email, o.name, o.test, o.in_signed_up])).toEqual([
+    ["friend@mail.net", "friend-gh", false, true],
+    ["operations+t7r3@alpha9.io", null, true, false],
+  ]);
+  expect(doc.summary).toEqual({
+    applicants: 5, applicants_signed_up: 3, other_accounts: 2, other_accounts_test: 1, signed_up: 4,
+    line: "5 applicants, 2 other accounts (1 signed up without applying, 1 our own test)",
+  });
+  // Today on production: one real applicant and our own test account.
+  const today = await listApplicants(sources({
+    applications: () => [{ at: "2026-11-13T20:33:00Z", contact: "ana@mail.net", use: "x", source: "P-0219" }],
+    testers: () => [tester("tid-ana", "ana@mail.net", "accepted", { redeemedBy: "acc-ana" })],
+    accounts: () => [account("acc-ana", {}), account("acc-t7", { stripe_email: "operations+t7r3@alpha9.io" })],
+  }), NOW);
+  expect(today.summary.line).toBe("1 applicant, 1 other account (our own test)");
+  expect(today.summary.signed_up).toBe(1);
+  expect(today.applicants[0]!.source).toBe("P-0219");
+});
+
+it("keeps the email off the public counts", async () => {
+  const { funnelCounts } = await import("../src/publicCounts.js");
+  const s = sources();
+  const counts = funnelCounts({ ...s, comped: new Set(), savesSince: () => 0 }, NOW);
+  expect(JSON.stringify(counts)).not.toMatch(/@|mail\.net/);
 });
 
 it("ids stay the same between reads and the name falls back to the GitHub login", async () => {

@@ -54,7 +54,21 @@ it("counts applications, accepted, signed up, active testers and paying customer
     active_testers: 2,
     paying_customers: 1,
     test_applications: 0,
+    test_signups: 0,
   });
+});
+
+it("leaves our own test accounts on a tester code out of signed_up and active testers (E26-S21 iteration 2)", () => {
+  const base = sources();
+  const counts = funnelCounts(sources({
+    accounts: () => [
+      ...base.accounts(),
+      account("t7", { stripe_email: "operations+t7r3@alpha9.io", fully_discounted: true, free_until: "2026-12-11T00:00:00Z", tenant_id: "t-t1" }),
+    ],
+    isTest: (contact) => contact.endsWith("@alpha9.io"),
+  }), NOW);
+  const before = funnelCounts(base, NOW);
+  expect(counts).toMatchObject({ signed_up: before.signed_up, active_testers: before.active_testers, test_signups: 1 });
 });
 
 it("leaves our own test applications out of every count and counts them apart", () => {
