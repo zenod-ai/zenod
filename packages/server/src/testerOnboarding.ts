@@ -13,7 +13,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { join } from "node:path";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { WelcomeMailer, type WelcomeRecord } from "./welcomeMail.js";
-import type { SendMail, ZenodMail } from "./zenodMail.js";
+import { mailReady, type SendMail, type ZenodMail } from "./zenodMail.js";
 
 export const TESTER_ONBOARDING_FILE = "tester-onboarding.json";
 export const TESTER_THANKS_MAIL_FILE = "tester-thanks-mail.json";
@@ -246,6 +246,8 @@ export class TesterOnboarding {
     setAt: string | null;
     watching: number;
     linked: number;
+    /** "ready" once Jordi's mailbox is connected (the Allow), "waiting" before, "none" without a sender. */
+    mailSender: "ready" | "waiting" | "none";
     mail: ReturnType<WelcomeMailer["counts"]>;
   } {
     const state = this.read();
@@ -256,6 +258,7 @@ export class TesterOnboarding {
       setAt: state.setAt ?? null,
       watching: records.filter((r) => r.armedAt && !r.linkedAt).length,
       linked: records.filter((r) => r.linkedAt).length,
+      mailSender: !this.options.sendMail ? "none" : mailReady(this.options.sendMail) ? "ready" : "waiting",
       mail: this.thanks.counts(),
     };
   }

@@ -84,7 +84,7 @@ describe("tester onboarding (E26-S26)", () => {
     await onboarding.sweep();
     await onboarding.thanks.process();
     expect(sent).toHaveLength(1);
-    expect(onboarding.status()).toMatchObject({ mode: "on", linked: 1, watching: 0, mail: { sent: 1, queued: 0 } });
+    expect(onboarding.status()).toMatchObject({ mode: "on", linked: 1, watching: 0, mailSender: "ready", mail: { sent: 1, queued: 0 } });
   });
 
   it("test mode reaches only our own test accounts", async () => {
@@ -98,7 +98,7 @@ describe("tester onboarding (E26-S26)", () => {
     expect(onboarding.whatsappWelcome("tester-1")).toBe("tester");
     whatsapp.set("tester-1", "verified");
     await onboarding.sweep();
-    expect(onboarding.status().mail.queued).toBe(1);
+    expect(onboarding.status()).toMatchObject({ mailSender: "waiting", mail: { queued: 1 } });
     onboarding.setMode("off", "test");
     await onboarding.thanks.process();
     expect(onboarding.status()).toMatchObject({ mode: "off", mail: { queued: 0, sent: 0 } });
