@@ -38,6 +38,12 @@ export interface MailSenderRoutesOptions {
   onConnected?: () => void;
   /** Whether the welcome and end-of-test emails are switched on (ZENOD_WELCOME_MAIL=1). */
   welcomeOn: boolean;
+  /** E26-S26: the tester welcome switch (off, test accounts, on), shown and set on this page. */
+  onboarding?: {
+    status: () => { mode: "off" | "test" | "on"; setBy: string | null; setAt: string | null; linked: number; mail: { queued: number; sent: number } };
+    setMode: (mode: "off" | "test" | "on") => void;
+    preview: () => ZenodMail;
+  };
   /** Set when Zenod sends through Cloudflare Email Service: no Google step is needed. */
   provider?: "cloudflare";
   secure: boolean;
@@ -57,6 +63,9 @@ const NOTICES: Record<string, string> = {
   not_ready: "Zenod cannot start the Google sign-in: its Google client or storage key is missing on the server.",
   api_off: "Connected, but Google answered that the Gmail API is switched off in Zenod's Google project. Open the link below, press Enable, then press Send me a test.",
   test_sent: "Test sent. It should be in your inbox within a minute.",
+  welcome_off: "Tester welcome switched off. Nothing more goes out, and queued thank-you emails are dropped.",
+  welcome_test: "Tester welcome on for our own test accounts only.",
+  welcome_on: "Tester welcome switched on for every new tester.",
   test_failed: "The test did not go out. Connect the mail sender again, then send another test.",
   disconnected: "Disconnected. Zenod can no longer send mail, and Google has withdrawn its permission.",
   disconnected_local: "Disconnected here. Google did not confirm, so also remove Zenod at myaccount.google.com/permissions.",
@@ -134,10 +143,33 @@ ${options.provider === "cloudflare" ? "" : `<p><b>What Google lets it do.</b> Se
 <h2>Status</h2>
 ${state}
 <p class="muted">Welcome and end-of-test emails: ${options.welcomeOn ? "switched on, they go out once the sender is connected" : "switched off for now, agents switch them on after your first test arrives"}.</p>
+${onboardingSection(options)}
 <h2>The email a tester gets</h2>
 <p class="muted">Subject: ${escapeHtml(mail.subject)}. From: Jordi at Zenod, ${sender}. The link below is an example; each tester gets their own code.</p>
 <iframe title="The email a tester gets" sandbox srcdoc="${escapeHtml(mail.html)}"></iframe>
 </main></body></html>`;
+}
+
+const MODE_WORDS = {
+  off: "Off. Testers get the old verified reply and no email.",
+  test: "On for our own test accounts only.",
+  on: "On for every new tester.",
+} as const;
+
+function onboardingSection(options: MailSenderRoutesOptions): string {
+  if (!options.onboarding) return "";
+  const status = options.onboarding.status();
+  const button = (mode: "off" | "test" | "on", label: string) =>
+    `<form method="post" action="/admin/mail/onboarding"><input type="hidden" name="mode" value="${mode}"><button class="btn${mode === "off" ? "" : " go"}" type="submit"${status.mode === mode ? " disabled" : ""}>${label}</button></form>`;
+  const thanks = options.onboarding.preview();
+  return `<h2>Tester welcome</h2>
+<p>When a tester links WhatsApp, Zenod answers with one message linking the 1-minute video at zenod.dev/start, and sends this thank-you email from you, once.</p>
+<p><span class="state ${status.mode === "off" ? "off" : "on"}">${escapeHtml(MODE_WORDS[status.mode])}</span>${status.setAt ? ` <span class="muted">Set ${escapeHtml(when(status.setAt))}${status.setBy ? ` by ${escapeHtml(status.setBy)}` : ""}.</span>` : ""}</p>
+<p class="muted">Welcomed so far: ${status.linked}. Thank-you emails sent: ${status.mail.sent}, waiting: ${status.mail.queued}.</p>
+<div class="row">${button("on", "On for every tester")}${button("test", "Test accounts only")}${button("off", "Switch off")}</div>
+<p class="muted">Switch off works at once: no new welcome, and emails still waiting are dropped. Emails already sent stay sent.</p>
+<p class="muted">Subject: ${escapeHtml(thanks.subject)}. "Ana" stands for the tester's first name.</p>
+<iframe title="The thank-you email" sandbox srcdoc="${escapeHtml(thanks.html)}"></iframe>`;
 }
 
 export function mountMailSenderRoutes(app: Hono<{ Bindings: HttpBindings }>, options: MailSenderRoutesOptions): void {
@@ -226,6 +258,15 @@ export function mountMailSenderRoutes(app: Hono<{ Bindings: HttpBindings }>, opt
     } catch (error) {
       return back(c, failedTest(error));
     }
+  });
+
+  app.post("/admin/mail/onboarding", async (c) => {
+    if (!options.isAdmin(c) || !sameOrigin(c) || !options.onboarding) return c.text("Not Found", 404);
+    const form = await c.req.parseBody().catch(() => ({} as Record<string, unknown>));
+    const mode = form.mode === "off" || form.mode === "test" || form.mode === "on" ? form.mode : null;
+    if (!mode) return back(c, "");
+    options.onboarding.setMode(mode);
+    return back(c, `welcome_${mode}`);
   });
 
   app.post("/admin/mail/disconnect", async (c) => {

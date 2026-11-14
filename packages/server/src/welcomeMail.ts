@@ -80,6 +80,8 @@ export interface WelcomeRecord {
   sentAt?: string;
   tries?: number;
   lastError?: string;
+  /** E26-S26: dropped unsent because its switch went off; never sent later. */
+  droppedAt?: string;
 }
 
 interface WelcomeState {
@@ -98,6 +100,8 @@ export interface WelcomeMailOptions {
   file?: string;
   compose?: (record: WelcomeRecord) => ZenodMail;
   label?: string;
+  /** E26-S26: while true, every queued mail not yet sent is dropped instead of sent. */
+  drop?: () => boolean;
 }
 
 export class WelcomeMailer {
@@ -148,9 +152,9 @@ export class WelcomeMailer {
     const records = Object.values(this.read().accounts);
     return {
       enabled: this.enabled,
-      queued: records.filter((r) => !r.sentAt).length,
+      queued: records.filter((r) => !r.sentAt && !r.droppedAt).length,
       sent: records.filter((r) => r.sentAt).length,
-      failing: records.filter((r) => !r.sentAt && r.lastError).length,
+      failing: records.filter((r) => !r.sentAt && !r.droppedAt && r.lastError).length,
     };
   }
 
@@ -179,10 +183,25 @@ export class WelcomeMailer {
   }
 
   private async step(): Promise<void> {
+    if (this.options.drop?.()) {
+      const state = this.read();
+      const at = this.now().toISOString();
+      let dropped = 0;
+      for (const record of Object.values(state.accounts)) {
+        if (record.sentAt || record.droppedAt) continue;
+        record.droppedAt = at;
+        dropped += 1;
+      }
+      if (dropped) {
+        this.write(state);
+        console.log(`[${this.options.label ?? "welcome"}] ${dropped} queued email(s) dropped, switched off`);
+      }
+      return;
+    }
     const send = this.options.sendMail;
     if (!mailReady(send)) return;
     for (const [accountId, record] of Object.entries(this.read().accounts)) {
-      if (record.sentAt || (record.tries ?? 0) >= MAX_TRIES) continue;
+      if (record.sentAt || record.droppedAt || (record.tries ?? 0) >= MAX_TRIES) continue;
       try {
         await send(this.options.compose?.(record) ?? welcomeMail(record.email, this.options.appUrl));
         this.update(accountId, { sentAt: this.now().toISOString(), lastError: "" });

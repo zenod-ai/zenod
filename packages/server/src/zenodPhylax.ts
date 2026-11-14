@@ -1633,6 +1633,35 @@ export class ZenodPhylaxAdapter {
     };
   }
 
+  /**
+   * E26-S26: who gets the tester welcome as their WhatsApp verification reply. Asked when a new
+   * one-time code is requested; "tester" arms it in Phylax, null asks without (and disarms).
+   */
+  private whatsappWelcome: ((accountId: string) => "tester" | null) | null = null;
+
+  setWhatsAppWelcome(decide: ((accountId: string) => "tester" | null) | null): void {
+    this.whatsappWelcome = decide;
+  }
+
+  /** E26-S26: send the tester welcome to an account whose WhatsApp is already linked (our test send). */
+  async sendTesterWelcome(account: CustomerAccount, operationId: string): Promise<"sent" | "skipped" | "failed"> {
+    if (!this.config.enabled || this.closed) return "skipped";
+    const binding = this.row(account.account_id);
+    if (!binding || binding.state !== "active") return "skipped";
+    try {
+      const call = await this.remote.call(this.token(binding), "phylax_management_v1_account_notice", {
+        kind: "tester_welcome",
+        operationId,
+        consoleUrl: "https://zenod.dev/start",
+      });
+      if (!call.isError) return "sent";
+      const error = (call.structuredContent as Record<string, unknown> | undefined)?.error as Record<string, unknown> | undefined;
+      return error?.code === "not_connected" ? "skipped" : "failed";
+    } catch {
+      return "failed";
+    }
+  }
+
   /** E26-S21: the account's WhatsApp state only ("verified", "off" …), read from Phylax; null when unknown. */
   async whatsappState(accountId: string): Promise<string | null> {
     const binding = this.row(accountId);
@@ -1708,6 +1737,9 @@ export class ZenodPhylaxAdapter {
           expectedRevision: revision,
           channel,
           ...(action.operation === "whatsapp.challenge" ? { identity: action.body.sender } : {}),
+          ...(action.operation === "whatsapp.challenge" && this.whatsappWelcome?.(binding.account_id) === "tester"
+            ? { welcome: "tester" }
+            : {}),
           ...(action.operation === "telegram.connect" ? { identity: action.body.identity } : {}),
         };
         this.db.prepare(

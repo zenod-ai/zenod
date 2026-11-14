@@ -22,6 +22,7 @@ import {
 } from "./phylaxTenantSettings.js";
 import type { HostedChannelMutationAuditStore } from "./hostedChannels.js";
 import type { PhylaxUsageMeter } from "./phylaxUsageMeter.js";
+import { ZENOD_WHATSAPP_TESTER_WELCOME, type PhylaxWhatsAppWelcome } from "./phylaxWhatsAppWelcome.js";
 
 export const PHYLAX_MANAGEMENT_PROTOCOL = "phylax.management";
 export const PHYLAX_MANAGEMENT_VERSION = "1.0";
@@ -86,6 +87,8 @@ interface ManagementDependencies {
   ledger: PhylaxAllowanceLedger;
   usageMeter: PhylaxUsageMeter;
   challengeSecret: string;
+  /** E26-S26: the tester welcome armed for a tenant's next WhatsApp verification (absent: never armed). */
+  welcome?: PhylaxWhatsAppWelcome;
 }
 
 function result(value: unknown, text = "Phylax management request completed.") {
@@ -387,6 +390,9 @@ function registerChannelMutationTools(
         // Optional for WhatsApp only: re-issuing a code falls back to the
         // tenant's stored pending number (E26-S23). Telegram still requires it.
         identity: z.string().trim().min(1).max(160).optional(),
+        // E26-S26: the owner arms its tester welcome as the verification reply (WhatsApp only);
+        // a code asked without it disarms any earlier arm.
+        welcome: z.enum(["tester"]).optional(),
       },
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -497,6 +503,7 @@ function registerChannelMutationTools(
                 code,
                 operationProof,
               );
+              dependencies.welcome?.set(tenantId, owner === "zenod" && input.welcome === "tester" ? "tester" : null, at);
               return {
                 status: 200,
                 body: {
@@ -676,7 +683,7 @@ function registerChannelMutationTools(
   );
 }
 
-export type PhylaxAccountNoticeKind = "payment_past_due" | "access_suspended";
+export type PhylaxAccountNoticeKind = "payment_past_due" | "access_suspended" | "tester_welcome";
 
 /** Fixed copy, so the management surface stays free of an arbitrary send-message primitive. */
 export function phylaxAccountNoticeText(
@@ -685,6 +692,8 @@ export function phylaxAccountNoticeText(
   consoleUrl: string,
 ): string {
   const product = owner === "zenod" ? "Zenod" : "Phylax";
+  // E26-S26: the same tester welcome a new link gets, for a number that is already linked (our test send).
+  if (kind === "tester_welcome") return ZENOD_WHATSAPP_TESTER_WELCOME;
   return kind === "payment_past_due"
     ? `${product}: your renewal could not be charged, so your subscription is past due. ` +
       `${product} keeps working while the payment is retried over the next days; if it is not sorted out, ` +
@@ -707,10 +716,10 @@ function registerAccountNoticeTool(
   server.registerTool(
     "phylax_management_v1_account_notice",
     {
-      description: "Send one fixed account notice (billing lapse) to this tenant's verified channel.",
+      description: "Send one fixed account notice (billing lapse, or the Zenod tester welcome) to this tenant's verified channel.",
       inputSchema: {
         operationId,
-        kind: z.enum(["payment_past_due", "access_suspended"]),
+        kind: z.enum(["payment_past_due", "access_suspended", "tester_welcome"]),
         consoleUrl: z.string().trim().url().max(200).refine((value) => value.startsWith("https://"), "https only"),
       },
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },

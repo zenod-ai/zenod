@@ -309,3 +309,12 @@ body:has(.pp) {
 .pp-not-found main { min-height: 60svh; }
 .pp-not-found-links { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 2.5rem 0 0; font: 400 1rem/1.5 var(--pp-sans); }
 .pp-linkish { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+/* E26-S26: zenod.dev/start */
+.pp-start-hero { padding: clamp(2rem, 6vw, 4rem) 0 0; max-width: 52rem; }
+.pp-start-hero h1 { margin-bottom: 1.5rem; }
+.pp-start-video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; height: auto; margin: 0 auto; background: var(--pp-stage); border: 1px solid var(--pp-rule, #ddd4c2); }
+.pp-start-block { margin-top: clamp(2.5rem, 6vw, 4.5rem); max-width: 46rem; }
+.pp-start-block ol { margin: 0; padding-left: 1.4rem; }
+.pp-start-block li { margin: 0 0 0.75rem; padding-left: 0.3rem; }
+.pp-start .pp-foot { padding-top: clamp(4rem, 9vw, 8rem); }
