@@ -70,6 +70,16 @@
      ],
      "since": "2026-11-11",
      "draft": true
+    },
+    {
+     "id": "tester-welcome",
+     "title": "A welcome on WhatsApp the moment you link it",
+     "text": "When a tester links WhatsApp, Zenod answers with one message: thanks, a link to a one-minute video of five things to try at zenod.dev/start, and an invitation to send the first voice note right there. Each tester gets it once.",
+     "rows": [
+      "E26-S26"
+     ],
+     "since": "2026-11-14",
+     "draft": true
     }
    ]
   },
