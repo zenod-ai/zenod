@@ -51,12 +51,12 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): plan done, customer tool list and zenod.dev/connect kit live; publishing to free directories waits on E10-A1 (snoozed to 2026-11-05).
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; trial token waits on the same sign-in (E7-A15).
-Last attempted: 2026-11-12T03:55Z DM run_c6fa2e13: infra-vps restored Zenod promotes (A50 round 2, Jordi: "stop it" meant EpicBooks, not Zenod); flagged promote-now (D36, FYI E7-A22), the M12 timer promoted b4cf52b at 03:49Z ; started T7-F1 + T7 round 5, E7-S3, S41, E26-S11 (posts E26-A9), E26-S15 on production ; earlier: M3 closed clean, M7 still slow (M14 drafted), M9 folded per Jordi E94-A2, S42 merged
-Result: production b4cf52b healthy (gate demo 96/100/1.7, private 94.1/98.2/3.1); a stranger can apply and sign up at 0 euro; whether a new tester can save, and Claude on production, are being proved now; no outside tester yet
-Waiting on: the first stranger to apply (zenod-social recruiting) ; Jordi's reviews (E7-S3 iteration 3 pending, E10-S1, E26-S11)
+Last attempted: 2026-11-14T06:25Z DM run_485bade7: roll-up of the children ; L4 card evidence label fixed for the review gate ; E15-S4 folded into L4 (same voice-notes chart) ; started E26-S25 (is the 13 Nov sign-up the applicant, answer alpha9) ; children: ZAL active (one outside applicant signed up, WhatsApp fixed, no saves) ; EPIC-7 active (WhatsApp linking live since 14 Nov, 1 applicant, 0 saves) ; EPIC-6 review (waits for his verdict) ; EPIC-9 review (Outcome waits for his mark) ; EPIC-26 active (invites open, first applicant mailed to retry WhatsApp) ; EPIC-23 active (tester zero works, waits on promotes) ; EPIC-24 active (errors fixed, M7 search speed recheck) ; EPIC-22 active (L4 voice-notes chart in review, three-pass rerun waits on E22-A6) ; EPIC-14 active (S41 card on 15 Nov, S30 week on 17 Nov) ; EPIC-10 active (in the MCP Registry and Glama, awesome list PR waits on a maintainer) ; EPIC-8 and EPIC-13 draft
+Result: production c7354269 healthy; one outside applicant on 13 Nov signed up at 0 euro, WhatsApp linking failed on our bug, fixed and they were mailed to retry; no saves yet; no ready rows left idle
+Waiting on: the first tester to link WhatsApp and save ; Jordi: E26-A14, E26-A11, E22-A6 ; his reviews (L4, E26-S24, EPIC-6 and EPIC-9 verdicts)
 Monitoring: S30 12 Nov check: Jordi's vault efc4268 still holds 0 Right place / Wrong place answers (script: too_few, need 20 with 5 wrong and 5 right); 500 filings now ca… · next check 2026-11-15T18:00:00.000Z
-Next action: EPIC-26 E26-S3 watches the first real tester end to end, incl. WhatsApp linking (EPIC-7 E7-3)
-Verified at: 2026-11-12T03:55Z (production health ok b4cf52b; promote log ~/zenod-eval/promotions.jsonl)
+Next action: E26-S25 answers alpha9 and fixes the applicant count; E26-S3 watches the first tester link WhatsApp and save (EPIC-7 E7-3)
+Verified at: 2026-11-14T06:25Z (cloud.zenod.dev health ok sha c7354269; child Current States read)
 
 ## Spine Map
 
