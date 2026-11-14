@@ -8,7 +8,7 @@ import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SqliteTenantStore } from "@zenod/mcp-chassis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PHYLAX_MANAGEMENT_PROFILES,
   PHYLAX_MANAGEMENT_TOOL_NAMES,
@@ -425,6 +425,68 @@ describe("tenant-safe Phylax management MCP", () => {
       });
       expect(disconnected.isError).not.toBe(true);
       expect(structured(disconnected)).toMatchObject({ channels: { telegram: { state: "off" } } });
+    } finally {
+      await client.close();
+      await unit.close();
+    }
+  });
+
+  it("E26-S23: re-issues a WhatsApp code for the pending number when no sender is given", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-management-wa-reissue-"));
+    dirs.push(dataDir);
+    const tenants = new SqliteTenantStore({ dataDir });
+    tenants.provisionTenant({ tenant: { id: "alpha" } });
+    const token = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.phylax);
+    const { unit, base } = await startUnit(dataDir, tenants);
+    vi.spyOn(unit.phylaxRuntime.whatsapp, "sharedNumber").mockReturnValue("+34 699 000 111");
+    const client = await clientFor(base, token);
+    try {
+      await client.callTool({
+        name: "phylax_management_v1_ensure_binding",
+        arguments: {
+          operationId: "ensure-native-02",
+          expectedRevision: "0",
+          externalTenantId: "native-alpha",
+          downstreamUrl: "https://memory.example/mcp/alpha",
+          downstreamToken: "native-secret",
+        },
+      });
+      const noPhone = await client.callTool({
+        name: "phylax_management_v1_channel_connect",
+        arguments: { operationId: "wa-challenge-none", expectedRevision: "0", channel: "whatsapp" },
+      });
+      expect(noPhone.isError).toBe(true);
+      expect(structured(noPhone)).toMatchObject({ error: { code: "invalid_request" } });
+      const noTelegram = await client.callTool({
+        name: "phylax_management_v1_channel_connect",
+        arguments: { operationId: "tg-challenge-none", expectedRevision: "0", channel: "telegram" },
+      });
+      expect(noTelegram.isError).toBe(true);
+      expect(structured(noTelegram)).toMatchObject({ error: { code: "invalid_request" } });
+
+      const first = await client.callTool({
+        name: "phylax_management_v1_channel_connect",
+        arguments: {
+          operationId: "wa-challenge-001",
+          expectedRevision: "0",
+          channel: "whatsapp",
+          identity: "+34 611 222 333",
+        },
+      });
+      expect(first.isError).not.toBe(true);
+      const firstBody = structured(first);
+      expect(firstBody.challenge.sharedNumber).toBe("+34 699 000 111");
+      const revision = firstBody.channels.whatsapp.revision;
+      const second = await client.callTool({
+        name: "phylax_management_v1_channel_connect",
+        arguments: { operationId: "wa-challenge-002", expectedRevision: revision, channel: "whatsapp" },
+      });
+      expect(second.isError).not.toBe(true);
+      const secondBody = structured(second);
+      expect(secondBody.challenge.sharedNumber).toBe("+34 699 000 111");
+      expect(secondBody.challenge.code).toMatch(/^\d{2}-[a-z]+$/);
+      expect(secondBody.challenge.code).not.toBe(firstBody.challenge.code);
+      expect(unit.phylaxTenantSettings.get("alpha").phoneNumber).toBe("34611222333");
     } finally {
       await client.close();
       await unit.close();
