@@ -148,6 +148,7 @@ Older decisions (D1–D21): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.
 EpicSpine skill: 2026.10.24.10 @ 1ce5487 (vendored copy re-synced in #1430), checked 2026-10-24
 
 Always:
+- Trying must be cheap (Jordi, 2026-11-14 03:33Z, Zenod Log/2026-11-14.md#^e-322e21): "it should become increasingly cheap to try ... we can just launch and see what happens ... if they don't come, it's also not ... such a huge cost for us". Launch small, learn from real testers, never wait for perfect; Zenod's tester push is also the test of whether EpicSocial "can promote something and work on goals and get results".
 - L-1 | any task beyond answering a question | the delivery manager dispatches a worker and never implements itself | Jordi's chosen operating model | confirmed 2026-10-10
 - L-2 | dispatching a worker | use the Claude Code `Agent` tool with `model: sonnet`, in the background, one task per worktree `../wt-<task>` | same subscription, no T3/OpenCode hop | confirmed 2026-10-10
 - L-3 | integrating worker output | verify diff and checks yourself; paths in AGENTS.md `Deploy gate:` merge via your own PR once `ci` is green, never admin-bypass; docs, spines and other `*.md` push straight to `main` | only gated paths roll production; `main` no longer requires `ci` (D34) | confirmed 2026-10-10, amended 2026-10-25
