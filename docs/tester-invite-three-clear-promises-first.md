@@ -29,12 +29,12 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-14T10:56Z E26-S26 (run_04dcd610): the tester welcome with the one-minute video reached our own WhatsApp; Phylax 4ac9f72 deployed, production promoted to 49fc70c3 (#1668 test-send fix), switch at test, card in review ; earlier: 2026-11-14T05:52Z E26-S24 (run_97859891): the WhatsApp setup page says "Waiting for your code" with until when it works, live on c7354269 ; 04:28Z E26-S23: our first tester got Jordi's personal thank-you email asking him to retry WhatsApp
+Last attempted: 2026-11-14T23:41Z Delivery Manager (run_abc69842): on Jordi's close of E26-S26 dispatched E26-S27 switch the welcome on (run_6e6f0e02, seat14) and E26-S28 thank-you email send (run_f4bfccf7, seat9) ; earlier: 2026-11-14T10:56Z E26-S26 (run_04dcd610): the tester welcome with the one-minute video reached our own WhatsApp; Phylax 4ac9f72 deployed, production promoted to 49fc70c3 (#1668 test-send fix), switch at test, card in review ; earlier: 2026-11-14T05:52Z E26-S24 (run_97859891): the WhatsApp setup page says "Waiting for your code" with until when it works, live on c7354269 ; 04:28Z E26-S23: our first tester got Jordi's personal thank-you email asking him to retry WhatsApp
 Result: tester invites are open: a stranger applies on zenod.dev/testers, gets their own link on screen, signs up at 0 euro with no card; first 10 places; email is an optional extra (parked)
 Evidence: [tester welcome](http://vps3.taild81fbb.ts.net:9002/) · [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/) · [phone setup review](evidence/e26-s23-2026-11-14.md) · [WhatsApp setup words](http://vps3.taild81fbb.ts.net:9001/)
-Waiting on: the first stranger to apply (zenod-social recruits) ; Jordi: the E26-S26 card (switch the welcome on for every tester) and his Allow on cloud.zenod.dev/admin/mail for the thank-you email ; his review of E26-S11
+Waiting on: the first stranger to apply (zenod-social recruits) ; Jordi: his Allow on cloud.zenod.dev/admin/mail for the thank-you email ; his review of E26-S11
 Approved work: none
-Next action: E26-S3 watches the first real applicant end to end, including WhatsApp linking for a new account (EPIC-7 E7-3)
+Next action: E26-S27 sets the onboarding switch to on and E26-S28 sends the thank-you mail once the Allow is pressed (both running) ; then E26-S3 watches the first real applicant end to end, including WhatsApp linking for a new account (EPIC-7 E7-3)
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
 Verified at: 2026-11-14T10:56Z (production zenod-mt 49fc70c3, Phylax 4ac9f72 WhatsApp connected; tester onboarding switch test, mail sender waiting)
 
