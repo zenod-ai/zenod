@@ -30,14 +30,14 @@ Goal sentence: Zenod answers questions about your memory well, tested on your ow
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-12T08:00Z Delivery Manager roll-up (run_881c3b9f): Q0 to Q4 done (the memory test suite runs live checks on his notes) ; Q6 done through EPIC-24 M8 ; Q5 draft for Jordi ; Q7 drafted 2026-11-12 from E7-S3 iteration 2: production now files on Claude Haiku and answers on Claude Sonnet, but the question set still uses a free stand-in and the nightly check DeepSeek, so nothing tests Claude yet; no new key asked, per Jordi's "DO NOT CREATE A DUPLICATE KEY" (E94-A2)
+Last attempted: 2026-11-14T06:55Z Delivery Manager roll-up (run_7a85c46e): E15-S4 (voice-notes chart and three-pass rerun) was folded into EPIC-22 L4, which built the same chart; L4 is now a pinned page in his review and the three-pass rerun waits on E22-A6 ; Q0 to Q4 and Q6 done, Q5 and Q7 drafts for Jordi
 Result: on the code production runs (2026-11-12): demo set 96 / 100 / 1.7 unchanged, his private set 94.1 / 96.5 / 3.1 (retrieval was 98.2; one older note now ranks below new ones); the checks do not yet run on Claude
 Evidence: [E7-S3 iteration 2](evidence/e7-s3-2026-11-12.md) · http://vps3.taild81fbb.ts.net:8921/e7-s3/#iteration-2
-Waiting on: nobody (Q5 and Q7 are drafts Jordi starts)
+Waiting on: nobody here (Q5 and Q7 are drafts Jordi starts; the voice-notes rerun waits on E22-A6 in EPIC-22)
 Approved work: none
 Next action: none due here: Q7 starts when Jordi starts it, reusing the keys we have
 Source revision: production b4cf52b
-Verified at: 2026-11-12T08:00Z (EPIC-15 ledger and E7-S3 iteration 2 evidence read)
+Verified at: 2026-11-14T06:55Z (EPIC-15 ledger read; L4 page 200 at vps3:9004)
 
 ## Non-Goals
 
