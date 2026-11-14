@@ -147,6 +147,12 @@ export class WelcomeMailer {
     return "queued";
   }
 
+  /** Whether a mail to this address is already queued or sent (one person with two accounts gets one). */
+  hasAddress(email: string): boolean {
+    const address = email.trim().toLowerCase();
+    return Object.values(this.read().accounts).some((r) => r.email.trim().toLowerCase() === address && !r.droppedAt);
+  }
+
   /** Counts only, for the operator page and the evidence. */
   counts(): { enabled: boolean; queued: number; sent: number; failing: number } {
     const records = Object.values(this.read().accounts);
