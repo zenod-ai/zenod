@@ -16,6 +16,7 @@ import {
 } from "zenod";
 import { createApp } from "../src/app.js";
 import { formatConversationTranscript } from "../src/conversationTranscript.js";
+import { projectHostedChannelAction } from "../src/hostedChannels.js";
 import { Runtime } from "../src/runtime.js";
 import { Settings } from "../src/settings.js";
 import {
@@ -591,6 +592,51 @@ describe("WhatsApp lifecycle", () => {
         outageSince: null,
       });
     } finally {
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("gives the full shared number for the link challenge while status() stays masked (EPIC-7 T13)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-shared-number-"));
+    const runtime = new Runtime(dir);
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => new FakeSocket(),
+    });
+    try {
+      expect(gateway.sharedNumber()).toBeNull();
+      runtime.settings.setRaw("whatsapp_linked_jid", "5215550001234:12@s.whatsapp.net");
+      expect(gateway.status().linkedNumber).toBe("••••1234");
+      expect(gateway.sharedNumber()).toBe("+5215550001234");
+      // Zenod's challenge check (projectHostedChannelAction) only accepts a number someone can message.
+      const projected = projectHostedChannelAction(
+        {
+          channels: {
+            whatsapp: { state: "awaiting_code", senderHint: "••••9876", sharedNumber: gateway.status().linkedNumber, verificationExpiresAt: 2, lastInboundAt: null, lastReceiptAt: null, revision: "1" },
+            telegram: { state: "off", identityHint: null, verificationExpiresAt: null, revision: "0" },
+          },
+          challenge: { code: "42-otter", sharedNumber: gateway.sharedNumber(), expiresAt: 2 },
+          mutation: { operationId: "connect-wa-0001", operation: "whatsapp.challenge", outcome: "succeeded", at: 1 },
+        },
+        "whatsapp.challenge",
+        "connect-wa-0001",
+      );
+      expect(projected).toMatchObject({ challenge: { sharedNumber: "+5215550001234" } });
+      expect(projectHostedChannelAction(
+        {
+          channels: (projected as { channels: unknown }).channels,
+          challenge: { code: "42-otter", sharedNumber: gateway.status().linkedNumber, expiresAt: 2 },
+          mutation: { operationId: "connect-wa-0001", operation: "whatsapp.challenge", outcome: "succeeded", at: 1 },
+        },
+        "whatsapp.challenge",
+        "connect-wa-0001",
+      )).toBeNull();
+    } finally {
+      await gateway.close();
       await runtime.close();
       await rm(dir, { recursive: true, force: true });
     }
