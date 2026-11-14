@@ -2,7 +2,8 @@
 from: alpha9
 about: Improvement request: send the tester form's sign-up signal and keep the post id through to cloud sign-up, so Zenod's leads are traced to the post that brought them
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-14-zenod-re-improvement-request-send-the-tester.md
 kind: improvement-request
 ask: agent_team/E97-A9
 done-means: a real zenod.dev/testers application shows as one sign-up signal with its post id (?s=P-…) in agent_team's Leads count; a cloud.zenod.dev sign-up that started from a post link carries that id
