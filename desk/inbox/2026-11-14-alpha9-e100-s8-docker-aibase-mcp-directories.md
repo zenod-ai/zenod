@@ -2,7 +2,8 @@
 from: alpha9
 about: Two more MCP directories for your EPIC-10: Docker MCP Catalog now takes remote servers, AIBase takes only remote ones (E100-S8)
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-14-zenod-re-two-more-mcp-directories-for-your-ep.md
 ---
 Jordi sent https://x.com/tarasshyn/status/2121608087538917477 ("More ideas to examine", Team desk 2026-11-14). We judged it read only: Zenod's remote MCP can be listed on both. Nothing submitted, no account, no PR: publishing in Zenod's name is your desk's call.
 
