@@ -4,38 +4,28 @@
   "cardSha": "3a2a9f1d73c8e57d",
   "inputs": {
     "card": "3a2a9f1d73c8e57d",
-    "page": "d5c9bfe7a171fd1b",
+    "page": "01d6a1f45143b6ee",
     "rules": "11787b661371e8e4",
     "words": "0ecd8bc922fc3d32"
   },
-  "checkedAt": "2026-11-14T11:24:47Z",
+  "checkedAt": "2026-11-14T11:25:20Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Yes: run it on all notes",
       "where": "2026-11-14",
       "status": "met",
-      "how": "Page shows all 421 notes read in three passes: Haiku points with quotes, Sonnet threads across months, Opus monthly digests and open loops, with costs and vault untouched."
+      "how": "The page shows all 421 notes read in three passes: pass 1 points, pass 2 threads, pass 3 monthly digests, with costs totalling $3.72 and a full pass diagram."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "The before/after two-column block at 390 px is squeezed into a narrow right column with many short wrapped lines, so the Pass 1 bullets are hard to read and tall. (rule 4)"
-    ],
-    "breaches": [
-      {
-        "rule": 4,
-        "width": 390,
-        "what": "The before/after two-column block at 390 px is squeezed into a narrow right column with many short wrapped lines, so the Pass 1 bullets are hard to read and tall."
-      }
-    ],
-    "summary": "The page shows the three-pass result clearly with a sequence diagram and punchline at 1280 and 390; the main look issue is the cramped two-column comparison on the phone."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths render the three-pass diagram, punchline box and before/after comparison cleanly; the page shows the delivered result."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: The before/after two-column block at 390 px is squeezed into a narrow right column with many short wrapped lines, so the Pass 1 bullets are hard to read and tall. (rule 4)"
-  ],
+  "pass": true,
+  "held": [],
   "shots": [
     {
       "width": 390,
