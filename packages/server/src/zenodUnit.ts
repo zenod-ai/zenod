@@ -1539,6 +1539,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         applications: () => readApplications(storage.dataDir),
         testers: () => flow.snapshot().testers,
         accounts: () => customer.accounts.list(),
+        comped,
         firstSave: (tenantId) => tenantFirstSave(join(storage.dataDir, tenantId, "tasks.sqlite")),
         ...(zenodPhylax ? { whatsapp: cachedWhatsAppState((accountId) => zenodPhylax.whatsappState(accountId)) } : {}),
         isTest: (contact, use) => marks.isTest(contact, use),

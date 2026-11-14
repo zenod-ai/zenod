@@ -29,6 +29,8 @@ export interface FunnelCounts {
   paying_customers: number;
   /** Our own test applications, left out of every count above (S7 round 2). */
   test_applications?: number;
+  /** Our own test accounts on a tester code, left out of signed_up and active_testers (E26-S21 iteration 2). */
+  test_signups?: number;
 }
 
 export interface PublicCountsDocument extends FunnelCounts {
@@ -42,10 +44,11 @@ export interface PublicCountsDocument extends FunnelCounts {
 export const COUNT_DEFINITIONS: Record<keyof FunnelCounts, string> = {
   applications: "distinct people who sent the tester form on zenod.dev/testers, our own tests left out",
   accepted: "applicants given a tester place, our own tests left out",
-  signed_up: "testers who finished the free checkout and have an account",
+  signed_up: "testers who finished the free checkout and have an account, our own test accounts left out",
   active_testers: `testers on their free month with at least one save in the last ${ACTIVE_DAYS} days`,
   paying_customers: "accounts on a live subscription that pays (not free, not comped)",
   test_applications: "applications that were our own tests, counted nowhere else",
+  test_signups: "accounts on a tester code that are our own tests, counted nowhere else",
 };
 
 export interface CountSources {
@@ -75,10 +78,12 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     const key = (normalizeTesterEmail(contact) ?? contact.trim()).toLowerCase();
     if (key) (isTest(contact, use) ? tests : applicants).add(key);
   }
+  const testAccounts = new Set<string>();
   const testers = sources.testers().filter((tester) => {
     const key = tester.email.toLowerCase();
     if (tests.has(key) || isTest(tester.email, "")) {
       tests.add(key);
+      if (tester.redeemedBy) testAccounts.add(tester.redeemedBy);
       return false;
     }
     return true;
@@ -88,6 +93,7 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
   const acceptedEmails = new Set(accepted.map((tester) => tester.email.toLowerCase()));
 
   let signedUp = 0;
+  let testSignups = 0;
   let activeTesters = 0;
   let paying = 0;
   const since = nowMs - ACTIVE_DAYS * 86_400_000;
@@ -97,6 +103,12 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     // free forever (free_until null) and count nowhere here.
     const email = account.stripe_email?.toLowerCase() ?? "";
     const tester = Boolean(account.fully_discounted && account.free_until) || (email !== "" && acceptedEmails.has(email));
+    // E26-S21 iteration 2: our own test accounts (the T7 rehearsal on a tester code) count apart, as their
+    // applications already do; before this, signed_up showed 2 for 1 real applicant.
+    if (tester && isTestAccount(account, testAccounts, isTest)) {
+      testSignups += 1;
+      continue;
+    }
     if (tester) signedUp += 1;
     if (!live(account)) continue;
     if (!account.fully_discounted) {
@@ -112,7 +124,19 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     active_testers: activeTesters,
     paying_customers: paying,
     test_applications: tests.size,
+    test_signups: testSignups,
   };
+}
+
+/** True for one of our own test accounts: its email looks like a test, or it redeemed a test application's place. */
+export function isTestAccount(
+  account: CustomerAccount,
+  testAccounts: ReadonlySet<string>,
+  isTest: (contact: string, use: string) => boolean,
+): boolean {
+  if (testAccounts.has(account.account_id)) return true;
+  const email = account.stripe_email?.trim() ?? "";
+  return email !== "" && isTest(email, "");
 }
 
 /** Finished saves for one tenant from its tasks.sqlite, read only; 0 when the file is missing or unreadable. */
