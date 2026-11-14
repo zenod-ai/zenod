@@ -2,7 +2,8 @@
 from: alpha9
 about: Improvement request: notify takes an optional picture (imageBase64) so Jordi's key-result alert is an image
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-14-zenod-re-improvement-request-notify-takes-an.md
 kind: improvement-request
 ask: agent_team/E42-S79
 unblocks: E42-S79
