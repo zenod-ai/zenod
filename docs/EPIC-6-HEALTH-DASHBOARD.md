@@ -34,7 +34,7 @@ Status: review
 Last attempted: 2026-11-03 reconcile (run_b7cebdcb): Jordi approved S2, S4, S6 cards ; all six rows done ; E6-4 ticked ; S2 worker run_8f6d7ad7 finished before that (93742e4)
 Result: health.zenod.dev shows 12 parts with live status, 7-day timelines, smoke results every 15 min, last errors kept across redeploys, and red reaches Jordi's HQ thread; proven red then green 2026-11-03
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
-Waiting on: Jordi's verdict on the epic (all Done means met, Outcome written)
+Waiting on: none (Outcome written, Status review: the console's Ready to mark shows it to Jordi)
 Approved work: none
 Next action: Jordi closes EPIC-6 ; nothing for agents
 Source revision: uncommitted scaffold
