@@ -125,6 +125,12 @@ export interface WhatsAppDiagnostics {
   store: WhatsAppStoreDiagnostics;
 }
 
+/** EPIC-20 A3: an optional picture sent with the text as its caption. */
+export interface WhatsAppOutboundImage {
+  data: Buffer;
+  mimetype: string;
+}
+
 export interface SocketLike {
   ev: {
     on(event: "connection.update", listener: (update: Record<string, unknown>) => void): void;
@@ -133,7 +139,7 @@ export interface SocketLike {
   user?: { id?: string | null } | null;
   sendMessage(
     jid: string,
-    content: { text: string },
+    content: { text: string } | { image: Buffer; caption?: string; mimetype?: string },
     options?: { messageId?: string },
   ): Promise<{ key?: { id?: string | null } } | undefined>;
   readMessages?(keys: WAMessageKey[]): Promise<void>;
@@ -1302,6 +1308,7 @@ export class WhatsAppGateway {
     text: string,
     auditMessageId?: string,
     tenantId?: string,
+    image?: WhatsAppOutboundImage,
   ): Promise<{ sentMessageId: string }> {
     const socket = this.socket;
     if (!socket) throw new Error("WhatsApp is not connected");
@@ -1328,7 +1335,7 @@ export class WhatsAppGateway {
       return { sentMessageId };
     }
     try {
-      const delivery = await this.sendOutboundIntent(socket, intent);
+      const delivery = await this.sendOutboundIntent(socket, intent, image);
       this.options.store.completeOutboundIntent(intent, delivery);
       if (intent.receiptEligible) {
         this.options.store.recordPortedReceiptDelivery(sourceMessageId, delivery.sentMessageId, "sent");
@@ -1401,6 +1408,7 @@ export class WhatsAppGateway {
   private sendOutboundIntent(
     socket: SocketLike,
     intent: WhatsAppOutboundIntent,
+    image?: WhatsAppOutboundImage,
   ): Promise<{ sentMessageId: string; raw?: unknown }> {
     const existing = this.outboundIntentSends.get(intent.intentId);
     if (existing) return existing;
@@ -1426,9 +1434,13 @@ export class WhatsAppGateway {
         return { sentMessageId };
       }
       try {
+        // EPIC-20 A3: an image goes out as ONE message with the text as its caption.
+        const content = image
+          ? { image: image.data, caption: intent.bodyText, mimetype: image.mimetype }
+          : { text: intent.bodyText };
         const sent = await socket.sendMessage(
           intent.chatId,
-          { text: intent.bodyText },
+          content,
           { messageId: intent.providerMessageId },
         );
         const sentMessageId = sent?.key?.id?.trim() ?? "";

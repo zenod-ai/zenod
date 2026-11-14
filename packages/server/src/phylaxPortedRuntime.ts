@@ -1081,9 +1081,9 @@ export class PhylaxPortedRuntime {
 
   delivery(tenantId?: string): PhylaxTenantDelivery {
     return {
-      send: async (channel, recipient, text) => {
+      send: async (channel, recipient, text, image) => {
         const sent = channel === "whatsapp"
-          ? await this.whatsapp.sendText(recipient, text, undefined, tenantId)
+          ? await this.whatsapp.sendText(recipient, text, undefined, tenantId, image)
           : await this.telegram.sendText(recipient, text, tenantId);
         return {
           channel,

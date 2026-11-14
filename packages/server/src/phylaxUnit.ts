@@ -57,6 +57,7 @@ import {
   phylaxWhatsAppPaths,
   registerPhylaxChannelTools,
   type PhylaxFixedProductAdapter,
+  type PhylaxNotifyImage,
   type PhylaxPortedChannel,
   type PhylaxTranscriptionFailure,
 } from "./phylaxChannels.js";
@@ -1246,19 +1247,20 @@ function registerTenantChannelTools(
   const tenantId = context.tenant?.id;
   if (!tenantId) throw new Error("Phylax channel tools require a tenant");
   const delivery = runtime.delivery(tenantId);
-  const send = async (channel: PhylaxPortedChannel, recipient: string, text: string) => {
+  const send = async (channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage) => {
     if (!settings.ownsRecipient(tenantId, channel, recipient)) {
       throw new PhylaxChannelError("delivery_error", "That recipient is not connected to this Zenod account.");
     }
-    return delivery.send(channel, recipient, text);
+    return image ? delivery.send(channel, recipient, text, image) : delivery.send(channel, recipient, text);
   };
   registerPhylaxChannelTools(server, {
     send,
-    async notify(text) {
+    async notify(text, image) {
       const tenant = settings.get(tenantId);
       const requests: Array<Promise<Awaited<ReturnType<typeof send>>>> = [];
       if (tenant.notificationPrefs.whatsapp && tenant.verified && tenant.phoneNumber) {
-        requests.push(send("whatsapp", tenant.phoneNumber, text));
+        // EPIC-20 A3: only WhatsApp carries the picture; Telegram keeps the text.
+        requests.push(send("whatsapp", tenant.phoneNumber, text, image));
       }
       if (tenant.notificationPrefs.telegram && tenant.telegramBinding) {
         requests.push(send("telegram", tenant.telegramBinding, text));
