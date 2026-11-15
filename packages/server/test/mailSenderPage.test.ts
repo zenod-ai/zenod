@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { describe, expect, it, vi } from "vitest";
 import { GMAIL_SEND_SCOPE, MAIL_GRANT_FILE, MailGrantStore } from "../src/mailGrant.js";
-import { gmailApiEnableUrl, mailSenderPage, mountMailSenderRoutes } from "../src/mailSenderPage.js";
+import { gmailApiEnableUrl, googleErrorWords, mailSenderPage, mountMailSenderRoutes } from "../src/mailSenderPage.js";
 import { GMAIL_API_OFF, type ZenodMail } from "../src/zenodMail.js";
 
 const MASTER = "b".repeat(64);
@@ -193,7 +193,15 @@ describe("Connect mail sender (EPIC-26 S11)", () => {
       const check = await (await app.request("/api/ops/mail/connect-check", { headers: { authorization: "Bearer ops" } })).json();
       expect(check.ok).toBe(ok);
       expect(new URL(seen[0]!).searchParams.get("login_hint")).toBe("jordi@alpha9.io");
+      if (!ok) expect(check).toHaveProperty("googleError");
     }
+  });
+
+  it("E26-S28: reads Google's error words and hides the client id", () => {
+    const raw = Buffer.from("\n\u0015redirect_uri_mismatch\u0012\u0020client 123-abc.apps used a wrong callback").toString("base64url");
+    const words = googleErrorWords(raw, "123-abc.apps");
+    expect(words).toContain("redirect_uri_mismatch");
+    expect(words).not.toContain("123-abc.apps");
   });
 
   it("with Cloudflare as the sender shows Ready, no Google connect step, and keeps Send me a test", () => {
