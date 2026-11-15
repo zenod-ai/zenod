@@ -1,28 +1,52 @@
 {
   "row": "L5",
   "card": "docs/cards/L5.md",
-  "cardSha": "3a2a9f1d73c8e57d",
+  "cardSha": "4cd1e251bbcd65ed",
   "inputs": {
-    "card": "3a2a9f1d73c8e57d",
-    "page": "01d6a1f45143b6ee",
+    "card": "4cd1e251bbcd65ed",
+    "page": "22f1dc0288b6c569",
     "rules": "11787b661371e8e4",
-    "words": "0ecd8bc922fc3d32"
+    "words": "b7ec3631fb0e5a34"
   },
-  "checkedAt": "2026-11-14T11:25:20Z",
+  "checkedAt": "2026-11-15T00:13:47Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
+      "said": "Your six months of voice notes point to 6 changes in how we work",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Page opens with the punchline box 'Your six months of voice notes point to 6 changes in how we work. Here they are.' and the six-change table follows."
+    },
+    {
+      "said": "what is being asked?",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Change 1 is a fresh-reader test: a fresh reader must say in one sentence what is being asked, with 41 notes."
+    },
+    {
       "said": "Yes: run it on all notes",
       "where": "2026-11-14",
+      "status": "elsewhere",
+      "how": "His 'Yes: run it on all notes' is about the run itself; the card says all 421 notes were read in three passes."
+    },
+    {
+      "said": "I don't know what you're asking. I don't understand your question, bro ... my expectation was, what changes were we gonna drive into the Epic Spine? ... 10,000 times more clear, please.",
+      "where": "vn_5b3ad6c9",
       "status": "met",
-      "how": "The page shows all 421 notes read in three passes: pass 1 points, pass 2 threads, pass 3 monthly digests, with costs totalling $3.72 and a full pass diagram."
+      "how": "Clarity test for every card and question is the first change, and the page shows the test at the top of the table."
+    },
+    {
+      "said": "ask questions more clearly in general",
+      "where": "vn_5b3ad6c9",
+      "status": "elsewhere",
+      "how": "His request for clearer questions in general is about the ask style, not the six-change page; the card's rule 1 covers it indirectly."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths render the three-pass diagram, punchline box and before/after comparison cleanly; the page shows the delivered result."
+    "summary": "Both widths open with the punchline box under the title, show the six-change table with counts and quotes, fit without sideways scroll, and end with the detail block; the card's ✗ line declares nothing is made yet."
   },
   "pass": true,
   "held": [],
