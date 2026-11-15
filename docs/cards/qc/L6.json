@@ -1,27 +1,27 @@
 {
   "row": "L6",
   "card": "docs/cards/L6.md",
-  "cardSha": "6a080f7057ba31b7",
+  "cardSha": "452e5ef6f5469538",
   "inputs": {
-    "card": "6a080f7057ba31b7",
-    "page": "61aa4cd83070c38e",
+    "card": "452e5ef6f5469538",
+    "page": "238351246692c197",
     "rules": "5c1e73ef9c3caa57",
     "words": "ce1b9d06867cb388"
   },
-  "checkedAt": "2026-11-15T09:25:47Z",
+  "checkedAt": "2026-11-15T09:26:17Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Page opens with the punchline box: team rule, say it back, fix the cause, first use links led to dead ends, so every link is tested first."
+      "how": "Punchline box opens the page with the team rule, first use: links led to dead ends, so every link is tested first."
     },
     {
       "said": "test every link first, and say what it is for",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Say-it-back section shows \"We think you mean: test every link first, and say what it is for.\""
+      "how": "Say-it-back section quotes \"test every link first, and say what it is for\" as what we think he means."
     },
     {
       "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
@@ -33,13 +33,13 @@
       "said": "you led me to a dead end. button clicked nothing happens",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Repeat table quotes \"you led me to a dead end. button clicked nothing happens\" in the E26-A15 row."
+      "how": "Repeat table E26-A15 row quotes \"you led me to a dead end. button clicked nothing happens\"."
     },
     {
       "said": "I hate it when you direct me into loose ends",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Repeat table quotes \"I hate it when you direct me into loose ends\" in the E26-A15 row."
+      "how": "Repeat table E26-A15 row quotes \"I hate it when you direct me into loose ends\"."
     },
     {
       "said": "Yes: use it from your next repeat\\",
@@ -52,15 +52,15 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the punchline, a five-box sequence on one line, tables and sections, with no sideways overflow and readable text; the card-level review is not shown on these screenshots."
+    "summary": "Phone and laptop pages both open with the punchline box, show the five-step sequence as one row of boxes with arrows, and end with the closing line; no sideways overflow and no clear house-rule breach visible."
   },
   "pass": false,
   "held": [
-    "ambiguous: The decision \"Did we get it right? Test every link first, and say what it is for.\" could be read as approving the whole five-step path or only the link-testing rule, and a stranger cannot tell what \"Not quite\" does beyond \"tell us by voice\"."
+    "ambiguous: The decision \"Did we get your dead-end complaint right? Test every link first, say what it's for.\" could be read as approving the whole five-step path or only the link-testing rule; and \"Not quite\" only says \"say by voice what you meant\", so it is unclear what happens to the rule."
   ],
   "reader": {
-    "asked": "Decide whether the card's rule, to test every link first and say what it is for, is what he meant by the dead-end complaint, and approve it or ask for a rewrite.",
-    "ambiguous": "The decision \"Did we get it right? Test every link first, and say what it is for.\" could be read as approving the whole five-step path or only the link-testing rule, and a stranger cannot tell what \"Not quite\" does beyond \"tell us by voice\"."
+    "asked": "Asks Jordi to say yes or not quite to whether 'test every link first, say what it's for' is what he meant by his dead-end complaint, and so approve the rule.",
+    "ambiguous": "The decision \"Did we get your dead-end complaint right? Test every link first, say what it's for.\" could be read as approving the whole five-step path or only the link-testing rule; and \"Not quite\" only says \"say by voice what you meant\", so it is unclear what happens to the rule."
   },
   "shots": [
     {
