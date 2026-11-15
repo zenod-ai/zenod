@@ -4,18 +4,18 @@
   "cardSha": "0bb6bb997f30461a",
   "inputs": {
     "card": "0bb6bb997f30461a",
-    "page": "aa7096fb6d8f34ee",
+    "page": "f2852469eb8ec25a",
     "rules": "5c1e73ef9c3caa57",
     "words": "ce1b9d06867cb388"
   },
-  "checkedAt": "2026-11-15T09:21:22Z",
+  "checkedAt": "2026-11-15T09:21:51Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Punchline box at top of page quotes the sentence verbatim at both widths."
+      "how": "Punchline box at top quotes the sentence verbatim at both widths."
     },
     {
       "said": "test every link first, and say what it is for",
@@ -27,7 +27,7 @@
       "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
       "where": "vn_cdcf1208",
       "status": "missed",
-      "how": "No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not a disambiguation protocol."
+      "how": "No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not as a protocol for three repeats."
     },
     {
       "said": "you led me to a dead end. button clicked nothing happens",
@@ -52,16 +52,16 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The first screen opens with the punchline quote and a five-box sequence at both widths; the page does not scroll sideways, and the evidence tables are readable, with a long text-heavy middle section on phone."
+    "summary": "Both widths open with the punchline and show the five-step sequence as boxes with arrows; the page is readable, with no sideways page scroll, and the evidence and tables are complete."
   },
   "pass": false,
   "held": [
-    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not a disambiguation protocol.",
-    "ambiguous: \"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
+    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not as a protocol for three repeats.",
+    "ambiguous: \"Your repeat about dead-end links was traced to its cause\" could mean the links were fixed, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
   ],
   "reader": {
-    "asked": "Decide whether the card's fix is right: he must press Yes or Not quite on whether 'Test every link first, and say what it is for' is what he meant.",
-    "ambiguous": "\"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
+    "asked": "Decide whether the card's stated result is what he meant, by clicking Yes: that is it or Not quite: tell us.",
+    "ambiguous": "\"Your repeat about dead-end links was traced to its cause\" could mean the links were fixed, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
   },
   "shots": [
     {
