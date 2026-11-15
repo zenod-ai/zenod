@@ -108,6 +108,21 @@ function failedTest(error: unknown): "api_off" | "test_failed" {
   return message === GMAIL_API_OFF ? "api_off" : "test_failed";
 }
 
+/** The readable words of Google's base64 authError (e.g. "redirect_uri_mismatch"), without the client id. */
+export function googleErrorWords(authError: string | null, clientId: string): string | null {
+  if (!authError) return null;
+  let text = "";
+  try {
+    text = Buffer.from(authError, "base64url").toString("latin1");
+  } catch {
+    return null;
+  }
+  const words = (text.match(/[A-Za-z_][A-Za-z0-9_ .,:'\/-]{3,}/g) ?? [])
+    .map((word) => word.split(clientId).join("<client>").trim())
+    .filter(Boolean);
+  return words.join(" | ").slice(0, 400) || null;
+}
+
 function hashState(state: string): string {
   return createHash("sha256").update(state).digest("hex");
 }
@@ -257,7 +272,8 @@ export function mountMailSenderRoutes(app: Hono<{ Bindings: HttpBindings }>, opt
   app.get("/api/ops/mail/connect-check", async (c) => {
     if (!options.isOps?.(c)) return c.json({ error: "not found" }, 404);
     if (!options.client || !options.store.available) return c.json({ ok: false, reason: "not_ready" });
-    const url = mailGrantAuthorizeUrl(options.client, `${MAIL_GRANT_STATE_PREFIX}check`, "x".repeat(43), options.sender);
+    const challenge = createHash("sha256").update(randomBytes(48).toString("base64url")).digest("base64url");
+    const url = mailGrantAuthorizeUrl(options.client, `${MAIL_GRANT_STATE_PREFIX}check`, challenge, options.sender);
     try {
       const response = await fetchImpl(url, { redirect: "manual" });
       const location = response.headers.get("location") ?? "";
@@ -267,6 +283,7 @@ export function mountMailSenderRoutes(app: Hono<{ Bindings: HttpBindings }>, opt
         ok: !error && Boolean(next) && next!.host === "accounts.google.com",
         googleStatus: response.status,
         googleNext: next ? `${next.host}${next.pathname}` : null,
+        ...(error && next ? { googleError: googleErrorWords(next.searchParams.get("authError"), options.client.clientId) } : {}),
         accountHint: options.sender,
       });
     } catch {
