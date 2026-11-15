@@ -80,6 +80,16 @@
      ],
      "since": "2026-11-14",
      "draft": true
+    },
+    {
+     "id": "tester-thank-you-email",
+     "title": "A personal thank-you email when you link WhatsApp",
+     "text": "Within minutes of linking WhatsApp, each tester gets one short thank-you email from Jordi, Zenod's founder, with a few useful links and an open offer of a quick call. It comes once, and replies reach him directly.",
+     "rows": [
+      "E26-S28"
+     ],
+     "since": "2026-11-15",
+     "draft": true
     }
    ]
   },
