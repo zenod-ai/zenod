@@ -56,7 +56,7 @@ def ops(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
     """Call a production ops route from VPS1, where the token file lives; the token is never printed or copied."""
     data = json.dumps(body) if body is not None else ""
     remote = (
-        f'f={TOKEN_FILE}; curl -sS -m 30 -o /dev/stdout -w "\\n%{{http_code}}" -X {method} '
+        f'f={TOKEN_FILE}; curl -sS -m 30 -w "\\n%{{http_code}}" -X {method} '
         f'-H "Authorization: Bearer $(cat $f)" -H "content-type: application/json" '
         + ("--data-binary @- " if body is not None else "")
         + f"{BASE}{path}"
