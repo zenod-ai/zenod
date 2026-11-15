@@ -59,7 +59,7 @@ describe("Zenod mail sender (EPIC-26 T2, S11)", () => {
     await expect(gmailMailer(source, "jordi@zenod.dev", undefined, off)(MAIL)).rejects.toThrow(GMAIL_API_OFF);
   });
 
-  it("uses the connected grant first: not ready until Jordi connects, then sends as jordi@zenod.dev", async () => {
+  it("uses the connected grant first: not ready until Jordi connects, then sends as jordi@alpha9.io", async () => {
     const dir = mkdtempSync(join(tmpdir(), "zenod-mail-"));
     const env = { GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "csecret", CHASSIS_VAULT_MASTER_KEY: MASTER, RESEND_API_KEY: "re_x" };
     const { calls, fetchImpl } = stubFetch();
@@ -68,7 +68,7 @@ describe("Zenod mail sender (EPIC-26 T2, S11)", () => {
     expect(mailReady(send)).toBe(false);
     await expect(send!(MAIL)).rejects.toThrow(/not connected/);
 
-    new MailGrantStore(dir, MASTER).save("jordi@zenod.dev", "refresh-1", "gmail.send");
+    new MailGrantStore(dir, MASTER).save("jordi@alpha9.io", "refresh-1", "gmail.send");
     expect(mailReady(send)).toBe(true);
     await send!(MAIL);
     await send!(MAIL);
@@ -76,17 +76,17 @@ describe("Zenod mail sender (EPIC-26 T2, S11)", () => {
     const form = new URLSearchParams(String(calls[0]!.init.body));
     expect(form.get("grant_type")).toBe("refresh_token");
     expect(form.get("refresh_token")).toBe("refresh-1");
-    expect(decode((JSON.parse(String(calls[1]!.init.body)) as { raw: string }).raw)).toContain("From: Jordi at Zenod <jordi@zenod.dev>");
+    expect(decode((JSON.parse(String(calls[1]!.init.body)) as { raw: string }).raw)).toContain("From: Jordi at Zenod <jordi@alpha9.io>");
   });
 
   it("marks the grant stopped when Google withdraws it, so mail stays queued", async () => {
     const dir = mkdtempSync(join(tmpdir(), "zenod-mail-"));
     const store = new MailGrantStore(dir, MASTER);
-    store.save("jordi@zenod.dev", "refresh-1", "gmail.send");
+    store.save("jordi@alpha9.io", "refresh-1", "gmail.send");
     const fetchImpl = (async () => new Response('{"error":"invalid_grant"}', { status: 400 })) as unknown as typeof fetch;
     const send = mailerFromEnv({ GOOGLE_OAUTH_CLIENT_ID: "c", GOOGLE_OAUTH_CLIENT_SECRET: "s", CHASSIS_VAULT_MASTER_KEY: MASTER }, { dataDir: dir, fetchImpl });
     await expect(send!(MAIL)).rejects.toThrow(/withdrawn/);
-    expect(store.status()).toMatchObject({ connected: false, email: "jordi@zenod.dev" });
+    expect(store.status()).toMatchObject({ connected: false, email: "jordi@alpha9.io" });
     expect(store.status().refusedAt).toBeTruthy();
     expect(mailReady(send)).toBe(false);
   });

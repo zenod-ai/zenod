@@ -1220,9 +1220,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       c.req.path === "/oauth/authorize" ||
       c.req.path === "/oauth/authorize/decision" ||
       c.req.path === "/oauth/subscribers/decision";
+    // E26-S28: the Connect mail sender form posts to /admin/mail/connect, which redirects to
+    // Google's consent screen; browsers check form-action on that redirect too, so without
+    // Google's origin here the button silently did nothing.
+    const isMailSenderRoute = c.req.path === "/admin/mail" || c.req.path === "/admin/mail/connect";
     const formActionPolicy = isMcpOAuthBrowserRoute
       ? "form-action 'self' https: http://127.0.0.1:* http://[::1]:* http://localhost:*"
-      : "form-action 'self' https://checkout.stripe.com";
+      : isMailSenderRoute
+        ? "form-action 'self' https://accounts.google.com"
+        : "form-action 'self' https://checkout.stripe.com";
     const routeContentSecurityPolicy = `${contentSecurityPolicy}; ${formActionPolicy}`;
     c.header(
       "Content-Security-Policy",
@@ -1397,7 +1403,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     });
     admin.mountRoutes?.(app);
     if (agent.name === "zenod") {
-      // EPIC-26 S11: one Google consent for gmail.send as jordi@zenod.dev, given on /admin/mail.
+      // EPIC-26 S11: one Google consent for gmail.send as Jordi's Google account (E26-S28: jordi@alpha9.io), given on /admin/mail.
       const mailSender = mailSenderFromEnv(env);
       const mail = mailerFromEnv(env, { dataDir: storage.dataDir });
       const appUrl = (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "");

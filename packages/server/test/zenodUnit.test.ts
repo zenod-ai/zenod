@@ -2709,6 +2709,13 @@ describe("Zenod chassis unit", () => {
       expect(ordinary.headers.get("content-security-policy")).not.toContain(
         "http://127.0.0.1:*",
       );
+      // E26-S28: the Connect mail sender form redirects to Google; form-action must allow it.
+      for (const path of ["/admin/mail", "/admin/mail/connect"]) {
+        const mailPage = await fetch(`${origin}${path}`);
+        expect(mailPage.headers.get("content-security-policy")).toContain(
+          "form-action 'self' https://accounts.google.com",
+        );
+      }
 
       const registration = await fetch(`${origin}/oauth/register`, {
         method: "POST",

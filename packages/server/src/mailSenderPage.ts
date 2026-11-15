@@ -1,6 +1,6 @@
 // EPIC-26 S11 round 2: the Connect mail sender page at cloud.zenod.dev/admin/mail, the
 // operator's sign-in only. One button runs Google's consent for gmail.send as
-// jordi@zenod.dev (mailGrant.ts); on success Zenod sends him one test, the email a
+// Jordi's Google account (E26-S28: jordi@alpha9.io) (mailGrant.ts); on success Zenod sends him one test, the email a
 // tester gets, and the queued tester mail goes out. Disconnect revokes the grant.
 import { createHash, randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
@@ -129,20 +129,21 @@ export function mailSenderPage(options: MailSenderRoutesOptions, noticeKey = "")
     : status.refusedAt
       ? `<p><span class="state off">Stopped.</span> Google stopped accepting Zenod's permission on ${escapeHtml(when(status.refusedAt))}. Connect it again to send.</p>${connectButton}`
       : `<p><span class="state off">Not connected.</span> Tester emails wait here until you connect.</p>${connectButton}
-<p class="muted">Google asks you to sign in. Choose <b>${sender}</b>, then press Allow. If Google first says it has not verified the app, press Advanced and then the link to go on to Zenod.</p>`;
+<p class="muted">Google opens. Choose your account <b>${sender}</b>, then press Allow. If Google first says it has not verified the app, press Advanced and then the link to go on to Zenod.</p>`;
   const mail = options.preview();
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Mail sender — Zenod</title><style>${ADMIN_STYLE}.row{display:flex;gap:.75rem;flex-wrap:wrap}.btn[disabled]{opacity:.5;cursor:default}.notice{border-left:3px solid #1f4d3a;padding:.5rem 1rem;background:#ece5d6;max-width:44rem}iframe{width:100%;max-width:40rem;height:34rem;border:1px solid #d9d2c1;background:#f6f2e9}</style></head><body><main>
 <p class="muted"><a href="/admin">Zenod admin</a> · <a href="/admin/testers">Testers and daily counts</a></p>
 <h1>Mail sender</h1>
+<p class="lead"><b>So each new tester gets your thank-you email automatically, press Allow once.</b> When a tester links WhatsApp, Zenod sends them one short thank-you email from you, offering a quick call.</p>
 ${notice ? `<p class="notice">${escapeHtml(notice)}${enable}</p>` : ""}
 <div class="where">
-<p><b>What this does.</b> Zenod emails each accepted tester their personal link from <b>${sender}</b>, through ${options.provider === "cloudflare" ? "Cloudflare" : "Gmail"}. Replies land in your inbox.</p>
+<p><b>What this does.</b> Zenod emails testers from <b>${sender}</b>: the thank-you email when they link WhatsApp, and their personal link when accepted, through ${options.provider === "cloudflare" ? "Cloudflare" : "Gmail"}. Replies land in your inbox.</p>
 ${options.provider === "cloudflare" ? "" : `<p><b>What Google lets it do.</b> Send email as that address, nothing else. Zenod cannot read, delete or change your mail. The permission is kept encrypted on Zenod's server, and Disconnect withdraws it at Google.</p>`}
 <p><b>Where this is.</b> Inside Zenod, at cloud.zenod.dev/admin/mail. Only your GitHub sign-in opens it.</p>
 </div>
 <h2>Status</h2>
 ${state}
-<p class="muted">Welcome and end-of-test emails: ${options.welcomeOn ? "switched on, they go out once the sender is connected" : "switched off for now, agents switch them on after your first test arrives"}.</p>
+<p class="muted">The tester thank-you email follows the Tester welcome switch below.${options.welcomeOn ? "" : " The older after-checkout welcome and end-of-test emails are a separate setting, off for now."}</p>
 ${onboardingSection(options)}
 <h2>The email a tester gets</h2>
 <p class="muted">Subject: ${escapeHtml(mail.subject)}. From: Jordi at Zenod, ${sender}. The link below is an example; each tester gets their own code.</p>
