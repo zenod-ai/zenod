@@ -1,36 +1,36 @@
 {
   "row": "E0-S1",
   "card": "docs/cards/E0-S1.md",
-  "cardSha": "f41db6b127245165",
+  "cardSha": "870d9d84ac74df04",
   "inputs": {
-    "card": "f41db6b127245165",
+    "card": "870d9d84ac74df04",
     "page": "957c72c9595adbf0",
     "rules": "5c1e73ef9c3caa57",
     "words": "13b3481095eb639e"
   },
-  "checkedAt": "2026-11-15T09:26:52Z",
+  "checkedAt": "2026-11-15T09:27:21Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Research: Zenod as a company memory, one voice-note mailbox every employee sends ideas to, AI sorts them and bubbles things up; one page on who would buy it, what exists, how it differs from EpicTeam",
       "where": "the row's ask (no quote of his found)",
       "status": "met",
-      "how": "Evidence page shows the IN, ZENOD DOES, OUT company memory diagram, buyers, what-exists table, and How it differs section; recommendation box at the end."
+      "how": "Evidence page shows the company-memory IN, ZENOD DOES, OUT diagram, buyers, what-exists table, and difference from EpicTeam."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box and a three-column diagram, tables and recommendation follow; no sideways overflow and the page renders fully."
+    "summary": "The page opens with the punchline box under the title, then a three-column diagram of the idea; buyers, a comparison table, the EpicTeam difference and a recommendation follow, at both widths."
   },
   "pass": false,
   "held": [
-    "ambiguous: \"The team recommends yes\" with the button \"Yes: say which business in your reply, you ask its owner, the team does the rest\" – a stranger could not tell whether a yes starts the test now or whether he still has to approve the tester invite first."
+    "ambiguous: \"Yes: name a business and ask its owner. The team starts the test when Zenod sends its first tester invite, with no other step from you\" - a stranger could read that a yes starts the test now, or that he still has to approve the tester invite before anything starts."
   ],
   "reader": {
-    "asked": "Decide whether to test a company memory with one small team, yes or no.",
-    "ambiguous": "\"The team recommends yes\" with the button \"Yes: say which business in your reply, you ask its owner, the team does the rest\" – a stranger could not tell whether a yes starts the test now or whether he still has to approve the tester invite first."
+    "asked": "Decide whether to run a no-build two-week test with one friendly team, and if yes, name a business and ask its owner.",
+    "ambiguous": "\"Yes: name a business and ask its owner. The team starts the test when Zenod sends its first tester invite, with no other step from you\" - a stranger could read that a yes starts the test now, or that he still has to approve the tester invite before anything starts."
   },
   "shots": [
     {
