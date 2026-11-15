@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
-import { greetingName, parseOnboardingMode, TesterOnboarding, testerThanksMail } from "../src/testerOnboarding.js";
+import { Hono } from "hono";
+import type { HttpBindings } from "@hono/node-server";
+import { greetingName, mountTesterMailQueueRoutes, parseOnboardingMode, TesterOnboarding, testerThanksMail } from "../src/testerOnboarding.js";
 import type { SendMail, ZenodMail } from "../src/zenodMail.js";
 
 const dirs: string[] = [];
@@ -137,5 +139,57 @@ describe("tester onboarding (E26-S26)", () => {
     expect(await onboarding.testSend(account("ourtest-2", "Zenod-Test@example.org"))).toEqual({ whatsapp: "sent", mail: "already queued" });
     await onboarding.thanks.process();
     expect(sent).toHaveLength(1);
+  });
+
+  it("lists queued mail for an outside sender and marks it sent once per address (E26-S28 it3)", async () => {
+    const { onboarding, sent } = await setup("test", false);
+    expect(await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"))).toEqual({ whatsapp: "sent", mail: "queued" });
+    await onboarding.thanks.process();
+    expect(sent).toHaveLength(0);
+    const [pending, ...rest] = onboarding.thanks.pending();
+    expect(rest).toHaveLength(0);
+    expect(pending).toMatchObject({ id: "ourtest-1", to: "zenod-test@example.org", subject: "Thank you for testing Zenod" });
+    expect(pending.text).toContain('Reply "call"');
+    expect(pending.html).toContain("zenod.dev/start");
+    expect(Object.keys(pending).sort()).toEqual(["html", "id", "queuedAt", "subject", "text", "to"]);
+    expect(onboarding.thanks.markSent("ourtest-1", "team-gmail", "<m1@mail>")).toBe("sent");
+    expect(onboarding.thanks.markSent("ourtest-1", "team-gmail", "<m2@mail>")).toBe("already sent");
+    expect(onboarding.thanks.markSent("nobody", "team-gmail")).toBe("unknown");
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+    expect(onboarding.status().mail).toMatchObject({ queued: 0, sent: 1 });
+  });
+
+  it("the ops mail-queue routes need the token, list one mail per address and mark idempotently", async () => {
+    const auth = { authorization: "Bearer ok", "content-type": "application/json" };
+    const fresh = await setup("test", false);
+    fresh.onboarding.thanks.queue("old-1", "jordi@example.org");
+    fresh.onboarding.thanks.queue("old-2", "Jordi@example.org");
+    fresh.onboarding.thanks.queue("other-1", "ana@example.org");
+    // Two records to one address (queued before the address check existed): only the first is listed.
+    const app2 = new Hono<{ Bindings: HttpBindings }>();
+    mountTesterMailQueueRoutes(app2, { isOps: (c) => c.req.header("authorization") === "Bearer ok", onboarding: fresh.onboarding });
+    expect((await app2.request("/api/ops/testers/onboarding/mail-queue")).status).toBe(404);
+    const list = await app2.request("/api/ops/testers/onboarding/mail-queue", { headers: auth });
+    const body = (await list.json()) as { mode: string; mails: Array<{ id: string }> };
+    expect(body.mode).toBe("test");
+    expect(body.mails.map((m) => m.id)).toEqual(["old-1", "other-1"]);
+    const mark = (payload: unknown) =>
+      app2.request("/api/ops/testers/onboarding/mail-sent", { method: "POST", headers: auth, body: JSON.stringify(payload) });
+    expect((await mark({ id: "old-1" })).status).toBe(400);
+    expect((await mark({ id: "nope", via: "team-gmail" })).status).toBe(404);
+    expect(await (await mark({ id: "old-1", via: "team-gmail", messageId: "<a@b>" })).json()).toMatchObject({ result: "sent" });
+    expect(await (await mark({ id: "old-1", via: "team-gmail" })).json()).toMatchObject({ result: "already sent" });
+    // old-2 has the same address: closed with old-1, never listed, never sent by Zenod's own sender either.
+    const after = (await (await app2.request("/api/ops/testers/onboarding/mail-queue", { headers: auth })).json()) as { mails: Array<{ id: string }> };
+    expect(after.mails.map((m) => m.id)).toEqual(["other-1"]);
+    expect(fresh.onboarding.thanks.counts()).toMatchObject({ queued: 1, sent: 2 });
+  });
+
+  it("lists nothing while switched off", async () => {
+    const { onboarding } = await setup("test", false);
+    onboarding.thanks.queue("old-1", "jordi@example.org");
+    expect(onboarding.thanks.pending()).toHaveLength(1);
+    onboarding.setMode("off", "test");
+    expect(onboarding.thanks.pending()).toHaveLength(0);
   });
 });

@@ -1,0 +1,10 @@
+[Unit]
+Description=Zenod tester thank-you mail every 15 minutes (EPIC-26 E26-S28)
+
+[Timer]
+OnBootSec=5min
+OnCalendar=*:07/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target
