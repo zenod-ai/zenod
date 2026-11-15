@@ -1,0 +1,46 @@
+{
+  "row": "E0-S1",
+  "card": "docs/cards/E0-S1.md",
+  "cardSha": "2dfc4d6fb9be42c0",
+  "inputs": {
+    "card": "2dfc4d6fb9be42c0",
+    "page": "ba4a6c97b0730501",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "04cb2541fa46e7bb"
+  },
+  "checkedAt": "2026-11-15T09:50:01Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "What if it instead is the memory of a company?",
+      "where": "vn_891cd2f9",
+      "status": "met",
+      "how": "A boxed company-memory column with a shared mailbox flow, plus buyers, existing products, a difference from EpicTeam and a recommendation."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open on the punchline box, show a clear three-column flow diagram, have no sideways overflow and a consistent look; the card and page are readable."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether to run a two-week company memory test, which the card recommends as yes.",
+    "ambiguous": "",
+    "note": "\"You pick a business, we run it.\" A stranger could read \"we\" as the team running the test for free, or as Jordi having to find and set up the business himself.](The second reading would change what he must do before answering, but not the yes/no decision.)"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9357/",
+      "file": "E0-S1-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9357/",
+      "file": "E0-S1-1280.webp"
+    }
+  ]
+}
