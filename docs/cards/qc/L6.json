@@ -1,0 +1,78 @@
+{
+  "row": "L6",
+  "card": "docs/cards/L6.md",
+  "cardSha": "9d3f000fa78ad8d2",
+  "inputs": {
+    "card": "9d3f000fa78ad8d2",
+    "page": "f022380bcbde0c9f",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "ce1b9d06867cb388"
+  },
+  "checkedAt": "2026-11-15T09:20:32Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Punchline box at top of page quotes the sentence verbatim on both widths."
+    },
+    {
+      "said": "test every link first, and say what it is for",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Decision line reads 'Test every link first, and say what it is for'; section 2 'We think you mean' says the same."
+    },
+    {
+      "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
+      "where": "vn_cdcf1208",
+      "status": "missed",
+      "how": "No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is described but no disambiguation step names it."
+    },
+    {
+      "said": "you led me to a dead end. button clicked nothing happens",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Evidence table quotes 'you led me to a dead end. button clicked nothing happens' under E26-A15 and explains the find-why cause."
+    },
+    {
+      "said": "I hate it when you direct me into loose ends",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Evidence table quotes 'I hate it when you direct me into loose ends' under E26-A15."
+    },
+    {
+      "said": "Yes: use it from your next repeat\\",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Card source quotes 'Yes: use it from your next repeat' and the five steps are used on the page."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the punchline, the five-step sequence sits in a boxed row with arrows, the page does not scroll sideways, and the evidence page is complete; the 390 px sequence scrolls inside its own box with a cut-off third box as an accepted cue."
+  },
+  "pass": false,
+  "held": [
+    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is described but no disambiguation step names it.",
+    "ambiguous: \"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves or only added a team rule; the delivered lines say a rule was made, not that the links now work."
+  ],
+  "reader": {
+    "asked": "Decide whether the card's stated fix, to test every link first and say what it is for, is what he meant, by clicking Yes or Not quite.",
+    "ambiguous": "\"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves or only added a team rule; the delivered lines say a rule was made, not that the links now work."
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9007/",
+      "file": "L6-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9007/",
+      "file": "L6-1280.webp"
+    }
+  ]
+}
