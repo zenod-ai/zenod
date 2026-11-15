@@ -1,14 +1,14 @@
 {
   "row": "L6",
   "card": "docs/cards/L6.md",
-  "cardSha": "0bb6bb997f30461a",
+  "cardSha": "5e3b827d49426f58",
   "inputs": {
-    "card": "0bb6bb997f30461a",
-    "page": "f2852469eb8ec25a",
+    "card": "5e3b827d49426f58",
+    "page": "e2748ee9ae76757f",
     "rules": "5c1e73ef9c3caa57",
     "words": "ce1b9d06867cb388"
   },
-  "checkedAt": "2026-11-15T09:21:51Z",
+  "checkedAt": "2026-11-15T09:23:35Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -27,7 +27,7 @@
       "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
       "where": "vn_cdcf1208",
       "status": "missed",
-      "how": "No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not as a protocol for three repeats."
+      "how": "No protocol for repeated saying-the-same-thing-three-times is shown; the page shows a five-step path for repeats, which is related but not the protocol he asked for."
     },
     {
       "said": "you led me to a dead end. button clicked nothing happens",
@@ -49,19 +49,28 @@
     }
   ],
   "visual": {
-    "pass": true,
-    "problems": [],
-    "breaches": [],
-    "summary": "Both widths open with the punchline and show the five-step sequence as boxes with arrows; the page is readable, with no sideways page scroll, and the evidence and tables are complete."
+    "pass": false,
+    "problems": [
+      "at 390 px: The five steps are a sequence but are drawn as boxes in a row that run off the right edge, cut mid-word, with only a partial cue; the sequence is hard to read on a phone. (rule 2)"
+    ],
+    "breaches": [
+      {
+        "rule": 2,
+        "width": 390,
+        "what": "The five steps are a sequence but are drawn as boxes in a row that run off the right edge, cut mid-word, with only a partial cue; the sequence is hard to read on a phone."
+      }
+    ],
+    "summary": "The phone page opens with the punchline and a five-step row, but the row clips 'Find why' and later steps; the laptop page is clean with the sequence drawn as boxes and arrows."
   },
   "pass": false,
   "held": [
-    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not as a protocol for three repeats.",
-    "ambiguous: \"Your repeat about dead-end links was traced to its cause\" could mean the links were fixed, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
+    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown; the page shows a five-step path for repeats, which is related but not the protocol he asked for.",
+    "failed the visual check: at 390 px: The five steps are a sequence but are drawn as boxes in a row that run off the right edge, cut mid-word, with only a partial cue; the sequence is hard to read on a phone. (rule 2)",
+    "ambiguous: \"Your repeat about dead-end links\" is not in the delivered lines; the line \"A team rule is written: we test an ask's links before you see it.\" could mean the links are now tested, or only that a rule was written, and a stranger cannot tell whether the dead ends are fixed."
   ],
   "reader": {
-    "asked": "Decide whether the card's stated result is what he meant, by clicking Yes: that is it or Not quite: tell us.",
-    "ambiguous": "\"Your repeat about dead-end links was traced to its cause\" could mean the links were fixed, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
+    "asked": "Review the card and say whether the five-step path with testing every link first is what he meant, using the Yes or Not quite buttons.",
+    "ambiguous": "\"Your repeat about dead-end links\" is not in the delivered lines; the line \"A team rule is written: we test an ask's links before you see it.\" could mean the links are now tested, or only that a rule was written, and a stranger cannot tell whether the dead ends are fixed."
   },
   "shots": [
     {
