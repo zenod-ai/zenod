@@ -1,36 +1,36 @@
 {
   "row": "E0-S1",
   "card": "docs/cards/E0-S1.md",
-  "cardSha": "f09b6fa499efb7c1",
+  "cardSha": "f41db6b127245165",
   "inputs": {
-    "card": "f09b6fa499efb7c1",
+    "card": "f41db6b127245165",
     "page": "957c72c9595adbf0",
     "rules": "5c1e73ef9c3caa57",
     "words": "13b3481095eb639e"
   },
-  "checkedAt": "2026-11-15T09:26:26Z",
+  "checkedAt": "2026-11-15T09:26:52Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Research: Zenod as a company memory, one voice-note mailbox every employee sends ideas to, AI sorts them and bubbles things up; one page on who would buy it, what exists, how it differs from EpicTeam",
       "where": "the row's ask (no quote of his found)",
       "status": "met",
-      "how": "Evidence page shows the IN, ZENOD DOES, OUT company memory diagram, buyers, a what-exists table, and a How it differs section against EpicTeam."
+      "how": "Evidence page shows the IN, ZENOD DOES, OUT company memory diagram, buyers, what-exists table, and How it differs section; recommendation box at the end."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 px the punchline box opens the page, then the three product flows stack as boxes with arrows; at 1280 px they sit side by side. No sideways scroll, text fits, and the evidence page needs no feedback block."
+    "summary": "Both widths open with the punchline box and a three-column diagram, tables and recommendation follow; no sideways overflow and the page renders fully."
   },
   "pass": false,
   "held": [
-    "ambiguous: \"The team recommends yes, after the tester invite.\" Reading one: the team waits for the tester invite to be sent before it starts, so your yes is only the first step. Reading two: the invite is a step you already have to approve, so your yes starts the test now. Your answer and what you do next depend on which one is meant."
+    "ambiguous: \"The team recommends yes\" with the button \"Yes: say which business in your reply, you ask its owner, the team does the rest\" – a stranger could not tell whether a yes starts the test now or whether he still has to approve the tester invite first."
   ],
   "reader": {
-    "asked": "Decide yes or no on testing a company memory with one small team for two weeks, and if yes, name the business in your reply.",
-    "ambiguous": "\"The team recommends yes, after the tester invite.\" Reading one: the team waits for the tester invite to be sent before it starts, so your yes is only the first step. Reading two: the invite is a step you already have to approve, so your yes starts the test now. Your answer and what you do next depend on which one is meant."
+    "asked": "Decide whether to test a company memory with one small team, yes or no.",
+    "ambiguous": "\"The team recommends yes\" with the button \"Yes: say which business in your reply, you ask its owner, the team does the rest\" – a stranger could not tell whether a yes starts the test now or whether he still has to approve the tester invite first."
   },
   "shots": [
     {
