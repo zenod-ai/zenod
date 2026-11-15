@@ -1,14 +1,14 @@
 {
   "row": "E0-S1",
   "card": "docs/cards/E0-S1.md",
-  "cardSha": "9b4662081d87ee2a",
+  "cardSha": "64cc1927ed7aa964",
   "inputs": {
-    "card": "9b4662081d87ee2a",
+    "card": "64cc1927ed7aa964",
     "page": "ba4a6c97b0730501",
     "rules": "5c1e73ef9c3caa57",
     "words": "13b3481095eb639e"
   },
-  "checkedAt": "2026-11-15T09:27:54Z",
+  "checkedAt": "2026-11-15T09:28:28Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -22,15 +22,15 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box under the title, then the three-box diagram; the page is clean with no sideways overflow and ends with a footer."
+    "summary": "Both widths open with the punchline box, show a three-column flow diagram with boxes and arrows, and end with the recommendation; no real breach is visible on the screenshots."
   },
   "pass": false,
   "held": [
-    "ambiguous: \"Yes: name a business and ask its owner, the team sets up the two-week test now\" could mean the test starts immediately on a yes, or that Jordi must still name the business and approve before setup begins."
+    "ambiguous: \"Yes: reply with one business you know. You ask its owner, then the team sets up the test.\" Readings: the test starts as soon as he says yes, or he must still name the business and approve before setup begins. The answer he gives is the same either way, but what he does next differs."
   ],
   "reader": {
-    "asked": "Decide whether to test a company memory with one small team: say yes, so the team sets up the two-week test now, or no to park the idea.",
-    "ambiguous": "\"Yes: name a business and ask its owner, the team sets up the two-week test now\" could mean the test starts immediately on a yes, or that Jordi must still name the business and approve before setup begins."
+    "asked": "Decide whether to test a company memory with one small team: reply yes with one business you know, or no to park the idea.",
+    "ambiguous": "\"Yes: reply with one business you know. You ask its owner, then the team sets up the test.\" Readings: the test starts as soon as he says yes, or he must still name the business and approve before setup begins. The answer he gives is the same either way, but what he does next differs."
   },
   "shots": [
     {
