@@ -1,0 +1,75 @@
+{
+  "row": "E26-S28",
+  "card": "docs/cards/E26-S28.md",
+  "cardSha": "50ed6e9a01c321b4",
+  "inputs": {
+    "card": "50ed6e9a01c321b4",
+    "page": "4d7199f4dd0bc37d",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "06217a49f276c4f2"
+  },
+  "checkedAt": "2026-11-15T11:00:24Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Yes: switch it on for testers",
+      "where": "WhatsApp welcome as their verification",
+      "status": "met",
+      "how": "Card says each new tester's email goes within 15 minutes by itself; evidence shows the timer sends automatically."
+    },
+    {
+      "said": "I press the button and nothing happens. Also, I have only jordi@alpha9.io and jordi@zenod.dev is an alias. I still don't understand what exactly are you trying to accomplish. What is the ultimate goal of this.. I see a lot of text but not a word about what's this for. I am signed in. I hate it when you direct me into loose ends. 📎 Jordi attached a file, open it with your console headers: http://100.104.206.10:8750/api/chat/attachments/att_d861b67c3d93/image.png",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Card goal states the purpose: every new tester gets the thank-you email with no step for him. Evidence says the Connect step is retired."
+    },
+    {
+      "said": "Connect mail sender",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Evidence says /admin/mail no longer asks him to connect; the email page notes Connect is only for sending from Zenod itself."
+    },
+    {
+      "said": "welcome emails switched off",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Card says the waiting emails went out and each new tester's email is sent automatically; nothing is switched off."
+    },
+    {
+      "said": "Send mail as",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Email page explains the copy reads from his Sent folder and a second copy shows the team name as sender."
+    },
+    {
+      "said": "replied on the link - you led me to a dead end. button clicked nothing happens.",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Evidence says the Allow steps page is retired; the dead-end link is gone and the card gives one decision."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "At 390 px and 1280 px the punchline sits under the title, the three-chip row scrolls inside its box, and the real email is shown in full with no sideways page scroll."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the thank-you email shown is the one every new tester should receive automatically, by choosing Yes to keep sending it or Change it to say what to alter.",
+    "ambiguous": ""
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9003/",
+      "file": "E26-S28-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9003/",
+      "file": "E26-S28-1280.webp"
+    }
+  ]
+}
