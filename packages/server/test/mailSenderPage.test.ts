@@ -170,6 +170,32 @@ describe("Connect mail sender (EPIC-26 S11)", () => {
     expect(test.headers.get("location")).toBe("/admin/mail?mail=api_off");
   });
 
+  it("E26-S28: the ops check follows the Connect link to Google and tells sign-in from an error page", async () => {
+    for (const [location, ok] of [
+      ["[REDACTED:agent-team-console/GOOGLE_TEAM_MAIL_SA_JSON]signin/identifier?x=1", true],
+      ["[REDACTED:agent-team-console/GOOGLE_TEAM_MAIL_SA_JSON]signin/oauth/error?authError=abc", false],
+    ] as const) {
+      const app = new Hono<{ Bindings: HttpBindings }>();
+      const seen: string[] = [];
+      mountMailSenderRoutes(app, {
+        isAdmin: () => false,
+        isOps: (c) => c.req.header("authorization") === "Bearer ops",
+        store: new MailGrantStore(mkdtempSync(join(tmpdir(), "zenod-mail-check-")), MASTER),
+        client: CLIENT,
+        sender: "jordi@alpha9.io",
+        preview: () => PREVIEW,
+        send: async () => {},
+        welcomeOn: false,
+        secure: true,
+        fetchImpl: (async (url: string) => { seen.push(String(url)); return new Response(null, { status: 302, headers: { location } }); }) as unknown as typeof fetch,
+      });
+      expect((await app.request("/api/ops/mail/connect-check")).status).toBe(404);
+      const check = await (await app.request("/api/ops/mail/connect-check", { headers: { authorization: "Bearer ops" } })).json();
+      expect(check.ok).toBe(ok);
+      expect(new URL(seen[0]!).searchParams.get("login_hint")).toBe("jordi@alpha9.io");
+    }
+  });
+
   it("with Cloudflare as the sender shows Ready, no Google connect step, and keeps Send me a test", () => {
     const store = new MailGrantStore(mkdtempSync(join(tmpdir(), "zenod-mail-cf-page-")), MASTER);
     const html = mailSenderPage({

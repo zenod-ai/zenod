@@ -14,6 +14,12 @@ import type { AccessTokenSource } from "./zenodMail.js";
 
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 export const DEFAULT_MAIL_SENDER = "jordi@zenod.dev";
+/**
+ * E26-S28: Jordi has one Google account, jordi@alpha9.io; jordi@zenod.dev is an alias on it and
+ * is not a Gmail "Send mail as" address (his Sent folder holds no mail from it, 2026-11-15), so the
+ * Google sender signs in and sends as jordi@alpha9.io. Mail to jordi@zenod.dev still reaches him.
+ */
+export const DEFAULT_GOOGLE_MAIL_SENDER = "jordi@alpha9.io";
 export const MAIL_GRANT_FILE = "mail-sender-grant.json";
 /** The Drive client's registered callback; mail consent states carry MAIL_GRANT_STATE_PREFIX. */
 export const MAIL_GRANT_CALLBACK_PATH = "/api/vault/drive/oauth/callback";
@@ -41,9 +47,10 @@ export function googleMailClientFromEnv(env: NodeJS.ProcessEnv): GoogleMailClien
   };
 }
 
-/** The one address Zenod sends as. */
+/** The one address Zenod sends as: jordi@zenod.dev through Cloudflare, else Jordi's Google account. */
 export function mailSenderFromEnv(env: NodeJS.ProcessEnv): string {
-  return (env.ZENOD_MAIL_SENDER?.trim() || DEFAULT_MAIL_SENDER).toLowerCase();
+  const cloudflare = Boolean(env.CLOUDFLARE_EMAIL_API_TOKEN?.trim() && env.CLOUDFLARE_ACCOUNT_ID?.trim());
+  return (env.ZENOD_MAIL_SENDER?.trim() || (cloudflare ? DEFAULT_MAIL_SENDER : DEFAULT_GOOGLE_MAIL_SENDER)).toLowerCase();
 }
 
 interface Sealed {
