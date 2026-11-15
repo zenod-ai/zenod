@@ -1,52 +1,52 @@
 {
   "row": "L5",
   "card": "docs/cards/L5.md",
-  "cardSha": "4cd1e251bbcd65ed",
+  "cardSha": "00e698b3e5c72d93",
   "inputs": {
-    "card": "4cd1e251bbcd65ed",
+    "card": "00e698b3e5c72d93",
     "page": "22f1dc0288b6c569",
     "rules": "11787b661371e8e4",
     "words": "b7ec3631fb0e5a34"
   },
-  "checkedAt": "2026-11-15T00:13:47Z",
+  "checkedAt": "2026-11-15T03:55:57Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Your six months of voice notes point to 6 changes in how we work",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Page opens with the punchline box 'Your six months of voice notes point to 6 changes in how we work. Here they are.' and the six-change table follows."
+      "how": "Page opens with the punchline box reading 'Your six months of voice notes point to 6 changes in how we work. Here they are.'"
     },
     {
       "said": "what is being asked?",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Change 1 is a fresh-reader test: a fresh reader must say in one sentence what is being asked, with 41 notes."
+      "how": "Each of the six changes carries a 'what is being asked?' fresh-reader test; change 1 states the test in its text."
     },
     {
       "said": "Yes: run it on all notes",
       "where": "2026-11-14",
       "status": "elsewhere",
-      "how": "His 'Yes: run it on all notes' is about the run itself; the card says all 421 notes were read in three passes."
+      "how": "Refers to running the pass on all notes, a task about the iteration 1 run, not this page's delivered result."
     },
     {
       "said": "I don't know what you're asking. I don't understand your question, bro ... my expectation was, what changes were we gonna drive into the Epic Spine? ... 10,000 times more clear, please.",
       "where": "vn_5b3ad6c9",
-      "status": "met",
-      "how": "Clarity test for every card and question is the first change, and the page shows the test at the top of the table."
+      "status": "elsewhere",
+      "how": "Quote about the assistant's clarity and questions belongs to the clarity self-test task, not this page."
     },
     {
       "said": "ask questions more clearly in general",
       "where": "vn_5b3ad6c9",
       "status": "elsewhere",
-      "how": "His request for clearer questions in general is about the ask style, not the six-change page; the card's rule 1 covers it indirectly."
+      "how": "Quote about asking questions more clearly is about the clarity task, not this changes page."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box under the title, show the six-change table with counts and quotes, fit without sideways scroll, and end with the detail block; the card's ✗ line declares nothing is made yet."
+    "summary": "Both widths show the punchline box first, a clean one-accent table of six changes with note counts, quotes and a details fold; no overflow or cut-off text seen."
   },
   "pass": true,
   "held": [],
