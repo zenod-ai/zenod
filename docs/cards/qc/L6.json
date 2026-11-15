@@ -1,14 +1,14 @@
 {
   "row": "L6",
   "card": "docs/cards/L6.md",
-  "cardSha": "5e3b827d49426f58",
+  "cardSha": "ce8cffe25822a2f8",
   "inputs": {
-    "card": "5e3b827d49426f58",
-    "page": "e2748ee9ae76757f",
+    "card": "ce8cffe25822a2f8",
+    "page": "97a95777285fe63d",
     "rules": "5c1e73ef9c3caa57",
     "words": "ce1b9d06867cb388"
   },
-  "checkedAt": "2026-11-15T09:23:35Z",
+  "checkedAt": "2026-11-15T09:24:38Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -27,7 +27,7 @@
       "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
       "where": "vn_cdcf1208",
       "status": "missed",
-      "how": "No protocol for repeated saying-the-same-thing-three-times is shown; the page shows a five-step path for repeats, which is related but not the protocol he asked for."
+      "how": "No protocol for saying the same thing three times is shown; only a five-step path for repeats."
     },
     {
       "said": "you led me to a dead end. button clicked nothing happens",
@@ -49,28 +49,19 @@
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 390 px: The five steps are a sequence but are drawn as boxes in a row that run off the right edge, cut mid-word, with only a partial cue; the sequence is hard to read on a phone. (rule 2)"
-    ],
-    "breaches": [
-      {
-        "rule": 2,
-        "width": 390,
-        "what": "The five steps are a sequence but are drawn as boxes in a row that run off the right edge, cut mid-word, with only a partial cue; the sequence is hard to read on a phone."
-      }
-    ],
-    "summary": "The phone page opens with the punchline and a five-step row, but the row clips 'Find why' and later steps; the laptop page is clean with the sequence drawn as boxes and arrows."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths show the page opening with the punchline box, a clean five-box sequence with arrows, and the evidence tables; no sideways scroll and no clipped text."
   },
   "pass": false,
   "held": [
-    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown; the page shows a five-step path for repeats, which is related but not the protocol he asked for.",
-    "failed the visual check: at 390 px: The five steps are a sequence but are drawn as boxes in a row that run off the right edge, cut mid-word, with only a partial cue; the sequence is hard to read on a phone. (rule 2)",
-    "ambiguous: \"Your repeat about dead-end links\" is not in the delivered lines; the line \"A team rule is written: we test an ask's links before you see it.\" could mean the links are now tested, or only that a rule was written, and a stranger cannot tell whether the dead ends are fixed."
+    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for saying the same thing three times is shown; only a five-step path for repeats.",
+    "ambiguous: \"A team rule is written: we test an ask's links before you see it.\" could mean the links are now tested for every ask, or only that a rule was written; a stranger cannot tell whether the dead ends are actually fixed."
   ],
   "reader": {
-    "asked": "Review the card and say whether the five-step path with testing every link first is what he meant, using the Yes or Not quite buttons.",
-    "ambiguous": "\"Your repeat about dead-end links\" is not in the delivered lines; the line \"A team rule is written: we test an ask's links before you see it.\" could mean the links are now tested, or only that a rule was written, and a stranger cannot tell whether the dead ends are fixed."
+    "asked": "Asks Jordi to say whether the card's 'Did we get it right? Test every link first, and say what it is for.' is what he meant, answering Yes or Not quite.",
+    "ambiguous": "\"A team rule is written: we test an ask's links before you see it.\" could mean the links are now tested for every ask, or only that a rule was written; a stranger cannot tell whether the dead ends are actually fixed."
   },
   "shots": [
     {
