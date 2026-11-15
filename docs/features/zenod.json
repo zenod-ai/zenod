@@ -111,7 +111,7 @@
     {
      "id": "become-a-tester",
      "title": "Apply to test Zenod",
-     "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: a free month of Zenod Hosted with no card, extended month by month.",
+     "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: their first 50 memories free, with no card.",
      "rows": [
       "ZAL-A13",
       "E26-S2"
@@ -130,19 +130,20 @@
      "draft": true
     },
     {
-     "id": "tester-free-month",
-     "title": "One free test month, never charged",
-     "text": "A tester gets one free month with no card. It ends by itself, and more free months come only when the team adds them, one at a time. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
+     "id": "tester-first-memories-free",
+     "title": "Your first 50 memories free, never charged",
+     "text": "A tester's first 50 saved memories are free, with no card and no time limit, and the Zenod app shows how many you have saved. When you reach 50, Zenod stays free until the end of that month. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
      "rows": [
-      "E26-S5"
+      "E26-S5",
+      "E26-S29"
      ],
-     "since": "2026-11-10",
+     "since": "2026-11-15",
      "draft": true
     },
     {
      "id": "end-of-test-offer",
-     "title": "Keep Zenod in one click when your free month ends",
-     "text": "When your free month is about to end, the app and your account page show what you keep, which is your notes in your own Drive or repository, and what 9 euros a month gives. One button opens checkout for your own account, with nothing charged before the free month is over. If you do not pay, Zenod pauses and your notes stay yours.",
+     "title": "Keep Zenod in one click when your free test ends",
+     "text": "When your free test is about to end, the app and your account page show what you keep, which is your notes in your own Drive or repository, and what 9 euros a month gives. One button opens checkout for your own account, with nothing charged before the free test is over. If you do not pay, Zenod pauses and your notes stay yours.",
      "rows": [
       "E26-S13"
      ],
