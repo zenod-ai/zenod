@@ -1,0 +1,76 @@
+{
+  "row": "L6",
+  "card": "docs/cards/L6.md",
+  "cardSha": "a37ed12759ce4065",
+  "inputs": {
+    "card": "a37ed12759ce4065",
+    "page": "238351246692c197",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "ce1b9d06867cb388"
+  },
+  "checkedAt": "2026-11-15T09:50:14Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Page opens with the punchline box: from the second time we say it back and fix the cause; first use: links led to dead ends."
+    },
+    {
+      "said": "test every link first, and say what it is for",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Card decision asks \"test every link first, say what it's for\"; page section 2 says test every link first, say what it's for."
+    },
+    {
+      "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Page opens with the protocol for repeats, second time say it back and fix the cause, quoting the three-times question."
+    },
+    {
+      "said": "you led me to a dead end. button clicked nothing happens",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Evidence table row E26-A15 quotes \"you led me to a dead end. button clicked nothing happens\"."
+    },
+    {
+      "said": "I hate it when you direct me into loose ends",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Evidence table row E26-A15 quotes \"I hate it when you direct me into loose ends\"."
+    },
+    {
+      "said": "Yes: use it from your next repeat\\",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Card source quotes his yes to use it from the next repeat."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the punchline box and a five-step sequence diagram; the page is readable, with no sideways overflow and the evidence table is complete."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the card's decision is what he meant by dead ends: test every link first and say what it's for.",
+    "ambiguous": "",
+    "note": "\"Fix the cause\" and \"nobody had clicked it first\" could mean the team now clicks links before every ask, or only that the one dead-end button was fixed; a stranger cannot tell which rule he is approving.\"changesAnswer\":false}"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9007/",
+      "file": "L6-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9007/",
+      "file": "L6-1280.webp"
+    }
+  ]
+}
