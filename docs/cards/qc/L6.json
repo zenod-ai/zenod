@@ -1,39 +1,39 @@
 {
   "row": "L6",
   "card": "docs/cards/L6.md",
-  "cardSha": "9d3f000fa78ad8d2",
+  "cardSha": "0bb6bb997f30461a",
   "inputs": {
-    "card": "9d3f000fa78ad8d2",
-    "page": "f022380bcbde0c9f",
+    "card": "0bb6bb997f30461a",
+    "page": "aa7096fb6d8f34ee",
     "rules": "5c1e73ef9c3caa57",
     "words": "ce1b9d06867cb388"
   },
-  "checkedAt": "2026-11-15T09:20:32Z",
+  "checkedAt": "2026-11-15T09:21:22Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Punchline box at top of page quotes the sentence verbatim on both widths."
+      "how": "Punchline box at top of page quotes the sentence verbatim at both widths."
     },
     {
       "said": "test every link first, and say what it is for",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Decision line reads 'Test every link first, and say what it is for'; section 2 'We think you mean' says the same."
+      "how": "Decision line and section 2 'We think you mean' both say 'test every link first, and say what it is for'."
     },
     {
       "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
       "where": "vn_cdcf1208",
       "status": "missed",
-      "how": "No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is described but no disambiguation step names it."
+      "how": "No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not a disambiguation protocol."
     },
     {
       "said": "you led me to a dead end. button clicked nothing happens",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Evidence table quotes 'you led me to a dead end. button clicked nothing happens' under E26-A15 and explains the find-why cause."
+      "how": "Evidence table quotes 'you led me to a dead end. button clicked nothing happens' under E26-A15 and explains the find-why."
     },
     {
       "said": "I hate it when you direct me into loose ends",
@@ -45,23 +45,23 @@
       "said": "Yes: use it from your next repeat\\",
       "where": "the card's source",
       "status": "met",
-      "how": "Card source quotes 'Yes: use it from your next repeat' and the five steps are used on the page."
+      "how": "Card source quotes 'Yes: use it from your next repeat' and the five steps are shown on the page."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline, the five-step sequence sits in a boxed row with arrows, the page does not scroll sideways, and the evidence page is complete; the 390 px sequence scrolls inside its own box with a cut-off third box as an accepted cue."
+    "summary": "The first screen opens with the punchline quote and a five-box sequence at both widths; the page does not scroll sideways, and the evidence tables are readable, with a long text-heavy middle section on phone."
   },
   "pass": false,
   "held": [
-    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is described but no disambiguation step names it.",
-    "ambiguous: \"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves or only added a team rule; the delivered lines say a rule was made, not that the links now work."
+    "not what he asked: \"we need to have a protocol for when I say the same thing three times ... how do \": No protocol for repeated saying-the-same-thing-three-times is shown on the card or the evidence page; the five-step path is shown but not a disambiguation protocol.",
+    "ambiguous: \"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
   ],
   "reader": {
-    "asked": "Decide whether the card's stated fix, to test every link first and say what it is for, is what he meant, by clicking Yes or Not quite.",
-    "ambiguous": "\"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves or only added a team rule; the delivered lines say a rule was made, not that the links now work."
+    "asked": "Decide whether the card's fix is right: he must press Yes or Not quite on whether 'Test every link first, and say what it is for' is what he meant.",
+    "ambiguous": "\"Your repeat about dead-end links was traced to its cause and fixed\" could mean the team fixed the links themselves, or only that a team rule was made; the delivered lines say a rule was made, not that the links now work."
   },
   "shots": [
     {
