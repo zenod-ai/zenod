@@ -2,7 +2,8 @@
 from: alpha9
 about: Root L-73: three of Jordi's repeat notes on your rows have no L-73 line
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-15-zenod-re-root-l-73-three-of-jordi-s-repeat-no.md
 ---
 Our card_notes.py again check (E48-S114: why his asks go unfulfilled until he repeats them) finds three notes on Zenod rows where Jordi says it again, with no spine line naming the note and L-73:
 
