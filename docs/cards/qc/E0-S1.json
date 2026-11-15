@@ -1,0 +1,47 @@
+{
+  "row": "E0-S1",
+  "card": "docs/cards/E0-S1.md",
+  "cardSha": "6442618d24703bfd",
+  "inputs": {
+    "card": "6442618d24703bfd",
+    "page": "ba4a6c97b0730501",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "13b3481095eb639e"
+  },
+  "checkedAt": "2026-11-15T09:34:31Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Research: Zenod as a company memory, one voice-note mailbox every employee sends ideas to, AI sorts them and bubbles things up; one page on who would buy it, what exists, how it differs from EpicTeam",
+      "where": "the row's ask (no quote of his found)",
+      "status": "met",
+      "how": "Page has a titled study with buyers, a product comparison table with prices, and a recommendation; the EpicTeam difference section is present."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths load with the punchline first, the three-column diagram sits early, and the page does not overflow sideways; the page reads cleanly with no true breach."
+  },
+  "pass": false,
+  "held": [
+    "ambiguous: \"Your part is only to name the business\" leaves unclear whether he must also pick the team size or the test's start, and whether 'the report' comes to him automatically; the two readings change what he does next, but the decision itself stays the same, so this does not change his answer.; changesAnswer false"
+  ],
+  "reader": {
+    "asked": "Decide whether to test company memory with one small business for two weeks, by naming that business, and read the report at the end.",
+    "ambiguous": "\"Your part is only to name the business\" leaves unclear whether he must also pick the team size or the test's start, and whether 'the report' comes to him automatically; the two readings change what he does next, but the decision itself stays the same, so this does not change his answer.; changesAnswer false"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9357/",
+      "file": "E0-S1-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9357/",
+      "file": "E0-S1-1280.webp"
+    }
+  ]
+}
