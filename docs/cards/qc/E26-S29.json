@@ -1,0 +1,57 @@
+{
+  "row": "E26-S29",
+  "card": "docs/cards/E26-S29.md",
+  "cardSha": "924944136e3511b7",
+  "inputs": {
+    "card": "924944136e3511b7",
+    "page": "31399db0438921ac",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "4afd8d2ca1f3b74e"
+  },
+  "checkedAt": "2026-11-15T13:52:51Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "your first 50 memories free, no card",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Both widths show \"Your first 50 memories free. No card.\" in the punchline; the card and the evidence agree."
+    },
+    {
+      "said": "for Zenote, I don't think it's one free month. I think it's like some level of consumption, you know, the first few memories or whatever ... we will figure out.",
+      "where": "vn_891cd2f9",
+      "status": "met",
+      "how": "The page describes a consumption allowance of the first 50 memories, not one free month, at both widths."
+    },
+    {
+      "said": "I don't think it's one free month ... the first few memories.\\",
+      "where": "vn_891cd2f9",
+      "status": "met",
+      "how": "Same as point 2: the first memories are free with no month offer shown at 390 or 1280 px."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the title and the answer line, the page fits the phone without sideways scroll, and the screens are readable with no clear house-rule breach."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether 50 free memories is the right tester allowance, or give your own number instead of the team's 50.",
+    "ambiguous": ""
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "https://zenod.dev/testers",
+      "file": "E26-S29-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "https://zenod.dev/testers",
+      "file": "E26-S29-1280.webp"
+    }
+  ]
+}
