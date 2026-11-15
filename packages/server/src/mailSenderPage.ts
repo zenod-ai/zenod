@@ -44,6 +44,8 @@ export interface MailSenderRoutesOptions {
     setMode: (mode: "off" | "test" | "on") => void;
     preview: () => ZenodMail;
   };
+  /** E26-S28: bearer check for the ops route that proves the Connect button reaches Google's sign-in. */
+  isOps?: (c: AppContext) => boolean;
   /** Set when Zenod sends through Cloudflare Email Service: no Google step is needed. */
   provider?: "cloudflare";
   secure: boolean;
@@ -248,6 +250,28 @@ export function mountMailSenderRoutes(app: Hono<{ Bindings: HttpBindings }>, opt
     }
     options.onConnected?.();
     return back(c, result);
+  });
+
+  // E26-S28: what the Connect button does after its redirect, checked from the server with the
+  // real client: Google answers its sign-in (good) or its OAuth error page (client or callback wrong).
+  app.get("/api/ops/mail/connect-check", async (c) => {
+    if (!options.isOps?.(c)) return c.json({ error: "not found" }, 404);
+    if (!options.client || !options.store.available) return c.json({ ok: false, reason: "not_ready" });
+    const url = mailGrantAuthorizeUrl(options.client, `${MAIL_GRANT_STATE_PREFIX}check`, "x".repeat(43), options.sender);
+    try {
+      const response = await fetchImpl(url, { redirect: "manual" });
+      const location = response.headers.get("location") ?? "";
+      const next = location ? new URL(location, url) : null;
+      const error = next ? next.pathname.includes("/oauth/error") || next.searchParams.has("authError") : response.status >= 400;
+      return c.json({
+        ok: !error && Boolean(next) && next!.host === "accounts.google.com",
+        googleStatus: response.status,
+        googleNext: next ? `${next.host}${next.pathname}` : null,
+        accountHint: options.sender,
+      });
+    } catch {
+      return c.json({ ok: false, reason: "google_unreachable" });
+    }
   });
 
   app.post("/admin/mail/test", async (c) => {

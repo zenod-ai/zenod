@@ -1475,6 +1475,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       });
       mountMailSenderRoutes(app, {
         isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)),
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
         store: new MailGrantStore(storage.dataDir, env.CHASSIS_VAULT_MASTER_KEY),
         client: googleMailClientFromEnv(env),
         sender: mailSender,
