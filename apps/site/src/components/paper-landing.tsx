@@ -88,11 +88,13 @@ export function Nav({
   base = "",
   menu = false,
   getStartedHref,
+  getStartedLabel = "Get started",
 }: {
   customer: Pick<PaperCustomer, "signedIn">;
   base?: "" | "/";
   menu?: boolean;
   getStartedHref?: string;
+  getStartedLabel?: string;
 }) {
   const links = [
     { href: `${base}#how`, label: "How it works" },
@@ -124,7 +126,7 @@ export function Nav({
           </a>
         )}
         <a className="pp-btn pp-btn-small" href={getStartedHref ?? `${base}#start`}>
-          Get started
+          {getStartedLabel}
         </a>
         {menu ? (
           <details className="pp-menu">

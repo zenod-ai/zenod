@@ -225,6 +225,10 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     // Section links from a sub-page land on the home page's sections.
     expect(testers).toContain('href="/#how"');
     expect(testers).not.toMatch(/href="#(how|mcp|start)"/);
+    // EPIC-7 T13: the first screen leads to the form, not to the €9 pricing, and phones get the Menu.
+    expect(testers).toMatch(/<a class="pp-btn pp-btn-small" href="#apply">Apply<\/a>/);
+    expect(testers.indexOf('href="#apply">Apply now')).toBeLessThan(testers.indexOf("What you get"));
+    expect(testers).toContain("<summary>Menu</summary>");
   });
 
   it("carries a tester code from /testers?code= into the one-link funnel (EPIC-26 T1)", () => {

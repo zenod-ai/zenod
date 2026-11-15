@@ -357,6 +357,14 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
             ten testers now. Apply below with your email, and while places are
             open you are in straight away. Here is what you get.
           </p>
+          {code ? null : (
+            // EPIC-7 T13: on a phone the form sits six screens down; the way in is in the first screen.
+            <p className="pp-apply-actions">
+              <a className="pp-btn pp-btn-primary" href="#apply">
+                Apply now, it takes a minute
+              </a>
+            </p>
+          )}
           {code ? (
             <div className="pp-testers-code">
               <p>
