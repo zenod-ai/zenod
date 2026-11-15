@@ -1,36 +1,36 @@
 {
   "row": "E0-S1",
   "card": "docs/cards/E0-S1.md",
-  "cardSha": "52ac74a4b468c5d2",
+  "cardSha": "4e4e8e4fcb131412",
   "inputs": {
-    "card": "52ac74a4b468c5d2",
+    "card": "4e4e8e4fcb131412",
     "page": "ba4a6c97b0730501",
     "rules": "5c1e73ef9c3caa57",
     "words": "13b3481095eb639e"
   },
-  "checkedAt": "2026-11-15T09:30:35Z",
+  "checkedAt": "2026-11-15T09:31:03Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Research: Zenod as a company memory, one voice-note mailbox every employee sends ideas to, AI sorts them and bubbles things up; one page on who would buy it, what exists, how it differs from EpicTeam",
       "where": "the row's ask (no quote of his found)",
       "status": "met",
-      "how": "Evidence page shows the company-memory IN, ZENOD DOES, OUT diagram, buyers, what-exists table, and how it differs from EpicTeam."
+      "how": "Evidence page shows the company-memory IN, ZENOD DOES, OUT diagram, buyers, a what-exists table, and how it differs from EpicTeam."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open the study page with the punchline box first, a boxed diagram of the three ideas, and no sideways overflow; the page is clean and readable."
+    "summary": "At 390 and 1280 px the punchline box leads, the three flow diagrams carry the idea, the layout fits without sideways scroll, and the single green accent is used consistently."
   },
   "pass": false,
   "held": [
-    "ambiguous: \"Do we test company memory with a small business you name? We recommend yes.\" Readings: he names the business himself before setup, or the team picks one and he only approves it. The card does not say who names the business before setup begins."
+    "ambiguous: \"Do we test company memory with one small business? We recommend yes.\" Reading one: he names the business himself before setup starts. Reading two: the team picks a business and he only approves it. The card does not say which, and his action differs between them."
   ],
   "reader": {
-    "asked": "Decide whether to test company memory with a small business you name, as a two-week no-build test with one team.",
-    "ambiguous": "\"Do we test company memory with a small business you name? We recommend yes.\" Readings: he names the business himself before setup, or the team picks one and he only approves it. The card does not say who names the business before setup begins."
+    "asked": "Decide whether to run a two-week company-memory test with one small business, as the card recommends (yes or no).",
+    "ambiguous": "\"Do we test company memory with one small business? We recommend yes.\" Reading one: he names the business himself before setup starts. Reading two: the team picks a business and he only approves it. The card does not say which, and his action differs between them."
   },
   "shots": [
     {
