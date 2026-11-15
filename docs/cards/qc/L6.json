@@ -1,0 +1,77 @@
+{
+  "row": "L6",
+  "card": "docs/cards/L6.md",
+  "cardSha": "03d6ca2a45ef9d27",
+  "inputs": {
+    "card": "03d6ca2a45ef9d27",
+    "page": "238351246692c197",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "ce1b9d06867cb388"
+  },
+  "checkedAt": "2026-11-15T09:44:04Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Page opens with the punchline box saying the protocol is now a team rule and every link is tested first; delivered line says the second repeat fixes the cause."
+    },
+    {
+      "said": "test every link first, and say what it is for",
+      "where": "2026-11-15",
+      "status": "met",
+      "how": "Card decision asks exactly whether he meant test every link first, say what it's for; page section 2 shows the same wording."
+    },
+    {
+      "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Page quotes the same-thing-three-times request and explains the second-time protocol in the intro section."
+    },
+    {
+      "said": "you led me to a dead end. button clicked nothing happens",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Evidence table lists E26-A15 with the quote 'you led me to a dead end. button clicked nothing happens'."
+    },
+    {
+      "said": "I hate it when you direct me into loose ends",
+      "where": "vn_cdcf1208",
+      "status": "met",
+      "how": "Evidence table quotes 'I hate it when you direct me into loose ends' in the 15 Nov row."
+    },
+    {
+      "said": "Yes: use it from your next repeat\\",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Card source quotes his yes on 15 Nov: 'Yes: use it from your next repeat'."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The 390 and 1280 screens open with the punchline, a sequence of five boxes with arrows, and an evidence page with tables; no sideways overflow and the page loads with no breach that would send the card back."
+  },
+  "pass": false,
+  "held": [
+    "ambiguous: \"Yes: that is what I meant, the rule stays\" versus \"Not quite: tell us by voice, we change it\" leave unclear whether the rule is already live or only pending his yes; the card's source says he already said yes on 15 Nov, so a stranger could read it as a second approval.|changesAnswer|true"
+  ],
+  "reader": {
+    "asked": "Decide whether to approve the rule to test every link first and say what it is for, which he meant by dead ends.",
+    "ambiguous": "\"Yes: that is what I meant, the rule stays\" versus \"Not quite: tell us by voice, we change it\" leave unclear whether the rule is already live or only pending his yes; the card's source says he already said yes on 15 Nov, so a stranger could read it as a second approval.|changesAnswer|true"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9007/",
+      "file": "L6-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9007/",
+      "file": "L6-1280.webp"
+    }
+  ]
+}
