@@ -1,0 +1,83 @@
+{
+  "row": "T13",
+  "card": "docs/cards/T13.md",
+  "cardSha": "c5934facd62dccea",
+  "inputs": {
+    "card": "c5934facd62dccea",
+    "page": "f3880ad0e6f3ceca",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "6c7ce7644dfae346"
+  },
+  "checkedAt": "2026-11-15T20:52:45Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "why are we not getting testers like now? … It's time to get fucking testers … can we get the testers?",
+      "where": "vn_5ef65752",
+      "status": "met",
+      "how": "Page shows the funnel by day and by post, and the one converting Reddit reply; the team's own tests are left out and the numbers show few visitors and no WhatsApp or saves, but the 'why not like now' question is answered with drop-off data."
+    },
+    {
+      "said": "our single focus right now should be getting testers. And we got one.",
+      "where": "vn_5ef65752",
+      "status": "met",
+      "how": "Card and page show 51 posts brought 15 people, one applied and one signed up; the only converting reply is named and the Apply button is first on phones."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The 390 and 1280 px screens open with the punchline box under the title, use one ink and one green accent, fit without sideways scroll, and show the delivered Apply-first tester page and the funnel tables."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the social team should reply on Reddit instead of posting on X from tomorrow.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "f3880ad0e6f3ceca",
+    "walkedAt": "2026-11-15T20:52:45Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9313/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'zenod-ai/zenod#1674'",
+        "url": "https://github.com/zenod-ai/zenod/pull/1674",
+        "result": "answered 200 (another site)"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9313/",
+      "file": "T13-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9313/",
+      "file": "T13-1280.webp"
+    }
+  ]
+}
