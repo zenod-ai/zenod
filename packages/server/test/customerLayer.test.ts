@@ -1104,7 +1104,7 @@ describe("hosted customer layer", () => {
         discounts: [{ coupon: "ZENOD_TESTER_1M" }],
         payment_method_collection: "if_required",
         subscription_data: { metadata: { zenod_tester: "1" } },
-        custom_text: { submit: { message: expect.stringContaining("already applied") } },
+        custom_text: { submit: { message: expect.stringContaining("Your first 50 memories are free, with no time limit.") } },
       });
       expect(createdParams).not.toHaveProperty("allow_promotion_codes");
       expect(asked).toEqual([["ZT-LOCAL234", expect.any(String)]]);

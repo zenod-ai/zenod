@@ -80,6 +80,7 @@ import { bearerMatches } from "./testerFlow.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
 import { OFFER_LINK_TTL_MS, offerMailerFromEnv, signedOfferUrl } from "./endOfTestOffer.js";
+import { mountTesterOffer, tenantSavedMemories, testerFreeMemories } from "./testerFreeMemories.js";
 import { customerLinkSecret } from "./customerSession.js";
 import { mountClientErrorReports } from "./clientErrors.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
@@ -966,6 +967,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       tenantStore,
       // EPIC-23 U7: codes Zenod made itself; the tester flow is created further down.
       testerCoupon: (code, accountId) => testerFlow?.redeem(code, accountId) ?? null,
+      // E26-S29: a tester (a 100% code that ends, like the tester coupon) sees their free memories used.
+      testerFreeMemories: (account) =>
+        account.fully_discounted && account.free_until
+          ? { used: tenantSavedMemories(storage.dataDir, account.tenant_id ?? null), limit: testerFreeMemories(env) }
+          : null,
       // E26-S25: a Stripe tester code links the account to its applicant, whatever email checkout got.
       testerStripeCodeUsed: (code, accountId) => void testerFlow?.linkStripeCode(code, accountId),
       // EPIC-26 S15: the quick start's step 2, from the chassis' OAuth sign-ins to this tenant.
@@ -1559,10 +1565,13 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const offerAppUrl = (env.CUSTOMER_APP_URL || "https://cloud.zenod.dev").replace(/\/$/, "");
     testerMonthEnd = new TesterMonthEnd({
       stripe: monthEndStripe as MonthEndStripe,
+      // E26-S29: free until the tester's first N memories are saved, no time limit.
+      freeMemories: testerFreeMemories(env),
       onFreeTimeEnding: (account, freeEndsMs) => {
         if (!account.accountId) return;
         offers.queue(`${account.subscriptionId}:${freeEndsMs}`, account.email, {
           free_ends_ms: String(freeEndsMs),
+          free_memories: String(testerFreeMemories(env)),
           pay_url: signedOfferUrl(offerAppUrl, account.accountId, freeEndsMs + OFFER_LINK_TTL_MS, customerLinkSecret(env)),
         });
       },
@@ -1575,6 +1584,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
                 who: account.stripe_email || account.github_email || account.github_login || account.tenant_slug || "a tester",
                 accountId: account.account_id,
                 email: account.stripe_email || account.github_email || null,
+                savedMemories: () => tenantSavedMemories(storage.dataDir, account.tenant_id ?? null),
                 usage: async () => {
                   const usage = await customer.usageForAccount(account);
                   return {
@@ -1606,6 +1616,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       savesSince: (tenantId, sinceMs) => tenantSavesSince(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
       isTest: (contact, use) => marks.isTest(contact, use),
     });
+    // E26-S29: the zenod.dev/testers page reads N from here, so it always matches the setting.
+    mountTesterOffer(app, testerFreeMemories(env));
     mountTesterFlowRoutes(app, testerFlow, {
       ...(options.customerAdmin ? { isAdmin: (c) => isCustomerAdminSession(readCustomerSession(c, env)) } : {}),
       opsToken: env.ZENOD_TESTER_OPS_TOKEN,

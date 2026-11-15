@@ -59,3 +59,36 @@ describe("HostedFreePlanBanner (EPIC-7 T5 welcome)", () => {
     expect(container.textContent).toBe("")
   })
 })
+
+describe("E26-S29: a tester's free memories", () => {
+  it("shows the offer and the count while memories are left", async () => {
+    stubAccount(
+      Response.json({
+        subscription_status: "active",
+        fully_discounted: true,
+        free_until: "2026-12-01T12:00:00.000Z",
+        free_memories: { used: 12, limit: 50 },
+      })
+    )
+    render(<HostedFreePlanBanner />)
+    expect(await screen.findByText("Your first 50 memories are free. No card.")).not.toBeNull()
+    expect(document.body.textContent).toMatch(/You have saved 12 of 50, with no time limit/)
+    expect(document.body.textContent).not.toMatch(/another month/)
+  })
+
+  it("at the cap says until when Zenod stays free and that nothing saved is lost", async () => {
+    stubAccount(
+      Response.json({
+        subscription_status: "active",
+        fully_discounted: true,
+        free_until: "2026-12-01T12:00:00.000Z",
+        free_memories: { used: 53, limit: 50 },
+      })
+    )
+    render(<HostedFreePlanBanner />)
+    expect(await screen.findByText(/You have used your free memories/)).not.toBeNull()
+    expect(document.body.textContent).toMatch(/You have saved 50 of 50/)
+    expect(document.body.textContent).toMatch(/€9 a month if you want to keep going/)
+    expect(document.body.textContent).toMatch(/Everything you saved stays in your Drive or GitHub/)
+  })
+})

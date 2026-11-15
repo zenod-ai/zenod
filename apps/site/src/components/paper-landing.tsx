@@ -17,6 +17,7 @@ import "@fontsource/instrument-sans/400.css";
 import "@fontsource/instrument-sans/500.css";
 import "@/paper.css";
 import "@/scenes.css";
+import { useFreeMemories } from "@/lib/testers";
 
 import whatsappScene from "@/scenes/whatsapp.html?raw";
 import retrievalScreen from "@/scenes/retrieval-screen.html?raw";
@@ -451,6 +452,7 @@ function useScenes() {
 }
 
 export function PaperLanding({ customer }: { customer: PaperCustomer }) {
+  const freeMemories = useFreeMemories();
   useReveal();
   useScenes();
   return (
@@ -479,8 +481,9 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             </p>
             {/* EPIC-7 T13: phone visitors had no way to the tester page above the footer. */}
             <p className="pp-fine pp-hero-testers">
-              We are letting in our first ten testers: a free month, no card
-              needed. <a href="/testers">Become a tester</a>
+              We are letting in our first ten testers: your first{" "}
+              {freeMemories} memories free, no card.{" "}
+              <a href="/testers">Become a tester</a>
             </p>
           </div>
           <figure className="pp-hero-shot">

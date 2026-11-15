@@ -1,3 +1,5 @@
+import * as React from "react";
+
 // The zenod.dev/testers apply form (ZAL-A13): posts to the server, which keeps
 // answers in a private file on the production data volume and (EPIC-26 S2)
 // accepts the first ten automatically. E26-S11 iteration 4 (Jordi, 2026-11-12: "test with
@@ -6,6 +8,21 @@
 export const TESTERS_APPLY_PATH = "/api/public/testers/apply";
 export const TESTERS_LINK_PATH = "/api/public/testers/link";
 export const TESTERS_WITHDRAW_PATH = "/api/public/testers/withdraw";
+// E26-S29: the offer is a tester's first N memories free; N is one server setting, read from here.
+export const TESTERS_OFFER_PATH = "/api/public/testers/offer";
+export const DEFAULT_FREE_MEMORIES = 50;
+
+/** N from the server, or the default while it loads or when it cannot be read. */
+export async function fetchFreeMemories(fetcher: typeof fetch = fetch): Promise<number> {
+  try {
+    const response = await fetcher(TESTERS_OFFER_PATH, { credentials: "omit", headers: { Accept: "application/json" } });
+    const body = (await response.json()) as { free_memories?: unknown };
+    const n = body.free_memories;
+    return response.ok && typeof n === "number" && Number.isInteger(n) && n > 0 ? n : DEFAULT_FREE_MEMORIES;
+  } catch {
+    return DEFAULT_FREE_MEMORIES;
+  }
+}
 const STORE_KEY = "zenod.tester";
 export const TESTERS_QUESTION = "How are you going to be using Zenod Memory?";
 
@@ -137,3 +154,19 @@ export async function withdrawTester(claim: string, fetcher: typeof fetch = fetc
   const payload = (await response.json().catch(() => ({}))) as { error?: unknown };
   throw new Error(typeof payload.error === "string" ? payload.error : "Could not withdraw just now. Please try again later.");
 }
+
+/** E26-S29: N, the tester's free memories, from the server setting (the default until it answers). */
+export function useFreeMemories(): number {
+  const [n, setN] = React.useState(DEFAULT_FREE_MEMORIES);
+  React.useEffect(() => {
+    let live = true;
+    void fetchFreeMemories().then((next) => {
+      if (live) setN(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return n;
+}
+

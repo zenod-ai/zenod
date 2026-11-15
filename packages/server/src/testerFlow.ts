@@ -38,6 +38,7 @@ import type { PublicCountsDocument } from "./publicCounts.js";
 import type { TesterMarks } from "./testerMarks.js";
 import { oneMonthAfter, type ExtendResult, type FreeTimeRow } from "./testerMonthEnd.js";
 import { mailerFromEnv, mailReady, resendMailer, type SendMail, type ZenodMail } from "./zenodMail.js";
+import { testerFreeMemories } from "./testerFreeMemories.js";
 
 export const TESTER_FLOW_FILE = "tester-flow.json";
 export const DEFAULT_TESTER_CAP = 10;
@@ -134,7 +135,7 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-export function testerMail(to: string, link: string, expires: string): TesterMail {
+export function testerMail(to: string, link: string, expires: string, freeMemories = testerFreeMemories()): TesterMail {
   const subject = "Your Zenod tester link";
   const text = [
     "Hi,",
@@ -143,7 +144,7 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
     "",
     link,
     "",
-    "Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. You get one free month. If the test is going well, we may add more, one month at a time. Nothing is ever charged unless you choose to pay.",
+    `Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. Your first ${freeMemories} memories are free, with no time limit. Nothing is ever charged unless you choose to pay.`,
     "Then pick Google Drive or GitHub for your notes, link your WhatsApp, and send your first voice note.",
     "",
     `The code works once, for one account, until ${expires}.`,
@@ -158,7 +159,7 @@ export function testerMail(to: string, link: string, expires: string): TesterMai
 <p>Hi,</p>
 <p>Thanks for applying to test Zenod. You're in: here is your personal link, with your code already inside.</p>
 <p style="margin:1.75rem 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f4d3a;color:#f6f2e9;text-decoration:none;padding:.8rem 1.2rem;border-radius:3px;font-family:Helvetica,Arial,sans-serif">Start testing Zenod</a></p>
-<p>Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. You get one free month. If the test is going well, we may add more, one month at a time. Nothing is ever charged unless you choose to pay.</p>
+<p>Open it, sign in with Google or GitHub, and checkout opens with your code applied. You pay €0 and no card is asked for. Your first ${freeMemories} memories are free, with no time limit. Nothing is ever charged unless you choose to pay.</p>
 <p>Then pick Google Drive or GitHub for your notes, link your WhatsApp, and send your first voice note.</p>
 <p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#4a554e">The code works once, for one account, until ${escapeHtml(expires)}. If the button does not open, copy this link: ${escapeHtml(link)}</p>
 <p>Questions or something broke? Just reply to this email.</p>
@@ -758,8 +759,8 @@ const EXTEND_NOTICE: Record<string, string> = {
 function freeTimeRow(row: FreeTimeRow, nowMs: number): string {
   const until = day(row.periodEndMs);
   const where = {
-    free: `Free until ${until}. It ends then unless you give one more month.`,
-    extended: `You gave one more month: free until ${day(oneMonthAfter(row.periodEndMs))}.`,
+    free: `Free this month, until ${until}. The next month is free too while they have free memories left.`,
+    extended: `One more free month given: free until ${day(oneMonthAfter(row.periodEndMs))}.`,
     ending: `Ends on ${until}.`,
     ended: "Ended.",
     not_free: "Renewal unpaid: look at it in Stripe now.",
@@ -783,7 +784,7 @@ function freeTimeSection(rows: FreeTimeRow[] | null, notice: string): string {
   const body = rows.map((row) => freeTimeRow(row, nowMs)).join("");
   return `<h2 id="free-time">Free time</h2>
 ${notice ? `<p class="where">${escapeHtml(notice)}</p>` : ""}
-<p>Each tester gets one free month. It ends by itself at the end of that month: no free month renews by itself, and nothing is ever charged. Six days before the end, Zenod sets the free month to end and alerts the team with that tester's usage. To keep a tester on, press One more free month. It covers one month, and you can press it again next month.</p>
+<p>Each tester's first ${testerFreeMemories()} memories are free, with no time limit. While a tester has saved fewer, Zenod gives the next month at €0 by itself, six days before the month ends. Once they reach ${testerFreeMemories()}, the month that is running is their last free one: Zenod sets it to end, alerts the team with that tester's usage, and sends the €9 offer. Nothing is ever charged by itself. To keep a tester on past that, press One more free month. It covers one month, and you can press it again next month.</p>
 <p class="muted">Usage cap, the same for every Hosted account: answers stop when a tester's AI use reaches $3 in a month. Notes keep being saved, and sorting them stops by $5 at most. Everything starts again on the 1st.</p>
 <table><thead><tr><th>Tester</th><th>Free time</th><th>AI this month</th><th>Last used</th><th></th></tr></thead><tbody>${body || `<tr><td colspan="5">No tester has signed up yet.</td></tr>`}</tbody></table>`;
 }

@@ -12,11 +12,19 @@
 // A tester is never charged by itself (round 2): if an extension does not leave the next invoice at
 // €0, the free month is ended instead and the team is alerted. The usage cap is the Hosted AI
 // allowance every account has (EPIC-7 T3, $3 a month for answers, filing stops at most at $5).
+//
+// E26-S29 (Jordi, 2026-11-15: "not one free month ... some level of consumption, the first few
+// memories"): the cap is now the tester's free memories (testerFreeMemories.ts, one setting, default
+// 50). While a tester has saved fewer, the job gives the next month at €0 by itself (the same safe
+// extension as the team's button: it ends instead if Stripe does not confirm €0). Once they reach it,
+// the month that is running is their last free one: it ends at the period end as above, the team is
+// alerted and the end-of-test offer goes out. Nothing they saved is touched.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type Stripe from "stripe";
 import { opsAlert } from "./opsAlert.js";
+import { freeMemoriesUsed, type FreeMemories } from "./testerFreeMemories.js";
 
 export const TESTER_COUPON_IDS = ["ZENOD_TESTER_1M", "ZENOD_TESTER_NEXT_MONTH_FREE"] as const;
 export const TESTER_EXTENSION_COUPON_ID = "ZENOD_TESTER_NEXT_MONTH_FREE";
@@ -34,7 +42,7 @@ const RUN_MS = 6 * 60 * 60 * 1000;
 const FIRST_RUN_MS = 60 * 1000;
 const DAY_MS = 86_400_000;
 
-export type MonthEndAction = "end" | "none";
+export type MonthEndAction = "end" | "extend" | "none";
 
 export interface MonthEndDecision {
   action: MonthEndAction;
@@ -61,22 +69,38 @@ export function extendedByUs(sub: Stripe.Subscription): boolean {
     sub.metadata?.zenod_tester_extended_for === String(sub.current_period_end);
 }
 
-/** The rule, with no I/O. `nextInvoiceCents` is the preview of the renewal invoice (null when unknown). */
-export function decideMonthEnd(input: { sub: Stripe.Subscription; nowMs: number; nextInvoiceCents: number | null }): MonthEndDecision {
-  const { sub, nowMs, nextInvoiceCents } = input;
+/**
+ * The rule, with no I/O. `nextInvoiceCents` is the preview of the renewal invoice (null when unknown);
+ * `freeMemories` is the tester's saves against their free memories (E26-S29), absent when not counted.
+ */
+export function decideMonthEnd(input: {
+  sub: Stripe.Subscription;
+  nowMs: number;
+  nextInvoiceCents: number | null;
+  freeMemories?: FreeMemories | null;
+}): MonthEndDecision {
+  const { sub, nowMs, nextInvoiceCents, freeMemories } = input;
   if (!isTesterSubscription(sub)) return { action: "none", reason: "not_a_tester" };
   if (sub.status === "past_due" || sub.status === "unpaid") {
     return { action: "none", reason: "past_due", exception: "renewal_past_due" };
   }
   if (sub.status !== "active" && sub.status !== "trialing") return { action: "none", reason: "not_renewing" };
-  if (sub.cancel_at_period_end) return { action: "none", reason: "ending" };
+  const memoriesLeft = Boolean(freeMemories && !freeMemoriesUsed(freeMemories));
+  // E26-S29: a month the old rule set to end comes back while the tester still has free memories.
+  if (sub.cancel_at_period_end) {
+    return memoriesLeft && sub.metadata?.zenod_tester_month_end === ENDED_FREE_TIME
+      ? { action: "extend", reason: "free_memories_left" }
+      : { action: "none", reason: "ending" };
+  }
   if (sub.current_period_end * 1000 - nowMs > TESTER_DECIDE_DAYS * DAY_MS) return { action: "none", reason: "not_due" };
   if (extendedByUs(sub)) {
     return nextInvoiceCents === 0
       ? { action: "none", reason: "extended_by_us" }
       : { action: "end", reason: "extension_not_free", exception: "not_free_ended_instead" };
   }
-  // Never an automatic free month: a month we did not extend ends, and the team hears in time to decide.
+  // E26-S29: free memories left, so the next month is free too; no time limit until they are used.
+  if (memoriesLeft) return { action: "extend", reason: "free_memories_left" };
+  // A month we did not extend ends (the free memories are used), and the team hears in time to decide.
   return { action: "end", reason: "free_time_over", exception: "free_time_ending" };
 }
 
@@ -107,6 +131,8 @@ export interface MonthEndAccount {
   accountId?: string;
   email?: string | null;
   usage(): Promise<TesterUsage>;
+  /** E26-S29: every finished save the tester made (the free memories counter). */
+  savedMemories?(): number;
 }
 
 export interface MonthEndResult {
@@ -179,6 +205,8 @@ export interface TesterMonthEndOptions {
   log?: (line: string) => void;
   /** EPIC-26 S13: a free month the team did not extend was just set to end: send the offer. */
   onFreeTimeEnding?: (account: MonthEndAccount, freeEndsMs: number) => void;
+  /** E26-S29: a tester's free memories (ZENOD_TESTER_FREE_MEMORIES); without it every month ends as before. */
+  freeMemories?: number;
 }
 
 const isActive = (sub: Stripe.Subscription) => sub.status === "active" || sub.status === "trialing";
@@ -244,6 +272,11 @@ export class TesterMonthEnd {
     if (usage?.spendUsd != null) fields.ai_usd = usage.spendUsd.toFixed(2);
     if (usage?.allowanceUsd != null) fields.cap_usd = usage.allowanceUsd;
     if (usage?.percentUsed != null) fields.ai_pct = usage.percentUsed;
+    const limit = this.options.freeMemories;
+    if (limit && account.savedMemories) {
+      fields.saved = account.savedMemories();
+      fields.free_memories = limit;
+    }
     const last = this.options.lastUsed(account.tenantId);
     fields.last_used_days = last === null ? "never" : Math.max(0, Math.floor((nowMs - last) / DAY_MS));
     return fields;
@@ -256,12 +289,19 @@ export class TesterMonthEnd {
     const nowMs = this.now();
     if (!isTesterSubscription(sub)) return { action: "none", reason: "not_a_tester", subscriptionId };
     const due = sub.current_period_end * 1000 - nowMs <= TESTER_DECIDE_DAYS * DAY_MS;
+    const limit = this.options.freeMemories;
     const decision = decideMonthEnd({
       sub,
       nowMs,
       nextInvoiceCents: due && !sub.cancel_at_period_end && extendedByUs(sub) ? await this.nextInvoiceCents(subscriptionId) : null,
+      freeMemories: due && limit && account.savedMemories ? { used: account.savedMemories(), limit } : null,
     });
     const result: MonthEndResult = { ...decision, subscriptionId };
+    if (decision.action === "extend") {
+      // The same safe extension as the team's button: when €0 is not confirmed it ends instead and alerts.
+      const extended = await this.extendByUs(subscriptionId, "free memories left");
+      return extended.ok ? result : { action: "end", reason: "extension_not_free", exception: "not_free_ended_instead", subscriptionId };
+    }
     if (decision.action !== "end") {
       if (decision.exception) this.alert(decision.exception);
       return result;
@@ -314,7 +354,7 @@ export class TesterMonthEnd {
       const count = (reason: string) => testers.filter((r) => r.reason === reason).length;
       this.log(
         `[tester-month-end] checked ${testers.length} tester(s): free time ended ${count("free_time_over")}, ` +
-          `extended by us ${count("extended_by_us")}, failed ${testers.filter((r) => r.action === "failed").length}, ` +
+          `extended by us ${count("extended_by_us")}, free memories left ${count("free_memories_left")}, failed ${testers.filter((r) => r.action === "failed").length}, ` +
           `nothing due ${count("not_due") + count("ending")}`,
       );
       return results;
@@ -334,7 +374,7 @@ export class TesterMonthEnd {
    * tester. Puts the `once` 100% coupon on the next invoice, takes back an end this rule set, and marks
    * the period as extended by us. If the next invoice is not €0 after that, the month ends instead.
    */
-  async extendByUs(subscriptionId: string): Promise<ExtendResult> {
+  async extendByUs(subscriptionId: string, why = "by the team"): Promise<ExtendResult> {
     const { stripe } = this.options;
     let sub: Stripe.Subscription;
     try {
@@ -365,7 +405,7 @@ export class TesterMonthEnd {
       this.alert(ended ? "not_free_ended_instead" : "not_free_end_failed");
       return { ok: false, reason: "not_free_ended_instead" };
     }
-    this.log("[tester-month-end] one tester extended by the team for one more free month");
+    this.log(`[tester-month-end] one tester given one more free month (${why})`);
     return { ok: true, freeUntilMs: oneMonthAfter(sub.current_period_end * 1000) };
   }
 

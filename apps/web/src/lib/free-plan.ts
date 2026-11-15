@@ -4,9 +4,13 @@ export type FreePlanAccount = {
   subscription_status?: string | null
   fully_discounted?: boolean
   free_until?: string | null
+  /** E26-S29: a tester's saves against their free memories; null for everyone else. */
+  free_memories?: FreeMemoriesView | null
   /** EPIC-26 S13: set while a tester's free month is ending or has ended without a month added. */
   end_of_test_offer?: EndOfTestOfferView | null
 }
+
+export type FreeMemoriesView = { used: number; limit: number }
 
 export type EndOfTestOfferView = {
   phase: "before" | "after"
