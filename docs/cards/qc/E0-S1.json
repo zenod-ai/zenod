@@ -1,36 +1,36 @@
 {
   "row": "E0-S1",
   "card": "docs/cards/E0-S1.md",
-  "cardSha": "870d9d84ac74df04",
+  "cardSha": "9b4662081d87ee2a",
   "inputs": {
-    "card": "870d9d84ac74df04",
-    "page": "957c72c9595adbf0",
+    "card": "9b4662081d87ee2a",
+    "page": "ba4a6c97b0730501",
     "rules": "5c1e73ef9c3caa57",
     "words": "13b3481095eb639e"
   },
-  "checkedAt": "2026-11-15T09:27:21Z",
+  "checkedAt": "2026-11-15T09:27:54Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Research: Zenod as a company memory, one voice-note mailbox every employee sends ideas to, AI sorts them and bubbles things up; one page on who would buy it, what exists, how it differs from EpicTeam",
       "where": "the row's ask (no quote of his found)",
       "status": "met",
-      "how": "Evidence page shows the company-memory IN, ZENOD DOES, OUT diagram, buyers, what-exists table, and difference from EpicTeam."
+      "how": "Evidence page shows company-memory IN, ZENOD DOES, OUT diagram, buyers, what-exists table, and differences from EpicTeam."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The page opens with the punchline box under the title, then a three-column diagram of the idea; buyers, a comparison table, the EpicTeam difference and a recommendation follow, at both widths."
+    "summary": "Both widths open with the punchline box under the title, then the three-box diagram; the page is clean with no sideways overflow and ends with a footer."
   },
   "pass": false,
   "held": [
-    "ambiguous: \"Yes: name a business and ask its owner. The team starts the test when Zenod sends its first tester invite, with no other step from you\" - a stranger could read that a yes starts the test now, or that he still has to approve the tester invite before anything starts."
+    "ambiguous: \"Yes: name a business and ask its owner, the team sets up the two-week test now\" could mean the test starts immediately on a yes, or that Jordi must still name the business and approve before setup begins."
   ],
   "reader": {
-    "asked": "Decide whether to run a no-build two-week test with one friendly team, and if yes, name a business and ask its owner.",
-    "ambiguous": "\"Yes: name a business and ask its owner. The team starts the test when Zenod sends its first tester invite, with no other step from you\" - a stranger could read that a yes starts the test now, or that he still has to approve the tester invite before anything starts."
+    "asked": "Decide whether to test a company memory with one small team: say yes, so the team sets up the two-week test now, or no to park the idea.",
+    "ambiguous": "\"Yes: name a business and ask its owner, the team sets up the two-week test now\" could mean the test starts immediately on a yes, or that Jordi must still name the business and approve before setup begins."
   },
   "shots": [
     {
