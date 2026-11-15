@@ -1,0 +1,12 @@
+[Unit]
+Description=Zenod tester thank-you mail through the team Gmail connection, one tick (EPIC-26 E26-S28)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CONSOLE_URL=http://127.0.0.1:18750
+# The sender as on origin/main, so a merged change is used on the next tick (like zenod-promote-tick).
+ExecStart=/bin/bash -c 'git -C /var/lib/vps3-scratch/t3agent/github/zenod fetch -q origin main && git -C /var/lib/vps3-scratch/t3agent/github/zenod show origin/main:scripts/tester-thanks/send.py > %h/.local/lib/zenod-tester-thanks-send.py && python3 %h/.local/lib/zenod-tester-thanks-send.py'
+TimeoutStartSec=10min

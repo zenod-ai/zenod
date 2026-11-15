@@ -75,7 +75,7 @@ import { MailGrantStore, googleMailClientFromEnv, mailSenderFromEnv } from "./ma
 import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
-import { TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
+import { mountTesterMailQueueRoutes, TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
 import { bearerMatches } from "./testerFlow.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
 import { lastUsedFromTenantData, TesterMonthEnd, type MonthEndStripe } from "./testerMonthEnd.js";
@@ -1448,6 +1448,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         if (!mode) return c.json({ error: `mode must be one of ${TESTER_ONBOARDING_MODES.join(", ")}` }, 400);
         onboarding.setMode(mode, typeof body?.by === "string" && body.by.trim() ? `ops: ${body.by.trim()}` : "ops");
         return c.json(onboarding.status());
+      });
+      // E26-S28 it3 (Delivery Manager 2026-11-15): the thank-you mail goes from Jordi's mailbox through the team's Gmail connection.
+      mountTesterMailQueueRoutes(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        onboarding,
       });
       app.post("/api/ops/testers/onboarding/test-send", async (c) => {
         if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);

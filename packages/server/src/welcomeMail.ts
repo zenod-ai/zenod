@@ -82,7 +82,23 @@ export interface WelcomeRecord {
   lastError?: string;
   /** E26-S26: dropped unsent because its switch went off; never sent later. */
   droppedAt?: string;
+  /** E26-S28 it3: sent outside Zenod (e.g. "team-gmail"), or "same address" when another record to it was sent. */
+  sentVia?: string;
+  /** E26-S28 it3: the sender's message id, when one was given. */
+  messageId?: string;
 }
+
+/** E26-S28 it3: one queued mail, composed, for an outside sender (the ops mail-queue route). */
+export interface PendingMail {
+  id: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  queuedAt: string;
+}
+
+export type MarkSentResult = "sent" | "already sent" | "dropped" | "unknown";
 
 interface WelcomeState {
   accounts: Record<string, WelcomeRecord>;
@@ -151,6 +167,48 @@ export class WelcomeMailer {
   hasAddress(email: string): boolean {
     const address = email.trim().toLowerCase();
     return Object.values(this.read().accounts).some((r) => r.email.trim().toLowerCase() === address && !r.droppedAt);
+  }
+
+  /**
+   * E26-S28 it3: the mails waiting to go, composed, for a sender outside Zenod (the team's Gmail connection).
+   * One per address: an address already sent to, or listed under an earlier record, is left out. Empty while
+   * the switch drops mail.
+   */
+  pending(): PendingMail[] {
+    if (this.options.drop?.()) return [];
+    const records = Object.entries(this.read().accounts).sort(([, a], [, b]) => a.queuedAt.localeCompare(b.queuedAt));
+    const done = new Set(records.filter(([, r]) => r.sentAt).map(([, r]) => r.email.trim().toLowerCase()));
+    const out: PendingMail[] = [];
+    for (const [id, record] of records) {
+      const address = record.email.trim().toLowerCase();
+      if (record.sentAt || record.droppedAt || done.has(address)) continue;
+      done.add(address);
+      const mail = this.options.compose?.(record) ?? welcomeMail(record.email, this.options.appUrl);
+      out.push({ id, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html, queuedAt: record.queuedAt });
+    }
+    return out;
+  }
+
+  /**
+   * E26-S28 it3: an outside sender reports one mail sent. Idempotent: a second call answers "already sent" and
+   * changes nothing. Every other unsent record to the same address is closed with it, so one address gets one mail.
+   */
+  markSent(id: string, via: string, messageId?: string): MarkSentResult {
+    const state = this.read();
+    const record = state.accounts[id];
+    if (!record) return "unknown";
+    if (record.sentAt) return "already sent";
+    if (record.droppedAt) return "dropped";
+    const at = this.now().toISOString();
+    const address = record.email.trim().toLowerCase();
+    Object.assign(record, { sentAt: at, sentVia: via.slice(0, 40), lastError: "", ...(messageId ? { messageId: messageId.slice(0, 200) } : {}) });
+    for (const other of Object.values(state.accounts)) {
+      if (other === record || other.sentAt || other.droppedAt || other.email.trim().toLowerCase() !== address) continue;
+      Object.assign(other, { sentAt: at, sentVia: "same address" });
+    }
+    this.write(state);
+    console.log(`[${this.options.label ?? "welcome"}] email marked sent via ${via.slice(0, 40)}`);
+    return "sent";
   }
 
   /** Counts only, for the operator page and the evidence. */

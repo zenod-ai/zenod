@@ -145,13 +145,13 @@ export function mailSenderPage(options: MailSenderRoutesOptions, noticeKey = "")
 <form method="post" action="/admin/mail/disconnect"><button class="btn" type="submit">Disconnect</button></form></div>`
     : status.refusedAt
       ? `<p><span class="state off">Stopped.</span> Google stopped accepting Zenod's permission on ${escapeHtml(when(status.refusedAt))}. Connect it again to send.</p>${connectButton}`
-      : `<p><span class="state off">Not connected.</span> Tester emails wait here until you connect.</p>${connectButton}
+      : `<p><span class="state off">Not connected.</span> Zenod itself does not send. Tester thank-you emails still go out through the team's Gmail connection.</p>${connectButton}
 <p class="muted">Google opens. Choose your account <b>${sender}</b>, then press Allow. If Google first says it has not verified the app, press Advanced and then the link to go on to Zenod.</p>`;
   const mail = options.preview();
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Mail sender — Zenod</title><style>${ADMIN_STYLE}.row{display:flex;gap:.75rem;flex-wrap:wrap}.btn[disabled]{opacity:.5;cursor:default}.notice{border-left:3px solid #1f4d3a;padding:.5rem 1rem;background:#ece5d6;max-width:44rem}iframe{width:100%;max-width:40rem;height:34rem;border:1px solid #d9d2c1;background:#f6f2e9}</style></head><body><main>
 <p class="muted"><a href="/admin">Zenod admin</a> · <a href="/admin/testers">Testers and daily counts</a></p>
 <h1>Mail sender</h1>
-<p class="lead"><b>So each new tester gets your thank-you email automatically, press Allow once.</b> When a tester links WhatsApp, Zenod sends them one short thank-you email from you, offering a quick call.</p>
+<p class="lead"><b>Nothing to do here.</b> Tester thank-you emails go from your mailbox through the team's Gmail connection. Connect here only to send from Zenod itself.</p>
 ${notice ? `<p class="notice">${escapeHtml(notice)}${enable}</p>` : ""}
 <div class="where">
 <p><b>What this does.</b> Zenod emails testers from <b>${sender}</b>: the thank-you email when they link WhatsApp, and their personal link when accepted, through ${options.provider === "cloudflare" ? "Cloudflare" : "Gmail"}. Replies land in your inbox.</p>

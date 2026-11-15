@@ -11,6 +11,8 @@
 // it at runtime in a private file on the data volume, which wins.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Context, Hono } from "hono";
+import type { HttpBindings } from "@hono/node-server";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { WelcomeMailer, type WelcomeRecord } from "./welcomeMail.js";
 import { mailReady, type SendMail, type ZenodMail } from "./zenodMail.js";
@@ -283,6 +285,33 @@ export class TesterOnboarding {
     this.timer = null;
     this.thanks.stop();
   }
+}
+
+/**
+ * E26-S28 it3 (Delivery Manager 2026-11-15): the thank-you mail goes from Jordi's mailbox through the team's Gmail
+ * connection. A sender outside Zenod reads the queue (GET .../mail-queue: id, to, subject, text, html, queuedAt) and
+ * reports each send (POST .../mail-sent {id, via, messageId}), idempotent, so one address gets one mail. Ops token only.
+ */
+export function mountTesterMailQueueRoutes(
+  app: Hono<{ Bindings: HttpBindings }>,
+  options: { isOps: (c: Context) => boolean; onboarding: Pick<TesterOnboarding, "mode" | "thanks"> },
+): void {
+  const { onboarding } = options;
+  app.get("/api/ops/testers/onboarding/mail-queue", (c) => {
+    if (!options.isOps(c)) return c.json({ error: "not found" }, 404);
+    return c.json({ mode: onboarding.mode(), mails: onboarding.thanks.pending() });
+  });
+  app.post("/api/ops/testers/onboarding/mail-sent", async (c) => {
+    if (!options.isOps(c)) return c.json({ error: "not found" }, 404);
+    const body = await c.req.json<{ id?: unknown; via?: unknown; messageId?: unknown }>().catch(() => null);
+    const id = typeof body?.id === "string" ? body.id.trim() : "";
+    const via = typeof body?.via === "string" ? body.via.trim() : "";
+    if (!id || !via) return c.json({ error: "id and via are required" }, 400);
+    const messageId = typeof body?.messageId === "string" && body.messageId.trim() ? body.messageId.trim() : undefined;
+    const result = onboarding.thanks.markSent(id, via, messageId);
+    if (result === "unknown") return c.json({ error: "no queued mail with that id" }, 404);
+    return c.json({ result, mail: onboarding.thanks.counts() });
+  });
 }
 
 export type { WelcomeRecord };
