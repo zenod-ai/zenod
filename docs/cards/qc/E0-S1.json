@@ -1,14 +1,14 @@
 {
   "row": "E0-S1",
   "card": "docs/cards/E0-S1.md",
-  "cardSha": "780e221ec25ae5d2",
+  "cardSha": "24f7faeaeb7cd45a",
   "inputs": {
-    "card": "780e221ec25ae5d2",
+    "card": "24f7faeaeb7cd45a",
     "page": "ba4a6c97b0730501",
     "rules": "5c1e73ef9c3caa57",
     "words": "13b3481095eb639e"
   },
-  "checkedAt": "2026-11-15T09:28:56Z",
+  "checkedAt": "2026-11-15T09:30:10Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -22,15 +22,15 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the punchline box first, the three-column diagram, then buyers, a comparison table and a recommendation box; no sideways overflow, text readable and the page loads with status 200."
+    "summary": "Desktop and phone pages load with no sideways overflow; punchline opens the page, a three-column flow diagram follows, then buyers, existing products table, EpicTeam difference and a recommendation box."
   },
   "pass": false,
   "held": [
-    "ambiguous: \"Yes: reply with one business you know. You ask its owner, then the team sets up the test.\" Readings: the test starts as soon as he says yes, or he must still name the business and approve before setup begins."
+    "ambiguous: \"Do we try a company memory with one small team you pick? The team recommends yes.\" Readings: picking the team is his job now, or the team picks one and he only approves it; the card does not say who names the business before setup begins."
   ],
   "reader": {
-    "asked": "Decide whether to test a company memory with one small team, by saying yes or no.",
-    "ambiguous": "\"Yes: reply with one business you know. You ask its owner, then the team sets up the test.\" Readings: the test starts as soon as he says yes, or he must still name the business and approve before setup begins."
+    "asked": "Decide whether to try a company memory with one small team you pick, which the team recommends yes to.",
+    "ambiguous": "\"Do we try a company memory with one small team you pick? The team recommends yes.\" Readings: picking the team is his job now, or the team picks one and he only approves it; the card does not say who names the business before setup begins."
   },
   "shots": [
     {
