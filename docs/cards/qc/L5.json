@@ -4,93 +4,82 @@
   "cardSha": "5a33b03be1488337",
   "inputs": {
     "card": "5a33b03be1488337",
-    "page": "5d613af6f5c00c11",
+    "page": "a2ce53a5129ea5ed",
     "rules": "5c1e73ef9c3caa57",
     "words": "516c6f0750b7363e"
   },
-  "checkedAt": "2026-11-15T07:16:26Z",
+  "checkedAt": "2026-11-15T07:17:31Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "You accepted 4 of the 6 changes; they are now team rules. One open question: how should we handle things you keep repeating?",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "The first screen opens with the punchline box: 'You accepted 4 of the 6 changes; they are now team rules.' Then the table follows."
+      "how": "Punchline box under the title opens with the exact sentence: four accepted, one open question on repeats."
     },
     {
       "said": "Yes: run it on all notes",
       "where": "2026-11-14",
-      "status": "elsewhere",
-      "how": "The 'run it on all notes' yes concerns the voice-note evidence, not a visible item on this page."
+      "status": "declared",
+      "how": "The daily voice-note check is marked ✗ dropped, with 'Most notes were old or the team's own tests' as the reason."
     },
     {
       "said": "I don't know what you're asking. I don't understand your question, bro ... my expectation was, what changes were we gonna drive into the Epic Spine? ... 10,000 times more clear, please.",
       "where": "vn_5b3ad6c9",
       "status": "met",
-      "how": "The page opens with a plain one-line answer and a clear question, replacing the earlier unclear wording."
+      "how": "The question is now stated plainly in the punchline and the five-step path, not as a long paragraph."
     },
     {
       "said": "ask questions more clearly in general",
       "where": "vn_5b3ad6c9",
       "status": "met",
-      "how": "The question and answer are stated plainly in the punchline box and the path section."
+      "how": "The page's sentences are short and direct, with the answer and the path stated up front."
     },
     {
       "said": "I like the first suggestion ... I would also add, the fresh reader also says what is the most confusing, what is most ambiguous in this card. Ambiguity is our enemy.",
       "where": "vn_cdcf1208",
-      "status": "missed",
-      "how": "The card does not show an ambiguity question or any 'most ambiguous' line; the fresh-reader change text is unchanged."
+      "status": "met",
+      "how": "Row 1 of the table says the reader also names the most ambiguous part of the card."
     },
     {
       "said": "Yeah, of course, absolutely.",
       "where": "vn_cdcf1208",
       "status": "elsewhere",
-      "how": "This is a conversational agreement with no visible page content to judge."
+      "how": "His 'yeah, of course' is a reply about the follow-up question, not a change this page must show."
     },
     {
       "said": "this sentence is difficult to read. But yeah, you can ask me ... if the question reaches me 10 notifications deep, then already we've defeated the purpose",
       "where": "vn_cdcf1208",
-      "status": "missed",
-      "how": "The page does not show the one-question rule for asking him, nor the 10-notifications-deep concern."
+      "status": "met",
+      "how": "Row 3 keeps the one-line question first in the inbox, 'never 10 notifications deep'."
     },
     {
       "said": "This feels hacky, man ... what's the protocol for when I say, I am repeating this and you're not getting it? ... we need a path",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "A five-step path is drawn as boxes with arrows, and the three past cases are shown beneath it."
+      "how": "The five-step path (spot, say it back, find why, fix, tell you) is drawn as boxes with arrows and shown on three cases."
     },
     {
       "said": "said three times becomes a rule",
       "where": "vn_cdcf1208",
       "status": "declared",
-      "how": "The card marks 'Said three times becomes a rule' with a ✗ and gives the reason: he called it hacky."
+      "how": "'Said three times becomes a rule' is marked ✗ dropped, with the reason that it was called hacky."
     },
     {
       "said": "I don't get that one. How recent are these notes? Zenod has been working relatively well recently.",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "The 'How recent are the voice notes' table shows the dates, counts and the 11 Nov last worry."
+      "how": "The last section gives the dates behind change 5 in a table: 21 team tests, 20 and 29 of his, last worry 11 Nov."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 390 px: The five-step path is a vertical stack of boxes with down arrows, not one line or compact steps; it reads as a tall list rather than a sequence.', 'fault': false (rule 2)"
-    ],
-    "breaches": [
-      {
-        "rule": 2,
-        "width": 390,
-        "what": "The five-step path is a vertical stack of boxes with down arrows, not one line or compact steps; it reads as a tall list rather than a sequence.', 'fault': false"
-      }
-    ],
-    "summary": "Both widths open with the answer, show the table, the path and the dated evidence, and end with the page shell; the only issue is the tall phone stack of the path steps."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the punchline box, show the ✓/✗ table, a readable five-step box row, the three cases and the dated table, with no sideways overflow or cut-off content."
   },
-  "pass": false,
-  "held": [
-    "not what he asked: \"I like the first suggestion ... I would also add, the fresh reader also says wha\": The card does not show an ambiguity question or any 'most ambiguous' line; the fresh-reader change text is unchanged.; \"this sentence is difficult to read. But yeah, you can ask me ... if the question\": The page does not show the one-question rule for asking him, nor the 10-notifications-deep concern.",
-    "failed the visual check: at 390 px: The five-step path is a vertical stack of boxes with down arrows, not one line or compact steps; it reads as a tall list rather than a sequence.', 'fault': false (rule 2)"
-  ],
+  "pass": true,
+  "held": [],
   "shots": [
     {
       "width": 390,
