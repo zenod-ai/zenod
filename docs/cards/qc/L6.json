@@ -1,75 +1,66 @@
 {
   "row": "L6",
   "card": "docs/cards/L6.md",
-  "cardSha": "6568b515e95a2672",
+  "cardSha": "6a080f7057ba31b7",
   "inputs": {
-    "card": "6568b515e95a2672",
-    "page": "97a95777285fe63d",
+    "card": "6a080f7057ba31b7",
+    "page": "61aa4cd83070c38e",
     "rules": "5c1e73ef9c3caa57",
     "words": "ce1b9d06867cb388"
   },
-  "checkedAt": "2026-11-15T09:25:15Z",
+  "checkedAt": "2026-11-15T09:25:47Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "You said it six times: our links led to dead ends. Now someone on the team clicks every link and button before you get an ask.",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Page opens with 'Your protocol for repeats is now a team rule... from the second time, we say it back and fix the cause' and the five steps in one line."
+      "how": "Page opens with the punchline box: team rule, say it back, fix the cause, first use links led to dead ends, so every link is tested first."
     },
     {
       "said": "test every link first, and say what it is for",
       "where": "2026-11-15",
       "status": "met",
-      "how": "Say-it-back section gives 'We think you mean: test every link first, and say what it is for.'"
+      "how": "Say-it-back section shows \"We think you mean: test every link first, and say what it is for.\""
     },
     {
       "said": "we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Top section quotes 'we need to have a protocol for when I say the same thing three times... how do we disambiguate this?' and sets the second-time protocol."
+      "how": "Top section quotes \"we need to have a protocol for when I say the same thing three times ... how do we disambiguate this?\""
     },
     {
       "said": "you led me to a dead end. button clicked nothing happens",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Repeat table quotes 'you led me to a dead end. button clicked nothing happens' as E26-A15."
+      "how": "Repeat table quotes \"you led me to a dead end. button clicked nothing happens\" in the E26-A15 row."
     },
     {
       "said": "I hate it when you direct me into loose ends",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Repeat table quotes 'I hate it when you direct me into loose ends' in the E26-A15 row."
+      "how": "Repeat table quotes \"I hate it when you direct me into loose ends\" in the E26-A15 row."
     },
     {
       "said": "Yes: use it from your next repeat\\",
       "where": "the card's source",
       "status": "met",
-      "how": "Card source quotes his 15 Nov yes: 'Yes: use it from your next repeat'."
+      "how": "Card source quotes his 15 Nov yes: \"Yes: use it from your next repeat\"."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 1280 px: The five-step path is a cycle-like sequence drawn as boxes with arrows, which is correct, but the Find why and Fix the cause steps repeat as a plain table below rather than being drawn as the same flow; the step table is a grid of words for an idea that is a sequence. (rule 2)"
-    ],
-    "breaches": [
-      {
-        "rule": 2,
-        "width": 1280,
-        "what": "The five-step path is a cycle-like sequence drawn as boxes with arrows, which is correct, but the Find why and Fix the cause steps repeat as a plain table below rather than being drawn as the same flow; the step table is a grid of words for an idea that is a sequence."
-      }
-    ],
-    "summary": "Both widths open with the punchline and a five-box sequence; the page is long, with a step table and repeat table, and no sideways overflow, though the detailed steps are tables rather than drawn flow."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths show the punchline, a five-box sequence on one line, tables and sections, with no sideways overflow and readable text; the card-level review is not shown on these screenshots."
   },
   "pass": false,
   "held": [
-    "failed the visual check: at 1280 px: The five-step path is a cycle-like sequence drawn as boxes with arrows, which is correct, but the Find why and Fix the cause steps repeat as a plain table below rather than being drawn as the same flow; the step table is a grid of words for an idea that is a sequence. (rule 2)",
-    "ambiguous: The evidence link says 'Open the five steps on your repeat' while the decision asks about testing every link first; a stranger could read the button as approving the whole five-step path or only the link-testing rule, and could not tell what Not quite does beyond 'tell us'."
+    "ambiguous: The decision \"Did we get it right? Test every link first, and say what it is for.\" could be read as approving the whole five-step path or only the link-testing rule, and a stranger cannot tell what \"Not quite\" does beyond \"tell us by voice\"."
   ],
   "reader": {
-    "asked": "Decide whether the card's shown result is right by answering Yes or Not quite to 'Test every link first, and say what it is for.'",
-    "ambiguous": "The evidence link says 'Open the five steps on your repeat' while the decision asks about testing every link first; a stranger could read the button as approving the whole five-step path or only the link-testing rule, and could not tell what Not quite does beyond 'tell us'."
+    "asked": "Decide whether the card's rule, to test every link first and say what it is for, is what he meant by the dead-end complaint, and approve it or ask for a rewrite.",
+    "ambiguous": "The decision \"Did we get it right? Test every link first, and say what it is for.\" could be read as approving the whole five-step path or only the link-testing rule, and a stranger cannot tell what \"Not quite\" does beyond \"tell us by voice\"."
   },
   "shots": [
     {
