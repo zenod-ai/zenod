@@ -1,8 +1,8 @@
 // zenod.dev/testers (ZAL-A13): the testers program in the Paper style. Jordi,
 // 2026-11-08: open the program and the apply form now, first 10 picked by hand.
-// The offer is the one EPIC-7 runs: a personal code for a free month of Hosted
-// at €0 with no card that ends by itself; more free months only when we add them, one at a time, never
-// automatically, and never charged by itself (EPIC-26 S5 round 3, Jordi's E26-A7 answer), usage capped. Answers go to a
+// The offer (E26-S29, Jordi 2026-11-15: "not one free month ... the first few memories"): a
+// personal code for Hosted at €0 with no card, free for the tester's first N memories with no time
+// limit (N from the server setting), never charged by itself, usage capped. Answers go to a
 // private file on the server, never to a repo or a public page. EPIC-26 T1
 // (Jordi's voice note, 2026-11-10): the three things a tester gets come first,
 // each with a real screen: the WhatsApp number, the word-for-word copy in their
@@ -28,6 +28,7 @@ import {
   rememberTester,
   submitTesterApplication,
   TESTERS_QUESTION,
+  useFreeMemories,
   withdrawTester,
   type TesterApplyStatus,
 } from "@/lib/testers";
@@ -340,6 +341,7 @@ function Promises() {
 
 export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: React.ReactNode }) {
   React.useEffect(() => startScenes(document), []);
+  const free = useFreeMemories();
   const code = inviteCodeFromSearch(typeof window === "undefined" ? undefined : window.location?.search);
   return (
     <div className="pp pp-testers">
@@ -347,6 +349,9 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
       <main id="top">
         <section className="pp-testers-hero" aria-labelledby="testers-title">
           <h1 id="testers-title">Test Zenod with us.</h1>
+          <p className="pp-lead pp-testers-offer" data-testid="tester-offer">
+            <strong>Your first {free} memories free. No card.</strong>
+          </p>
           <p className="pp-lead">
             Zenod is a librarian for your memory. We are letting in our first
             ten testers now. Apply below with your email, and while places are
@@ -380,18 +385,16 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
           <div>
             <h2>What it costs</h2>
             <p>
-              A free month of Zenod Hosted, with WhatsApp and managed AI usage
-              included. No card needed.
+              Your first {free} memories free. No card. Each voice note or
+              message you save is one memory. Take as long as you like to
+              reach {free}. WhatsApp and managed AI usage are included, and
+              your Zenod app shows how many you have saved.
             </p>
             <p>
-              The free month ends by itself. If the test is going well, we may
-              add more free months, one at a time. That is our choice, never
-              automatic. Your Zenod app shows how many free days you have left.
-            </p>
-            <p>
-              Nothing is ever charged unless you choose to pay. When your free
-              time ends, your notes stay in your own Drive or GitHub, and you
-              can keep going for €9 a month.
+              When you reach {free}, Zenod stays free until the end of that
+              month. After that, Hosted is €9 a month if you want to keep
+              going. You are never charged unless you choose to pay, and
+              everything you saved stays in your own Drive or GitHub.
             </p>
             <p>
               Usage is capped each month, like every Hosted account. If you

@@ -16,6 +16,7 @@ import type { HttpBindings } from "@hono/node-server";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { WelcomeMailer, type WelcomeRecord } from "./welcomeMail.js";
 import { mailReady, type SendMail, type ZenodMail } from "./zenodMail.js";
+import { testerFreeMemories } from "./testerFreeMemories.js";
 
 export const TESTER_ONBOARDING_FILE = "tester-onboarding.json";
 export const TESTER_THANKS_MAIL_FILE = "tester-thanks-mail.json";
@@ -43,7 +44,7 @@ export function greetingName(name: string | null | undefined): string | null {
 }
 
 /** The thank-you email (proposal E26-S22, section 3), from Jordi at Zenod. */
-export function testerThanksMail(to: string, firstName: string | null): ZenodMail {
+export function testerThanksMail(to: string, firstName: string | null, freeMemories = testerFreeMemories()): ZenodMail {
   const hi = firstName ? `Hi ${firstName},` : "Hi,";
   const links: Array<[string, string, string]> = [
     ["Your Zenod app", "cloud.zenod.dev/app", "https://cloud.zenod.dev/app"],
@@ -52,10 +53,14 @@ export function testerThanksMail(to: string, firstName: string | null): ZenodMai
     ["The tester page", "zenod.dev/testers", "https://zenod.dev/testers"],
   ];
   const subject = "Thank you for testing Zenod";
+  // E26-S29: the offer, the same words as zenod.dev/testers.
+  const offer = `Your first ${freeMemories} memories are free, with no card and no time limit.`;
   const text = [
     hi,
     "",
     "Thank you for becoming a Zenod tester. We're truly grateful, and keen to learn from your experience.",
+    "",
+    offer,
     "",
     "You can write to me at any time at jordi@zenod.dev, or just reply to this email. Broken, confusing or great: I read every message.",
     "",
@@ -73,6 +78,7 @@ export function testerThanksMail(to: string, firstName: string | null): ZenodMai
 <div style="max-width:32rem;margin:0 auto;padding:2rem 1.25rem">
 <p>${escapeHtml(hi)}</p>
 <p>Thank you for becoming a Zenod tester. We're truly grateful, and keen to learn from your experience.</p>
+<p>${escapeHtml(offer)}</p>
 <p>You can write to me at any time at <a href="mailto:jordi@zenod.dev" style="${link}">jordi@zenod.dev</a>, or just reply to this email. Broken, confusing or great: I read every message.</p>
 <p>If you're open to it, I'd also be happy to have a quick call in a few days to hear how it's going. No pressure at all. Reply "call" and we'll find a time.</p>
 <p>A few useful links:</p>

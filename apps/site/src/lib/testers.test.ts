@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchTesterLink, forgetTester, withdrawTester, rememberedTester, rememberTester, submitTesterApplication } from "./testers";
+import { DEFAULT_FREE_MEMORIES, fetchFreeMemories, fetchTesterLink, forgetTester, withdrawTester, rememberedTester, rememberTester, submitTesterApplication } from "./testers";
 
 const answer = (status: number, body: unknown) =>
   (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
@@ -55,5 +55,15 @@ describe("testers apply form (EPIC-26 S2)", () => {
     const box = new Map<string, string>([["zenod.tester", "{}"]]);
     forgetTester({ getItem: (k: string) => box.get(k) ?? null, setItem: (k: string, v: string) => void box.set(k, v), removeItem: (k: string) => void box.delete(k) } as unknown as Storage);
     expect(box.size).toBe(0);
+  });
+});
+
+describe("E26-S29: the tester's free memories", () => {
+  it("reads N from the server setting, and falls back to 50", async () => {
+    const answer = (body: unknown, ok = true) => (async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })) as unknown as typeof fetch;
+    expect(await fetchFreeMemories(answer({ free_memories: 30 }))).toBe(30);
+    expect(await fetchFreeMemories(answer({ free_memories: "lots" }))).toBe(DEFAULT_FREE_MEMORIES);
+    expect(await fetchFreeMemories(answer({}, false))).toBe(50);
+    expect(await fetchFreeMemories((async () => { throw new Error("offline"); }) as unknown as typeof fetch)).toBe(50);
   });
 });

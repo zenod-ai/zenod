@@ -52,6 +52,7 @@ type Account = {
   current_period_end: string | null
   fully_discounted?: boolean
   free_until?: string | null
+  free_memories?: { used: number; limit: number } | null
   end_of_test_offer?: EndOfTestOfferView | null
   mcp_url: string | null
   token: string | null
@@ -333,6 +334,7 @@ export function HostedAccount() {
                   <FreePlanNotice
                     className="mt-3"
                     freeUntil={account.free_until ?? null}
+                    freeMemories={account.free_memories ?? null}
                   />
                 ) : null}
                 {account.cancel_at_period_end && account.current_period_end ? (

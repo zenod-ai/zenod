@@ -16,10 +16,10 @@ export function EndOfTestOffer({ offer }: { offer: EndOfTestOfferView }) {
     <section
       className="space-y-3 border border-[#1f4d3a]/40 bg-[#f6f2e9] p-5 text-[#18211c] dark:bg-[#1b211d] dark:text-[#f6f2e9]"
       data-testid="end-of-test-offer"
-      aria-label="Your free month"
+      aria-label="Your free time"
     >
       <h2 className="font-serif text-xl leading-snug">
-        {before ? `Your free month ends on ${when}.` : `Your free month ended on ${when}.`}
+        {before ? `Your free time ends on ${when}.` : `Your free time ended on ${when}.`}
       </h2>
       <p>
         Your notes stay yours. They live in your own Google Drive or GitHub

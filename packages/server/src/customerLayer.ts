@@ -114,6 +114,7 @@ import {
 } from "./productionReadiness.js";
 import { opsAlert } from "./opsAlert.js";
 import { endOfTestOffer, firstChargeAt, OFFER_PATH, offerCheckoutMessage, verifyOfferLink, type EndOfTestOffer } from "./endOfTestOffer.js";
+import { testerCheckoutMessage, testerFreeMemories, type FreeMemories } from "./testerFreeMemories.js";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
@@ -184,6 +185,8 @@ export interface CustomerLayerOptions {
    * Asked only when Stripe holds no promotion code with that name; it binds the code to this account.
    */
   testerCoupon?: (code: string, accountId: string) => string | null;
+  /** E26-S29: a tester's saves against their free memories, null for anyone who is not a tester. */
+  testerFreeMemories?: (account: CustomerAccount) => FreeMemories | null;
   /** E26-S25: a tester's Stripe promotion code went on this account's checkout (testerFlow.ts `linkStripeCode`). */
   testerStripeCodeUsed?: (code: string, accountId: string) => void;
   /**
@@ -1427,6 +1430,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       current_period_end: account.current_period_end,
       fully_discounted: account.fully_discounted ?? false,
       free_until: account.free_until ?? null,
+      free_memories: options.testerFreeMemories?.(account) ?? null,
       tenant_id: account.tenant_id,
       slug: account.tenant_slug,
       mcp_url: hasAccess ? `${billing.domain}/mcp` : null,
@@ -2334,6 +2338,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       // U7: a code Zenod made itself has no Stripe promotion code; its coupon goes on the session directly.
       const couponId = !promotionCodeId && invite.code ? options.testerCoupon?.(invite.code, accountId) ?? null : null;
       const checkoutInvite: CheckoutInvite = { promotionCodeId, couponId, welcome: true, signedUp: invite.signedUp };
+      // E26-S29: a tester's code (ZT-…) says the offer above the pay button: the first N memories free.
+      if ((promotionCodeId || couponId) && /^ZT-/i.test(invite.code ?? "")) {
+        checkoutInvite.submitMessage = testerCheckoutMessage(testerFreeMemories(env));
+      }
       try {
         session = await createCustomerCheckout(stripe, accounts, billing, checkoutOwner, resolved, product, checkoutInvite);
         if (promotionCodeId && invite.code) {

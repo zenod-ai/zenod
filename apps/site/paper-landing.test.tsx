@@ -202,14 +202,14 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     const home = render("/");
     expect(home).toContain('href="/testers"');
     expect(home).toContain("Have a tester code? Enter it at checkout.");
-    const testers = render("/testers").replace(/\s+/g, " ");
+    const testers = render("/testers").replace(/<!-- -->/g, "").replace(/\s+/g, " ");
     expect(testers.match(/<h1\b/g)).toHaveLength(1);
     expect(testers).toContain("How are you going to be using Zenod Memory?");
     const field = (name: string) => testers.match(new RegExp(`<(?:input|textarea)[^>]*name="${name}"[^>]*>`))?.[0] ?? "";
     expect(field("use")).toContain('required=""');
     expect(field("contact")).toContain('required=""');
     expect(field("website")).toMatch(/tabindex="-1"/i);
-    for (const line of ["A free month of Zenod Hosted", "No card needed.", "The free month ends by itself", "one at a time", "never automatic", "Nothing is ever charged unless you choose to pay", "Usage is capped", "everything you send is still kept", "first ten", "a few weeks", "send us a line"])
+    for (const line of ["Your first 50 memories free. No card.", "Take as long as you like to reach 50.", "When you reach 50, Zenod stays free until the end of that month.", "never charged unless you choose to pay", "Usage is capped", "everything you send is still kept", "first ten", "a few weeks", "send us a line"])
       expect(testers).toContain(line);
     // EPIC-26 T1: the three things a tester gets come first, in this order.
     const promises = [

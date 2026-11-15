@@ -18,7 +18,7 @@ describe("EndOfTestOffer (EPIC-26 S13)", () => {
       />
     )
     const day = new Date("2026-12-03T12:00:00.000Z").toLocaleDateString(undefined, { day: "numeric", month: "long" })
-    expect(screen.getByRole("heading").textContent).toBe(`Your free month ends on ${day}.`)
+    expect(screen.getByRole("heading").textContent).toBe(`Your free time ends on ${day}.`)
     expect(screen.getByText(/Your notes stay yours/).textContent).toContain("Google Drive or GitHub")
     expect(screen.getByText(/Hosted is €9 a month plus VAT/)).toBeTruthy()
     const button = screen.getByRole("link", { name: "Keep Zenod for €9 a month" })
@@ -32,7 +32,7 @@ describe("EndOfTestOffer (EPIC-26 S13)", () => {
         offer={{ phase: "after", free_ends_at: "2026-12-03T12:00:00.000Z", pay_url: "/keep-zenod" }}
       />
     )
-    expect(screen.getByRole("heading").textContent).toMatch(/^Your free month ended on/)
+    expect(screen.getByRole("heading").textContent).toMatch(/^Your free time ended on/)
     expect(screen.getByText(/Zenod is paused/)).toBeTruthy()
   })
 

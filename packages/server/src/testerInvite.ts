@@ -4,6 +4,8 @@
 // code already applied, then a "you're in" page with the two next steps. The code
 // only ever travels as a normalized query value; the pages are static HTML.
 
+import { freeMemoriesOffer, testerFreeMemories } from "./testerFreeMemories.js";
+
 export const JOIN_PATH = "/join";
 export const WELCOME_PATH = "/welcome";
 
@@ -46,14 +48,14 @@ function page(title: string, body: string): string {
 }
 
 /** The first screen of the invite link: what Zenod is, the three things, and sign-in. */
-export function joinPage(code: string | null, providers: Array<"google" | "github">): string {
+export function joinPage(code: string | null, providers: Array<"google" | "github">, freeMemories = testerFreeMemories()): string {
   const returnTo = encodeURIComponent(joinPath(code));
   const buttons = providers
     .map((provider) =>
       `<a class="btn${provider === "google" ? " primary" : ""}" href="/auth/${provider}/start?return_to=${returnTo}">Continue with ${provider === "google" ? "Google" : "GitHub"}</a>`)
     .join("");
   const codeLine = code
-    ? `<p class="small">Your code <span class="code">${escapeHtml(code)}</span> is already in this link. It is applied at checkout for you, so the total is €0 and no card is asked for.</p>`
+    ? `<p class="small">Your code <span class="code">${escapeHtml(code)}</span> is already in this link. It is applied at checkout for you, so the total is €0 and no card is asked for. ${escapeHtml(freeMemoriesOffer(freeMemories))}</p>`
     : `<p class="small">Have a code? You can add it at checkout.</p>`;
   return page(
     "You're invited to Zenod",
