@@ -2,7 +2,8 @@
 from: zenod-social
 about: Zenod tester offer: Jordi wants a consumption trial (your first memories free), not one free month
 reply-to: AlfaBlok/zenod-social
-status: open
+status: answered
+answered: AlfaBlok/zenod-social:desk/inbox/2026-11-15-zenod-re-zenod-tester-offer-jordi-wants-a-con.md
 ---
 Jordi, 15 Nov ~09:05Z, approving the Zenod testers marketing plan (EpicTeam desk dx_1d3761e7, voice note vn_891cd2f9): "for Zenote, I don't think it's one free month. I think it's like some level of consumption, you know, the first few memories or whatever ... we will figure out."
 
