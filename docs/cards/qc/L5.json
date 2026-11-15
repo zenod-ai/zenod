@@ -1,21 +1,21 @@
 {
   "row": "L5",
   "card": "docs/cards/L5.md",
-  "cardSha": "5a33b03be1488337",
+  "cardSha": "d7adaf831607f22d",
   "inputs": {
-    "card": "5a33b03be1488337",
+    "card": "d7adaf831607f22d",
     "page": "a2ce53a5129ea5ed",
     "rules": "5c1e73ef9c3caa57",
     "words": "516c6f0750b7363e"
   },
-  "checkedAt": "2026-11-15T07:17:31Z",
+  "checkedAt": "2026-11-15T07:29:50Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "You accepted 4 of the 6 changes; they are now team rules. One open question: how should we handle things you keep repeating?",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Punchline box under the title opens with the exact sentence: four accepted, one open question on repeats."
+      "how": "The punchline box under the title opens with the exact sentence about four accepted changes and one open question."
     },
     {
       "said": "Yes: run it on all notes",
@@ -27,25 +27,25 @@
       "said": "I don't know what you're asking. I don't understand your question, bro ... my expectation was, what changes were we gonna drive into the Epic Spine? ... 10,000 times more clear, please.",
       "where": "vn_5b3ad6c9",
       "status": "met",
-      "how": "The question is now stated plainly in the punchline and the five-step path, not as a long paragraph."
+      "how": "The question is stated plainly in the punchline and the five-step path, not in a long paragraph."
     },
     {
       "said": "ask questions more clearly in general",
       "where": "vn_5b3ad6c9",
       "status": "met",
-      "how": "The page's sentences are short and direct, with the answer and the path stated up front."
+      "how": "Sentences are short and direct, with the answer and the path stated up front."
     },
     {
       "said": "I like the first suggestion ... I would also add, the fresh reader also says what is the most confusing, what is most ambiguous in this card. Ambiguity is our enemy.",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "Row 1 of the table says the reader also names the most ambiguous part of the card."
+      "how": "Row 1 of the table says the fresh reader also names the most ambiguous part of the card."
     },
     {
       "said": "Yeah, of course, absolutely.",
       "where": "vn_cdcf1208",
       "status": "elsewhere",
-      "how": "His 'yeah, of course' is a reply about the follow-up question, not a change this page must show."
+      "how": "The 'yeah, of course' reply concerns the follow-up question, not a change this page must show."
     },
     {
       "said": "this sentence is difficult to read. But yeah, you can ask me ... if the question reaches me 10 notifications deep, then already we've defeated the purpose",
@@ -57,7 +57,7 @@
       "said": "This feels hacky, man ... what's the protocol for when I say, I am repeating this and you're not getting it? ... we need a path",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "The five-step path (spot, say it back, find why, fix, tell you) is drawn as boxes with arrows and shown on three cases."
+      "how": "The five-step path is drawn as boxes with arrows at 1280 and shown on three past cases."
     },
     {
       "said": "said three times becomes a rule",
@@ -69,14 +69,14 @@
       "said": "I don't get that one. How recent are these notes? Zenod has been working relatively well recently.",
       "where": "vn_cdcf1208",
       "status": "met",
-      "how": "The last section gives the dates behind change 5 in a table: 21 team tests, 20 and 29 of his, last worry 11 Nov."
+      "how": "The final section gives the dates behind change 5 in a table: 21 team tests, 20 and 29 of his, last worry 11 Nov."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box, show the ✓/✗ table, a readable five-step box row, the three cases and the dated table, with no sideways overflow or cut-off content."
+    "summary": "Both widths open with the punchline box under the title, show the ✓/✗ table, a boxed five-step path and the dates table; no clear house-rule breach is visible on the screenshots."
   },
   "pass": true,
   "held": [],
