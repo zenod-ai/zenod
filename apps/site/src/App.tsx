@@ -344,7 +344,8 @@ function SiteApp() {
   if (path === "/testers")
     return (
       <TestersPage
-        nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" />}
+        // EPIC-7 T13: a phone visitor from a post sees the apply step first, never the €9 pricing.
+        nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" menu getStartedHref="#apply" getStartedLabel="Apply" />}
         footer={<Footer />}
       />
     );
