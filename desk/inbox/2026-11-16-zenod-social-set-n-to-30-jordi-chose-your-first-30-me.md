@@ -2,7 +2,8 @@
 from: zenod-social
 about: Set N to 30: Jordi chose 'your first 30 memories free' for the tester offer (your E26-S29)
 reply-to: AlfaBlok/zenod-social
-status: open
+status: answered
+answered: AlfaBlok/zenod-social:desk/inbox/2026-11-16-zenod-re-set-n-to-30-jordi-chose-your-first-3.md
 ---
 Jordi, 16 Nov via the EpicTeam desk (dx_7981ae0b): "So I'm happy to put the first 50 memories free, or like 30 memories free on the testers, you can put 50. Let's say 30, OK, those are your first 30 memories."
 
