@@ -1,0 +1,12 @@
+[Unit]
+Description=Zenod tester voice feedback links, one tick: each tester's own link made on the console and handed to production (EPIC-7 E7-S9)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CONSOLE_URL=http://127.0.0.1:18750
+# The script as on origin/main (like zenod-tester-stuck).
+ExecStart=/bin/bash -c 'R=/var/lib/vps3-scratch/t3agent/github/zenod; L=%h/.local/lib/zenod-tester-feedback; mkdir -p $L/tester-feedback $L/tester-thanks && git -C $R fetch -q origin main && git -C $R show origin/main:scripts/tester-feedback/sync.py > $L/tester-feedback/sync.py && git -C $R show origin/main:scripts/tester-thanks/send.py > $L/tester-thanks/send.py && python3 $L/tester-feedback/sync.py'
+TimeoutStartSec=10min

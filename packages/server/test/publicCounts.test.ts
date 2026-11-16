@@ -54,6 +54,7 @@ it("counts applications, accepted, signed up, active testers and paying customer
     active_testers: 2,
     paying_customers: 1,
     whatsapp_replied: 0,
+    feedback_recorded: 0,
     test_applications: 0,
     test_signups: 0,
   });
@@ -85,6 +86,22 @@ it("counts signed-up testers with a Saved reply on WhatsApp, our own test accoun
     isTest: (contact) => contact.endsWith("@alpha9.io"),
   }), NOW);
   expect(counts).toMatchObject({ signed_up: 3, whatsapp_replied: 1, test_signups: 1 });
+});
+
+it("counts testers with a filed voice feedback note, one per link, our own test accounts left out (E7-S9)", () => {
+  const base = sources();
+  const counts = funnelCounts(sources({
+    accounts: () => [
+      ...base.accounts(),
+      account("t7", { stripe_email: "operations+t7r3@alpha9.io", fully_discounted: true, free_until: "2026-12-11T00:00:00Z" }),
+    ],
+    // t1 filed two notes; b holds a link with none; payer (not a tester) and t7 (our test) filed notes too
+    feedbackNotes: (accountId) => ({ t1: { linkId: "fbl_t1", notes: 2 }, b: { linkId: "fbl_b", notes: 0 },
+      payer: { linkId: "fbl_payer", notes: 1 }, t7: { linkId: "fbl_t7", notes: 3 } } as Record<string, { linkId: string; notes: number }>)[accountId] ?? null,
+    isTest: (contact) => contact.endsWith("@alpha9.io"),
+  }), NOW);
+  expect(counts).toMatchObject({ signed_up: 3, feedback_recorded: 1, test_signups: 1 });
+  expect(funnelCounts(base, NOW).feedback_recorded).toBe(0);
 });
 
 it("reads finished WhatsApp saves from a tenant's tasks.sqlite, self-tests and other channels left out", () => {

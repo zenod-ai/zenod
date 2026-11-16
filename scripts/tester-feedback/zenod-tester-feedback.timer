@@ -1,0 +1,10 @@
+[Unit]
+Description=Zenod tester voice feedback links every 15 minutes (EPIC-7 E7-S9)
+
+[Timer]
+OnBootSec=7min
+OnCalendar=*:13/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

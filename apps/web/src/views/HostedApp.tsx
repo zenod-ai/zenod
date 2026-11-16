@@ -14,6 +14,7 @@ import { ZenodLogo } from "@/components/zenod-logo"
 import { HostedFreePlanBanner, HostedPlanLine } from "@/components/free-plan-notice"
 import { HostedEndOfTestOffer } from "@/components/end-of-test-offer"
 import { QuickStartCard, QuickStartPill, QuickStartRestore } from "@/components/quick-start"
+import { TesterFeedbackEntry } from "@/components/tester-feedback"
 import { UsageByFeaturePanel } from "@/components/usage-by-feature"
 import { Button } from "@/components/ui/button"
 import {
@@ -205,6 +206,8 @@ export function HostedApp({
         <div className="flex flex-wrap items-center gap-2">
           <QuickStartPill onOpen={() => { go({ section: "chat" }); window.scrollTo?.({ top: 0 }) }} />
           <HostedPlanLine />
+          {/* E7-S9: testers only, their own voice feedback link. */}
+          <TesterFeedbackEntry />
         </div>
       </header>
       <HostedEndOfTestOffer />

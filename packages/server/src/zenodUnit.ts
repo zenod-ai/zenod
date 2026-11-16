@@ -77,6 +77,7 @@ import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
+import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { mountTesterMailQueueRoutes, TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
@@ -1482,6 +1483,20 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
         ...testerSetups,
       });
+      // E7-S9: each tester's own voice feedback link, made on the team console by a vps3 timer and kept here; the app
+      // shows it as one "Tell us what you think" entry to testers only.
+      mountTesterFeedbackRoutes(app, {
+        dataDir: storage.dataDir,
+        accounts: () => customer.accounts.list(),
+        isTester,
+        isTest,
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        sessionAccount: (c) => {
+          const session = readCustomerSession(c, env);
+          return session ? customer.accounts.resolveActiveTenantForUser(session.user_id) : null;
+        },
+        firstName: applicantFirstName,
+      });
       // E26-S32 (Jordi's yes on E26-A17): one email the day after sign-up when WhatsApp is still not linked, sent by the
       // thank-you timer through the team's Gmail connection; once per tester, off with mode "off".
       mountTesterWhatsAppNudgeRoutes(app, {
@@ -1653,6 +1668,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       comped,
       savesSince: (tenantId, sinceMs) => tenantSavesSince(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
       whatsappSaves: (tenantId) => tenantWhatsAppSaves(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId),
+      // E7-S9: filed voice feedback notes per tester link (kept by the vps3 feedback timer).
+      feedbackNotes: (accountId) => readTesterFeedback(storage.dataDir)[accountId] ?? null,
       isTest: (contact, use) => marks.isTest(contact, use),
     });
     // E26-S29: the zenod.dev/testers page reads N from here, so it always matches the setting.
