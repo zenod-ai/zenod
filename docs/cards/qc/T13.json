@@ -1,46 +1,70 @@
 {
   "row": "T13",
   "card": "docs/cards/T13.md",
-  "cardSha": "c5934facd62dccea",
+  "cardSha": "2642943f504b88d5",
   "inputs": {
-    "card": "c5934facd62dccea",
-    "page": "f3880ad0e6f3ceca",
+    "card": "2642943f504b88d5",
+    "page": "e1bf46a235f9a440",
     "rules": "5c1e73ef9c3caa57",
-    "words": "6c7ce7644dfae346"
+    "words": "f25f25b047ef94da"
   },
-  "checkedAt": "2026-11-15T20:52:45Z",
+  "checkedAt": "2026-11-16T08:21:56Z",
   "by": "card_qc.py (console judge)",
   "words": [
+    {
+      "said": "we should keep both! aren't posts the same basically? what's the problem? we need to stay active!!!",
+      "where": "039c63c94, his note on this card 2026-11-16",
+      "key": "039c63c94",
+      "when": "newest",
+      "status": "met",
+      "how": "Evidence page states 'keep both' as the next step: posts on X and Reddit continue, personal Reddit replies added on top."
+    },
     {
       "said": "why are we not getting testers like now? … It's time to get fucking testers … can we get the testers?",
       "where": "vn_5ef65752",
       "status": "met",
-      "how": "Page shows the funnel by day and by post, and the one converting Reddit reply; the team's own tests are left out and the numbers show few visitors and no WhatsApp or saves, but the 'why not like now' question is answered with drop-off data."
+      "how": "Page shows funnel by day and by post, and the one converting Reddit reply; team's own tests left out."
     },
     {
       "said": "our single focus right now should be getting testers. And we got one.",
       "where": "vn_5ef65752",
       "status": "met",
-      "how": "Card and page show 51 posts brought 15 people, one applied and one signed up; the only converting reply is named and the Apply button is first on phones."
+      "how": "Card lines and page show 51 posts brought 15 people, one applied, one signed up; converting reply named."
+    },
+    {
+      "said": "we should keep both! aren't posts the same basically? we need to stay active!!!",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Page's first screen states 'What happens next, as you said on 16 Nov: keep both' with daily posts and Reddit replies."
     }
   ],
   "visual": {
-    "pass": true,
-    "problems": [],
-    "breaches": [],
-    "summary": "The 390 and 1280 px screens open with the punchline box under the title, use one ink and one green accent, fit without sideways scroll, and show the delivered Apply-first tester page and the funnel tables."
+    "pass": false,
+    "problems": [
+      "at 390 px: The per-day table is cut off at the right edge: the Saved and WhatsApp columns are clipped and the 'What brings people' table's Applied column is cut off, with no visible scroll cue. (rule 4)"
+    ],
+    "breaches": [
+      {
+        "rule": 4,
+        "width": 390,
+        "what": "The per-day table is cut off at the right edge: the Saved and WhatsApp columns are clipped and the 'What brings people' table's Applied column is cut off, with no visible scroll cue."
+      }
+    ],
+    "summary": "Laptop view is clean and answer-first; the phone view has tables clipped at the right edge with no scroll cue, and the first screen's table and the cards' copy are otherwise readable."
   },
-  "pass": true,
-  "held": [],
+  "pass": false,
+  "held": [
+    "failed the visual check: at 390 px: The per-day table is cut off at the right edge: the Saved and WhatsApp columns are clipped and the 'What brings people' table's Applied column is cut off, with no visible scroll cue. (rule 4)"
+  ],
   "reader": {
-    "asked": "Decide whether the social team should reply on Reddit instead of posting on X from tomorrow.",
+    "asked": "Decide whether to keep posting everywhere and add daily personal Reddit replies, or post only as now.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "f3880ad0e6f3ceca",
-    "walkedAt": "2026-11-15T20:52:45Z",
+    "page": "e1bf46a235f9a440",
+    "walkedAt": "2026-11-16T08:21:56Z",
     "steps": [
       {
         "n": 1,
