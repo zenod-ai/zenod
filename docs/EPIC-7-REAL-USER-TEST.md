@@ -38,7 +38,7 @@ Evidence: [T13 funnel](http://vps3.taild81fbb.ts.net:9313/) · [T13 evidence](ev
 Waiting on: the 16 Nov 07:41Z promote of #1674, then the T13 card to his review; his review of E7-S3; infra-vps/EPIC-2-A49 Mac run (tester-watch, T7-F2); zenod-social replies on Reddit instead of X
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: 16 Nov 07:50Z: confirm production carries #1674, set T13 to review ; EPIC-26 E26-S3 watches the first stranger end to end
-Monitoring: Drive OAuth readiness proof renewed 2026-11-11 (E26-A5, look at 03:48:45Z) until 2027-02-09 · next check 2027-02-02 (watcher warning) · then raise a `do` ask for Jordi to renew it in Google Cloud console, or set the tester allowlist
+Monitoring: team Gmail down since 2026-11-16T03:45Z (gmail_search and gmail_send answer Command failed; agent_team desk note) · next check 2026-11-16T07:50Z · then send the E7-A25 email and check the tester thank-you timer
 Source revision: see git log
 Verified at: 2026-11-15T21:41Z (production zenod-mt f6803691; staging cdc05374 with the phone Apply button; T13 funnel page http://vps3.taild81fbb.ts.net:9313/)
 
@@ -212,6 +212,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-12 | decided | decided by Delivery Manager: E7-A24 answered Go (invite the first testers as soon as the mail sender is live) — why: Jordi's E7-A23 answer "let's try with first tester directly" already settles it; the ask gate held E7-A24 as a re-ask — rollback: the tester page's stop switch pauses acceptances | Delivery Manager run_862e3b50 |
 | 2026-11-14 | accepted | T13 opened ready on Jordi's words (L-37: his ask is his ready stamp), 7 Nov voice note ^e-5fc46c: "why are we not getting testers like now? … It's time to get fucking testers … can we get the testers?"; the idle watch flagged wheel zenod-live with no worker; T11 (answer why Zenod is not live) folds into T13's numbers — rollback: close T13 superseded | Log/2026-11-07.md ^e-5fc46c |
 | 2026-11-14 | accepted | T13 rolled Phylax by hand to sha-952b8d0 (WhatsApp link challenge gives the full shared number), the DEPLOYMENTS.md procedure as ZAL-A15 and A16 | the one broken step that lost the first real tester; reversible in one update to @sha256:99296dea (sha-3721658) | [T13 evidence](evidence/e7-t13-2026-11-14.md) | if a new account still cannot link WhatsApp |
+| 2026-11-16 | accepted | E7-A25 answered by Jordi: "APPROVED": one email to our only tester, exact text on the ask, sent by the team from jordi@alpha9.io | the send waits on the team Gmail connection, down since ~03:45Z (every gmail call answers Command failed); reported to agent_team desk 2026-11-16; sent on the first wake after Gmail answers | Delivery Manager run_d2e331ae | [E7-A25](#waiting-on) | Gmail answers again |
 
 ## Operating Learnings
 
