@@ -50,6 +50,7 @@ import {
   GET_INGEST_RESULT_SHAPE,
   READ_LLM_TIMELINE_SHAPE,
   GET_MEMORY_SHAPE,
+  GET_RAW_ARTIFACT_SHAPE,
   MEMORY_CLOUD_SHAPE,
   INGEST_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
@@ -71,6 +72,7 @@ import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./to
 import { storeReceiptHeadline } from "./recentSaves.js";
 import { rankHits } from "./rankedMemory.js";
 import { opsAlert } from "./opsAlert.js";
+import { RAW_ARTIFACT_MAX_BYTES, RawArtifactError, readRawArtifact, type RawArtifactStore } from "./rawArtifactRead.js";
 
 /**
  * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
@@ -572,6 +574,8 @@ export function buildMcpServer(
   githubCapability?: () => boolean,
   onGithubAuthorizationRevoked?: () => void,
   readAsFor?: (question: string) => Promise<ReadAs[]>,
+  // EPIC-21 V8: this tenant's own artifact archive, read only (absent: no get_raw_artifact tool).
+  rawArtifactStore?: () => RawArtifactStore,
 ): McpServer {
   const server =
     existingServer ??
@@ -1065,6 +1069,54 @@ export function buildMcpServer(
       };
     },
   );
+
+  if (rawArtifactStore) {
+    const refused = (code: string, message: string) => ({
+      content: [{ type: "text" as const, text: `ERROR ${code}: ${message}` }],
+      structuredContent: { error: { code, message } },
+      isError: true,
+    });
+    server.registerTool(
+      "get_raw_artifact",
+      {
+        title: "Get raw artifact",
+        description:
+          `Read only. Return the archived original of one captured entry, such as a WhatsApp voice note's audio, by the exact evidence reference that search_memory returns (for example Log/2026-08-01.md#^e-123abc). The file is read from this memory's own archive, its bytes are checked against the entry's recorded Raw artifact sha256, and they come back base64-encoded with their mime type. Files over ${RAW_ARTIFACT_MAX_BYTES} bytes are refused.`,
+        inputSchema: GET_RAW_ARTIFACT_SHAPE,
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ ref }) => {
+        if (!/^[^#\s]+\.md#\^[A-Za-z0-9_-]+$/.test(ref)) {
+          return refused("bad_ref", `'${ref}' is not an evidence reference; pass one like Log/2026-08-01.md#^e-123abc from search_memory.`);
+        }
+        const engine = await getEngine();
+        const entry = await engine.getEntry(ref).catch(() => null);
+        if (!entry) return refused("not_found", `No captured entry ${ref} in this memory.`);
+        try {
+          const artifact = await readRawArtifact(entry.evidenceRef, entry.content, rawArtifactStore());
+          return {
+            content: [{ type: "text" as const, text: `${entry.evidenceRef}\n${artifact.filename} · ${artifact.mimeType} · ${artifact.sizeBytes} bytes · sha256 ${artifact.sha256} (verified)\nBytes are in structuredContent.data (base64).` }],
+            structuredContent: {
+              ref: entry.evidenceRef,
+              contentType: entry.contentType ?? null,
+              capturedAt: entry.capturedAt,
+              uri: artifact.uri,
+              filename: artifact.filename,
+              mimeType: artifact.mimeType,
+              sizeBytes: artifact.sizeBytes,
+              sha256: artifact.sha256,
+              sha256Verified: true,
+              encoding: "base64",
+              data: artifact.data.toString("base64"),
+            },
+          };
+        } catch (error) {
+          if (error instanceof RawArtifactError) return refused(error.code, error.message);
+          return refused("archive_read_failed", `The archive could not be read for ${ref}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      },
+    );
+  }
 
   server.registerTool(
     "memory_cloud",

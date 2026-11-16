@@ -3250,6 +3250,15 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           },
           // EPIC-14 S29: ask_brain reads the quick index first, for the AI apps a person connects.
           agent.name === "zenod" ? (question) => runtime.readAs(question) : undefined,
+          // EPIC-21 V8: read back an archived original from this tenant's own archive only.
+          agent.name === "zenod"
+            ? () => ({
+                drive: driveClientFromSettings(settings),
+                driveFolderIds: [settings.get("artifact_archive_drive_folder_id"), settings.get("google_drive_folder_id")]
+                  .filter((id): id is string => Boolean(id)),
+                localDir: settings.get("artifact_archive_local_dir") ?? null,
+              })
+            : undefined,
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

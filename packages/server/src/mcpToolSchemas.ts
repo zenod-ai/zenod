@@ -32,6 +32,11 @@ export const GET_MEMORY_SHAPE = {
   path: z.string().min(1).describe("Vault-relative path, e.g. Areas/Insurance.md, or an exact evidence reference, e.g. Log/2026-08-01.md#^e-123abc"),
 };
 
+/** get_raw_artifact (EPIC-21 V8): the archived original of one captured entry. */
+export const GET_RAW_ARTIFACT_SHAPE = {
+  ref: z.string().min(1).max(512).describe("Exact evidence reference of a captured entry, e.g. Log/2026-08-01.md#^e-123abc"),
+};
+
 /** memory_cloud (E18-W1): the weighted cloud around a question or one memory. */
 export const MEMORY_CLOUD_SHAPE = {
   query: z.string().min(1).optional().describe("A question or topic: the cloud grows from its best matching memories."),
