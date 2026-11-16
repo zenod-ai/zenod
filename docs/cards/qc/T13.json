@@ -4,11 +4,11 @@
   "cardSha": "2642943f504b88d5",
   "inputs": {
     "card": "2642943f504b88d5",
-    "page": "e1bf46a235f9a440",
+    "page": "9ed148a30b88eb0f",
     "rules": "5c1e73ef9c3caa57",
     "words": "f25f25b047ef94da"
   },
-  "checkedAt": "2026-11-16T08:21:56Z",
+  "checkedAt": "2026-11-16T08:22:56Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,45 +17,35 @@
       "key": "039c63c94",
       "when": "newest",
       "status": "met",
-      "how": "Evidence page states 'keep both' as the next step: posts on X and Reddit continue, personal Reddit replies added on top."
+      "how": "Evidence first screen states 'What happens next, as you said on 16 Nov: keep both' with posts continuing and Reddit replies added on top."
     },
     {
       "said": "why are we not getting testers like now? … It's time to get fucking testers … can we get the testers?",
       "where": "vn_5ef65752",
       "status": "met",
-      "how": "Page shows funnel by day and by post, and the one converting Reddit reply; team's own tests left out."
+      "how": "Page shows funnel by day and by post, the one converting Reddit reply, and the team's own tests left out."
     },
     {
       "said": "our single focus right now should be getting testers. And we got one.",
       "where": "vn_5ef65752",
       "status": "met",
-      "how": "Card lines and page show 51 posts brought 15 people, one applied, one signed up; converting reply named."
+      "how": "Card lines and page show 51 posts brought 15 people, one applied, one signed up, converting reply named."
     },
     {
       "said": "we should keep both! aren't posts the same basically? we need to stay active!!!",
       "where": "the card's source",
       "status": "met",
-      "how": "Page's first screen states 'What happens next, as you said on 16 Nov: keep both' with daily posts and Reddit replies."
+      "how": "Page's first screen states 'keep both' with daily posts and Reddit replies added on top."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 390 px: The per-day table is cut off at the right edge: the Saved and WhatsApp columns are clipped and the 'What brings people' table's Applied column is cut off, with no visible scroll cue. (rule 4)"
-    ],
-    "breaches": [
-      {
-        "rule": 4,
-        "width": 390,
-        "what": "The per-day table is cut off at the right edge: the Saved and WhatsApp columns are clipped and the 'What brings people' table's Applied column is cut off, with no visible scroll cue."
-      }
-    ],
-    "summary": "Laptop view is clean and answer-first; the phone view has tables clipped at the right edge with no scroll cue, and the first screen's table and the cards' copy are otherwise readable."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the punchline box under the title, show the funnel tables and the tester page screenshots, and have no sideways overflow; the page is clean and readable."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: at 390 px: The per-day table is cut off at the right edge: the Saved and WhatsApp columns are clipped and the 'What brings people' table's Applied column is cut off, with no visible scroll cue. (rule 4)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
     "asked": "Decide whether to keep posting everywhere and add daily personal Reddit replies, or post only as now.",
     "ambiguous": ""
@@ -63,8 +53,8 @@
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "e1bf46a235f9a440",
-    "walkedAt": "2026-11-16T08:21:56Z",
+    "page": "9ed148a30b88eb0f",
+    "walkedAt": "2026-11-16T08:22:56Z",
     "steps": [
       {
         "n": 1,
