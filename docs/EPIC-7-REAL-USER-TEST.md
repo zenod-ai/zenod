@@ -161,7 +161,7 @@ Never also:
 - Never sign in to Google in Jordi's own Chrome, and never sign out of any account there.
 - Never change the account's password, recovery phone, recovery email or 2-step settings, even if Google suggests it.
 - Never read, copy or describe a password, a code or a cookie.
-| E7-S7 | Ticket worker | unassigned | Know who comes to zenod.dev: pass the page path (p=<path>) to the shared page counter on every zenod.dev page and count the cloud.zenod.dev sign-up steps (signin_open, signup_open, oauth_google, signup_sent) with the same no-cookie image call; SEO pass: /sitemap.xml, a Sitemap line in robots.txt, rel=canonical, og:url, twitter:card summary_large_image, SoftwareApplication JSON-LD, the meta description in the first HTML | ready | none | none | main | Jordi's ask E46-S57 (16 Nov) via alpha9 desk note 2026-11-16-alpha9-e46-s57 | 2026-11-16 | worker |
+| E7-S7 | Ticket worker | run_9ae3cbe9-fe72-4239-9f34-529787adfcbe (claimed 2026-11-16T08:05Z) | Know who comes to zenod.dev: pass the page path (p=<path>) to the shared page counter on every zenod.dev page and count the cloud.zenod.dev sign-up steps (signin_open, signup_open, oauth_google, signup_sent) with the same no-cookie image call; SEO pass: /sitemap.xml, a Sitemap line in robots.txt, rel=canonical, og:url, twitter:card summary_large_image, SoftwareApplication JSON-LD, the meta description in the first HTML | active | none | wt/e7-s7 | main | Jordi's ask E46-S57 (16 Nov) via alpha9 desk note 2026-11-16-alpha9-e46-s57 | 2026-11-16 | worker |
 
 ## Decisions
 
