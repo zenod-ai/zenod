@@ -97,7 +97,7 @@ export function testerThanksMail(to: string, firstName: string | null, freeMemor
 <p>${escapeHtml(offer)}</p>
 <p>You can write to me at any time at <a href="mailto:jordi@zenod.dev" style="${link}">jordi@zenod.dev</a>, or just reply to this email. Broken, confusing or great: I read every message.</p>
 <p>If you're open to it, I'd also be happy to have a quick call in a few days to hear how it's going. No pressure at all. Reply "call" and we'll find a time.</p>
-${feedback ? `<p>${escapeHtml(FEEDBACK_PARAGRAPH)} <a href="${feedback}" style="${link}">${feedback}</a></p>\n` : ""}<p>A few useful links:</p>
+${feedback ? `<p>${escapeHtml(FEEDBACK_PARAGRAPH)} <a href="${feedback}" style="${link};word-break:break-all">${feedback}</a></p>\n` : ""}<p>A few useful links:</p>
 <ul style="padding-left:1.25rem">
 ${links.map(([label, shown, url]) => `<li style="margin:0 0 .4rem">${escapeHtml(label)}: <a href="${url}" style="${link}">${shown}</a></li>`).join("\n")}
 </ul>
