@@ -114,8 +114,13 @@ export interface WelcomeMailOptions {
   now?: () => Date;
   /** EPIC-26 S13: the same queue for another mail: its own file, words and log label. */
   file?: string;
-  compose?: (record: WelcomeRecord) => ZenodMail;
+  compose?: (record: WelcomeRecord, id: string) => ZenodMail;
   label?: string;
+  /**
+   * E7-S10: while true for a record, it waits (left out of the queue and not sent) and is composed later; the caller
+   * bounds how long. Nothing is stored for it, so a held mail is still sent once.
+   */
+  hold?: (record: WelcomeRecord, id: string) => boolean;
   /** E26-S26: while true, every queued mail not yet sent is dropped instead of sent. */
   drop?: () => boolean;
 }
@@ -183,7 +188,8 @@ export class WelcomeMailer {
       const address = record.email.trim().toLowerCase();
       if (record.sentAt || record.droppedAt || done.has(address)) continue;
       done.add(address);
-      const mail = this.options.compose?.(record) ?? welcomeMail(record.email, this.options.appUrl);
+      if (this.options.hold?.(record, id)) continue;
+      const mail = this.options.compose?.(record, id) ?? welcomeMail(record.email, this.options.appUrl);
       out.push({ id, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html, queuedAt: record.queuedAt });
     }
     return out;
@@ -266,8 +272,9 @@ export class WelcomeMailer {
     if (!mailReady(send)) return;
     for (const [accountId, record] of Object.entries(this.read().accounts)) {
       if (record.sentAt || record.droppedAt || (record.tries ?? 0) >= MAX_TRIES) continue;
+      if (this.options.hold?.(record, accountId)) continue;
       try {
-        await send(this.options.compose?.(record) ?? welcomeMail(record.email, this.options.appUrl));
+        await send(this.options.compose?.(record, accountId) ?? welcomeMail(record.email, this.options.appUrl));
         this.update(accountId, { sentAt: this.now().toISOString(), lastError: "" });
         console.log(`[${this.options.label ?? "welcome"}] email sent`);
       } catch (error) {

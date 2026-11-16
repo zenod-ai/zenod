@@ -43,8 +43,23 @@ export function greetingName(name: string | null | undefined): string | null {
   return /^[\p{L}][\p{L}'-]{1,29}$/u.test(first) ? first.charAt(0).toUpperCase() + first.slice(1) : null;
 }
 
-/** The thank-you email (proposal E26-S22, section 3), from Jordi at Zenod. */
-export function testerThanksMail(to: string, firstName: string | null, freeMemories = testerFreeMemories()): ZenodMail {
+/**
+ * E7-S10 (Jordi's yes on E7-A26, 16 Nov 2026: "Yes: the extra paragraph for new testers."): the approved words, word
+ * for word, followed by the tester's own voice feedback link (E7-S9).
+ */
+export const FEEDBACK_PARAGRAPH =
+  "Could you leave us a voice note about Zenod once a week? Open this link, tap the button and talk; a minute is plenty. Nobody listens to the audio: it becomes text for our team and is thrown away.";
+/**
+ * E7-S10: a thank-you whose tester has no voice feedback link yet waits for one this long after it was queued (the
+ * link timer, zenod-tester-feedback, runs every 15 minutes: two ticks), then goes without the paragraph. It is sent
+ * once either way.
+ */
+export const FEEDBACK_LINK_WAIT_MS = 30 * 60 * 1000;
+const FEEDBACK_URL = /^https:\/\/[a-z0-9.-]+(:\d+)?\/api\/public\/feedback\/[A-Za-z0-9_-]{8,}$/;
+
+/** The thank-you email (proposal E26-S22, section 3), from Jordi at Zenod; E7-S10: with the feedback link when given. */
+export function testerThanksMail(to: string, firstName: string | null, freeMemories = testerFreeMemories(), feedbackUrl: string | null = null): ZenodMail {
+  const feedback = feedbackUrl && FEEDBACK_URL.test(feedbackUrl) ? feedbackUrl : null;
   const hi = firstName ? `Hi ${firstName},` : "Hi,";
   const links: Array<[string, string, string]> = [
     ["Your Zenod app", "cloud.zenod.dev/app", "https://cloud.zenod.dev/app"],
@@ -66,6 +81,7 @@ export function testerThanksMail(to: string, firstName: string | null, freeMemor
     "",
     "If you're open to it, I'd also be happy to have a quick call in a few days to hear how it's going. No pressure at all. Reply \"call\" and we'll find a time.",
     "",
+    ...(feedback ? [`${FEEDBACK_PARAGRAPH} ${feedback}`, ""] : []),
     "A few useful links:",
     ...links.map(([label, , url]) => `${label}: ${url}`),
     "",
@@ -81,7 +97,7 @@ export function testerThanksMail(to: string, firstName: string | null, freeMemor
 <p>${escapeHtml(offer)}</p>
 <p>You can write to me at any time at <a href="mailto:jordi@zenod.dev" style="${link}">jordi@zenod.dev</a>, or just reply to this email. Broken, confusing or great: I read every message.</p>
 <p>If you're open to it, I'd also be happy to have a quick call in a few days to hear how it's going. No pressure at all. Reply "call" and we'll find a time.</p>
-<p>A few useful links:</p>
+${feedback ? `<p>${escapeHtml(FEEDBACK_PARAGRAPH)} <a href="${feedback}" style="${link};word-break:break-all">${feedback}</a></p>\n` : ""}<p>A few useful links:</p>
 <ul style="padding-left:1.25rem">
 ${links.map(([label, shown, url]) => `<li style="margin:0 0 .4rem">${escapeHtml(label)}: <a href="${url}" style="${link}">${shown}</a></li>`).join("\n")}
 </ul>
@@ -123,6 +139,8 @@ export interface TesterOnboardingOptions {
   firstName: (email: string) => string | null;
   /** Phylax's WhatsApp state for the account ("verified" once linked), null when unknown. */
   whatsappState: (accountId: string) => Promise<string | null>;
+  /** E7-S10: the tester's own voice feedback link (E7-S9), null while none is made; absent leaves the paragraph out. */
+  feedbackLink?: (accountId: string) => string | null;
   /** Sends the welcome to an account whose WhatsApp is already linked (the test send). */
   sendWelcome: (account: CustomerAccount, operationId: string) => Promise<"sent" | "skipped" | "failed">;
   now?: () => Date;
@@ -147,10 +165,23 @@ export class TesterOnboarding {
       sendMail: options.sendMail,
       file: TESTER_THANKS_MAIL_FILE,
       label: "tester-thanks",
-      compose: (record) => testerThanksMail(record.email, record.data?.first_name || null),
+      compose: (record, accountId) =>
+        testerThanksMail(record.email, record.data?.first_name || null, testerFreeMemories(), this.feedbackLink(accountId)),
+      // E7-S10: no link yet, wait for the link timer (bounded), then send without the paragraph.
+      hold: (record, accountId) =>
+        Boolean(options.feedbackLink) && !this.feedbackLink(accountId)
+        && this.now().getTime() - Date.parse(record.queuedAt) < FEEDBACK_LINK_WAIT_MS,
       drop: () => this.mode() === "off",
       ...(options.now ? { now: options.now } : {}),
     });
+  }
+
+  private feedbackLink(accountId: string): string | null {
+    try {
+      return this.options.feedbackLink?.(accountId) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private read(): OnboardingState {
