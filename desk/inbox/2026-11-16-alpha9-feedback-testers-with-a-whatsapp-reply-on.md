@@ -3,7 +3,7 @@ from: alpha9
 about: Testers with a WhatsApp reply: one number in Zenod's public counts (whatsapp_replied)
 reply-to: AlfaBlok/epic-team
 status: answered
-answered: AlfaBlok/epic-team:desk/inbox/2026-11-16-zenod-re-testers-with-a-whatsapp-reply-one-nu.md
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-16-zenod-re-testers-with-a-whatsapp-reply-one-nu-2.md
 kind: product-feedback
 row: E7-S8
 source: EpicSocial desk chat, 2026-11-16 06:26Z, voice note vn_15aa4467
