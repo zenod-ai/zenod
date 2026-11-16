@@ -2,7 +2,7 @@
 // like some level of consumption, you know, the first few memories or whatever"): the tester offer is a
 // consumption trial. A tester's first N memories (finished saves) are free, with no time limit and no card.
 //
-// N is one setting, ZENOD_TESTER_FREE_MEMORIES (default 50), so Jordi's number changes it without code.
+// N is one setting, ZENOD_TESTER_FREE_MEMORIES (default 30, Jordi 2026-11-16 vn_e622f472 "your first 30 memories"), so Jordi's number changes it without code.
 // The count is the saves counter the public counts already use (finished `store` and `media_ingest` jobs
 // in the tenant's tasks.sqlite). While a tester has fewer than N, the month-end job gives the next month
 // at €0 by itself; once they reach N, the free time ends at the period end, the end-of-test offer goes
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import type { Hono } from "hono";
 import { tenantSavesSince } from "./publicCounts.js";
 
-export const DEFAULT_TESTER_FREE_MEMORIES = 50;
+export const DEFAULT_TESTER_FREE_MEMORIES = 30;
 export const TESTER_OFFER_PATH = "/api/public/testers/offer";
 
 /** N from ZENOD_TESTER_FREE_MEMORIES: a whole number from 1 to 100000, else the default. */

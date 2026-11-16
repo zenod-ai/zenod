@@ -59,11 +59,11 @@ describe("testers apply form (EPIC-26 S2)", () => {
 });
 
 describe("E26-S29: the tester's free memories", () => {
-  it("reads N from the server setting, and falls back to 50", async () => {
+  it("reads N from the server setting, and falls back to 30", async () => {
     const answer = (body: unknown, ok = true) => (async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })) as unknown as typeof fetch;
     expect(await fetchFreeMemories(answer({ free_memories: 30 }))).toBe(30);
     expect(await fetchFreeMemories(answer({ free_memories: "lots" }))).toBe(DEFAULT_FREE_MEMORIES);
-    expect(await fetchFreeMemories(answer({}, false))).toBe(50);
-    expect(await fetchFreeMemories((async () => { throw new Error("offline"); }) as unknown as typeof fetch)).toBe(50);
+    expect(await fetchFreeMemories(answer({}, false))).toBe(30);
+    expect(await fetchFreeMemories((async () => { throw new Error("offline"); }) as unknown as typeof fetch)).toBe(30);
   });
 });

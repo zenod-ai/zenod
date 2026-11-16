@@ -424,7 +424,7 @@ describe("free time on the operator page (E26-S5 round 3)", () => {
   it("shows each tester's free time, usage and the one-more-month button, and says no month renews by itself", async () => {
     const { app } = withFreeTime();
     const page = await (await app.request("/admin/testers")).text();
-    expect(page).toContain("first 50 memories are free, with no time limit");
+    expect(page).toContain("first 30 memories are free, with no time limit");
     expect(page).toContain("Free this month, until 10 December 2026. The next month is free too while they have free memories left.");
     expect(page).toContain("$1.20 of $3 (40%)");
     expect(page).toContain("2 days ago");

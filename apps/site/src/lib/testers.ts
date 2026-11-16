@@ -10,7 +10,7 @@ export const TESTERS_LINK_PATH = "/api/public/testers/link";
 export const TESTERS_WITHDRAW_PATH = "/api/public/testers/withdraw";
 // E26-S29: the offer is a tester's first N memories free; N is one server setting, read from here.
 export const TESTERS_OFFER_PATH = "/api/public/testers/offer";
-export const DEFAULT_FREE_MEMORIES = 50;
+export const DEFAULT_FREE_MEMORIES = 30;
 
 /** N from the server, or the default while it loads or when it cannot be read. */
 export async function fetchFreeMemories(fetcher: typeof fetch = fetch): Promise<number> {
