@@ -1,87 +1,52 @@
 {
   "row": "E7-S9",
   "card": "docs/cards/E7-S9.md",
-  "cardSha": "e940934f7574a81e",
+  "cardSha": "1222e65677339faa",
   "inputs": {
-    "card": "e940934f7574a81e",
-    "page": "050c635b28d74c63",
+    "card": "1222e65677339faa",
+    "page": "4572166c0b6ba0c5",
     "rules": "5c1e73ef9c3caa57",
     "words": "a02c70b09384bd1a"
   },
-  "checkedAt": "2026-11-16T12:36:09Z",
+  "checkedAt": "2026-11-16T12:36:42Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Tell us what you think",
       "where": "WhatsApp that sends the link to a test",
       "status": "met",
-      "how": "Evidence page shows the header entry \"Tell us what you think\" in the app mockup at 1280 and 390, and the Zenod screenshot shows it."
+      "how": "Evidence shows the \"Tell us what you think\" header entry in the app at 1280 and 390 px, and the voice feedback page."
     },
     {
       "said": "that's our way of getting feedback from customers, that we can send a link and this link will allow them to provide voice notes that ... link back to a structured data of feedback ... I am so worried that all this feedback is going to get lost",
       "where": "vn_27afac4e",
       "status": "declared",
-      "how": "Card's ✗ line says nobody is told about the link outside the app and sending it by email needs his yes; evidence page says it is one ask."
+      "how": "Card's ✗ line says nobody is told about the link outside the app yet; the evidence page says the same and waits on his yes."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "The feature-flow diagram and the results table are cut off at the right edge in the 390 px first screen and the production diagram is clipped; text such as \"production (VPS1, cloud.zenod.de\" runs past the box and cannot be read in full. (rule 4)",
-      "at 1280 px: The three-system flow (production, vps3 timer, team console) is a sequence drawn as a boxed grid with arrows, and the team console column is clipped at the right edge. (rule 2)"
-    ],
-    "breaches": [
-      {
-        "rule": 4,
-        "width": 390,
-        "what": "The feature-flow diagram and the results table are cut off at the right edge in the 390 px first screen and the production diagram is clipped; text such as \"production (VPS1, cloud.zenod.de\" runs past the box and cannot be read in full."
-      },
-      {
-        "rule": 2,
-        "width": 1280,
-        "what": "The three-system flow (production, vps3 timer, team console) is a sequence drawn as a boxed grid with arrows, and the team console column is clipped at the right edge."
-      }
-    ],
-    "summary": "The first screen opens with the answer and the diagram, but the diagrams and tables are clipped at 390 px and the sequence diagram is cut off at 1280 px; the evidence page itself shows the delivered entry in both widths."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths show the header link, the app mockup and the voice page; the evidence page itself is a plain text list with no diagram, and the 1280 px last screen shows the app mockup and page shell cleanly with no sideways overflow."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: The feature-flow diagram and the results table are cut off at the right edge in the 390 px first screen and the production diagram is clipped; text such as \"production (VPS1, cloud.zenod.de\" runs past the box and cannot be read in full. (rule 4); at 1280 px: The three-system flow (production, vps3 timer, team console) is a sequence drawn as a boxed grid with arrows, and the team console column is clipped at the right edge. (rule 2)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether the per-tester feedback link placement and wording in the app is right, answering Yes or Change it.",
-    "ambiguous": "",
-    "note": "\"Nobody is told about the link outside the app yet. Sending it by email needs your yes.\" A reader could take the ✗ line as a request for a separate approval now, or as a note that the email step is a later, separate ask; the Yes button would be read differently by each."
+    "asked": "Decide whether the placement and wording of the Tell us what you think feedback link in the app is right, answering Yes or Change it.",
+    "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "050c635b28d74c63",
-    "walkedAt": "2026-11-16T12:36:09Z",
+    "page": "4572166c0b6ba0c5",
+    "walkedAt": "2026-11-16T12:36:42Z",
     "steps": [
       {
         "n": 1,
         "what": "open the card's link",
         "url": "http://vps3.taild81fbb.ts.net:8921/e7-s9/",
         "result": "opened"
-      },
-      {
-        "n": 2,
-        "what": "open the link 'screenshot'",
-        "url": "http://vps3.taild81fbb.ts.net:8921/e7-s9/app-1280.png",
-        "result": "answered 200"
-      },
-      {
-        "n": 3,
-        "what": "open the link 'screenshot'",
-        "url": "http://vps3.taild81fbb.ts.net:8921/e7-s9/app-390.png",
-        "result": "answered 200"
-      },
-      {
-        "n": 4,
-        "what": "open the link 'screenshot'",
-        "url": "http://vps3.taild81fbb.ts.net:8921/e7-s9/recording-page-390.png",
-        "result": "answered 200"
       }
     ]
   },
