@@ -65,43 +65,59 @@ export function maskAccount(account: CustomerAccount): string {
   return `${masked} …${account.account_id.slice(-4)}`;
 }
 
+export interface TesterSetupOptions {
+  accounts: () => CustomerAccount[];
+  isTester: (account: CustomerAccount) => boolean;
+  isTest: (account: CustomerAccount) => boolean;
+  setup: (accountId: string) => Promise<WhatsAppSetupRead | null>;
+}
+
+/** One real tester's WhatsApp setup (unmasked: the caller decides what leaves). */
+export interface TesterSetupRow extends WhatsAppSetupStep {
+  account: CustomerAccount;
+  email: string | null;
+  read: WhatsAppSetupRead | null;
+}
+
+/**
+ * Every real tester account (test accounts, non-testers, unpaid and cancelled left out) with its WhatsApp step.
+ * One person may hold two accounts: linked on either means linked. Shared by the stuck check (E26-S31) and the
+ * next-day WhatsApp email (E26-S32).
+ */
+export async function readTesterSetups(options: TesterSetupOptions): Promise<TesterSetupRow[]> {
+  const accounts = options.accounts().filter((account) =>
+    account.tenant_id && account.subscription_status !== "checkout_pending" && account.subscription_status !== "canceled"
+    && options.isTester(account) && !options.isTest(account));
+  const rows: TesterSetupRow[] = [];
+  for (const account of accounts) {
+    const read = await options.setup(account.account_id).catch(() => null);
+    rows.push({ account, email: (accountEmail(account) ?? "").toLowerCase() || null, read, ...whatsappSetupStep(read) });
+  }
+  const linked = new Set(rows.filter((r) => r.step === "linked" && r.email).map((r) => r.email));
+  return rows.map((r) => (r.email && linked.has(r.email) && r.step !== "linked" ? { ...r, step: "linked", text: "linked on another account", ourBug: false } : r));
+}
+
 export function mountTesterWhatsAppSetupRoute(
   app: Hono<{ Bindings: HttpBindings }>,
-  options: {
-    isOps: (c: Context) => boolean;
-    accounts: () => CustomerAccount[];
-    isTester: (account: CustomerAccount) => boolean;
-    isTest: (account: CustomerAccount) => boolean;
-    setup: (accountId: string) => Promise<WhatsAppSetupRead | null>;
-    now?: () => number;
-  },
+  options: TesterSetupOptions & { isOps: (c: Context) => boolean; now?: () => number },
 ): void {
   app.get("/api/ops/testers/whatsapp-setup", async (c) => {
     if (!options.isOps(c)) return c.json({ error: "not found" }, 404);
-    const accounts = options.accounts().filter((account) =>
-      account.tenant_id && account.subscription_status !== "checkout_pending" && account.subscription_status !== "canceled"
-      && options.isTester(account) && !options.isTest(account));
-    const testers = [];
-    for (const account of accounts) {
-      const read = await options.setup(account.account_id).catch(() => null);
-      const step = whatsappSetupStep(read);
-      testers.push({
+    const rows = await readTesterSetups(options);
+    return c.json({
+      generatedAt: new Date(options.now?.() ?? Date.now()).toISOString(),
+      testers: rows.map(({ account, read, step, text, ourBug }) => ({
         account: maskAccount(account),
         key: account.account_id.slice(-8),
-        email: (accountEmail(account) ?? "").toLowerCase() || null,
         signedUpAt: account.claimed_at,
         whatsapp: read?.state ?? null,
         attempts: read?.attempts ?? 0,
         lastAttemptAt: read?.lastAttemptAt ? new Date(read.lastAttemptAt).toISOString() : null,
         lastStatus: read?.lastStatus ?? null,
-        ...step,
-      });
-    }
-    // One person may hold two accounts: linked on either means linked.
-    const linked = new Set(testers.filter((t) => t.step === "linked" && t.email).map((t) => t.email));
-    return c.json({
-      generatedAt: new Date(options.now?.() ?? Date.now()).toISOString(),
-      testers: testers.map(({ email, ...rest }) => ({ ...rest, ...(email && linked.has(email) && rest.step !== "linked" ? { step: "linked", text: "linked on another account", ourBug: false } : {}) })),
+        step,
+        text,
+        ourBug,
+      })),
     });
   });
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tester thank-you mail sender (EPIC-26 E26-S28 iteration 3).
+"""Tester thank-you mail sender (EPIC-26 E26-S28 iteration 3), and the next-day WhatsApp email (E26-S32).
 
 The Delivery Manager decided on 2026-11-15 (spine Decisions, E26-A16 withdrawn): the thank-you email a tester gets
 when they link WhatsApp goes from Jordi's own mailbox through the console's team Gmail connection (MCP `team-gmail`,
@@ -35,7 +35,7 @@ import sys
 import urllib.error
 import urllib.request
 
-ROW = "E26-S28"
+ROW = "E26-S28/E26-S32"
 CONSOLE = os.environ.get("CONSOLE_URL", "http://127.0.0.1:18750").rstrip("/")
 # The Zenod milestone's Delivery Manager (persona with Send switched on, console Services page).
 ASSIGNMENT = os.environ.get("ZENOD_DM_ASSIGNMENT", "as_f4fd49bd-5c61-4b8f-a5c5-397a238b1617")
@@ -95,7 +95,7 @@ def gmail_send(run: str, mail: dict, call=console) -> tuple[bool, str]:
 def open_run(call=console) -> str:
     now = dt.datetime.now(dt.timezone.utc)
     code, out = call("POST", "/api/runs", {"assignmentId": ASSIGNMENT, "host": "vps3",
-                                           "summary": f"{ROW} tester thank-you mail (timer)",
+                                           "summary": f"{ROW} tester mail (timer)",
                                            "clientRequestId": f"tester-thanks-{now.strftime('%Y%m%dT%H%M%S')}"})
     if code not in (200, 201) or not out.get("id"):
         raise SystemExit(f"could not open a console run: {code} {str(out)[:200]}")
@@ -126,23 +126,35 @@ def write_ledger(ledger: dict) -> None:
     tmp.replace(ledger_path())
 
 
+# Each queue: (label, queue route, mark route, absent ok). E26-S32: the next-day WhatsApp email (Jordi's yes on E26-A17)
+# rides the same tick, run and ledger; a production without its route (before the promote) is skipped quietly.
+QUEUES = (
+    ("thank-you", "/api/ops/testers/onboarding/mail-queue", "/api/ops/testers/onboarding/mail-sent", False),
+    ("whatsapp-nudge", "/api/ops/testers/whatsapp-nudge/queue", "/api/ops/testers/whatsapp-nudge/sent", True),
+)
+
+
 def tick(dry_run: bool = False, ops_call=ops, console_call=console, log=print) -> int:
-    code, queue = ops_call("GET", "/api/ops/testers/onboarding/mail-queue")
-    if code != 200:
-        log(f"could not read the queue: {code} {str(queue)[:200]}")
-        return 2
-    mails = queue.get("mails") or []
-    if not mails:
+    due: list[tuple[str, dict]] = []
+    for label, queue_path, mark_path, optional in QUEUES:
+        code, queue = ops_call("GET", queue_path)
+        if code == 404 and optional:
+            continue
+        if code != 200:
+            log(f"could not read the {label} queue: {code} {str(queue)[:200]}")
+            return 2
+        due += [(mark_path, m) for m in queue.get("mails") or []]
+    if not due:
         return 0
     ledger = read_ledger()
     if dry_run:
-        for m in mails:
+        for _, m in due:
             log(f"would send {m['id']} to {mask(m['to'])}: {m['subject']}{' (already sent, mark only)' if m['id'] in ledger else ''}")
         return 0
     run = None
     sent = marked = 0
     problem = ""
-    for m in mails:
+    for mark_path, m in due:
         entry = ledger.get(m["id"])
         if not entry:
             run = run or open_run(console_call)
@@ -155,12 +167,12 @@ def tick(dry_run: bool = False, ops_call=ops, console_call=console, log=print) -
             ledger[m["id"]] = entry
             write_ledger(ledger)
             sent += 1
-        mcode, mout = ops_call("POST", "/api/ops/testers/onboarding/mail-sent", {"id": m["id"], "via": VIA, "messageId": entry.get("messageId") or None})
+        mcode, mout = ops_call("POST", mark_path, {"id": m["id"], "to": m["to"], "via": VIA, "messageId": entry.get("messageId") or None})
         if mcode == 200:
             marked += 1
         else:
             problem = f"mark failed for {m['id']}: {mcode} {str(mout)[:200]} (retried next tick, not resent)"
-    summary = f"{ROW}: tester thank-you mail, {sent} sent through team-gmail, {marked} marked sent" + (f"; {problem}" if problem else "")
+    summary = f"{ROW}: tester mail, {sent} sent through team-gmail, {marked} marked sent" + (f"; {problem}" if problem else "")
     log(summary)
     if run:
         close_run(run, not problem, summary, console_call)

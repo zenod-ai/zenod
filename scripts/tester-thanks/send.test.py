@@ -16,8 +16,9 @@ MAIL = {"id": "acct-1", "to": "ana@example.org", "subject": "Thank you for testi
 
 
 class Fake:
-    def __init__(self, mails, mark_codes=(200,), send_ok=True):
+    def __init__(self, mails, mark_codes=(200,), send_ok=True, nudges=None):
         self.mails = list(mails)
+        self.nudges = None if nudges is None else list(nudges)
         self.mark_codes = list(mark_codes)
         self.send_ok = send_ok
         self.sends, self.marks, self.runs, self.closed = [], [], [], []
@@ -25,10 +26,14 @@ class Fake:
     def ops(self, method, path, body=None):
         if path.endswith("/mail-queue"):
             return 200, {"mode": "on", "mails": self.mails}
+        if path.endswith("/whatsapp-nudge/queue"):
+            return (404, {"error": "not found"}) if self.nudges is None else (200, {"mode": "on", "mails": self.nudges})
         code = self.mark_codes.pop(0) if self.mark_codes else 200
         if code == 200:
-            self.marks.append(body)
+            self.marks.append({**body, "path": path})
             self.mails = [m for m in self.mails if m["id"] != body["id"]]
+            if self.nudges is not None:
+                self.nudges = [m for m in self.nudges if m["id"] != body["id"]]
         return code, {"result": "sent"} if code == 200 else {"error": "boom"}
 
     def console(self, method, path, body=None):
@@ -68,7 +73,7 @@ class TickTest(unittest.TestCase):
         self.assertEqual(len(fake.sends), 1)
         self.assertEqual(fake.sends[0]["to"], "ana@example.org")
         self.assertEqual(fake.sends[0]["body"], "Hi Ana,")
-        self.assertEqual(fake.marks, [{"id": "acct-1", "via": "team-gmail", "messageId": "<abc@mail.gmail.com>"}])
+        self.assertEqual(fake.marks, [{"id": "acct-1", "to": "ana@example.org", "via": "team-gmail", "messageId": "<abc@mail.gmail.com>", "path": "/api/ops/testers/onboarding/mail-sent"}])
         self.assertEqual(fake.closed[0]["outcome"], "progressed")
         self.assertEqual(self.tick(fake), 0)
         self.assertEqual(len(fake.sends), 1)
@@ -95,6 +100,44 @@ class TickTest(unittest.TestCase):
         self.assertEqual(self.tick(fake, dry_run=True), 0)
         self.assertEqual(fake.sends, [])
         self.assertEqual(fake.runs, [])
+
+
+class NudgeTest(unittest.TestCase):
+    """E26-S32: the next-day WhatsApp email rides the same tick and goes once, ever."""
+
+    NUDGE = {"id": "nudge-acct-2", "to": "bo@example.org", "subject": "Your Zenod WhatsApp link", "text": "Hi Bo,", "html": "", "queuedAt": "2026-11-16T00:00:00Z"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        send.STATE = pathlib.Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def tick(self, fake):
+        return send.tick(ops_call=fake.ops, console_call=fake.console, log=lambda *_: None)
+
+    def test_nudge_sent_and_marked_on_its_own_route(self):
+        fake = Fake([MAIL], nudges=[self.NUDGE])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual([s["subject"] for s in fake.sends], ["Thank you for testing Zenod", "Your Zenod WhatsApp link"])
+        self.assertEqual(fake.marks[1]["path"], "/api/ops/testers/whatsapp-nudge/sent")
+        self.assertEqual(fake.marks[1]["to"], "bo@example.org")
+        self.assertEqual(len(fake.runs), 1)
+
+    def test_nudge_never_resent_when_its_mark_failed(self):
+        fake = Fake([], mark_codes=(503, 200), nudges=[self.NUDGE])
+        self.assertEqual(self.tick(fake), 1)
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
+        self.assertEqual(len(fake.marks), 1)
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
+
+    def test_production_without_the_nudge_route_still_sends_thanks(self):
+        fake = Fake([MAIL])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
 
 
 if __name__ == "__main__":
