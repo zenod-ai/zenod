@@ -467,6 +467,12 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
 .zl-name { font: 500 1.75rem / 1 "Newsreader Variable", Georgia, serif; letter-spacing: -0.01em; margin: 0; }
 .zl-tagline { font-size: 0.86rem; color: var(--muted-foreground); opacity: 0.85; margin: 0.2rem 0 0; }
 .zl-plan { font-size: 0.82rem; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 0.25rem 0.8rem; white-space: nowrap; }
+/* E7-S9: the tester's voice feedback entry, as quiet as the plan line; one action. */
+.zl-feedback { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--foreground); border: 1px solid var(--border); border-radius: 999px; padding: 0.25rem 0.8rem; white-space: nowrap; text-decoration: none; transition: background-color 120ms ease, border-color 120ms ease; }
+.zl-feedback svg { width: 0.9rem; height: 0.9rem; color: #1f4d3a; }
+.dark .zl-feedback svg { color: #6fbf98; }
+.zl-feedback:hover { background: var(--muted); border-color: #1f4d3a; }
+.zl-feedback:focus-visible { outline: 2px solid #1f4d3a; outline-offset: 2px; }
 .zl-tabs [data-slot="tabs-list"] { width: 100%; }
 .zl-gear { margin-left: auto; }
 .zl-sub { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem; }

@@ -29,6 +29,8 @@ export interface FunnelCounts {
   paying_customers: number;
   /** Signed-up testers who got at least one Saved reply over WhatsApp (E7-S8). */
   whatsapp_replied: number;
+  /** Signed-up testers with at least one voice feedback note filed through their own link (E7-S9). */
+  feedback_recorded: number;
   /** Our own test applications, left out of every count above (S7 round 2). */
   test_applications?: number;
   /** Our own test accounts on a tester code, left out of signed_up and active_testers (E26-S21 iteration 2). */
@@ -50,6 +52,7 @@ export const COUNT_DEFINITIONS: Record<keyof FunnelCounts, string> = {
   active_testers: `testers on their free month with at least one save in the last ${ACTIVE_DAYS} days`,
   paying_customers: "accounts on a live subscription that pays (not free, not comped)",
   whatsapp_replied: "testers who got at least one Saved reply over WhatsApp from the production number (a finished WhatsApp save), our own test accounts left out",
+  feedback_recorded: "testers who filed at least one voice feedback note through their own feedback link (one link per person, the team's voice-feedback service), our own test accounts left out",
   test_applications: "applications that were our own tests, counted nowhere else",
   test_signups: "accounts on a tester code that are our own tests, counted nowhere else",
 };
@@ -65,6 +68,8 @@ export interface CountSources {
   savesSince: (tenantId: string, sinceMs: number) => number;
   /** Finished WhatsApp saves (each answered with a Saved reply on WhatsApp) for this tenant, ever; 0 when unset. */
   whatsappSaves?: (tenantId: string) => number;
+  /** E7-S9: this account's feedback link and its filed notes (tester-feedback.json); none when unset. */
+  feedbackNotes?: (accountId: string) => { linkId: string; notes: number } | null;
   /** True for our own test applications (testerMarks.ts); none when unset. */
   isTest?: (contact: string, use: string) => boolean;
 }
@@ -99,6 +104,8 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
 
   let signedUp = 0;
   let whatsappReplied = 0;
+  // E7-S9: one link per person (two accounts with one email share it), so count links, not accounts.
+  const feedbackLinks = new Set<string>();
   const whatsappSaves = sources.whatsappSaves ?? (() => 0);
   let testSignups = 0;
   let activeTesters = 0;
@@ -119,6 +126,8 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     if (tester) signedUp += 1;
     // E7-S8: the same testers as signed_up (test accounts already left out above), with a Saved reply on WhatsApp.
     if (tester && account.tenant_id && whatsappSaves(account.tenant_id) > 0) whatsappReplied += 1;
+    const feedback = tester ? sources.feedbackNotes?.(account.account_id) ?? null : null;
+    if (feedback && feedback.notes > 0) feedbackLinks.add(feedback.linkId);
     if (!live(account)) continue;
     if (!account.fully_discounted) {
       paying += 1;
@@ -133,6 +142,7 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     active_testers: activeTesters,
     paying_customers: paying,
     whatsapp_replied: whatsappReplied,
+    feedback_recorded: feedbackLinks.size,
     test_applications: tests.size,
     test_signups: testSignups,
   };
