@@ -109,6 +109,7 @@ Verified at: 2026-11-15T08:13Z (production zenod-mt df8c7933 per E26-S28 evidenc
 | zenod-errors-now-find-fix-and-monitor-so-we-hear-first | child | [EPIC-24: Zenod errors now: find, fix, and monitor so we hear first](zenod-errors-now-find-fix-and-monitor-so.md) | none | draft | none | fill Goal, Serves and Done means |
 | landing-literals-kept-forever-a-living-graph-your-data-stays-yours | child | [EPIC-25: Landing: literals kept forever, a living graph, your data stays yours](landing-literals-kept-forever-a-living-g.md) | none | draft | none | fill Goal, Serves and Done means |
 | tester-invite-three-clear-promises-first-invite-out | child | [EPIC-26: Tester invite: three clear promises, first invite out](tester-invite-three-clear-promises-first.md) | none | draft | none | fill Goal, Serves and Done means |
+| zenod-10-paying-users | child | [EPIC-27: Zenod: 10 paying users](zenod-10-paying-users.md) | Ten people pay for Zenod by 31 Dec: Jordi's objective, after Zenod: 5 testers (agent_team E40-S66). | active | Delivery Manager switched off; 0 of 10 paying | none until its Delivery Manager is switched on |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
