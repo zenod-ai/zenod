@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
 import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
-import { greetingName, mountTesterMailQueueRoutes, parseOnboardingMode, TesterOnboarding, testerThanksMail } from "../src/testerOnboarding.js";
+import { FEEDBACK_LINK_WAIT_MS, FEEDBACK_PARAGRAPH, greetingName, mountTesterMailQueueRoutes, parseOnboardingMode, TesterOnboarding, testerThanksMail } from "../src/testerOnboarding.js";
 import type { SendMail, ZenodMail } from "../src/zenodMail.js";
 
 const dirs: string[] = [];
@@ -18,7 +18,7 @@ function account(id: string, email: string, extra: Partial<CustomerAccount> = {}
   return { account_id: id, stripe_email: email, github_email: null, ...extra } as CustomerAccount;
 }
 
-async function setup(envMode: "off" | "test" | "on" = "on", ready = true) {
+async function setup(envMode: "off" | "test" | "on" = "on", ready = true, extra: { feedbackLink?: (id: string) => string | null; now?: () => Date } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), "tester-onboarding-"));
   dirs.push(dataDir);
   const sent: ZenodMail[] = [];
@@ -43,6 +43,7 @@ async function setup(envMode: "off" | "test" | "on" = "on", ready = true) {
     firstName: (email) => (email === "ana@example.org" ? "ana maria" : null),
     whatsappState: async (id) => whatsapp.get(id) ?? "off",
     sendWelcome,
+    ...extra,
   });
   return { onboarding, sent, whatsapp, sendWelcome };
 }
@@ -190,6 +191,92 @@ describe("tester onboarding (E26-S26)", () => {
     onboarding.thanks.queue("old-1", "jordi@example.org");
     expect(onboarding.thanks.pending()).toHaveLength(1);
     onboarding.setMode("off", "test");
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+  });
+});
+
+describe("the voice feedback paragraph in the thank-you (E7-S10)", () => {
+  const LINK = "https://signup.alpha9.io/api/public/feedback/abcDEF123_-x";
+  const APPROVED =
+    "Could you leave us a voice note about Zenod once a week? Open this link, tap the button and talk; a minute is plenty. Nobody listens to the audio: it becomes text for our team and is thrown away.";
+
+  it("carries Jordi's approved words with the tester's own link, the rest unchanged", () => {
+    expect(FEEDBACK_PARAGRAPH).toBe(APPROVED);
+    const without = testerThanksMail("a@b.org", "Ana", 50);
+    const withLink = testerThanksMail("a@b.org", "Ana", 50, LINK);
+    expect(without.text).not.toContain("voice note");
+    expect(withLink.text).toContain(`\n\n${APPROVED} ${LINK}\n\nA few useful links:`);
+    expect(withLink.text.replace(`${APPROVED} ${LINK}\n\n`, "")).toBe(without.text);
+    expect(withLink.html).toContain(`<p>${APPROVED.replace(/'/g, "&#39;")} <a href="${LINK}"`);
+    expect(withLink.subject).toBe(without.subject);
+  });
+
+  it("leaves the paragraph out for a link that is not a feedback link", () => {
+    for (const bad of ["javascript:alert(1)", "https://evil.example/x", `${LINK}"><script>`]) {
+      expect(testerThanksMail("a@b.org", null, 50, bad).text).not.toContain("voice note");
+    }
+  });
+
+  it("a tester with a link gets it in the one thank-you, never a second email", async () => {
+    const links = new Map([["tester-1", LINK]]);
+    const { onboarding, sent, whatsapp } = await setup("on", false, { feedbackLink: (id) => links.get(id) ?? null });
+    onboarding.whatsappWelcome("tester-1");
+    whatsapp.set("tester-1", "verified");
+    await onboarding.sweep();
+    const [mail, ...rest] = onboarding.thanks.pending();
+    expect(rest).toHaveLength(0);
+    expect(mail!.text).toContain(`${APPROVED} ${LINK}`);
+    expect(onboarding.thanks.markSent(mail!.id, "team-gmail")).toBe("sent");
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+    // Relinking, a re-sync or a test send: nothing goes again.
+    expect(onboarding.whatsappWelcome("tester-1")).toBeNull();
+    await onboarding.sweep();
+    expect(await onboarding.testSend(account("tester-1", "ana@example.org"))).toEqual({ whatsapp: "already sent", mail: "already sent" });
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("a tester already thanked before the paragraph existed is never mailed again", async () => {
+    const links = new Map<string, string>();
+    const { onboarding } = await setup("on", false, { feedbackLink: (id) => links.get(id) ?? null });
+    onboarding.whatsappWelcome("tester-1");
+    await onboarding.sweep();
+    expect(await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"))).toMatchObject({ mail: "queued" });
+    // The old thank-you (no link then) goes out after its wait.
+    expect(onboarding.thanks.markSent("ourtest-1", "team-gmail")).toBe("sent");
+    links.set("ourtest-1", LINK);
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+    expect(await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"))).toEqual({ whatsapp: "already sent", mail: "already sent" });
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+  });
+
+  it("no link yet: waits for the link timer, then sends once without the paragraph", async () => {
+    let now = new Date("2026-11-16T21:00:00Z");
+    const links = new Map<string, string>();
+    const { onboarding, sent } = await setup("test", true, { feedbackLink: (id) => links.get(id) ?? null, now: () => now });
+    expect(await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"))).toMatchObject({ mail: "queued" });
+    await onboarding.thanks.process();
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+    expect(sent).toHaveLength(0);
+    // The link arrives within the wait: the mail goes with it.
+    now = new Date(now.getTime() + 15 * 60 * 1000);
+    links.set("ourtest-1", LINK);
+    await onboarding.thanks.process();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toContain(`${APPROVED} ${LINK}`);
+    await onboarding.thanks.process();
+    expect(sent).toHaveLength(1);
+  });
+
+  it("no link after the wait: the thank-you goes without the paragraph, once", async () => {
+    let now = new Date("2026-11-16T21:00:00Z");
+    const { onboarding } = await setup("test", false, { feedbackLink: () => null, now: () => now });
+    await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"));
+    expect(onboarding.thanks.pending()).toHaveLength(0);
+    now = new Date(now.getTime() + FEEDBACK_LINK_WAIT_MS);
+    const [mail] = onboarding.thanks.pending();
+    expect(mail!.text).not.toContain("voice note");
+    expect(onboarding.thanks.markSent(mail!.id, "team-gmail")).toBe("sent");
     expect(onboarding.thanks.pending()).toHaveLength(0);
   });
 });

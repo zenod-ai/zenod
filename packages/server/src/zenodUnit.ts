@@ -1449,6 +1449,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         isTester,
         isTest,
         firstName: applicantFirstName,
+        // E7-S10: the thank-you carries the tester's own voice feedback link (E7-S9) once the link timer made it.
+        feedbackLink: (accountId) => readTesterFeedback(storage.dataDir)[accountId]?.url ?? null,
         whatsappState: (accountId) => zenodPhylax?.whatsappState(accountId) ?? Promise.resolve(null),
         sendWelcome: (account, operationId) => zenodPhylax?.sendTesterWelcome(account, operationId) ?? Promise.resolve("skipped"),
       });
@@ -1554,7 +1556,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         onboarding: {
           status: () => onboarding.status(),
           setMode: (mode: TesterOnboardingMode) => onboarding.setMode(mode, "Jordi on /admin/mail"),
-          preview: () => testerThanksMail("tester@example.com", "Ana"),
+          preview: () => testerThanksMail("tester@example.com", "Ana", undefined, "https://signup.alpha9.io/api/public/feedback/example-link"),
         },
         ...(cloudflareMailConfigured(env) ? { provider: "cloudflare" as const } : {}),
         secure: env.NODE_ENV === "production",
