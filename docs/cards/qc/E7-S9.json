@@ -1,46 +1,71 @@
 {
   "row": "E7-S9",
   "card": "docs/cards/E7-S9.md",
-  "cardSha": "1222e65677339faa",
+  "cardSha": "ae8b6f00f7bceded",
   "inputs": {
-    "card": "1222e65677339faa",
-    "page": "4572166c0b6ba0c5",
+    "card": "ae8b6f00f7bceded",
+    "page": "7d0a14915936d7f5",
     "rules": "5c1e73ef9c3caa57",
-    "words": "a02c70b09384bd1a"
+    "words": "2506b3d6d04d1c48"
   },
-  "checkedAt": "2026-11-16T12:36:42Z",
+  "checkedAt": "2026-11-16T21:23:19Z",
   "by": "card_qc.py (console judge)",
   "words": [
+    {
+      "said": "Yes: the extra paragraph for new testers.",
+      "where": "jr_f8a60d61, his note on this card 2026-11-16",
+      "key": "jr_f8a60d61",
+      "when": "newest",
+      "status": "met",
+      "how": "Card line says new testers get the link in their thank-you email; the email paragraph itself is further down the evidence page."
+    },
     {
       "said": "Tell us what you think",
       "where": "WhatsApp that sends the link to a test",
       "status": "met",
-      "how": "Evidence shows the \"Tell us what you think\" header entry in the app at 1280 and 390 px, and the voice feedback page."
+      "how": "Evidence shows the \"Tell us what you think\" header entry in the app at 1280 and 390 px, and the voice feedback page. (kept: the last check accepted it and this one names nothing that changed)"
     },
     {
       "said": "that's our way of getting feedback from customers, that we can send a link and this link will allow them to provide voice notes that ... link back to a structured data of feedback ... I am so worried that all this feedback is going to get lost",
       "where": "vn_27afac4e",
-      "status": "declared",
-      "how": "Card's ✗ line says nobody is told about the link outside the app yet; the evidence page says the same and waits on his yes."
+      "status": "missed",
+      "how": "Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered. (changed since the last check: The earlier declared line saying outside customers get no link is no longer on the card.)"
     }
   ],
   "visual": {
-    "pass": true,
-    "problems": [],
-    "breaches": [],
-    "summary": "Both widths show the header link, the app mockup and the voice page; the evidence page itself is a plain text list with no diagram, and the 1280 px last screen shows the app mockup and page shell cleanly with no sideways overflow."
+    "pass": false,
+    "problems": [
+      "at 390 px: The first screen opens with the h1 and then a prose paragraph and a numbered list; no one-line punchline box or boxed summary comes before the prose. (rule 1)",
+      "at 390 px: The four-step sequence (signs up, link made, taps it, note filed) is a plain numbered list, not boxes in one line with arrows. (rule 2)"
+    ],
+    "breaches": [
+      {
+        "rule": 1,
+        "width": 390,
+        "what": "The first screen opens with the h1 and then a prose paragraph and a numbered list; no one-line punchline box or boxed summary comes before the prose."
+      },
+      {
+        "rule": 2,
+        "width": 390,
+        "what": "The four-step sequence (signs up, link made, taps it, note filed) is a plain numbered list, not boxes in one line with arrows."
+      }
+    ],
+    "summary": "Phone and laptop screens load with the tester link in the header, but the first screen is prose and a plain numbered list before the app screenshot, with no punchline box or step diagram."
   },
-  "pass": true,
-  "held": [],
+  "pass": false,
+  "held": [
+    "not what he asked: \"that's our way of getting feedback from customers, that we can send a link and t\": Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered. (changed since the last check: The earlier declared line saying outside customers get no link is no longer on the card.)",
+    "failed the visual check: at 390 px: The first screen opens with the h1 and then a prose paragraph and a numbered list; no one-line punchline box or boxed summary comes before the prose. (rule 1); at 390 px: The four-step sequence (signs up, link made, taps it, note filed) is a plain numbered list, not boxes in one line with arrows. (rule 2)"
+  ],
   "reader": {
-    "asked": "Decide whether the placement and wording of the Tell us what you think feedback link in the app is right, answering Yes or Change it.",
+    "asked": "Decide whether the Tell us what you think feedback link's place and wording are right, answering Yes to keep it or Change it with what to change.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "4572166c0b6ba0c5",
-    "walkedAt": "2026-11-16T12:36:42Z",
+    "page": "7d0a14915936d7f5",
+    "walkedAt": "2026-11-16T21:23:19Z",
     "steps": [
       {
         "n": 1,
