@@ -138,7 +138,10 @@ def tick(dry_run: bool = False, ops_call=ops, console_call=console, log=print) -
     due: list[tuple[str, dict]] = []
     for label, queue_path, mark_path, optional in QUEUES:
         code, queue = ops_call("GET", queue_path)
-        if code == 404 and optional:
+        if code != 200 and optional:
+            # E26-S32: before the promote production has no such route (it answers 401 or 404); a failing optional
+            # queue never holds the thank-you back.
+            log(f"skipped the {label} queue: {code}")
             continue
         if code != 200:
             log(f"could not read the {label} queue: {code} {str(queue)[:200]}")
