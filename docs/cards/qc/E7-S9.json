@@ -1,14 +1,14 @@
 {
   "row": "E7-S9",
   "card": "docs/cards/E7-S9.md",
-  "cardSha": "212af900d59bea17",
+  "cardSha": "0f8aa2fc917a487e",
   "inputs": {
-    "card": "212af900d59bea17",
-    "page": "11e3e00a9563a498",
+    "card": "0f8aa2fc917a487e",
+    "page": "dc9a1e5e7ab1b646",
     "rules": "5c1e73ef9c3caa57",
     "words": "2506b3d6d04d1c48"
   },
-  "checkedAt": "2026-11-16T21:24:07Z",
+  "checkedAt": "2026-11-16T21:24:53Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,40 +17,38 @@
       "key": "jr_f8a60d61",
       "when": "newest",
       "status": "met",
-      "how": "Card line says new testers get the voice note link in their thank-you email; the evidence page's email section describes the same."
+      "how": "Card line says new testers get the link in their thank-you email; evidence page's email section describes it."
     },
     {
       "said": "Tell us what you think",
       "where": "WhatsApp that sends the link to a test",
       "status": "met",
-      "how": "The 'Tell us what you think' entry appears in the app header at 390 and 1280 px, and the voice feedback page opens."
+      "how": "\"Tell us what you think\" entry appears in the app header at 390 and 1280 px, and the voice page opens."
     },
     {
       "said": "that's our way of getting feedback from customers, that we can send a link and this link will allow them to provide voice notes that ... link back to a structured data of feedback ... I am so worried that all this feedback is going to get lost",
       "where": "vn_27afac4e",
-      "status": "missed",
-      "how": "Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered, and paying customers get no link yet. (changed since the last check: The card's own line 'Paying customers get no link yet' is still there; the customer-feedback point remains unmet, not newly broken.)"
+      "status": "declared",
+      "how": "Card's ✗ line says customers beyond testers get no link yet; none pay today."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths load with the title and punchline box first, the app header entry and voice page are shown, and no sideways overflow; the page ends with its shell footer and no feedback block, which the evidence page does not need."
+    "summary": "The first screen opens with the punchline box and a clean, quiet look; the sequence is only boxes without arrows, and the 390 px row clips its last box with a cue, so the only breach is minor."
   },
-  "pass": false,
-  "held": [
-    "not what he asked: \"that's our way of getting feedback from customers, that we can send a link and t\": Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered, and paying customers get no link yet. (changed since the last check: The card's own line 'Paying customers get no link yet' is still there; the customer-feedback point remains unmet, not newly broken.)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether the feedback link's place in the app and its wording are right: Yes to keep it, or Change it and say what to change.",
+    "asked": "Decide whether the feedback link's place in the app and its wording (\"Tell us what you think\") are right, answering Yes to keep it or Change it with what to change.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "11e3e00a9563a498",
-    "walkedAt": "2026-11-16T21:24:07Z",
+    "page": "dc9a1e5e7ab1b646",
+    "walkedAt": "2026-11-16T21:24:53Z",
     "steps": [
       {
         "n": 1,
