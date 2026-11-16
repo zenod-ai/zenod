@@ -1,0 +1,87 @@
+{
+  "row": "E0-S2",
+  "card": "docs/cards/E0-S2.md",
+  "cardSha": "bcc82fbde96e24fb",
+  "inputs": {
+    "card": "bcc82fbde96e24fb",
+    "page": "d813c79de2e6b8d9",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "85874ada4e6b9238"
+  },
+  "checkedAt": "2026-11-16T07:59:54Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "It needs an accounting wheel.",
+      "where": "2026-11-16",
+      "status": "met",
+      "how": "The page is an accounting wheel drawn as a circle of seven steps with arrows, plus key results, what runs today and the first close."
+    }
+  ],
+  "visual": {
+    "pass": false,
+    "problems": [
+      "http://vps3.taild81fbb.ts.net:9359/: a plan opens with a diagram and few words: plan-words: 473 visible words outside a collapsed details; a plan is diagrams with labels and one sentence (max 300); plan-prose: 1 paragraph(s), item(s) or cell(s) over 20 words (57 max): make them labels or move them into details; plan-diagram: 4 section(s) with no diagram: \"The four key results on \"Zenod: 5 testers\"\"; \"Each step today\"; \"The smallest piece that turns it once\"; \"The first close: November 2026, on 1 to 3 December\" (rule 7)"
+    ],
+    "breaches": [],
+    "summary": "At 1280 the wheel is a clear circle with arrows; at 390 the wheel shrinks but stays readable, the page closes with the first-close table and sources, and the card's feedback block is absent but the card is not on the evidence page."
+  },
+  "pass": false,
+  "held": [
+    "failed the visual check: http://vps3.taild81fbb.ts.net:9359/: a plan opens with a diagram and few words: plan-words: 473 visible words outside a collapsed details; a plan is diagrams with labels and one sentence (max 300); plan-prose: 1 paragraph(s), item(s) or cell(s) over 20 words (57 max): make them labels or move them into details; plan-diagram: 4 section(s) with no diagram: \"The four key results on \"Zenod: 5 testers\"\"; \"Each step today\"; \"The smallest piece that turns it once\"; \"The first close: November 2026, on 1 to 3 December\" (rule 7)"
+  ],
+  "reader": {
+    "asked": "Decide whether to build the accounting wheel, starting with the November close, by pressing Yes or No.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "d813c79de2e6b8d9",
+    "walkedAt": "2026-11-16T07:59:54Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9359/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-0'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-0",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'Zenod's public counts'",
+        "url": "https://cloud.zenod.dev/api/public/counts",
+        "result": "answered 200"
+      },
+      {
+        "n": 5,
+        "what": "open the link 'the team's operating numbers'",
+        "url": "http://vps3.taild81fbb.ts.net:9471/operating.json",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9359/",
+      "file": "E0-S2-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9359/",
+      "file": "E0-S2-1280.webp"
+    }
+  ]
+}
