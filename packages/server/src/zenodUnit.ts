@@ -76,6 +76,7 @@ import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
+import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { mountTesterMailQueueRoutes, TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
 import { bearerMatches } from "./testerFlow.js";
@@ -1428,6 +1429,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         const email = accountEmail(account);
         return Boolean(email && onboardingMarks.isTest(email));
       };
+      const applicantFirstName = (email: string): string | null => {
+        const key = email.trim().toLowerCase();
+        const application = (readApplications(storage.dataDir) as Array<{ contact?: unknown; name?: unknown }>)
+          .filter((entry) => typeof entry.contact === "string" && entry.contact.trim().toLowerCase() === key).pop();
+        return typeof application?.name === "string" ? application.name : null;
+      };
       const onboarding = new TesterOnboarding({
         dataDir: storage.dataDir,
         envMode: parseOnboardingMode(env.ZENOD_TESTER_ONBOARDING) ?? "off",
@@ -1435,12 +1442,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         account: findAccount,
         isTester,
         isTest,
-        firstName: (email) => {
-          const key = email.trim().toLowerCase();
-          const application = (readApplications(storage.dataDir) as Array<{ contact?: unknown; name?: unknown }>)
-            .filter((entry) => typeof entry.contact === "string" && entry.contact.trim().toLowerCase() === key).pop();
-          return typeof application?.name === "string" ? application.name : null;
-        },
+        firstName: applicantFirstName,
         whatsappState: (accountId) => zenodPhylax?.whatsappState(accountId) ?? Promise.resolve(null),
         sendWelcome: (account, operationId) => zenodPhylax?.sendTesterWelcome(account, operationId) ?? Promise.resolve("skipped"),
       });
@@ -1465,12 +1467,26 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         onboarding,
       });
       // E26-S31: where each tester's WhatsApp setup stands, for the team's stuck-sign-up check.
-      mountTesterWhatsAppSetupRoute(app, {
-        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+      const testerSetups = {
         accounts: () => customer.accounts.list(),
         isTester,
         isTest,
-        setup: (accountId) => zenodPhylax?.whatsappSetup(accountId) ?? Promise.resolve(null),
+        setup: (accountId: string) => zenodPhylax?.whatsappSetup(accountId) ?? Promise.resolve(null),
+      };
+      mountTesterWhatsAppSetupRoute(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        ...testerSetups,
+      });
+      // E26-S32 (Jordi's yes on E26-A17): one email the day after sign-up when WhatsApp is still not linked, sent by the
+      // thank-you timer through the team's Gmail connection; once per tester, off with mode "off".
+      mountTesterWhatsAppNudgeRoutes(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        nudge: new TesterWhatsAppNudge({
+          dataDir: storage.dataDir,
+          envMode: parseNudgeMode(env.ZENOD_TESTER_NUDGE) ?? "on",
+          firstName: applicantFirstName,
+          ...testerSetups,
+        }),
       });
       app.post("/api/ops/testers/onboarding/test-send", async (c) => {
         if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);
