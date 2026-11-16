@@ -27,7 +27,7 @@ class Fake:
         if path.endswith("/mail-queue"):
             return 200, {"mode": "on", "mails": self.mails}
         if path.endswith("/whatsapp-nudge/queue"):
-            return (404, {"error": "not found"}) if self.nudges is None else (200, {"mode": "on", "mails": self.nudges})
+            return (401, {"error": "unauthorized"}) if self.nudges is None else (200, {"mode": "on", "mails": self.nudges})
         code = self.mark_codes.pop(0) if self.mark_codes else 200
         if code == 200:
             self.marks.append({**body, "path": path})
