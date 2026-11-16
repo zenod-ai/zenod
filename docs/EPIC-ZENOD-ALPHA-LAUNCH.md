@@ -40,15 +40,15 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 
 Status: active
 Phase: tester door open on production; launch work runs in EPIC-7 (testers), EPIC-23 and EPIC-26 (first tester and invites); A0 done 2026-10-25
-Last verified: 2026-11-14
-Last attempted: 2026-11-15T08:12Z roll-up (run_8dd7d4e8): docs/EPIC-7-REAL-USER-TEST.md (active): a stranger can apply, sign up at 0 euro and link WhatsApp; one applicant signed up on 13 Nov, was mailed to retry WhatsApp on 14 Nov and has not linked yet ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): the health page is finished and waits only for Jordi's mark
-Result: production zenod-mt df8c7933 (promoted 2026-11-15 08:02Z); the tester door works end to end; a tester who links WhatsApp now gets the welcome video (E26-S27), and the thank-you email from Jordi is built and waits on his one Allow; no saves yet
+Last verified: 2026-11-16
+Last attempted: 2026-11-16T09:40Z roll-up (run_5292424b): docs/EPIC-7-REAL-USER-TEST.md (active): the tester door is open with the first 30 memories free; still 1 outside sign-up (13 Nov), 0 WhatsApp links, 0 saves; zenod.dev visit and sign-up-step counting (E7-S7) is closing and a WhatsApp-replied count (E7-S8) was started today ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): health.zenod.dev is done and waits only for his mark
+Result: production zenod-mt 8f967044 (health ok 16 Nov 09:40Z); public counts: 1 application, 1 sign-up, 0 active testers, 0 paying; a sign-up stuck before WhatsApp now reaches the team within the hour (E26-S31) and an automatic next-day email with his approved text is being built (E26-S32)
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: Jordi: EPIC-26 E26-A16 (Allow for the thank-you email) ; his mark on EPIC-6 ; the first tester to link WhatsApp and save
+Waiting on: the first tester to link WhatsApp and save ; his mark on EPIC-6
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: EPIC-26 E26-S28 sends the thank-you email once E26-A16 is pressed; E26-S3 watches the first tester link WhatsApp and save (EPIC-7 E7-3)
-Verified at: 2026-11-15T08:12Z (production zenod-mt df8c7933 per E26-S28 evidence; EPIC-7, EPIC-6 and EPIC-26 Current States read)
+Next action: EPIC-26 E26-S32 ships the next-day WhatsApp-link email; EPIC-7 E7-S8 puts whatsapp_replied on his objective; E26-S3 watches the first tester link WhatsApp and save (E7-3)
+Verified at: 2026-11-16T09:40Z (production 8f967044 via /api/health; /api/public/counts read; EPIC-7 and EPIC-6 Current States read)
 
 ## Waiting on
 
