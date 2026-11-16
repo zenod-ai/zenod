@@ -653,6 +653,7 @@ const COUNT_LABELS: Array<[string, string]> = [
   ["signed_up", "Signed up"],
   ["active_testers", "Active testers"],
   ["paying_customers", "Paying"],
+  ["whatsapp_replied", "Saved reply on WhatsApp"],
 ];
 
 const when = (iso: string) => iso.slice(0, 16).replace("T", " ");

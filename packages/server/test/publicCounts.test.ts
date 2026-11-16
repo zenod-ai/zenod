@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { expect, it } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
-import { funnelCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, type CountSources } from "../src/publicCounts.js";
+import { funnelCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantWhatsAppSaves, type CountSources } from "../src/publicCounts.js";
 import type { TesterRecord } from "../src/testerFlow.js";
 
 // EPIC-26 S7: the funnel as counts only, readable by anyone.
@@ -53,6 +53,7 @@ it("counts applications, accepted, signed up, active testers and paying customer
     signed_up: 3,
     active_testers: 2,
     paying_customers: 1,
+    whatsapp_replied: 0,
     test_applications: 0,
     test_signups: 0,
   });
@@ -69,6 +70,38 @@ it("leaves our own test accounts on a tester code out of signed_up and active te
   }), NOW);
   const before = funnelCounts(base, NOW);
   expect(counts).toMatchObject({ signed_up: before.signed_up, active_testers: before.active_testers, test_signups: 1 });
+});
+
+it("counts signed-up testers with a Saved reply on WhatsApp, our own test accounts left out (E7-S8)", () => {
+  const base = sources();
+  const counts = funnelCounts(sources({
+    accounts: () => [
+      ...base.accounts(),
+      // our own T7 test account on a tester code, with WhatsApp saves: counted nowhere but test_signups
+      account("t7", { stripe_email: "operations+t7r3@alpha9.io", fully_discounted: true, free_until: "2026-12-11T00:00:00Z" }),
+    ],
+    // t1 (tester), payer (not a tester), friend (free forever) and t7 (our test) all saved on WhatsApp
+    whatsappSaves: (tenantId) => (["t-t1", "t-payer", "t-friend", "t-t7"].includes(tenantId) ? 2 : 0),
+    isTest: (contact) => contact.endsWith("@alpha9.io"),
+  }), NOW);
+  expect(counts).toMatchObject({ signed_up: 3, whatsapp_replied: 1, test_signups: 1 });
+});
+
+it("reads finished WhatsApp saves from a tenant's tasks.sqlite, self-tests and other channels left out", () => {
+  const dir = mkdtempSync(join(tmpdir(), "counts-"));
+  const path = join(dir, "tasks.sqlite");
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE task_jobs (id TEXT, tenant_id TEXT, kind TEXT, status TEXT, idempotency_key TEXT, input_json TEXT)`);
+  const insert = db.prepare(`INSERT INTO task_jobs VALUES (?, ?, ?, ?, ?, ?)`);
+  insert.run("1", "t", "media_ingest", "done", "phylax:whatsapp:m1", "{}");
+  insert.run("2", "t", "store", "done", "whatsapp-keep:x", JSON.stringify({ source: "whatsapp" }));
+  insert.run("3", "t", "store", "error", "phylax:whatsapp:m2", "{}");
+  insert.run("4", "t", "store", "done", "phylax:telegram:m3", "{}");
+  insert.run("5", "t", "store", "done", "phylax:whatsapp:m4", JSON.stringify({ source: "selftest" }));
+  insert.run("6", "other", "store", "done", "phylax:whatsapp:m5", "{}");
+  db.close();
+  expect(tenantWhatsAppSaves(path, "t")).toBe(2);
+  expect(tenantWhatsAppSaves(join(dir, "missing.sqlite"), "t")).toBe(0);
 });
 
 it("leaves our own test applications out of every count and counts them apart", () => {
@@ -119,7 +152,9 @@ it("keeps one line per day, answers the endpoint publicly and leaks no email", a
   expect(response.status).toBe(200);
   expect(response.headers.get("access-control-allow-origin")).toBe("*");
   const body = await response.json() as Record<string, unknown> & { history: Array<{ date: string }> };
-  expect(body).toMatchObject({ schema: "zenod-counts/v1", date: "2026-11-11", applications: 3, accepted: 2, paying_customers: 1 });
+  expect(body).toMatchObject({ schema: "zenod-counts/v1", date: "2026-11-11", applications: 3, accepted: 2, paying_customers: 1, whatsapp_replied: 0 });
+  expect((body.definitions as Record<string, string>).whatsapp_replied).toMatch(/WhatsApp/);
+  expect(body.history.every((day) => "whatsapp_replied" in day)).toBe(true);
   expect(body.history.map((day) => day.date)).toEqual(["2026-11-10", "2026-11-11"]);
   expect(JSON.stringify(body)).not.toMatch(/@|example|t-t1/);
   expect(readFileSync(join(dir, "public-counts.json"), "utf8")).not.toMatch(/@/);
