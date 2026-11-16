@@ -27,6 +27,8 @@ export interface FunnelCounts {
   active_testers: number;
   /** Accounts on a live subscription that pays: not free, not comped. */
   paying_customers: number;
+  /** Signed-up testers who got at least one Saved reply over WhatsApp (E7-S8). */
+  whatsapp_replied: number;
   /** Our own test applications, left out of every count above (S7 round 2). */
   test_applications?: number;
   /** Our own test accounts on a tester code, left out of signed_up and active_testers (E26-S21 iteration 2). */
@@ -47,6 +49,7 @@ export const COUNT_DEFINITIONS: Record<keyof FunnelCounts, string> = {
   signed_up: "testers who finished the free checkout and have an account, our own test accounts left out",
   active_testers: `testers on their free month with at least one save in the last ${ACTIVE_DAYS} days`,
   paying_customers: "accounts on a live subscription that pays (not free, not comped)",
+  whatsapp_replied: "testers who got at least one Saved reply over WhatsApp from the production number (a finished WhatsApp save), our own test accounts left out",
   test_applications: "applications that were our own tests, counted nowhere else",
   test_signups: "accounts on a tester code that are our own tests, counted nowhere else",
 };
@@ -60,6 +63,8 @@ export interface CountSources {
   comped: ReadonlySet<string>;
   /** Saves (store, media_ingest) finished for this tenant since `sinceMs`. */
   savesSince: (tenantId: string, sinceMs: number) => number;
+  /** Finished WhatsApp saves (each answered with a Saved reply on WhatsApp) for this tenant, ever; 0 when unset. */
+  whatsappSaves?: (tenantId: string) => number;
   /** True for our own test applications (testerMarks.ts); none when unset. */
   isTest?: (contact: string, use: string) => boolean;
 }
@@ -93,6 +98,8 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
   const acceptedEmails = new Set(accepted.map((tester) => tester.email.toLowerCase()));
 
   let signedUp = 0;
+  let whatsappReplied = 0;
+  const whatsappSaves = sources.whatsappSaves ?? (() => 0);
   let testSignups = 0;
   let activeTesters = 0;
   let paying = 0;
@@ -110,6 +117,8 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
       continue;
     }
     if (tester) signedUp += 1;
+    // E7-S8: the same testers as signed_up (test accounts already left out above), with a Saved reply on WhatsApp.
+    if (tester && account.tenant_id && whatsappSaves(account.tenant_id) > 0) whatsappReplied += 1;
     if (!live(account)) continue;
     if (!account.fully_discounted) {
       paying += 1;
@@ -123,6 +132,7 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     signed_up: signedUp,
     active_testers: activeTesters,
     paying_customers: paying,
+    whatsapp_replied: whatsappReplied,
     test_applications: tests.size,
     test_signups: testSignups,
   };
@@ -151,6 +161,32 @@ export function tenantSavesSince(tasksPath: string, tenantId: string, sinceMs: n
          WHERE tenant_id=? AND kind IN ('store', 'media_ingest') AND status='done' AND updated_at>=?`,
       )
       .get(tenantId, sinceMs) as { n: number } | undefined;
+    return Number(row?.n ?? 0);
+  } catch {
+    return 0;
+  } finally {
+    db?.close();
+  }
+}
+
+/**
+ * E7-S8: finished WhatsApp saves for one tenant from its tasks.sqlite, read only (the same WhatsApp test as
+ * TaskJobStore.firstCaptureAt; self-tests left out). Each one is answered with the Saved receipt on WhatsApp.
+ * 0 when the file is missing or unreadable.
+ */
+export function tenantWhatsAppSaves(tasksPath: string, tenantId: string): number {
+  if (!existsSync(tasksPath)) return 0;
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(tasksPath, { readOnly: true });
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM task_jobs
+         WHERE tenant_id=? AND kind IN ('store', 'media_ingest') AND status='done'
+           AND COALESCE(json_extract(input_json, '$.source'), '') <> 'selftest'
+           AND (idempotency_key LIKE '%:whatsapp:%' OR json_extract(input_json, '$.source') = 'whatsapp')`,
+      )
+      .get(tenantId) as { n: number } | undefined;
     return Number(row?.n ?? 0);
   } catch {
     return 0;

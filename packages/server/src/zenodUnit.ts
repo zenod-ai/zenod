@@ -66,7 +66,7 @@ import {
 } from "./zenodPhylax.js";
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
-import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince } from "./publicCounts.js";
+import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantWhatsAppSaves } from "./publicCounts.js";
 import { cachedWhatsAppState, mountTesterApplicants, signInEmailsByUser, tenantFirstSave } from "./testerApplicants.js";
 import { setHelpersBuilding } from "./personaRunner.js";
 import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./quickStart.js";
@@ -1631,6 +1631,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       accounts: () => customer.accounts.list(),
       comped,
       savesSince: (tenantId, sinceMs) => tenantSavesSince(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
+      whatsappSaves: (tenantId) => tenantWhatsAppSaves(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId),
       isTest: (contact, use) => marks.isTest(contact, use),
     });
     // E26-S29: the zenod.dev/testers page reads N from here, so it always matches the setting.

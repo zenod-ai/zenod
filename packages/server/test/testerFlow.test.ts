@@ -347,8 +347,8 @@ describe("tester flow routes", () => {
     mountTesterFlowRoutes(app, flow, {
       isAdmin: () => true,
       admin: {
-        counts: () => ({ schema: "zenod-counts/v1", date: "2026-11-10", definitions: COUNT_DEFINITIONS, at: "2026-11-10T20:00:00Z", applications: 1, accepted: 1, signed_up: 0, active_testers: 0, paying_customers: 0, test_applications: 1,
-          history: [{ date: "2026-11-10", applications: 1, accepted: 1, signed_up: 0, active_testers: 0, paying_customers: 0, test_applications: 1 }] }),
+        counts: () => ({ schema: "zenod-counts/v1", date: "2026-11-10", definitions: COUNT_DEFINITIONS, at: "2026-11-10T20:00:00Z", applications: 1, accepted: 1, signed_up: 0, active_testers: 0, paying_customers: 0, whatsapp_replied: 0, test_applications: 1,
+          history: [{ date: "2026-11-10", applications: 1, accepted: 1, signed_up: 0, active_testers: 0, paying_customers: 0, whatsapp_replied: 0, test_applications: 1 }] }),
         applications: () => [
           { at: "2026-11-09T06:05:00Z", contact: "TEST", use: "TEST application <b>" },
           { at: "2026-11-10T19:00:00Z", contact: "stranger@gmail.com", use: "My voice notes from walks" },
