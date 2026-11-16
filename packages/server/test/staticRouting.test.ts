@@ -27,6 +27,8 @@ describe("site and dashboard routing", () => {
       writeFile(join(siteDist, "start.html"), "<html>Start with Zenod</html>"),
       writeFile(join(siteDist, "start", "zenod-start.mp4"), "0123456789"),
       writeFile(join(siteDist, "brand", "zenod-icon.svg"), "<svg>Z</svg>"),
+      writeFile(join(siteDist, "robots.txt"), "Sitemap: https://zenod.dev/sitemap.xml\n"),
+      writeFile(join(siteDist, "sitemap.xml"), "<urlset></urlset>"),
       writeFile(join(webDist, "index.html"), "<html>Zenod dashboard</html>"),
       writeFile(join(webDist, "assets", "dashboard.js"), "dashboard asset"),
     ]);
@@ -60,6 +62,16 @@ describe("site and dashboard routing", () => {
     expect(part.status).toBe(206);
     await expect(part.text()).resolves.toBe("2345");
     expect((await app.request("https://cloud.zenod.dev/start")).status).toBe(404);
+  });
+
+  it("serves robots.txt and sitemap.xml on the public host only (E7-S7)", async () => {
+    const robots = await app.request("https://zenod.dev/robots.txt");
+    expect(robots.status).toBe(200);
+    await expect(robots.text()).resolves.toContain("Sitemap: https://zenod.dev/sitemap.xml");
+    const sitemap = await app.request("https://zenod.dev/sitemap.xml");
+    expect(sitemap.status).toBe(200);
+    expect(sitemap.headers.get("content-type")).toContain("xml");
+    expect((await app.request("https://cloud.zenod.dev/sitemap.xml")).status).toBe(404);
   });
 
   it("serves the dashboard SPA at cloud root and account for the transplanted customer layer", async () => {

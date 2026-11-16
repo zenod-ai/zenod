@@ -1,4 +1,7 @@
+import { useEffect } from "react"
+
 import { Button } from "@/components/ui/button"
+import { countLeavingStep, countStep } from "@/lib/signup-counter"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx @ 6bdb318.
 function GithubMark({ className }: { className?: string }) {
@@ -42,6 +45,8 @@ export function HostedLogin({
 }: {
   methods?: Array<"github" | "google">
 }) {
+  // E7-S7: the sign-in page shown, then which sign-in button was pressed.
+  useEffect(() => countStep("signin_open"), [])
   return (
     <main className="flex min-h-svh items-center justify-center bg-background px-4 py-10">
       <section className="w-full max-w-sm overflow-hidden border border-border bg-card text-center">
@@ -63,7 +68,10 @@ export function HostedLogin({
                 variant="outline"
                 className="w-full rounded-none"
               >
-                <a href="/auth/google/start">
+                <a
+                  href="/auth/google/start"
+                  onClick={() => countLeavingStep("oauth_google")}
+                >
                   <GoogleMark className="size-5" />
                   Continue with Google
                 </a>
@@ -75,7 +83,10 @@ export function HostedLogin({
                 size="lg"
                 className="w-full rounded-none bg-[#24292f] text-white hover:bg-[#1b1f24] hover:text-white"
               >
-                <a href="/auth/github/start">
+                <a
+                  href="/auth/github/start"
+                  onClick={() => countLeavingStep("oauth_github")}
+                >
                   <GithubMark className="size-5" />
                   Continue with GitHub
                 </a>

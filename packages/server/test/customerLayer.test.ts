@@ -964,6 +964,10 @@ describe("hosted customer layer", () => {
       expect(html).toContain("A WhatsApp number for your voice notes.");
       expect(html).toContain(`/auth/github/start?return_to=${encodeURIComponent("/join?code=TESTER1")}`);
       expect(html).toContain("TESTER1");
+      // E7-S7: the sign-up steps for alpha9's counter: page opened, and the click on each sign-in button.
+      expect(html).toContain("https://signup.alpha9.io/api/public/pv?e=step&h=cloud.zenod.dev&k=signup_open");
+      expect(html).toContain('data-step="oauth_github"');
+      expect(html).toContain('<script src="/site/step.js" defer></script>');
       expect(promoLookups).toEqual([]);
       expect(createdParams).toBeNull();
 
@@ -1002,6 +1006,7 @@ describe("hosted customer layer", () => {
       expect(html).toContain('href="/app#vault"');
       expect(html).toContain('href="/app#settings/channels"');
       expect(html).toContain("signup.alpha9.io");
+      expect(html).toContain("pv?e=step&h=cloud.zenod.dev&k=signup_sent");
 
       const again = await app.request("/join?code=TESTER1", { headers: { cookie } });
       expect(again.status).toBe(303);

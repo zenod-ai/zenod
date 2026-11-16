@@ -129,6 +129,9 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
 
   app.get("/favicon.svg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/og.jpg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
+  // E7-S7: crawlers' files. Cloudflare's managed robots.txt prepends its content signals to ours.
+  app.get("/robots.txt", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
+  app.get("/sitemap.xml", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/legal/*", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   // Directory listing kit (EPIC-10 R2): the connect guide and the brand icons
   // that MCP directories link to.
