@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { sep } from "node:path";
+import { driveClientFromSettings } from "./drive.js";
+import type { Settings } from "./settings.js";
 
 /**
  * EPIC-21 V8: read back the archived original of one captured entry (a WhatsApp
@@ -127,4 +129,14 @@ export async function readRawArtifact(ref: string, content: string, store: RawAr
   }
 
   throw new RawArtifactError("not_in_this_vault", `${ref} points at an archive this memory cannot read (${pointer.uri.split(":")[0]}).`);
+}
+
+/** This tenant's own archive, from its own (physically tenant-scoped) settings. */
+export function rawArtifactStoreFromSettings(settings: Settings): RawArtifactStore {
+  return {
+    drive: driveClientFromSettings(settings),
+    driveFolderIds: [settings.get("artifact_archive_drive_folder_id"), settings.get("google_drive_folder_id")]
+      .filter((id): id is string => Boolean(id)),
+    localDir: settings.get("artifact_archive_local_dir") ?? null,
+  };
 }

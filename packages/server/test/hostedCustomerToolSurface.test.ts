@@ -140,6 +140,14 @@ describe("hosted customer MCP tool surface", () => {
     }
   });
 
+  it("lists get_raw_artifact on the operator's tenant only, never on a customer's (EPIC-21 V8)", async () => {
+    expect(HOSTED_CUSTOMER_MCP_TOOLS).not.toContain("get_raw_artifact");
+    expect(HOSTED_CHANNEL_MCP_TOOLS).not.toContain("get_raw_artifact");
+    const operator = await listTools("operator-canonical");
+    expect(operator.find((tool) => tool.name === "get_raw_artifact")?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect((await listTools("customer-canonical")).map((tool) => tool.name)).not.toContain("get_raw_artifact");
+  });
+
   /** Browser-consent OAuth flow as a directory connector runs it, for the customer tenant. */
   async function oauthAccessToken(): Promise<string> {
     const registered = await request("/oauth/register", {
