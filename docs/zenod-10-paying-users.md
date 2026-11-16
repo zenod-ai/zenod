@@ -41,6 +41,7 @@ Verified at: 2026-11-16
 
 | ID | Role | Assignee | Title | Status | Depends on | PR / Commit | Integration | Evidence | Last Update | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
+| E27-S1 | Ticket worker | unassigned | E27-1: the path from testers to ten paying users by 31 Dec: who pays first (testers past their 30 free memories), the price and checkout they meet, and the weekly count, as one plan for Jordi | draft | EPIC-7 (five testers first, his order) | none | main | none yet | 2026-11-16 | waits behind Zenod: 5 testers; Jordi readies it |
 
 ## Decisions
 
