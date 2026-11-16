@@ -41,7 +41,10 @@ function FreeMemoriesNotice({
       </p>
       <p className="text-muted-foreground">
         You have saved {Math.min(memories.used, memories.limit)} of{" "}
-        {memories.limit}, with no time limit.
+        {memories.limit}
+        {used
+          ? "."
+          : `, ${memories.limit - memories.used} left. No time limit.`}
       </p>
       {used ? (
         <p className="text-muted-foreground">
@@ -137,8 +140,8 @@ export function HostedPlanLine({ now = Date.now() }: { now?: number } = {}) {
   if (memories) {
     return (
       <span className="zl-plan" data-testid="plan-line">
-        Free · {Math.min(memories.used, memories.limit)} of {memories.limit}{" "}
-        free memories used
+        Free · {Math.max(0, memories.limit - memories.used)} of{" "}
+        {memories.limit} free memories left
       </span>
     )
   }

@@ -44,16 +44,16 @@ function sub(overrides: Partial<Stripe.Subscription> & { renewsInDays?: number }
 }
 
 describe("the free memories setting", () => {
-  it("is 50 by default and one env setting changes it", () => {
-    expect(DEFAULT_TESTER_FREE_MEMORIES).toBe(50);
-    expect(testerFreeMemories({})).toBe(50);
+  it("is 30 by default and one env setting changes it", () => {
+    expect(DEFAULT_TESTER_FREE_MEMORIES).toBe(30);
+    expect(testerFreeMemories({})).toBe(30);
     expect(testerFreeMemories({ ZENOD_TESTER_FREE_MEMORIES: "100" })).toBe(100);
     expect(testerFreeMemories({ ZENOD_TESTER_FREE_MEMORIES: " 25 " })).toBe(25);
   });
 
   it("ignores a value that is not a whole number from 1 up", () => {
     for (const bad of ["0", "-5", "abc", "12.5", "", "9999999"]) {
-      expect(testerFreeMemories({ ZENOD_TESTER_FREE_MEMORIES: bad })).toBe(50);
+      expect(testerFreeMemories({ ZENOD_TESTER_FREE_MEMORIES: bad })).toBe(30);
     }
   });
 
