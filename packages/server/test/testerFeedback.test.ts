@@ -45,8 +45,8 @@ describe("tester feedback links", () => {
   it("lists testers who finished checkout, our test accounts flagged, non-testers, cancelled and pending left out", async () => {
     const body = await (await app.request("/api/ops/testers/feedback-links", { headers: ops })).json() as { testers: Array<Record<string, unknown>> };
     expect(body.testers.map((t) => t.accountId)).toEqual(["user-usr_aaaa", "user-usr_bbbb"]);
-    expect(body.testers[0]).toMatchObject({ who: "Dana <dana@gmail.com>", test: false, link: null });
-    expect(body.testers[1]).toMatchObject({ who: "<ops@alpha9.io> (our test account)", test: true });
+    expect(body.testers[0]).toMatchObject({ who: "Dana (dana@gmail.com)", test: false, link: null });
+    expect(body.testers[1]).toMatchObject({ who: "TEST ops@alpha9.io", test: true });
   });
 
   it("keeps the links the timer hands in and refuses bad ones", async () => {

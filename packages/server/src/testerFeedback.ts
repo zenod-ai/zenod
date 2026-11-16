@@ -105,7 +105,8 @@ export function mountTesterFeedbackRoutes(app: Hono<{ Bindings: HttpBindings }>,
         return {
           accountId: account.account_id,
           email: email || null,
-          who: `${first ? `${first} ` : ""}<${email || account.account_id}>${test ? " (our test account)" : ""}`,
+          // the recording page greets them with it: "Hi Dana (dana@…)"; our own tests start TEST, as on the console
+          who: `${test ? "TEST " : ""}${first ? `${first} (${email})` : email || account.account_id}`,
           test,
           link: link ? { linkId: link.linkId, url: link.url, notes: link.notes } : null,
         };
