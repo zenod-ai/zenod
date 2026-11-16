@@ -194,6 +194,7 @@ describe("Zenod chassis unit", () => {
       "ask_brain",
       "get_ingest_result",
       "get_memory",
+      "get_raw_artifact",
       "get_task_result",
       "list_drive_files",
       "memory_cloud",

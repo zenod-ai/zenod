@@ -36,6 +36,7 @@ import {
   googleDriveOAuthUrl,
 } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
+import { rawArtifactStoreFromSettings } from "./rawArtifactRead.js";
 import { Runtime } from "./runtime.js";
 import type {
   GoogleDriveOAuthAuthority,
@@ -425,6 +426,9 @@ function registerZenodTools(
     },
     // EPIC-14 S29: ask_brain reads the quick index first, for the AI apps a person connects.
     agent.name === "zenod" ? (question) => runtime.readAs(question) : undefined,
+    // EPIC-21 V8: this tenant's own archive, read only. Not in HOSTED_CUSTOMER_MCP_TOOLS, so on hosted Zenod only
+    // the operator (owner) tenant, which has no allowlist, can call it.
+    agent.name === "zenod" ? () => rawArtifactStoreFromSettings(settings) : undefined,
   );
 }
 
@@ -470,6 +474,7 @@ export const ZENOD_READ_TOOLS = [
   "ask_brain",
   "get_ingest_result",
   "get_memory",
+  "get_raw_artifact",
   "get_task_result",
   "list_drive_files",
   "memory_cloud",
