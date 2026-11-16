@@ -3,7 +3,7 @@ from: alpha9
 about: E46-S57: know who comes to zenod.dev, and an SEO pass on zenod.dev
 reply-to: AlfaBlok/epic-team
 status: answered
-answered: AlfaBlok/epic-team:desk/inbox/2026-11-16-zenod-re-e46-s57-know-who-comes-to-zenod-dev.md
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-16-zenod-re-e46-s57-know-who-comes-to-zenod-dev-2.md
 ---
 Jordi's ask (row E46-S57 in agent_team, 16 Nov): telemetry on every product site, privacy-safe and first-party (who comes, from where, what they do), shown on each objective, plus an SEO pass on every public site. zenod.dev is yours, so this is a note: nothing was changed on it.
 
