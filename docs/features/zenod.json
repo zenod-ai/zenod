@@ -111,7 +111,7 @@
     {
      "id": "become-a-tester",
      "title": "Apply to test Zenod",
-     "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: their first 50 memories free, with no card.",
+     "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: their first 30 memories free, with no card.",
      "rows": [
       "ZAL-A13",
       "E26-S2"
@@ -131,8 +131,8 @@
     },
     {
      "id": "tester-first-memories-free",
-     "title": "Your first 50 memories free, never charged",
-     "text": "A tester's first 50 saved memories are free, with no card and no time limit, and the Zenod app shows how many you have saved. When you reach 50, Zenod stays free until the end of that month. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
+     "title": "Your first 30 memories free, never charged",
+     "text": "A tester's first 30 saved memories are free, with no card and no time limit, and the Zenod app shows how many are left. When you reach 30, Zenod stays free until the end of that month. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
      "rows": [
       "E26-S5",
       "E26-S29"
