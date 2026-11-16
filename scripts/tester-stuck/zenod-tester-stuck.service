@@ -1,0 +1,12 @@
+[Unit]
+Description=Zenod stuck sign-up check, one tick: a tester not linked to WhatsApp an hour after sign-up reaches the team desk (EPIC-26 E26-S31)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CONSOLE_URL=http://127.0.0.1:18750
+# The check as on origin/main (like zenod-tester-thanks); the desk note is written in its own detached worktree.
+ExecStart=/bin/bash -c 'R=/var/lib/vps3-scratch/t3agent/github/zenod; L=%h/.local/lib/zenod-tester-stuck; S=%h/.local/state/zenod-tester-stuck; mkdir -p $L/tester-stuck $L/tester-thanks $S && git -C $R fetch -q origin main && git -C $R show origin/main:scripts/tester-stuck/check.py > $L/tester-stuck/check.py && git -C $R show origin/main:scripts/tester-thanks/send.py > $L/tester-thanks/send.py && { [ -e $S/desk/.git ] || git -C $R worktree add -q --detach $S/desk origin/main; } && python3 $L/tester-stuck/check.py'
+TimeoutStartSec=10min

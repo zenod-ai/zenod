@@ -75,6 +75,8 @@ import { MailGrantStore, googleMailClientFromEnv, mailSenderFromEnv } from "./ma
 import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
+import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
+import type { CustomerAccount } from "./customerAccounts.js";
 import { mountTesterMailQueueRoutes, TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
 import { bearerMatches } from "./testerFlow.js";
 import { welcomeMailerFromEnv } from "./welcomeMail.js";
@@ -1416,21 +1418,23 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       // EPIC-26 E26-S26: the tester welcome at the WhatsApp link (one message, one thank-you mail), one switch.
       const onboardingMarks = new TesterMarks(storage.dataDir, teamEmailsFromEnv(env));
       const findAccount = (accountId: string) => customer.accounts.list().find((account) => account.account_id === accountId) ?? null;
+      const isTester = (account: CustomerAccount) => {
+        if (account.fully_discounted && account.free_until) return true;
+        const email = account.stripe_email?.trim().toLowerCase() ?? "";
+        return email !== "" && (testerFlow?.snapshot().testers ?? []).some((tester) =>
+          tester.status === "accepted" && tester.email.toLowerCase() === email);
+      };
+      const isTest = (account: CustomerAccount) => {
+        const email = accountEmail(account);
+        return Boolean(email && onboardingMarks.isTest(email));
+      };
       const onboarding = new TesterOnboarding({
         dataDir: storage.dataDir,
         envMode: parseOnboardingMode(env.ZENOD_TESTER_ONBOARDING) ?? "off",
         sendMail: mail,
         account: findAccount,
-        isTester: (account) => {
-          if (account.fully_discounted && account.free_until) return true;
-          const email = account.stripe_email?.trim().toLowerCase() ?? "";
-          return email !== "" && (testerFlow?.snapshot().testers ?? []).some((tester) =>
-            tester.status === "accepted" && tester.email.toLowerCase() === email);
-        },
-        isTest: (account) => {
-          const email = accountEmail(account);
-          return Boolean(email && onboardingMarks.isTest(email));
-        },
+        isTester,
+        isTest,
         firstName: (email) => {
           const key = email.trim().toLowerCase();
           const application = (readApplications(storage.dataDir) as Array<{ contact?: unknown; name?: unknown }>)
@@ -1459,6 +1463,14 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       mountTesterMailQueueRoutes(app, {
         isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
         onboarding,
+      });
+      // E26-S31: where each tester's WhatsApp setup stands, for the team's stuck-sign-up check.
+      mountTesterWhatsAppSetupRoute(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        accounts: () => customer.accounts.list(),
+        isTester,
+        isTest,
+        setup: (accountId) => zenodPhylax?.whatsappSetup(accountId) ?? Promise.resolve(null),
       });
       app.post("/api/ops/testers/onboarding/test-send", async (c) => {
         if (!bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN)) return c.json({ error: "not found" }, 404);

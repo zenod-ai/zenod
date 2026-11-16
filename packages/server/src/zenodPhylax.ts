@@ -106,6 +106,20 @@ interface ChannelOperationRow {
   operation: HostedChannelMutationName;
   arguments_json: string;
   created_at: number;
+  /** E26-S31: what the call answered (HTTP status and error code), so a stuck WhatsApp setup shows its last step. */
+  result_status?: number | null;
+  result_code?: string | null;
+  finished_at?: number | null;
+}
+
+/** E26-S31: one account's WhatsApp setup as the stuck-sign-up check reads it (no number, no code). */
+export interface WhatsAppSetupRead {
+  bound: boolean;
+  state: string | null;
+  attempts: number;
+  lastAttemptAt: number | null;
+  lastStatus: number | null;
+  lastCode: string | null;
 }
 
 interface AllowanceOperationRow {
@@ -653,6 +667,15 @@ export class ZenodPhylaxAdapter {
     }
     if (!allowanceOperationColumns.has("terminal_error_code")) {
       this.db.exec("ALTER TABLE zenod_phylax_allowance_operations ADD COLUMN terminal_error_code TEXT");
+    }
+    const channelOperationColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(zenod_phylax_channel_operations)").all() as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+    for (const [column, type] of [["result_status", "INTEGER"], ["result_code", "TEXT"], ["finished_at", "INTEGER"]] as const) {
+      if (!channelOperationColumns.has(column)) {
+        this.db.exec(`ALTER TABLE zenod_phylax_channel_operations ADD COLUMN ${column} ${type}`);
+      }
     }
     this.timer = config.enabled
       ? setInterval(() => void this.reconcileAll(), config.reconcileIntervalMs)
@@ -1674,7 +1697,49 @@ export class ZenodPhylaxAdapter {
     }
   }
 
+  /** E26-S31: the WhatsApp setup of one account: Phylax state plus the code requests Zenod sent and what they answered. */
+  async whatsappSetup(accountId: string): Promise<WhatsAppSetupRead> {
+    const binding = this.row(accountId);
+    const rows = this.db.prepare(
+      `SELECT created_at, result_status, result_code FROM zenod_phylax_channel_operations
+       WHERE account_id=? AND operation='whatsapp.challenge' ORDER BY created_at`,
+    ).all(accountId) as unknown as Array<Pick<ChannelOperationRow, "created_at" | "result_status" | "result_code">>;
+    const last = rows.at(-1);
+    return {
+      bound: Boolean(binding && binding.state === "active"),
+      state: await this.whatsappState(accountId),
+      attempts: rows.length,
+      lastAttemptAt: last?.created_at ?? null,
+      lastStatus: last?.result_status ?? null,
+      lastCode: last?.result_code ?? null,
+    };
+  }
+
   async channels(
+    tenant: HostedChannelCustomerTenant,
+    action?: {
+      operation: HostedChannelMutationName;
+      operationId: string;
+      body: Record<string, unknown>;
+    },
+  ): Promise<{ status: number; body: unknown }> {
+    const result = await this.channelCall(tenant, action);
+    if (action) {
+      const error = (result.body as { error?: { code?: unknown } } | null)?.error;
+      try {
+        this.db.prepare(
+          `UPDATE zenod_phylax_channel_operations SET result_status=?, result_code=?, finished_at=?
+           WHERE operation_id=? AND account_id IN
+             (SELECT account_id FROM zenod_phylax_bindings WHERE phylax_tenant_id=?)`,
+        ).run(result.status, typeof error?.code === "string" ? error.code : null, Date.now(), action.operationId, tenant.tenantId);
+      } catch {
+        // the record is for the stuck-sign-up check only; never fail the customer's call over it
+      }
+    }
+    return result;
+  }
+
+  private async channelCall(
     tenant: HostedChannelCustomerTenant,
     action?: {
       operation: HostedChannelMutationName;

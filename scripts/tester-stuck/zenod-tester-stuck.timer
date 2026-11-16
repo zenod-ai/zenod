@@ -1,0 +1,10 @@
+[Unit]
+Description=Zenod stuck sign-up check every 15 minutes (EPIC-26 E26-S31)
+
+[Timer]
+OnBootSec=6min
+OnCalendar=*:11/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

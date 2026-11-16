@@ -1621,6 +1621,9 @@ describe("Zenod Phylax product adapter", () => {
     expect(projected.status).toBe(200);
     expect(projected.body).not.toHaveProperty("evidence");
     expect(projected.body).not.toHaveProperty("binding");
+    // E26-S31: the code request and its answer are kept for the stuck-sign-up check.
+    expect(await adapter.whatsappSetup(alpha.account_id)).toMatchObject({ bound: true, attempts: 1, lastStatus: 200, lastCode: null });
+    expect(await adapter.whatsappSetup(beta.account_id)).toMatchObject({ bound: true, attempts: 0, lastStatus: null });
     remote.channelRevision = "wa:99";
     expect((await adapter.channels(alphaTenant, action)).status).toBe(200);
     const channelCalls = remote.calls.filter((call) => call.tool === "phylax_management_v1_channel_connect");
