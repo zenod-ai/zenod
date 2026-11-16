@@ -10,6 +10,13 @@ export const JOIN_PATH = "/join";
 export const WELCOME_PATH = "/welcome";
 
 const SIGNUP_COUNTER_URL = "https://signup.alpha9.io/api/public/pv?h=zenod.dev&e=signup";
+// E7-S7: the sign-up steps alpha9's counter reads for "what they do": the invite page opened
+// (signup_open), Continue with Google or GitHub (oauth_<provider>, by /site/step.js on click) and
+// the account created (signup_sent). Host and step name only, no cookie.
+const STEP_COUNTER_URL = "https://signup.alpha9.io/api/public/pv?e=step&h=cloud.zenod.dev&k=";
+function stepPixel(step: string): string {
+  return `<img src="${STEP_COUNTER_URL}${step}" width="1" height="1" alt="" referrerpolicy="no-referrer" style="position:absolute">`;
+}
 
 /** A Stripe promotion code as a tester types it: letters, digits, - and _, 3 to 40 long. */
 export function normalizeInviteCode(value: string | null | undefined): string | null {
@@ -52,7 +59,7 @@ export function joinPage(code: string | null, providers: Array<"google" | "githu
   const returnTo = encodeURIComponent(joinPath(code));
   const buttons = providers
     .map((provider) =>
-      `<a class="btn${provider === "google" ? " primary" : ""}" href="/auth/${provider}/start?return_to=${returnTo}">Continue with ${provider === "google" ? "Google" : "GitHub"}</a>`)
+      `<a class="btn${provider === "google" ? " primary" : ""}" href="/auth/${provider}/start?return_to=${returnTo}" data-step="oauth_${provider}">Continue with ${provider === "google" ? "Google" : "GitHub"}</a>`)
     .join("");
   const codeLine = code
     ? `<p class="small">Your code <span class="code">${escapeHtml(code)}</span> is already in this link. It is applied at checkout for you, so the total is €0 and no card is asked for. ${escapeHtml(freeMemoriesOffer(freeMemories))}</p>`
@@ -70,14 +77,15 @@ export function joinPage(code: string | null, providers: Array<"google" | "githu
 <p class="muted">Sign in to create your account. Then you go straight to checkout.</p>
 <div class="buttons">${buttons || `<p class="small">Sign-in is not available right now. Please try again later.</p>`}</div>
 ${codeLine}
-<p class="small">More about testing: <a href="https://zenod.dev/testers">zenod.dev/testers</a></p>`,
+<p class="small">More about testing: <a href="https://zenod.dev/testers">zenod.dev/testers</a></p>
+${stepPixel("signup_open")}<script src="/site/step.js" defer></script>`,
   );
 }
 
 /** After checkout: the account is ready, and the two steps that make it useful. */
 export function welcomePage(signedUp: boolean): string {
   const counter = signedUp
-    ? `<img src="${SIGNUP_COUNTER_URL}" width="1" height="1" alt="" referrerpolicy="no-referrer" style="position:absolute">`
+    ? `<img src="${SIGNUP_COUNTER_URL}" width="1" height="1" alt="" referrerpolicy="no-referrer" style="position:absolute">${stepPixel("signup_sent")}`
     : "";
   return page(
     "You're in — Zenod",

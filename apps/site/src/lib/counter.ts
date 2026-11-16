@@ -84,10 +84,12 @@ function sessionStore(): Storage | null {
   }
 }
 
-/** Once per page load. A first sign-in also counts once, then the marker is removed from the address. */
+/**
+ * Once per page load: a first sign-in counts once, then the marker is removed from the address.
+ * The page view itself is asked by public/pv.js in the first HTML (E7-S7), with the same fields as pageViewUrl.
+ */
 export function countPageLoad(ping: Ping = imagePing): void {
   const storage = sessionStore()
-  ping(pageViewUrl(window.location, document.referrer, storage))
   const url = new URL(window.location.href)
   if (url.searchParams.get(SIGNUP_MARKER_PARAM) === "1") {
     ping(signupUrl(storage))

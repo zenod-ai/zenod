@@ -1,0 +1,5 @@
+# zenod.dev (E7-S7). Cloudflare adds its content signals above this file.
+User-agent: *
+Allow: /
+
+Sitemap: https://zenod.dev/sitemap.xml
