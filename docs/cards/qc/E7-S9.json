@@ -1,14 +1,14 @@
 {
   "row": "E7-S9",
   "card": "docs/cards/E7-S9.md",
-  "cardSha": "ae8b6f00f7bceded",
+  "cardSha": "212af900d59bea17",
   "inputs": {
-    "card": "ae8b6f00f7bceded",
-    "page": "7d0a14915936d7f5",
+    "card": "212af900d59bea17",
+    "page": "11e3e00a9563a498",
     "rules": "5c1e73ef9c3caa57",
     "words": "2506b3d6d04d1c48"
   },
-  "checkedAt": "2026-11-16T21:23:19Z",
+  "checkedAt": "2026-11-16T21:24:07Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,55 +17,40 @@
       "key": "jr_f8a60d61",
       "when": "newest",
       "status": "met",
-      "how": "Card line says new testers get the link in their thank-you email; the email paragraph itself is further down the evidence page."
+      "how": "Card line says new testers get the voice note link in their thank-you email; the evidence page's email section describes the same."
     },
     {
       "said": "Tell us what you think",
       "where": "WhatsApp that sends the link to a test",
       "status": "met",
-      "how": "Evidence shows the \"Tell us what you think\" header entry in the app at 1280 and 390 px, and the voice feedback page. (kept: the last check accepted it and this one names nothing that changed)"
+      "how": "The 'Tell us what you think' entry appears in the app header at 390 and 1280 px, and the voice feedback page opens."
     },
     {
       "said": "that's our way of getting feedback from customers, that we can send a link and this link will allow them to provide voice notes that ... link back to a structured data of feedback ... I am so worried that all this feedback is going to get lost",
       "where": "vn_27afac4e",
       "status": "missed",
-      "how": "Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered. (changed since the last check: The earlier declared line saying outside customers get no link is no longer on the card.)"
+      "how": "Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered, and paying customers get no link yet. (changed since the last check: The card's own line 'Paying customers get no link yet' is still there; the customer-feedback point remains unmet, not newly broken.)"
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 390 px: The first screen opens with the h1 and then a prose paragraph and a numbered list; no one-line punchline box or boxed summary comes before the prose. (rule 1)",
-      "at 390 px: The four-step sequence (signs up, link made, taps it, note filed) is a plain numbered list, not boxes in one line with arrows. (rule 2)"
-    ],
-    "breaches": [
-      {
-        "rule": 1,
-        "width": 390,
-        "what": "The first screen opens with the h1 and then a prose paragraph and a numbered list; no one-line punchline box or boxed summary comes before the prose."
-      },
-      {
-        "rule": 2,
-        "width": 390,
-        "what": "The four-step sequence (signs up, link made, taps it, note filed) is a plain numbered list, not boxes in one line with arrows."
-      }
-    ],
-    "summary": "Phone and laptop screens load with the tester link in the header, but the first screen is prose and a plain numbered list before the app screenshot, with no punchline box or step diagram."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths load with the title and punchline box first, the app header entry and voice page are shown, and no sideways overflow; the page ends with its shell footer and no feedback block, which the evidence page does not need."
   },
   "pass": false,
   "held": [
-    "not what he asked: \"that's our way of getting feedback from customers, that we can send a link and t\": Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered. (changed since the last check: The earlier declared line saying outside customers get no link is no longer on the card.)",
-    "failed the visual check: at 390 px: The first screen opens with the h1 and then a prose paragraph and a numbered list; no one-line punchline box or boxed summary comes before the prose. (rule 1); at 390 px: The four-step sequence (signs up, link made, taps it, note filed) is a plain numbered list, not boxes in one line with arrows. (rule 2)"
+    "not what he asked: \"that's our way of getting feedback from customers, that we can send a link and t\": Nothing on the card or page shows customers getting a link to send voice notes into structured feedback; only testers are covered, and paying customers get no link yet. (changed since the last check: The card's own line 'Paying customers get no link yet' is still there; the customer-feedback point remains unmet, not newly broken.)"
   ],
   "reader": {
-    "asked": "Decide whether the Tell us what you think feedback link's place and wording are right, answering Yes to keep it or Change it with what to change.",
+    "asked": "Decide whether the feedback link's place in the app and its wording are right: Yes to keep it, or Change it and say what to change.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "7d0a14915936d7f5",
-    "walkedAt": "2026-11-16T21:23:19Z",
+    "page": "11e3e00a9563a498",
+    "walkedAt": "2026-11-16T21:24:07Z",
     "steps": [
       {
         "n": 1,
