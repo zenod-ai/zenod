@@ -207,6 +207,7 @@ describe("MCP endpoint", () => {
       "edit_github_issue",
       "get_ingest_result",
       "get_memory",
+      "get_raw_artifact",
       "get_recent_conversation_transcript",
       "get_task_result",
       "ingest_memory",
