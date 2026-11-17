@@ -60,6 +60,21 @@ export function soundsClinical(...texts: Array<string | null | undefined>): bool
   return CLINICAL.test(texts.filter(Boolean).join("\n"));
 }
 
+/**
+ * S41 round 4: the research line names who studied an idea, like "Psychologist Peter Gollwitzer, 1999".
+ * That job title is about the scientist, not the person, yet the clinical check left a whole card out
+ * for it (1 in 3 Claude replies on his notes, 17 Nov). It is said as "researcher" in that line only;
+ * every other clinical word in it, and in every other line, still leaves the card out.
+ */
+const RESEARCHER_JOB = /\b(?:psychologists?|psychiatrists?)\b/gi;
+
+export function plainResearchSource(source: string): string {
+  return source.replace(RESEARCHER_JOB, (word) => {
+    const plain = /s$/i.test(word) ? "researchers" : "researcher";
+    return word[0] === word[0]!.toUpperCase() ? `R${plain.slice(1)}` : plain;
+  });
+}
+
 /** One pattern and one idea, checked. */
 export interface PatternIdea {
   /** One gentle sentence that names the pattern, said to the person. */
@@ -93,6 +108,7 @@ export function parsePattern(reply: Record<string, unknown> | null): PatternIdea
     no: line(raw.no),
     sources: (Array.isArray(raw.sources) ? raw.sources : []).filter((n): n is number => Number.isInteger(n) && (n as number) > 0).slice(0, 5),
   };
+  found.source = plainResearchSource(found.source);
   return found.noticed && found.idea && found.known && found.source && found.yes && found.no ? found : null;
 }
 
