@@ -32,10 +32,10 @@ Status: active
 Last attempted: 2026-11-17T08:10Z S30 ticket worker (run_a97b64b1): the helper week on his memory judged; we recommend testers start with Weekly recap and Open loops on (Open loops every 3 days, no repeats), the other five off for testers and on for him; he tapped 5 times, all on 10 Nov, none after; card in review ; earlier (2026-11-12 roll-up): helpers, suggestion cards, quick index, clarifier and daily idea card live and approved; S41 runs on Claude on production since 12 Nov, its only run on 15 Nov 02:00Z found nothing to say
 Result: S30 verdict page live on the tailnet with examples from his memory; the counting timers are stopped; which helpers testers get waits on his pick
 Evidence: [S30 verdict](http://vps3.taild81fbb.ts.net:8921/e14-s30/) · [S30 evidence](evidence/e14-s30-2026-11-17.md) · [S41 round 4](evidence/e14-s41-r4-2026-11-17.md) · [S42](evidence/e14-s42-2026-11-11.md) · [S36](evidence/e14-s36-2026-11-11.md)
-Waiting on: Jordi: S30 (card in review, which helpers testers get switched on first) ; nobody for S41 until its first real pattern card
+Waiting on: the S30 card in his review list (no ask: his pick on the card is the answer) ; the date 2026-11-18 02:00Z for S41 (Patterns and ideas wakes on production 9f650ae with the #1686 fix)
 Approved work: none
-Next action: after his S30 pick: switch his picked helpers on for new testers and stop helpers repeating a suggestion ; S41 card when Patterns and ideas posts its first card
-Source revision: production b4cf52b
+Next action: after his S30 pick: switch his picked helpers on for new testers and stop helpers repeating a suggestion ; S41 check at 2026-11-18 02:30Z, card to review if it posted
+Source revision: production 9f650ae
 Verified at: 2026-11-17T08:10Z (S30 tally to 17 Nov 08:00Z, 694 log reads; page curl 200)
 
 ## Non-Goals
