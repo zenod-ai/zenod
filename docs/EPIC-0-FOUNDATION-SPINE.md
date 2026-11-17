@@ -52,12 +52,12 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): in the official MCP Registry and on Glama; E10-S4 waits on an awesome-mcp-servers maintainer, R9 on 2026-12-07.
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; S2 trial token is its own Delivery Manager's.
-Last attempted: 2026-11-16T21:35Z DM run_fff467a9: EPIC-7 active (E7-S7 visitor counting, E7-S8 WhatsApp-replied count and E7-S10 feedback paragraph live; E7-S9 feedback link card in his review) ; EPIC-26 active (E26-S32 next-day WhatsApp-link email live) ; EPIC-21 V8 done (his voice notes readable as original audio, alpha9 told) ; EPIC-27 E27-S1 draft behind the testers ; the other children unchanged since 09:40Z
-Result: production zenod-mt bc12314f; public counts: 1 sign-up, 0 WhatsApp replies, 0 feedback, 0 paying; every tester step from sign-up to feedback now has a live path and a count; no worker running, no ready row
-Waiting on: testers recruited by zenod-social ; Jordi: the E7-S9 card and his other reviews (E0-S1, E0-S2, W4, D1, EPIC-6, EPIC-9 marks)
+Last attempted: 2026-11-17T22:35Z DM run_e7bd4406 roll-up: ZAL active (tester path live, waits on testers) ; EPIC-7 active (E7-S9 feedback link approved by Jordi; E7-S11 per-post sign-up counts for zenod-social being built) ; EPIC-26 active (E26-S33 welcome email at sign-up live, the 13 Nov tester got it 17 Nov 19:22Z) ; EPIC-14 active (S30 approved: new testers start with Weekly recap and Open loops, S44 live; S41 patterns helper checked after its 18 Nov 02:00Z run; S45 no-repeats a draft for Jordi) ; EPIC-27 active, E27-S1 draft behind the testers ; EPIC-22 and EPIC-12 wait on the engine freeze to 24 Nov ; EPIC-24, EPIC-10, EPIC-15, EPIC-17, EPIC-18, EPIC-20, EPIC-21, EPIC-25 unchanged since 16 Nov ; EPIC-6 and EPIC-9 wait on his mark
+Result: production zenod-mt 9deb4548; public counts: 1 application, 1 sign-up, 0 WhatsApp replies, 0 feedback, 0 paying; everything Zenod builds for a tester is live, recruiting (zenod-social) is the gap
+Waiting on: testers recruited by zenod-social ; Jordi: his marks on EPIC-6 and EPIC-9 and his other open reviews (E0-S1, E0-S2, W4, D1)
 Monitoring: Objective: Zenod: 5 testers: we now know exactly why the patterns helper posted nothing on Jordi's memory, and a fix that would have cost 1 card in 3 is live b… · next check 2026-11-18T02:30:00.000Z
-Next action: E26-S3 watches the first tester link WhatsApp, save and leave feedback (EPIC-7 E7-3, E7-4)
-Verified at: 2026-11-16T21:35Z (production bc12314f via /api/health; child Current States and runs read)
+Next action: E7-S11 ships per-post sign-up counts ; S41 check 2026-11-18 02:30Z ; E26-S3 watches the next tester end to end
+Verified at: 2026-11-17T22:35Z (production 9deb4548 via /api/health and /api/public/counts; child Current States and runs read)
 
 ## Spine Map
 
