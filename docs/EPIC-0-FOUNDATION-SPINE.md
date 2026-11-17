@@ -55,7 +55,7 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 Last attempted: 2026-11-16T21:35Z DM run_fff467a9: EPIC-7 active (E7-S7 visitor counting, E7-S8 WhatsApp-replied count and E7-S10 feedback paragraph live; E7-S9 feedback link card in his review) ; EPIC-26 active (E26-S32 next-day WhatsApp-link email live) ; EPIC-21 V8 done (his voice notes readable as original audio, alpha9 told) ; EPIC-27 E27-S1 draft behind the testers ; the other children unchanged since 09:40Z
 Result: production zenod-mt bc12314f; public counts: 1 sign-up, 0 WhatsApp replies, 0 feedback, 0 paying; every tester step from sign-up to feedback now has a live path and a count; no worker running, no ready row
 Waiting on: testers recruited by zenod-social ; Jordi: the E7-S9 card and his other reviews (E0-S1, E0-S2, W4, D1, EPIC-6, EPIC-9 marks)
-Monitoring: EPIC-0 Current State brought up to date (production bc12314f; E7-S7..S10, E26-S32, V8 live). No worker running, no ready rows, no open desk notes; waits on Jor… · next check 2026-11-17T08:00:00.000Z
+Monitoring: Objective: Zenod: 5 testers: we now know exactly why the patterns helper posted nothing on Jordi's memory, and a fix that would have cost 1 card in 3 is live b… · next check 2026-11-18T02:30:00.000Z
 Next action: E26-S3 watches the first tester link WhatsApp, save and leave feedback (EPIC-7 E7-3, E7-4)
 Verified at: 2026-11-16T21:35Z (production bc12314f via /api/health; child Current States and runs read)
 
