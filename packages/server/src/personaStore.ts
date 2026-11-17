@@ -178,6 +178,29 @@ export class PersonaStore {
     return true;
   }
 
+  /**
+   * EPIC-14 S44 (Jordi's S30 pick, 2026-11-17: "Recap and loops: switch both on for new testers"): an
+   * account whose helpers were never touched (no switch, no cadence, no run) gets the tester defaults
+   * as explicit switches, once. An account with any switch or run (Jordi's) is left exactly as it is,
+   * and a tester who later switches one off keeps it off. Returns true when it wrote them.
+   */
+  applyTesterDefaults(defaults: ReadonlyArray<{ personaId: string; cadence?: object }>): boolean {
+    if (this.db.prepare(`SELECT 1 FROM persona_settings LIMIT 1`).get()) return false;
+    if (this.db.prepare(`SELECT 1 FROM persona_runs LIMIT 1`).get()) return false;
+    this.db.exec("BEGIN");
+    try {
+      for (const { personaId, cadence } of defaults) {
+        this.setEnabled(personaId, true);
+        if (cadence) this.setCadence(personaId, cadence, true);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return true;
+  }
+
   /** `defaultEnabled` fills a new row when only the cadence is set, so setting it never switches one on. */
   setEnabled(personaId: string, enabled: boolean): void {
     this.db
@@ -281,6 +304,15 @@ const stores = new Map<string, PersonaStore>();
 /** EPIC-23 E23-A2: from here on, new accounts start with the weekly recap off. */
 export const WEEKLY_RECAP_OFF_SINCE = "2026-11-11T00:00:00.000Z";
 
+/**
+ * EPIC-14 S44: what a new tester starts with (Jordi's S30 pick): Weekly recap on, Open loops on every
+ * 3 days instead of nightly; every other helper off.
+ */
+export const TESTER_DEFAULT_HELPERS: ReadonlyArray<{ personaId: string; cadence?: object }> = [
+  { personaId: "weekly-recap" },
+  { personaId: "open-loops", cadence: { every: "days", days: 3 } },
+];
+
 /** The tenant's persona store, opened once per data directory (like inboxFor). */
 export function personasFor(runtime: { readonly dataDir: string }): PersonaStore {
   let store = stores.get(runtime.dataDir);
@@ -294,6 +326,8 @@ export function personasFor(runtime: { readonly dataDir: string }): PersonaStore
     store.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE);
     // EPIC-14 S41: Patterns and ideas the same way: on for the owner's account, off for testers.
     store.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE);
+    // EPIC-14 S44: an account whose helpers were never touched starts with the tester defaults.
+    if (store.applyTesterDefaults(TESTER_DEFAULT_HELPERS)) console.log(`[persona] tester defaults on: ${TESTER_DEFAULT_HELPERS.map((d) => d.personaId).join(",")}`);
     stores.set(runtime.dataDir, store);
   }
   return store;

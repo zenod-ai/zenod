@@ -700,7 +700,7 @@ export const CLARIFIER: PersonaDefinition = createClarifier({ memoryOnly: MEMORY
 /** S41: one pattern in how the person thinks or works, and one idea research supports, every few days. */
 export const PATTERNS_AND_IDEAS: PersonaDefinition = createPatterns({ memoryOnly: MEMORY_ONLY, memoryTitle, memoryWords, parseJsonReply, memoryPhrases });
 
-/** Every persona the runner knows, in catalog order. Only Weekly recap is on by default. */
+/** Every persona the runner knows, in catalog order. All are off by default; a new account starts with Weekly recap and Open loops switched on (S44, personaStore TESTER_DEFAULT_HELPERS). */
 export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, SOMETHING_TO_TRY, PATTERNS_AND_IDEAS, MEMORY_HEALTH, CLARIFIER];
 
 export function personaById(id: string): PersonaDefinition | null {
