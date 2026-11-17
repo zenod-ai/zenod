@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { expect, it } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
-import { funnelCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantWhatsAppSaves, type CountSources } from "../src/publicCounts.js";
+import { funnelCounts, sourceCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantWhatsAppSaves, type CountSources } from "../src/publicCounts.js";
 import type { TesterRecord } from "../src/testerFlow.js";
 
 // EPIC-26 S7: the funnel as counts only, readable by anyone.
@@ -129,6 +129,47 @@ it("leaves our own test applications out of every count and counts them apart", 
   expect(counts).toMatchObject({ applications: 2, accepted: 1, test_applications: 2 });
 });
 
+it("counts applications and sign-ups per post source, our own tests left out, never a person (E7-S11)", () => {
+  const src = sources({
+    applications: () => [
+      { contact: "a@example.com", source: "P-0146" },
+      { contact: "a@example.com", source: "P-0255" },          // a repeat keeps the first source
+      { contact: "b@example.com", source: "P-0146" },
+      { contact: "c@example.com" },                           // no source
+      { contact: "d@example.com", source: "google.com" },
+      { contact: "e@example.com", source: "TEST" },           // ?s=TEST: our own test
+      { contact: "ops@alpha9.io", source: "P-0146" },          // our own test address
+      { contact: "f@example.com", source: "<script>" },       // not a source id
+    ],
+    testers: () => [
+      { ...tester("a@example.com", "accepted"), redeemedBy: "t1" },
+      tester("b@example.com", "accepted"),
+      tester("d@example.com", "accepted"),
+      { ...tester("ops@alpha9.io", "accepted"), redeemedBy: "t7" },
+    ],
+    accounts: () => [
+      account("t1", { fully_discounted: true, free_until: "2026-12-01T00:00:00Z", stripe_email: "other@example.com" }), // a, by its code
+      account("b", { fully_discounted: true, free_until: "2026-12-01T00:00:00Z", stripe_email: "b@example.com" }),        // b, by email
+      account("t7", { fully_discounted: true, free_until: "2026-12-01T00:00:00Z", stripe_email: "ops@alpha9.io" }),       // our test
+      account("x", { fully_discounted: true, free_until: "2026-12-01T00:00:00Z", stripe_email: "x@example.com" }),        // no application
+    ],
+    comped: new Set(),
+    isTest: (contact) => contact.endsWith("@alpha9.io"),
+  });
+  const bySource = sourceCounts(src, NOW);
+  expect(bySource).toEqual([
+    { source: "P-0146", applications: 2, signed_up: 2 },
+    { source: "google.com", applications: 1, signed_up: 0 },
+    { source: "none", applications: 2, signed_up: 1 },
+  ]);
+  const counts = funnelCounts(src, NOW);
+  // per source adds up to the totals
+  expect(bySource.reduce((n, row) => n + row.applications, 0)).toBe(counts.applications);
+  expect(bySource.reduce((n, row) => n + row.signed_up, 0)).toBe(counts.signed_up);
+  expect(counts).toMatchObject({ test_applications: 2, test_signups: 1 });
+  expect(JSON.stringify(bySource)).not.toMatch(/@|alpha9|TEST|script/);
+});
+
 it("a tester whose free month ended and who now pays counts as paying and still as signed up", () => {
   const counts = funnelCounts(sources({
     accounts: () => [account("x", { stripe_email: "a@example.com", fully_discounted: false })],
@@ -172,6 +213,8 @@ it("keeps one line per day, answers the endpoint publicly and leaks no email", a
   expect(body).toMatchObject({ schema: "zenod-counts/v1", date: "2026-11-11", applications: 3, accepted: 2, paying_customers: 1, whatsapp_replied: 0 });
   expect((body.definitions as Record<string, string>).whatsapp_replied).toMatch(/WhatsApp/);
   expect(body.history.every((day) => "whatsapp_replied" in day)).toBe(true);
+  expect(body.by_source).toEqual([{ source: "none", applications: 3, signed_up: 3 }]);
+  expect((body.definitions as Record<string, string>).by_source).toMatch(/\?s=<post id>.*our own tests left out/);
   expect(body.history.map((day) => day.date)).toEqual(["2026-11-10", "2026-11-11"]);
   expect(JSON.stringify(body)).not.toMatch(/@|example|t-t1/);
   expect(readFileSync(join(dir, "public-counts.json"), "utf8")).not.toMatch(/@/);
