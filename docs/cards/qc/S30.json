@@ -1,0 +1,66 @@
+{
+  "row": "S30",
+  "card": "docs/cards/S30.md",
+  "cardSha": "89548acd1ebbef56",
+  "inputs": {
+    "card": "89548acd1ebbef56",
+    "page": "5824c5ef5da15833",
+    "rules": "5c1e73ef9c3caa57",
+    "words": "eea62897e76d46db"
+  },
+  "checkedAt": "2026-11-17T08:06:18Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "OK, I love it. Let's do it",
+      "where": "vn_44e6bf40",
+      "status": "met",
+      "how": "Card recommends Weekly recap and Open loops on for testers; page shows the verdict and per-helper reasons with examples."
+    },
+    {
+      "said": "out of scope: project work",
+      "where": "2026-11-10",
+      "status": "elsewhere",
+      "how": "The point is about a project-work item out of scope, not about helper verdicts on this page."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Desktop and phone screens show a clean single-style verdict page with a punchline box and side-by-side cards; the phone capture shows the layout intact, though the page is text-heavy below the cards."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Choose which helpers testers get switched on first: Recap and loops, Recap only, or none.",
+    "ambiguous": "",
+    "note": "\"The team recommends Recap and loops\" and the buttons 'Recap and loops: switch both on for new testers' are clear; but 'Recap only' versus 'None' both leave some helpers on or off in ways the card does not spell out, so a stranger cannot tell whether 'None' turns off Quick index too."
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "5824c5ef5da15833",
+    "walkedAt": "2026-11-17T08:06:18Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:8921/e14-s30/",
+        "result": "opened"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e14-s30/",
+      "file": "S30-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e14-s30/",
+      "file": "S30-1280.webp"
+    }
+  ]
+}
