@@ -9,6 +9,7 @@ import type { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { TESTER_APPLICATIONS_FILE } from "./testerApplications.js";
+import { cleanApplicantSource } from "./testerApplicants.js";
 import { normalizeTesterEmail, type TesterRecord } from "./testerFlow.js";
 
 export const PUBLIC_COUNTS_FILE = "public-counts.json";
@@ -37,15 +38,27 @@ export interface FunnelCounts {
   test_signups?: number;
 }
 
+/** E7-S11: one post (or referring host) and the applications and sign-ups it brought, our own tests left out. */
+export interface SourceCount {
+  source: string;
+  applications: number;
+  signed_up: number;
+}
+
+/** The source of an application that came with no ?s= post id and no referring host (or before sources were kept). */
+export const NO_SOURCE = "none";
+
 export interface PublicCountsDocument extends FunnelCounts {
   schema: "zenod-counts/v1";
   date: string;
   at: string;
-  definitions: Record<keyof FunnelCounts, string>;
+  /** E7-S11: applications and sign-ups per post source, to date. */
+  by_source: SourceCount[];
+  definitions: Record<keyof FunnelCounts | "by_source", string>;
   history: Array<FunnelCounts & { date: string }>;
 }
 
-export const COUNT_DEFINITIONS: Record<keyof FunnelCounts, string> = {
+export const COUNT_DEFINITIONS: Record<keyof FunnelCounts | "by_source", string> = {
   applications: "distinct people who sent the tester form on zenod.dev/testers, our own tests left out",
   accepted: "applicants given a tester place, our own tests left out",
   signed_up: "testers who finished the free checkout and have an account, our own test accounts left out",
@@ -55,11 +68,13 @@ export const COUNT_DEFINITIONS: Record<keyof FunnelCounts, string> = {
   feedback_recorded: "testers who filed at least one voice feedback note through their own feedback link (one link per person, the team's voice-feedback service), our own test accounts left out",
   test_applications: "applications that were our own tests, counted nowhere else",
   test_signups: "accounts on a tester code that are our own tests, counted nowhere else",
+  by_source:
+    "to date, per source: the ?s=<post id> of the post link (or the referring site's host) the person's first tester application came with, its applications and its signed_up (a sign-up is its application's source); \"none\" when no source came with it; our own tests left out; only the source id, never a person",
 };
 
 export interface CountSources {
   /** The application lines kept by the testers form (testerApplications.ts). */
-  applications: () => Array<{ contact?: unknown; use?: unknown }>;
+  applications: () => Array<{ contact?: unknown; use?: unknown; source?: unknown }>;
   /** The tester flow's records (testerFlow.ts); empty when the flow is off. */
   testers: () => TesterRecord[];
   accounts: () => CustomerAccount[];
@@ -77,16 +92,35 @@ export interface CountSources {
 const live = (account: CustomerAccount) =>
   account.subscription_status === "active" || account.subscription_status === "past_due";
 
-/** The five counts from the sources. Pure apart from the sources. */
+/** The counts from the sources. Pure apart from the sources. */
 export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts {
+  return countAll(sources, nowMs).counts;
+}
+
+/** E7-S11: applications and sign-ups per post source, most applications first. Pure apart from the sources. */
+export function sourceCounts(sources: CountSources, nowMs: number): SourceCount[] {
+  return countAll(sources, nowMs).bySource;
+}
+
+function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts; bySource: SourceCount[] } {
   const isTest = sources.isTest ?? (() => false);
   const applicants = new Set<string>();
   const tests = new Set<string>();
+  // E7-S11: each applicant's source, from their first application that carried one.
+  const sourceOf = new Map<string, string>();
   for (const line of sources.applications()) {
     const contact = typeof line.contact === "string" ? line.contact : "";
     const use = typeof line.use === "string" ? line.use : "";
     const key = (normalizeTesterEmail(contact) ?? contact.trim()).toLowerCase();
-    if (key) (isTest(contact, use) ? tests : applicants).add(key);
+    if (!key) continue;
+    const source = cleanApplicantSource(line.source);
+    // ?s=TEST marks our own test visits and applications on every page (E80-S2).
+    if (isTest(contact, use) || /^test$/i.test(source ?? "")) {
+      tests.add(key);
+      continue;
+    }
+    applicants.add(key);
+    if (source && !sourceOf.has(key)) sourceOf.set(key, source);
   }
   const testAccounts = new Set<string>();
   const testers = sources.testers().filter((tester) => {
@@ -101,6 +135,17 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
   for (const tester of testers) applicants.add(tester.email.toLowerCase());
   const accepted = testers.filter((tester) => tester.status === "accepted");
   const acceptedEmails = new Set(accepted.map((tester) => tester.email.toLowerCase()));
+  // E7-S11: a sign-up belongs to the application whose code it redeemed, else to the one with its checkout email.
+  const applicantOfAccount = new Map(
+    testers.filter((tester) => tester.redeemedBy).map((tester) => [tester.redeemedBy!, tester.email.toLowerCase()] as const),
+  );
+  const perSource = new Map<string, SourceCount>();
+  const bucket = (source: string) => {
+    let row = perSource.get(source);
+    if (!row) perSource.set(source, (row = { source, applications: 0, signed_up: 0 }));
+    return row;
+  };
+  for (const key of applicants) bucket(sourceOf.get(key) ?? NO_SOURCE).applications += 1;
 
   let signedUp = 0;
   let whatsappReplied = 0;
@@ -123,7 +168,11 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
       testSignups += 1;
       continue;
     }
-    if (tester) signedUp += 1;
+    if (tester) {
+      signedUp += 1;
+      const key = applicantOfAccount.get(account.account_id) ?? email;
+      bucket(sourceOf.get(key) ?? NO_SOURCE).signed_up += 1;
+    }
     // E7-S8: the same testers as signed_up (test accounts already left out above), with a Saved reply on WhatsApp.
     if (tester && account.tenant_id && whatsappSaves(account.tenant_id) > 0) whatsappReplied += 1;
     const feedback = tester ? sources.feedbackNotes?.(account.account_id) ?? null : null;
@@ -135,7 +184,14 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
       activeTesters += 1;
     }
   }
-  return {
+  const bySource = [...perSource.values()].sort(
+    (a, b) =>
+      Number(a.source === NO_SOURCE) - Number(b.source === NO_SOURCE) ||
+      b.applications - a.applications ||
+      b.signed_up - a.signed_up ||
+      a.source.localeCompare(b.source),
+  );
+  const counts: FunnelCounts = {
     applications: applicants.size,
     accepted: accepted.length,
     signed_up: signedUp,
@@ -146,6 +202,7 @@ export function funnelCounts(sources: CountSources, nowMs: number): FunnelCounts
     test_applications: tests.size,
     test_signups: testSignups,
   };
+  return { counts, bySource };
 }
 
 /** True for one of our own test accounts: its email looks like a test, or it redeemed a test application's place. */
@@ -206,14 +263,14 @@ export function tenantWhatsAppSaves(tasksPath: string, tenantId: string): number
 }
 
 /** The kept applications, one JSON object per line; unreadable lines are skipped. */
-export function readApplications(dataDir: string): Array<{ at?: unknown; contact?: unknown; use?: unknown }> {
+export function readApplications(dataDir: string): Array<{ at?: unknown; contact?: unknown; use?: unknown; source?: unknown }> {
   const path = join(dataDir, TESTER_APPLICATIONS_FILE);
   if (!existsSync(path)) return [];
-  const out: Array<{ at?: unknown; contact?: unknown; use?: unknown }> = [];
+  const out: Array<{ at?: unknown; contact?: unknown; use?: unknown; source?: unknown }> = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     try {
-      out.push(JSON.parse(line) as { at?: unknown; contact?: unknown; use?: unknown });
+      out.push(JSON.parse(line) as { at?: unknown; contact?: unknown; use?: unknown; source?: unknown });
     } catch {
       // a torn line from a crash mid-write: skip it
     }
@@ -252,7 +309,7 @@ export class PublicCounts {
     const nowMs = this.now();
     const at = new Date(nowMs).toISOString();
     const date = at.slice(0, 10);
-    const counts = funnelCounts(this.sources, nowMs);
+    const { counts, bySource } = countAll(this.sources, nowMs);
     const days = this.readDays();
     days[date] = counts;
     const kept = Object.keys(days).sort().slice(-KEEP_DAYS);
@@ -270,6 +327,7 @@ export class PublicCounts {
       date,
       at,
       ...counts,
+      by_source: bySource,
       definitions: COUNT_DEFINITIONS,
       history: kept.map((day) => ({ date: day, ...keptDays[day]! })),
     };
