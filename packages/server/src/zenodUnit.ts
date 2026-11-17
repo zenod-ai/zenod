@@ -79,6 +79,7 @@ import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
+import { mountTesterSignupWelcomeRoutes, parseSignupWelcomeMode, TesterSignupWelcome } from "./testerSignupWelcome.js";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { mountTesterMailQueueRoutes, TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
 import { bearerMatches } from "./testerFlow.js";
@@ -1507,6 +1508,16 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           dataDir: storage.dataDir,
           envMode: parseNudgeMode(env.ZENOD_TESTER_NUDGE) ?? "on",
           firstName: applicantFirstName,
+          ...testerSetups,
+        }),
+      });
+      // E26-S33 (zenod-social's EPIC-6-A4, Jordi approved 15 Nov): the welcome email with the video and five things to
+      // try, once per tester when the free sign-up is finished, sent first by the same timer; off with mode "off".
+      mountTesterSignupWelcomeRoutes(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        welcome: new TesterSignupWelcome({
+          dataDir: storage.dataDir,
+          envMode: parseSignupWelcomeMode(env.ZENOD_TESTER_SIGNUP_WELCOME) ?? "on",
           ...testerSetups,
         }),
       });

@@ -16,9 +16,10 @@ MAIL = {"id": "acct-1", "to": "ana@example.org", "subject": "Thank you for testi
 
 
 class Fake:
-    def __init__(self, mails, mark_codes=(200,), send_ok=True, nudges=None):
+    def __init__(self, mails, mark_codes=(200,), send_ok=True, nudges=None, welcomes=None):
         self.mails = list(mails)
         self.nudges = None if nudges is None else list(nudges)
+        self.welcomes = None if welcomes is None else list(welcomes)
         self.mark_codes = list(mark_codes)
         self.send_ok = send_ok
         self.sends, self.marks, self.runs, self.closed = [], [], [], []
@@ -28,12 +29,16 @@ class Fake:
             return 200, {"mode": "on", "mails": self.mails}
         if path.endswith("/whatsapp-nudge/queue"):
             return (401, {"error": "unauthorized"}) if self.nudges is None else (200, {"mode": "on", "mails": self.nudges})
+        if path.endswith("/signup-welcome/queue"):
+            return (404, {"error": "not found"}) if self.welcomes is None else (200, {"mode": "on", "mails": self.welcomes})
         code = self.mark_codes.pop(0) if self.mark_codes else 200
         if code == 200:
             self.marks.append({**body, "path": path})
             self.mails = [m for m in self.mails if m["id"] != body["id"]]
             if self.nudges is not None:
                 self.nudges = [m for m in self.nudges if m["id"] != body["id"]]
+            if self.welcomes is not None:
+                self.welcomes = [m for m in self.welcomes if m["id"] != body["id"]]
         return code, {"result": "sent"} if code == 200 else {"error": "boom"}
 
     def console(self, method, path, body=None):
@@ -135,6 +140,43 @@ class NudgeTest(unittest.TestCase):
         self.assertEqual(len(fake.sends), 1)
 
     def test_production_without_the_nudge_route_still_sends_thanks(self):
+        fake = Fake([MAIL])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
+
+
+class WelcomeTest(unittest.TestCase):
+    """E26-S33: the sign-up welcome goes first in the tick, once, ever, on its own route."""
+
+    WELCOME = {"id": "welcome-acct-1", "to": "ana@example.org", "subject": "Welcome to Zenod, here is how to start", "text": "Hi,", "html": "", "queuedAt": "2026-11-17T00:00:00Z"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        send.STATE = pathlib.Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def tick(self, fake):
+        return send.tick(ops_call=fake.ops, console_call=fake.console, log=lambda *_: None)
+
+    def test_welcome_goes_before_the_thank_you_and_the_nudge(self):
+        nudge = dict(NudgeTest.NUDGE)
+        fake = Fake([MAIL], nudges=[nudge], welcomes=[self.WELCOME])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual([s["subject"] for s in fake.sends], ["Welcome to Zenod, here is how to start", "Thank you for testing Zenod", "Your Zenod WhatsApp link"])
+        self.assertEqual(fake.marks[0]["path"], "/api/ops/testers/signup-welcome/sent")
+        self.assertEqual(len(fake.runs), 1)
+
+    def test_welcome_never_resent_when_its_mark_failed(self):
+        fake = Fake([], mark_codes=(503, 200), welcomes=[self.WELCOME])
+        self.assertEqual(self.tick(fake), 1)
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
+        self.assertEqual(len(fake.marks), 1)
+
+    def test_production_without_the_welcome_route_still_sends_thanks(self):
         fake = Fake([MAIL])
         self.assertEqual(self.tick(fake), 0)
         self.assertEqual(len(fake.sends), 1)

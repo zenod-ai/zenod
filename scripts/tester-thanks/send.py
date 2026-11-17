@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tester thank-you mail sender (EPIC-26 E26-S28 iteration 3), and the next-day WhatsApp email (E26-S32).
+"""Tester thank-you mail sender (EPIC-26 E26-S28 iteration 3), the next-day WhatsApp email (E26-S32) and the sign-up welcome (E26-S33).
 
 The Delivery Manager decided on 2026-11-15 (spine Decisions, E26-A16 withdrawn): the thank-you email a tester gets
 when they link WhatsApp goes from Jordi's own mailbox through the console's team Gmail connection (MCP `team-gmail`,
@@ -35,7 +35,7 @@ import sys
 import urllib.error
 import urllib.request
 
-ROW = "E26-S28/E26-S32"
+ROW = "E26-S28/E26-S32/E26-S33"
 CONSOLE = os.environ.get("CONSOLE_URL", "http://127.0.0.1:18750").rstrip("/")
 # The Zenod milestone's Delivery Manager (persona with Send switched on, console Services page).
 ASSIGNMENT = os.environ.get("ZENOD_DM_ASSIGNMENT", "as_f4fd49bd-5c61-4b8f-a5c5-397a238b1617")
@@ -128,7 +128,10 @@ def write_ledger(ledger: dict) -> None:
 
 # Each queue: (label, queue route, mark route, absent ok). E26-S32: the next-day WhatsApp email (Jordi's yes on E26-A17)
 # rides the same tick, run and ledger; a production without its route (before the promote) is skipped quietly.
+# E26-S33: the sign-up welcome (zenod-social's EPIC-6-A4, Jordi approved 15 Nov) is listed first, so within one tick a new
+# tester's first email from us is the welcome; the thank-you and the next-day email keep their own rules.
 QUEUES = (
+    ("signup-welcome", "/api/ops/testers/signup-welcome/queue", "/api/ops/testers/signup-welcome/sent", True),
     ("thank-you", "/api/ops/testers/onboarding/mail-queue", "/api/ops/testers/onboarding/mail-sent", False),
     ("whatsapp-nudge", "/api/ops/testers/whatsapp-nudge/queue", "/api/ops/testers/whatsapp-nudge/sent", True),
 )
