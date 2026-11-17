@@ -434,7 +434,7 @@ export const OPEN_LOOPS: PersonaDefinition = modelPersona({
   id: "open-loops",
   name: "Open loops finder",
   purpose: "Finds loose ends in your own life that your notes leave open.",
-  brief: "Every night it reads what you said in the last 14 days and lists the loose ends in your own life, like a call to make or a form to send, in its own folder. It suggests one change to your memory, like linking a loose end to the note that closed it, or asks you whether the most important one is still open. It never tracks your projects' work.",
+  brief: "On its schedule it reads what you said in the last 14 days and lists the loose ends in your own life, like a call to make or a form to send, in its own folder. It suggests one change to your memory, like linking a loose end to the note that closed it, or asks you whether the most important one is still open. It never tracks your projects' work.",
   skills: ["read", "write-own-folder", "post-inbox", "ask", "propose-desk-job"],
   schedule: { every: "night" },
   days: 14,
