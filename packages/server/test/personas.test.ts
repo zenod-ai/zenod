@@ -745,6 +745,20 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     const two = deps({ entries: calm, model: () => stubModel(JSON.stringify({ pattern: clinical })).model });
     expect(await runPersona(PATTERNS_AND_IDEAS, two.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes, no pattern; left out one because the words were too clinical" });
     expect(two.inbox.list()).toHaveLength(0);
+
+    // Round 4: a researcher's job in the research line is no clinical word about the person; the card posts.
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const researcher = { noticed: "You often hold several open plans at once.", topic: "many plans at once", idea: "Try writing one if-then plan for the next step.", known: "if-then planning", source: "Psychologist Peter Gollwitzer, 1999, with other psychologists since.", yes: "It turns a vague plan into one clear step.", no: "It may feel stiff on busy days.", sources: [1, 2] };
+    const three = deps({ entries: calm, model: () => stubModel(JSON.stringify({ pattern: researcher })).model });
+    expect(await runPersona(PATTERNS_AND_IDEAS, three.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes and offered one idea" });
+    expect(three.inbox.list()[0]!.body).toContain("Known as if-then planning. Researcher Peter Gollwitzer, 1999, with other researchers since.");
+    // Any other clinical word in that line still leaves the card out.
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const four = deps({ entries: calm, model: () => stubModel(JSON.stringify({ pattern: { ...researcher, source: "Psychologist Peter Gollwitzer, from therapy research." } })).model });
+    expect(await runPersona(PATTERNS_AND_IDEAS, four.deps, "manual")).toMatchObject({ summary: "Read 3 notes, no pattern; left out one because the words were too clinical" });
+    expect(four.inbox.list()).toHaveLength(0);
   });
 
   it("Patterns and ideas is off for a new account and on for an account that used helpers before (S41)", () => {
