@@ -122,7 +122,8 @@ describe("tester quick start (EPIC-26 S15)", () => {
     const read = async () => (await layer.app.request("/api/console/quick-start", { headers: { cookie } })).json() as Promise<Record<string, unknown>>;
     try {
       expect((await layer.app.request("/api/console/quick-start")).status).toBe(401);
-      expect(await read()).toMatchObject({ score: 0, total: 5 });
+      // S44: a new account starts with Weekly recap on, so the helper step is ticked from the start.
+      expect(await read()).toMatchObject({ score: 1, total: 5, helperName: "Weekly recap" });
 
       const job = runtime.taskJobStore.enqueue("store", { content: "Ana's book: Piranesi", source: "whatsapp" }, "tenant-a:whatsapp:m1", T0);
       runtime.taskJobStore.update(job.id, { status: "done" });

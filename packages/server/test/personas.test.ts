@@ -28,6 +28,7 @@ import {
   duePersonas,
   nextPersonaWakeAt,
   personaEnabled,
+  personaSchedule,
   personaPeriodKey,
   personaView,
   runPersona,
@@ -36,7 +37,7 @@ import {
   type PersonaModel,
   type PersonaRunnerDeps,
 } from "../src/personaRunner.js";
-import { closePersonasFor, PersonaStore, personasFor, WEEKLY_RECAP_OFF_SINCE } from "../src/personaStore.js";
+import { closePersonasFor, PersonaStore, personasFor, TESTER_DEFAULT_HELPERS, WEEKLY_RECAP_OFF_SINCE } from "../src/personaStore.js";
 import type { TeamAsk } from "../src/teamAsk.js";
 
 /**
@@ -448,10 +449,11 @@ describe("persona settings routes (EPIC-14 S4)", () => {
     try {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
-        ["weekly-recap", false, null], ["open-loops", false, null], ["people-follow-ups", false, null],
+        ["weekly-recap", true, null], ["open-loops", true, null], ["people-follow-ups", false, null],
         ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["patterns-and-ideas", false, null], ["memory-health", false, null], ["clarifier", false, null],
       ]);
-      // E23-A2: a new account starts with every helper off; the user switches one on.
+      // S44: a new account starts with Weekly recap and Open loops (every 3 days) on, the rest off.
+      expect(first.personas.find((p) => p.id === "open-loops")).toMatchObject({ schedule: "Every 3 days, at night" });
       const on = await (await app.request("/api/console/personas/weekly-recap", { method: "POST", body: JSON.stringify({ enabled: true }), headers: { "content-type": "application/json" } })).json() as { personas: Array<{ enabled: boolean }> };
       expect(on.personas[0]).toMatchObject({ enabled: true });
       expect(first.personas[0]!.skills.map((skill) => skill.label)).toContain("Write only into its own folder");
@@ -470,6 +472,7 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       expect((await app.request("/api/console/personas/weekly-recap", { method: "POST", body: "{}" })).status).toBe(400);
 
       // A persona that is off never runs, not even with Run now.
+      expect((await app.request("/api/console/personas/open-loops", { method: "POST", body: JSON.stringify({ enabled: false }), headers: { "content-type": "application/json" } })).status).toBe(200);
       expect((await app.request("/api/console/personas/open-loops/run", { method: "POST" })).status).toBe(409);
       // Its cadence: every 3 days; setting it leaves the switch alone; nonsense is refused; null goes back to its default.
       const post = (body: unknown) => app.request("/api/console/personas/open-loops", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
@@ -575,6 +578,32 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     fresh.setEnabled("open-loops", true);
     expect(fresh.keepOnIfUsedBefore("weekly-recap", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
     expect(personaEnabled(fresh, WEEKLY_RECAP)).toBe(false);
+  });
+
+  it("starts a new account with Weekly recap and Open loops every 3 days on, the rest off, and leaves used accounts alone (S44)", async () => {
+    const fresh = { dataDir: join(dir, "s44-fresh") };
+    await mkdir(fresh.dataDir, { recursive: true });
+    try {
+      const store = personasFor(fresh);
+      expect(BUILT_IN_PERSONAS.filter((p) => personaEnabled(store, p)).map((p) => p.id)).toEqual(["weekly-recap", "open-loops"]);
+      expect(personaSchedule(store, OPEN_LOOPS)).toEqual({ every: "days", days: 3 });
+      expect(personaSchedule(store, WEEKLY_RECAP)).toEqual({ every: "week" });
+      // A tester's own switch-off stays off when the store opens again.
+      store.setEnabled("open-loops", false);
+      closePersonasFor(fresh);
+      expect(personaEnabled(personasFor(fresh), OPEN_LOOPS)).toBe(false);
+    } finally {
+      closePersonasFor(fresh);
+    }
+    // An account with any switch or run (the owner's) is not changed.
+    const used = new PersonaStore(join(dir, "s44-used.sqlite"));
+    used.setEnabled("topic-gardener", true);
+    expect(used.applyTesterDefaults(TESTER_DEFAULT_HELPERS)).toBe(false);
+    expect(used.enabled("weekly-recap")).toBeNull();
+    const ran = new PersonaStore(join(dir, "s44-ran.sqlite"));
+    ran.start("weekly-recap", "manual");
+    expect(ran.applyTesterDefaults(TESTER_DEFAULT_HELPERS)).toBe(false);
+    expect(ran.enabled("open-loops")).toBeNull();
   });
 
   it("keeps a cadence per persona: every 3 days runs once per 3-day period, the switch untouched", async () => {
