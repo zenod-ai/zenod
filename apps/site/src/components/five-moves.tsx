@@ -5,7 +5,7 @@
 // librarian of your library; one memory every AI reads and writes. Each move
 // is a scene for lib/scenes.ts (data-at steps, final frame without motion).
 // Every claim holds for production today: the log is append-only and verbatim,
-// strengths rank answers, helpers start off (E23-A2) and the weekly recap writes
+// strengths rank answers, new accounts start with two helpers on (EPIC-14 S44) and the weekly recap writes
 // into its own folder, and cloud.zenod.dev/mcp signs any MCP client in with
 // OAuth. WhatsApp only captures and acknowledges (root L-6), so its line runs
 // one way, into the memory.
@@ -186,6 +186,17 @@ function CloudStage() {
   );
 }
 
+// The helpers that run on production today (packages/server personaCatalog.ts
+// and patterns.ts), in plain words, each with what it does now (E25-S3).
+const HELPERS = [
+  { name: "Open loops", does: "finds loose ends in your own life, like a call to make or a form to send, and asks if the top one is still open." },
+  { name: "Weekly recap", does: "writes a short recap of your week and one thing worth noticing." },
+  { name: "Something to try", does: "once a day, one small thing to try, drawn from your last few voice notes." },
+  { name: "Patterns and ideas", does: "every few days, names a pattern in how you think or work and offers one idea that research supports, with its source." },
+  { name: "Ideas digest", does: "gathers the ideas you had into one digest and suggests linking the ones that belong together." },
+  { name: "Topic gardener", does: "suggests one tidy-up of how your memory is filed." },
+];
+
 // 3. Helpers read the memory at night and add to it: the weekly recap writes a
 // new memory into its own folder, another helper leaves a suggestion.
 function HelpersStage() {
@@ -279,7 +290,7 @@ export const FiveMoves = React.memo(function FiveMoves() {
     <section className="mv-sec" id="how-zenod-works" aria-labelledby="moves-title">
       <div className="mv-head">
         <p className="mv-kicker">How Zenod works</p>
-        <h2 id="moves-title">Your words go in. A living memory grows out of them.</h2>
+        <h2 id="moves-title">You talk. Your memory organizes itself.</h2>
       </div>
 
       <Move no="1" id="forever" title="We keep your words forever, exactly as you said them." stage={<KeptStage />}>
@@ -305,19 +316,22 @@ export const FiveMoves = React.memo(function FiveMoves() {
         </p>
       </Move>
 
-      <Move no="3" id="helpers" title="Helpers read it and add new memories." stage={<HelpersStage />} building>
+      <Move no="3" id="helpers" title="Send helpers into your memory." stage={<HelpersStage />}>
         <p>
-          Helpers are small readers that wake at night. The weekly recap reads
-          your week and writes a short recap into its own folder of your
-          library, where it becomes a memory like any other.
+          Helpers are readers you switch on in the app. Each one reads what you
+          said and leaves you one thing in your inbox, with the notes it came
+          from. New accounts start with Open loops and Weekly recap.
         </p>
+        <ul className="mv-helper-list">
+          {HELPERS.map((helper) => (
+            <li key={helper.name}>
+              <b>{helper.name}</b> {helper.does}
+            </li>
+          ))}
+        </ul>
         <p>
-          Others suggest a tidy-up, and you answer Do it or Not now from your
-          inbox.
-        </p>
-        <p>
-          Helpers are still being built, so they stay off for now. Your memory
-          works fully without them.
+          A helper writes only in its own folder and changes nothing else
+          until you press Do it.
         </p>
       </Move>
 
@@ -356,7 +370,7 @@ export const OneMemorySection = React.memo(function OneMemorySection() {
     <section className="pp-mcp mv-one" id="mcp" aria-labelledby="mcp-title">
       <div className="pp-mcp-say">
         <p className="mv-no">5</p>
-        <h2 id="mcp-title">One memory that every AI reads and writes.</h2>
+        <h2 id="mcp-title">Connect all your agents to one memory.</h2>
         <p>
           Your memory sits in the middle and keeps all your tools on the same
           page. Drop things in from WhatsApp. Claude, ChatGPT, Codex, Gemini

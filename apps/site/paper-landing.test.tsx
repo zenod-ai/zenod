@@ -117,9 +117,11 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(moves).toContain("forever, exactly as you said them");
     expect(moves).toContain("Google Drive or GitHub");
     expect(moves).toContain("cloud of thoughts");
-    expect(moves).toContain("Helpers read it and add new memories");
+    expect(moves).toContain("Send helpers into your memory");
+    for (const helper of ["Open loops", "Weekly recap", "Something to try", "Patterns and ideas", "Ideas digest", "Topic gardener"]) expect(moves).toContain(helper);
+    expect(moves).not.toContain("Still building");
     expect(moves).toContain("Zenod is the librarian");
-    expect(html).toContain("One memory that every AI reads and writes.");
+    expect(html).toContain("Connect all your agents to one memory.");
     // Every stage is a scene with a description, so the final frame says it without motion.
     expect(html.match(/class="mv-stage scene[^"]*"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/g)).toHaveLength(5);
   });
