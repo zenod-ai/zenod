@@ -10,7 +10,9 @@
 // demo content; the graph view and lit answer screens (EPIC-18 W4) are the
 // shipped web app on the made-up demo vault. EPIC-25 puts five short animated
 // moves right after the hero (kept forever, the cloud, helpers, the librarian,
-// one memory for every AI); the real screens below prove them.
+// one memory for every AI); the real screens below prove them. E25-S3 (Jordi,
+// vn_101d2c67, 2026-11-18) leads with his words: a self-organizing digital
+// memory, voice notes on WhatsApp, every agent over MCP, helpers on your memory.
 import * as React from "react";
 import "@fontsource-variable/newsreader";
 import "@fontsource/instrument-sans/400.css";
@@ -464,14 +466,19 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
         <section className="pp-hero" aria-labelledby="hero-title">
           <div className="pp-hero-text">
             <h1 id="hero-title">
-              <span className="pp-line"><span>Hire a librarian</span></span>{" "}
-              <span className="pp-line"><span>for your memory.</span></span>
+              <span className="pp-line"><span>A digital memory</span></span>{" "}
+              <span className="pp-line"><span>that organizes itself.</span></span>
             </h1>
             <p className="pp-lead">
-              Send Zenod a voice note on WhatsApp, or ask Claude, ChatGPT or
-              Cursor to save what you just worked out: they connect to Zenod
-              over MCP, from the cloud. Zenod transcribes it, files it and
-              keeps it as plain Markdown in your own GitHub or Google Drive.
+              Just send voice notes on WhatsApp. Zenod transcribes each one,
+              files it on the right page and links it to what you said before,
+              as plain Markdown in your own Google Drive or GitHub.
+            </p>
+            <p className="pp-lead">
+              Connect all your agents to it over MCP: Claude, ChatGPT, Cursor
+              and the rest read from it and save to it. Then send helpers into
+              it, to remind you of loose ends, bring back ideas and notice
+              patterns you missed.
             </p>
             <p className="pp-actions">
               <a className="pp-btn pp-btn-primary" href="#start">
@@ -609,9 +616,11 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
         >
           <p>
             Your memory is plain Markdown in a GitHub repository or Google Drive
-            folder you own, with every change kept in its history. Open it in
-            Obsidian, dig through years of notes with any tool, or stop using
-            Zenod and keep every file.
+            folder you own, with every change kept in its history. Open the
+            folder in Obsidian as it is: its folders, pages and the links back
+            to your own words all work there. On Google Drive, sync the folder
+            to your computer with Google Drive for desktop first. Stop using
+            Zenod and you keep every file.
           </p>
         </Showcase>
 

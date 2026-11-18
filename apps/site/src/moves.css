@@ -11,6 +11,10 @@
 .mv-say p:not(.mv-no) { margin: 0 0 1rem; }
 /* EPIC-23 U7: a part not ready yet. */
 .pp .mv-building { display: inline-block; vertical-align: middle; margin-left: 0.75rem; padding: 0.15rem 0.55rem; border: 1px solid currentColor; border-radius: 3px; font: 500 0.8rem/1.4 var(--pp-sans, system-ui, sans-serif); letter-spacing: 0.02em; color: #8a3b12; }
+/* E25-S3: the helpers live today, one line each. */
+.pp .mv-helper-list { list-style: none; margin: 0 0 1rem; padding: 0; border-top: 1px solid var(--line); }
+.pp .mv-helper-list li { padding: 0.55rem 0; border-bottom: 1px solid var(--line); font: 400 0.95rem/1.45 var(--pp-sans); }
+.pp .mv-helper-list b { font-weight: 500; color: var(--pp-accent); }
 .mv-stage { background: var(--pp-stage); border-radius: 6px; padding: clamp(1rem, 2.5vw, 2rem); font-family: var(--pp-sans); color: var(--pp-ink); min-height: 21rem; position: relative; overflow: hidden; }
 .pp .mv-stage p { margin: 0; }
 
