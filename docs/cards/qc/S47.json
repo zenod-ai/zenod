@@ -1,0 +1,71 @@
+{
+  "row": "S47",
+  "card": "docs/cards/S47.md",
+  "cardSha": "3328878429e35967",
+  "inputs": {
+    "card": "3328878429e35967",
+    "page": "cf49b34bf8e813c5",
+    "rules": "7dd845c8b4b0e115",
+    "words": "e48f40f49658ebad"
+  },
+  "checkedAt": "2026-11-18T08:34:34Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "personas that are kind of dispatched on your memory",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Screens show five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) plus a quiet Keep my memory tidy switch, with helpers underneath; the phrase 'personas dispatched on your memory' is reflected in the regroup."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The live Helpers screen renders at 390 and 1280 px with five personas, a tidy switch and a coming-soon item, no sideways overflow; the page reads cleanly."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the five personas read clearly on the Helpers screen, and he recommends yes.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "cf49b34bf8e813c5",
+    "walkedAt": "2026-11-18T08:34:34Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:8921/e14-s47/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link 'Before: nine long cards'",
+        "url": "http://vps3.taild81fbb.ts.net:8921/e14-s47/00-before-1280.png",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Open your own Helpers screen'",
+        "url": "https://cloud.zenod.dev/app",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e14-s47/",
+      "file": "S47-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e14-s47/",
+      "file": "S47-1280.webp"
+    }
+  ]
+}
