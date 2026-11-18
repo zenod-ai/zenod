@@ -7,6 +7,7 @@ import { inTreeSweepWindow, treeSweepWeekStart, TREE_SWEEP_WINDOW_START_HOUR_UTC
 import { opsAlert } from "./opsAlert.js";
 import { isTeamRecord } from "./helperScope.js";
 import { TeamAskError, type TeamAsk } from "./teamAsk.js";
+import { CALM_HELPER_IDS, calmDayStart, calmWaitKey, inboxShownKeys, isCalmHelper, suggestionKeys } from "./calmCards.js";
 
 /**
  * The persona runner (EPIC-14 S4). A persona is a small agent that wakes on the user's memory on a
@@ -271,6 +272,14 @@ const EARLIER_QUESTIONS = 20;
 const ABOUT = ":about:";
 const MAX_NOTE_CHARS = 20_000;
 
+/** EPIC-14 S50: a card this user was already shown; it is left out and the run ends done. */
+export class PersonaRepeatError extends Error {
+  constructor() {
+    super("Left out a card already shown once");
+    this.name = "PersonaRepeatError";
+  }
+}
+
 export class PersonaCapError extends Error {
   constructor(readonly cap: "steps" | "spend" | "posts" | "notes", message: string) {
     super(message);
@@ -404,6 +413,18 @@ export async function runPersona(
   const budget = personaBudget(deps.store, persona, started, deps.totalMonthUsd);
   if (budget.totalUsd >= budget.totalCapUsd) return end("capped", "The helpers' monthly budget is used up");
   if (budget.personaUsd >= budget.personaCapUsd) return end("capped", `${persona.name}'s monthly budget is used up`);
+  // EPIC-14 S50: one calm card a day across the five personas. A scheduled helper that wakes after
+  // today's card waits for tomorrow, before it reads or spends anything (calmCards.ts).
+  const calm = isCalmHelper(persona.id);
+  const calmToday = () => deps.store.cardsSince([...CALM_HELPER_IDS], calmDayStart(started));
+  if (calm && trigger === "schedule") {
+    const today = calmToday()[0];
+    if (today) {
+      const summary = `Waits for tomorrow: one card a day, today's came from ${today.personaId}`;
+      console.log(`[persona] ${persona.id} waits: calm card today from ${today.personaId}`);
+      return deps.store.finishWaiting(run.id, { ...tally, status: "skipped", summary }, calmWaitKey(started));
+    }
+  }
 
   const skilled = (skill: PersonaSkill) => {
     if (!persona.skills.includes(skill)) throw new PersonaSkillError(skill);
@@ -498,9 +519,27 @@ export async function runPersona(
   let suggestions = 0;
   let asked = false;
   const canAskTeam = Boolean(persona.asksTeam && deps.teamAsk && deps.store.askTeam(persona.id));
-  const beforePost = () => {
+  // EPIC-14 S50: what this user was already shown, by any helper: the store, plus the cards still in the inbox.
+  let shown: Set<string> | null = null;
+  const beforePost = (card: { title: string; action?: string | null; links?: InboxLink[] }) => {
     if (tally.inboxItemIds.length >= PERSONA_MAX_POSTS_PER_RUN) throw new PersonaCapError("posts", `Stopped at ${PERSONA_MAX_POSTS_PER_RUN} inbox posts`);
+    const keys = suggestionKeys(card);
+    shown ??= inboxShownKeys(deps.inbox.list(500));
+    if (keys.some((key) => shown!.has(key)) || deps.store.wasShown(keys)) {
+      console.log(`[persona] ${persona.id} left out a repeat`);
+      throw new PersonaRepeatError();
+    }
+    // One calm card a run, and none once today's has landed (a scheduled run; Run now is the user's ask).
+    if (calm && (tally.inboxItemIds.length >= 1 || (trigger === "schedule" && calmToday().length > 0))) {
+      throw new PersonaCapError("posts", "Stopped at one card a day");
+    }
     step();
+    return keys;
+  };
+  const remember = (keys: string[], item: InboxItem) => {
+    deps.store.rememberShown(persona.id, keys);
+    for (const key of keys) shown?.add(key);
+    return posted(item);
   };
   const ctx: PersonaContext = {
     ...read,
@@ -548,8 +587,8 @@ export async function runPersona(
     },
     postFinding(input) {
       skilled("post-inbox");
-      beforePost();
-      return posted(deps.inbox.post({ kind: "finding", from: persona.name, sourceKey: sourceKey(), ...input }));
+      const keys = beforePost(input);
+      return remember(keys, deps.inbox.post({ kind: "finding", from: persona.name, sourceKey: sourceKey(), ...input }));
     },
     postQuestion({ about, ...input }) {
       skilled("ask");
@@ -557,8 +596,8 @@ export async function runPersona(
       const key = about ? `persona:${persona.id}${ABOUT}${about.slice(0, 200)}` : null;
       const same = key ? deps.inbox.list(500).find((item) => item.sourceKey === key) : undefined;
       if (same) return same;
-      beforePost();
-      return posted(deps.inbox.post({ kind: "question", from: persona.name, sourceKey: key ?? sourceKey(), ...input }));
+      const keys = beforePost(input);
+      return remember(keys, deps.inbox.post({ kind: "question", from: persona.name, sourceKey: key ?? sourceKey(), ...input }));
     },
     postSuggestion(input) {
       // S26: one change the helper proposes; the user does it (one undoable desk job), changes it first or says not now.
@@ -568,17 +607,18 @@ export async function runPersona(
       const same = deps.inbox.list(500).find((item) => item.kind === "suggestion" && item.from === persona.name && !item.example
         && item.status === "open" && sameWords(item.action ?? "", input.action));
       if (same) return same;
-      beforePost();
+      const keys = beforePost(input);
       suggestions += 1;
-      return posted(deps.inbox.post({ kind: "suggestion", from: persona.name, sourceKey: sourceKey(), ...input }));
+      return remember(keys, deps.inbox.post({ kind: "suggestion", from: persona.name, sourceKey: sourceKey(), ...input }));
     },
     proposeDeskJob({ request, why }) {
       skilled("propose-desk-job");
-      beforePost();
+      const title = `${why.trim().slice(0, 300)} Run it?`;
+      const keys = beforePost({ title, action: request });
       // The desk owns a `desk-ask:` card: Run it starts the job with the card's body as its request.
-      return posted(deps.inbox.post({
+      return remember(keys, deps.inbox.post({
         kind: "question", from: persona.name, sourceKey: `desk-ask:${sourceKey()}`,
-        title: `${why.trim().slice(0, 300)} Run it?`,
+        title,
         body: request.trim().slice(0, 600),
         options: [{ id: "run", label: "Run it" }, { id: "no", label: "Not now" }],
       }));
@@ -606,11 +646,17 @@ export async function runPersona(
   } catch (error) {
     // What it wrote before a cap is still its work: keep it, and say why it stopped.
     const capped = error instanceof PersonaCapError || isAllowanceError(error);
+    // S50: a repeat left out is no failure: the run's notes stay, it ends done and says so.
+    const repeat = error instanceof PersonaRepeatError;
     try {
-      if (capped) tally.revision = await commitNotes(persona, deps, notes, started);
+      if (capped || repeat) tally.revision = await commitNotes(persona, deps, notes, started);
     } catch (commitError) {
       console.warn(`[persona] ${persona.id} notes not saved: ${(commitError as Error).message}`);
       opsAlert("helper", "notes_not_saved", { helper: persona.id });
+    }
+    if (repeat) {
+      if (tally.modelCalls > 0) deps.inbox.markFeedbackRead(unread);
+      return end("done", tally.inboxItemIds.length ? "Posted one card and left out one already shown" : "Left out a card already shown once, posted nothing");
     }
     if (capped) return end("capped", isAllowanceError(error) ? "The AI allowance for this month is used up" : (error as Error).message);
     console.warn(`[persona] ${persona.id} run ${run.id} failed: ${(error as Error).message}`);
@@ -634,10 +680,23 @@ async function commitNotes(persona: PersonaDefinition, deps: PersonaRunnerDeps, 
  */
 export function duePersonas(personas: readonly PersonaDefinition[], store: PersonaStore, now: Date): PersonaDefinition[] {
   const inWindow = inTreeSweepWindow(now.getTime());
-  return personas.map((persona) => withAskRevision(store, persona)).filter((persona) => {
+  const due = personas.map((persona) => withAskRevision(store, persona)).filter((persona) => {
     if (!personaEnabled(store, persona) || store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, personaSchedule(store, persona)))) return false;
+    // S50: it already waited today for the day's one calm card; it wakes again tomorrow.
+    if (store.hasRunForPeriod(persona.id, calmWaitKey(now))) return false;
     return inWindow || wantsFirstWake(store, persona);
   });
+  // S50: the tidy helpers first (they never take the day's calm card), then the calm ones, the one
+  // whose last card is oldest first (never posted: first), so a nightly helper cannot crowd out the rest.
+  const last = new Map(due.filter((persona) => isCalmHelper(persona.id)).map((persona) => [persona.id, store.lastCardAt(persona.id) ?? ""]));
+  return due
+    .map((persona, index) => ({ persona, index }))
+    .sort((a, b) => {
+      const ac = last.get(a.persona.id), bc = last.get(b.persona.id);
+      if (ac === undefined || bc === undefined) return ac === bc ? a.index - b.index : ac === undefined ? -1 : 1;
+      return ac.localeCompare(bc) || a.index - b.index;
+    })
+    .map(({ persona }) => persona);
 }
 
 /** What the settings screen shows for one persona. */

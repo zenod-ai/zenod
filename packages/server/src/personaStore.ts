@@ -124,6 +124,11 @@ export class PersonaStore {
       );
       CREATE INDEX IF NOT EXISTS persona_runs_persona ON persona_runs(persona_id, started_at);
       CREATE UNIQUE INDEX IF NOT EXISTS persona_runs_period ON persona_runs(persona_id, period_key) WHERE period_key IS NOT NULL;
+      CREATE TABLE IF NOT EXISTS persona_shown (
+        key TEXT PRIMARY KEY,
+        persona_id TEXT NOT NULL,
+        shown_at TEXT NOT NULL
+      );
     `);
     // Round 2: the user's own cadence per persona (JSON, null = its default).
     const columns = this.db.prepare(`PRAGMA table_info(persona_settings)`).all() as Array<{ name: string }>;
@@ -249,6 +254,51 @@ export class PersonaStore {
     return this.get(id)!;
   }
 
+  /**
+   * EPIC-14 S50: a scheduled run that waited for tomorrow (one calm card a day). Its period is given
+   * back, so the persona wakes again in the next window, and the day is marked so it waits only once.
+   */
+  finishWaiting(id: string, end: PersonaRunEnd, waitKey: string): PersonaRun {
+    const run = this.finish(id, end);
+    try {
+      this.db.prepare(`UPDATE persona_runs SET period_key=? WHERE id=?`).run(waitKey, id);
+    } catch {
+      this.db.prepare(`UPDATE persona_runs SET period_key=NULL WHERE id=?`).run(id);
+    }
+    return this.get(id) ?? run;
+  }
+
+  /** EPIC-14 S50: when each of these personas last put a card in the inbox, any trigger. */
+  cardsSince(personaIds: readonly string[], sinceIso: string): Array<{ personaId: string; at: string }> {
+    if (personaIds.length === 0) return [];
+    const rows = this.db
+      .prepare(`SELECT persona_id, started_at FROM persona_runs WHERE started_at>=? AND inbox_item_ids!='[]'
+                AND persona_id IN (${personaIds.map(() => "?").join(",")}) ORDER BY started_at`)
+      .all(sinceIso, ...personaIds) as Array<{ persona_id: string; started_at: string }>;
+    return rows.map((row) => ({ personaId: row.persona_id, at: row.started_at }));
+  }
+
+  lastCardAt(personaId: string): string | null {
+    const row = this.db
+      .prepare(`SELECT MAX(started_at) AS at FROM persona_runs WHERE persona_id=? AND inbox_item_ids!='[]'`)
+      .get(personaId) as { at: string | null } | undefined;
+    return row?.at ?? null;
+  }
+
+  /** EPIC-14 S50: true when any of these suggestion keys was shown before (by any helper). */
+  wasShown(keys: readonly string[]): boolean {
+    const ask = this.db.prepare(`SELECT 1 FROM persona_shown WHERE key=?`);
+    return keys.some((key) => ask.get(key) !== undefined);
+  }
+
+  /** Remember what a helper showed; the newest PERSONA_SHOWN_MAX keys are kept, the rest dropped. */
+  rememberShown(personaId: string, keys: readonly string[]): void {
+    const at = this.now().toISOString();
+    const put = this.db.prepare(`INSERT INTO persona_shown (key, persona_id, shown_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET shown_at=excluded.shown_at`);
+    for (const key of keys) put.run(key.slice(0, 400), personaId, at);
+    this.db.prepare(`DELETE FROM persona_shown WHERE key NOT IN (SELECT key FROM persona_shown ORDER BY shown_at DESC, rowid DESC LIMIT ?)`).run(PERSONA_SHOWN_MAX);
+  }
+
   /** A restart left runs "running": they end as failed, so their period can be run again. */
   recoverInterrupted(): number {
     const stale = this.db.prepare(`SELECT id FROM persona_runs WHERE status='running'`).all() as Array<{ id: string }>;
@@ -298,6 +348,9 @@ export class PersonaStore {
     this.db.close();
   }
 }
+
+/** EPIC-14 S50: how many suggestion keys a user's store keeps (a few per card, about a year of cards). */
+export const PERSONA_SHOWN_MAX = 1_000;
 
 const stores = new Map<string, PersonaStore>();
 

@@ -195,7 +195,7 @@ describe("persona runner (EPIC-14 S4)", () => {
     let clock = new Date("2026-11-08T03:00:00Z");
     const stub = stubModel();
     const b = deps({ model: () => stub.model, now: () => clock });
-    b.deps.store = new PersonaStore(join(dir, "personas-b.sqlite"));
+    b.deps.store = new PersonaStore(join(dir, "personas-b.sqlite"), () => clock);
     expect(await runPersona(WEEKLY_RECAP, b.deps, "schedule")).toMatchObject({ status: "done", periodKey: `week:2026-11-08@${WEEKLY_RECAP.revisedAt}` });
     // The same period never runs twice.
     expect(await runPersona(WEEKLY_RECAP, b.deps, "schedule")).toBeNull();
@@ -297,12 +297,13 @@ describe("persona runner (EPIC-14 S4)", () => {
     let clock = new Date("2026-11-08T12:00:00Z");
     const stub = stubModel();
     const { deps: d, store } = deps({ model: () => stub.model, now: () => clock });
-    const v1: PersonaDefinition = { ...WEEKLY_RECAP, defaultEnabled: true, revisedAt: undefined };
+    // S50: a helper outside the five, so the second card the same day is not held back for tomorrow.
+    const v1: PersonaDefinition = { ...WEEKLY_RECAP, id: "revision-test", defaultEnabled: true, revisedAt: undefined };
     expect(duePersonas([v1], store, clock).length).toBe(1);
     expect(await runPersona(v1, d, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08" });
     expect(duePersonas([v1], store, clock)).toEqual([]);
     clock = new Date("2026-11-08T20:00:00Z");
-    const v2: PersonaDefinition = { ...WEEKLY_RECAP, defaultEnabled: true, revisedAt: "2026-11-08T19:30:00.000Z" };
+    const v2: PersonaDefinition = { ...v1, revisedAt: "2026-11-08T19:30:00.000Z" };
     expect(duePersonas([v2], store, clock).length).toBe(1);
     expect(await runPersona(v2, d, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08@2026-11-08T19:30:00.000Z" });
     expect(duePersonas([v2], store, clock)).toEqual([]);
