@@ -11,6 +11,7 @@ import { answerDeskQuestion } from "../src/memoryDesk.js";
 import {
   BUILT_IN_PERSONAS,
   IDEAS_DIGEST,
+  MAKE_IT_EASIER,
   MEMORY_HEALTH,
   memoryTitle,
   memoryWords,
@@ -450,7 +451,7 @@ describe("persona settings routes (EPIC-14 S4)", () => {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
         ["weekly-recap", true, null], ["open-loops", true, null], ["people-follow-ups", false, null],
-        ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["patterns-and-ideas", false, null], ["memory-health", false, null], ["clarifier", false, null],
+        ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["patterns-and-ideas", false, null], ["make-it-easier", false, null], ["memory-health", false, null], ["clarifier", false, null],
       ]);
       // S44: a new account starts with Weekly recap and Open loops (every 3 days) on, the rest off.
       expect(first.personas.find((p) => p.id === "open-loops")).toMatchObject({ schedule: "Every 3 days, at night" });
@@ -539,8 +540,8 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     entry(16, "2026-11-06", "Only one this week"),
   ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 
-  it("lists nine personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
-    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Patterns and ideas", "Health of your memory", "Clarifier"]);
+  it("lists ten personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
+    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Patterns and ideas", "Make it easier", "Health of your memory", "Clarifier"]);
     expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual([]);
     for (const persona of BUILT_IN_PERSONAS) {
       expect(persona.purpose.length).toBeGreaterThan(10);
@@ -801,6 +802,87 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     owner.setEnabled("patterns-and-ideas", false);
     expect(owner.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
     expect(owner.enabled("patterns-and-ideas")).toBe(false);
+  });
+
+  it("Make it easier names one repeated effort and one way to spend less on it, as a why yes, why not card (S49)", async () => {
+    const voice = (n: number, day: string, words: string): MemoryEntry => ({ ...entry(n, day, `Voice note "e${n}.ogg" ingested`), contentType: "voice_note", content: `Voice note "e${n}.ogg" ingested through Zenod media seam.\nSource: WhatsApp voice note\n\n${words}` });
+    const entries = [
+      voice(1, "2026-11-07", "Drove to the pharmacy again for the same refill."),
+      voice(2, "2026-10-28", "Another trip to the pharmacy, forty minutes in traffic."),
+      entry(3, "2026-10-25", "Buy milk"),
+      voice(4, "2026-10-15", "Picked up the monthly prescription, the queue was long."),
+    ];
+    const easier = { noticed: "You go to the pharmacy for the same refill every few weeks.", effort: "monthly pharmacy refill trips", idea: "Ask the pharmacy to deliver the refill every month on a standing order.", short: "a standing delivery order", saves: "time", yes: "It would save you about forty minutes a month in traffic.", no: "If you like the trip out, it may not feel worth changing.", sources: [1, 2, 3] };
+    const stub = stubModel(JSON.stringify({ easier }));
+    const { deps: d, inbox, written } = deps({ model: () => stub.model, entries, now: () => new Date("2026-11-08T03:00:00Z") });
+    expect(await runPersona(MAKE_IT_EASIER, d, "manual")).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 3 notes and offered one easier way" });
+    // Voice notes first, a month back; told to stay practical, never project work, quiet on distress.
+    expect(stub.calls[0]!.prompt).toContain("last 30 days");
+    expect(stub.calls[0]!.prompt).toContain("monthly prescription");
+    expect(stub.calls[0]!.prompt).not.toContain("Buy milk");
+    expect(stub.calls[0]!.system).toContain("time, money or effort");
+    expect(stub.calls[0]!.system).toContain("real distress");
+    const card = inbox.list()[0]!;
+    expect(card).toMatchObject({ kind: "finding", from: "Make it easier", title: easier.idea, body: `${easier.noticed}\n\nSaves time.`, card: { picture: { change: "try", from: "monthly pharmacy refill trips", to: "a standing delivery order" }, yes: easier.yes, no: easier.no } });
+    expect(card.links.map((l) => l.path)).toEqual(["Log/2026-11-07.md", "Log/2026-10-28.md", "Log/2026-10-15.md", "Personas/make-it-easier/2026-11-08.md"]);
+    expect(written[0]!.files[0]!.content).toContain("## Easier\n\nAsk the pharmacy to deliver");
+
+    // Within the week it waits: at most one card a week, even when run by hand.
+    const memory = { ...fakeMemory(entries), async get(path: string) {
+      if (path === "Personas/make-it-easier/2026-11-08.md") return { path, frontmatter: {}, body: written[0]!.files[0]!.content, url: "", provider: "github" as const };
+      throw new Error("no note");
+    } };
+    const soon = stubModel(JSON.stringify({ easier }));
+    const next = deps({ model: () => soon.model, entries, memory, now: () => new Date("2026-11-13T03:00:00Z") });
+    expect(await runPersona(MAKE_IT_EASIER, next.deps, "manual")).toMatchObject({ status: "done", summary: "Posted a card 5 days ago, waits" });
+    expect(soon.calls).toHaveLength(0);
+    // A week on it reads again and is told to offer a different way.
+    const later = stubModel(JSON.stringify({ easier: null }));
+    const again = deps({ model: () => later.model, entries, memory, now: () => new Date("2026-11-15T03:00:00Z") });
+    expect(await runPersona(MAKE_IT_EASIER, again.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes, nothing to make easier" });
+    expect(later.calls[0]!.prompt).toContain("Offer a different one:\n- Ask the pharmacy to deliver");
+  });
+
+  it("Make it easier stays quiet on a hard note and leaves out clinical words and project work (S49)", async () => {
+    const voice = (n: number, day: string, words: string): MemoryEntry => ({ ...entry(n, day, `Voice note "f${n}.ogg" ingested`), contentType: "voice_note", content: words });
+    const hard = [voice(1, "2026-11-07", "Some days it feels hopeless."), voice(2, "2026-11-05", "Paid the parking again."), voice(3, "2026-11-04", "Parking again.")];
+    const quiet = stubModel(JSON.stringify({ easier: null }));
+    const one = deps({ model: () => quiet.model, entries: hard });
+    expect(await runPersona(MAKE_IT_EASIER, one.deps, "manual")).toMatchObject({ status: "done", summary: "Read 3 notes, stayed quiet" });
+    expect(quiet.calls).toHaveLength(0);
+    expect(one.inbox.list()).toHaveLength(0);
+    expect(one.written[0]!.files[0]!.content).not.toContain("hopeless");
+
+    const calm = [voice(1, "2026-11-07", "Paid the parking again."), voice(2, "2026-11-05", "Parking meter again."), voice(3, "2026-11-04", "Parking.")];
+    for (const [reply, why] of [
+      [{ noticed: "Parking seems to feed your anxiety.", effort: "daily parking", idea: "Buy a monthly parking pass.", short: "a monthly pass", saves: "money", yes: "Cheaper.", no: "Less flexible.", sources: [1, 2] }, "the words were too clinical"],
+      [{ noticed: "You keep paying parking.", effort: "daily parking", idea: "Open a ticket for the team to automate parking.", short: "a ticket", saves: "effort", yes: "Less work.", no: "Takes setup.", sources: [1, 2] }, "the idea was project work"],
+      [{ noticed: "You keep paying parking.", effort: "daily parking", idea: "Buy a monthly parking pass.", short: "a monthly pass", saves: "money", yes: "Cheaper.", no: "Less flexible.", sources: [1] }, "it showed in fewer than two notes"],
+    ] as const) {
+      rmSync(join(dir, "inbox.sqlite"), { force: true });
+      rmSync(join(dir, "personas.sqlite"), { force: true });
+      const run = deps({ entries: calm, model: () => stubModel(JSON.stringify({ easier: reply })).model });
+      expect(await runPersona(MAKE_IT_EASIER, run.deps, "manual")).toMatchObject({ status: "done", summary: `Read 3 notes, nothing to make easier; left out one because ${why}` });
+      expect(run.inbox.list()).toHaveLength(0);
+    }
+  });
+
+  it("Make it easier runs weekly and is off for every account, the owner's too, until switched on (S49)", () => {
+    expect(MAKE_IT_EASIER.defaultEnabled).toBe(false);
+    expect(MAKE_IT_EASIER.schedule).toEqual({ every: "week" });
+    expect(MAKE_IT_EASIER.skills).not.toContain("send-whatsapp");
+    expect(MAKE_IT_EASIER.limits.maxRunUsd).toBeLessThanOrEqual(0.02);
+    expect(TESTER_DEFAULT_HELPERS.map((d) => d.personaId)).not.toContain("make-it-easier");
+    // An account that used helpers before (the owner's): the keep-on rules switch others on, never this one.
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const owner = new PersonaStore(join(dir, "personas.sqlite"), () => new Date("2026-11-05T03:00:00Z"));
+    owner.setEnabled("open-loops", true);
+    owner.close();
+    const runtime = { dataDir: dir };
+    const store = personasFor(runtime);
+    expect(store.enabled("patterns-and-ideas")).toBe(true);
+    expect(personaEnabled(store, MAKE_IT_EASIER)).toBe(false);
+    closePersonasFor(runtime);
   });
 
   it("Topic gardener suggests one tidy-up as a suggestion card and changes nothing itself (S27)", async () => {
