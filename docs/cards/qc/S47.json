@@ -1,40 +1,41 @@
 {
   "row": "S47",
   "card": "docs/cards/S47.md",
-  "cardSha": "5a5f33caf9fef66e",
+  "cardSha": "e5bd51d104631124",
   "inputs": {
-    "card": "5a5f33caf9fef66e",
+    "card": "e5bd51d104631124",
     "page": "cf49b34bf8e813c5",
     "rules": "7dd845c8b4b0e115",
     "words": "e48f40f49658ebad"
   },
-  "checkedAt": "2026-11-18T08:34:59Z",
+  "checkedAt": "2026-11-18T09:29:58Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "personas that are kind of dispatched on your memory",
       "where": "the card's source",
       "status": "met",
-      "how": "Screens show five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) plus a quiet Keep my memory tidy switch."
+      "how": "Evidence page shows five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) plus a quiet Keep my memory tidy switch on the Helpers screen."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the Helpers screen and evidence page rendered without sideways overflow; the phone and laptop captures are legible."
+    "summary": "Both widths show the Helpers screen with five persona switches and one tidy switch, a persona table, and the opened Remind me helpers; no feedback block or sideways scroll is visible."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "x",
-    "ambiguous": ""
+    "asked": "He must decide whether the five personas read clearly on his Helpers screen, answering yes or no.",
+    "ambiguous": "",
+    "note": "\"personas that are kind of dispatched on your memory\" is not in the card's delivered lines; a stranger may not know what 'personas' means here, but the decision asks only whether the screen reads clearly, so the answer stays the same."
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "cf49b34bf8e813c5",
-    "walkedAt": "2026-11-18T08:34:59Z",
+    "walkedAt": "2026-11-18T09:29:58Z",
     "steps": [
       {
         "n": 1,
