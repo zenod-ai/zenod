@@ -52,12 +52,12 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): in the official MCP Registry and on Glama; E10-S4 waits on an awesome-mcp-servers maintainer, R9 on 2026-12-07.
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; S2 trial token is its own Delivery Manager's.
-Last attempted: 2026-11-17T22:35Z DM run_e7bd4406 roll-up: ZAL active (tester path live, waits on testers) ; EPIC-7 active (E7-S9 feedback link approved by Jordi; E7-S11 per-post sign-up counts for zenod-social being built) ; EPIC-26 active (E26-S33 welcome email at sign-up live, the 13 Nov tester got it 17 Nov 19:22Z) ; EPIC-14 active (S30 approved: new testers start with Weekly recap and Open loops, S44 live; S41 patterns helper checked after its 18 Nov 02:00Z run; S45 no-repeats a draft for Jordi) ; EPIC-27 active, E27-S1 draft behind the testers ; EPIC-22 and EPIC-12 wait on the engine freeze to 24 Nov ; EPIC-24, EPIC-10, EPIC-15, EPIC-17, EPIC-18, EPIC-20, EPIC-21, EPIC-25 unchanged since 16 Nov ; EPIC-6 and EPIC-9 wait on his mark
-Result: production zenod-mt 9deb4548; public counts: 1 application, 1 sign-up, 0 WhatsApp replies, 0 feedback, 0 paying; everything Zenod builds for a tester is live, recruiting (zenod-social) is the gap
-Waiting on: testers recruited by zenod-social ; Jordi: his marks on EPIC-6 and EPIC-9 and his other open reviews (E0-S1, E0-S2, W4, D1)
+Last attempted: 2026-11-18T23:10Z DM run_30e2df7d roll-up: EPIC-25 zenod.dev in Jordi's words, iteration 2 approved by him 18 Nov (Sara's week, raw and derived file, less text) and new memories open cleanly in Obsidian (E25-S4) ; EPIC-14 five memory personas approved and live (S47 to S49), the patterns helper approved (S41), one card a day and no repeats live (S50, proof 19 Nov) ; EPIC-12 the phone app opens on Find a memory (S40, his review snoozed to 21 Nov) ; EPIC-7 per-post sign-up counts live, our only tester unreachable on WhatsApp, drafts E7-S13 and E7-S14 wait on Jordi ; EPIC-20 Phylax nightly load fix live (A4, measured 19 Nov) ; EPIC-24 Zenod timers lighter (M20), search speed recheck waits on VPS1 load ; EPIC-26, EPIC-27, EPIC-22 and the rest unchanged
+Result: production zenod-mt ed5f2fb4; public counts: 1 application, 1 sign-up, 0 WhatsApp replies, 0 feedback, 0 paying; everything Zenod builds for a tester is live and approved, recruiting (zenod-social) is the gap
+Waiting on: testers recruited by zenod-social ; Jordi: S40 (snoozed to 21 Nov), drafts E7-S13 and E7-S14, his marks on EPIC-6 and EPIC-9 ; VPS1 load (infra-vps) for the M7 search recheck
 Monitoring: S49 closed live 6073ad4b (folded into S47); two zenod-social notes closed, product deck told Make it easier is live. Waiting: Jordi reviews (E25-S3, S47, S41);… · next check 2026-11-19T06:30:00.000Z
-Next action: E7-S11 ships per-post sign-up counts ; S41 check 2026-11-18 02:30Z ; E26-S3 watches the next tester end to end
-Verified at: 2026-11-17T22:35Z (production 9deb4548 via /api/health and /api/public/counts; child Current States and runs read)
+Next action: 19 Nov 06:30Z: S50 proof and A4 night load, then the M7 search recheck ; E26-S3 watches the next tester end to end
+Verified at: 2026-11-18T23:10Z (production ed5f2fb4 via /api/health and /api/public/counts; child Current States and runs read)
 
 ## Spine Map
 
