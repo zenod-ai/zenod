@@ -201,6 +201,23 @@ export class PersonaStore {
     return true;
   }
 
+  /**
+   * EPIC-14 S48 (Jordi's E14-A12 yes, 18 Nov): Remind me takes in People and follow-ups. A tester's
+   * account (no helper use before `ownerBeforeIso`) that has Remind me on (any of `withAny` switched
+   * on) and never touched `personaId` gets it switched on, once, with `cadence`. The owner's account,
+   * a tester with Remind me off, and anyone who switched `personaId` themselves are left as they are.
+   * Returns true when it wrote the switch.
+   */
+  joinIfGroupOn(personaId: string, withAny: readonly string[], ownerBeforeIso: string, cadence?: object): boolean {
+    if (this.db.prepare(`SELECT 1 FROM persona_settings WHERE persona_id=?`).get(personaId)) return false;
+    if (!withAny.some((id) => this.enabled(id) === true)) return false;
+    if (this.db.prepare(`SELECT 1 FROM persona_runs WHERE started_at < ? LIMIT 1`).get(ownerBeforeIso)) return false;
+    if (this.db.prepare(`SELECT 1 FROM persona_settings WHERE updated_at < ? LIMIT 1`).get(ownerBeforeIso)) return false;
+    this.setEnabled(personaId, true);
+    if (cadence) this.setCadence(personaId, cadence, true);
+    return true;
+  }
+
   /** `defaultEnabled` fills a new row when only the cadence is set, so setting it never switches one on. */
   setEnabled(personaId: string, enabled: boolean): void {
     this.db
@@ -311,6 +328,8 @@ export const WEEKLY_RECAP_OFF_SINCE = "2026-11-11T00:00:00.000Z";
 export const TESTER_DEFAULT_HELPERS: ReadonlyArray<{ personaId: string; cadence?: object }> = [
   { personaId: "weekly-recap" },
   { personaId: "open-loops", cadence: { every: "days", days: 3 } },
+  // EPIC-14 S48: People and follow-ups is part of Remind me, on every 3 days like Open loops.
+  { personaId: "people-follow-ups", cadence: { every: "days", days: 3 } },
 ];
 
 /** The tenant's persona store, opened once per data directory (like inboxFor). */
@@ -328,6 +347,8 @@ export function personasFor(runtime: { readonly dataDir: string }): PersonaStore
     store.keepOnIfUsedBefore("patterns-and-ideas", WEEKLY_RECAP_OFF_SINCE);
     // EPIC-14 S44: an account whose helpers were never touched starts with the tester defaults.
     if (store.applyTesterDefaults(TESTER_DEFAULT_HELPERS)) console.log(`[persona] tester defaults on: ${TESTER_DEFAULT_HELPERS.map((d) => d.personaId).join(",")}`);
+    // EPIC-14 S48: a tester with Remind me on gets People and follow-ups with it (every 3 days), once.
+    if (store.joinIfGroupOn("people-follow-ups", ["open-loops", "weekly-recap"], WEEKLY_RECAP_OFF_SINCE, { every: "days", days: 3 })) console.log("[persona] remind me: people-follow-ups on");
     stores.set(runtime.dataDir, store);
   }
   return store;
