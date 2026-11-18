@@ -1,14 +1,14 @@
 {
   "row": "S41",
   "card": "docs/cards/S41.md",
-  "cardSha": "79e66ce028101822",
+  "cardSha": "1bc9101962c6d06f",
   "inputs": {
-    "card": "79e66ce028101822",
+    "card": "1bc9101962c6d06f",
     "page": "42dd7d1e34d954b2",
     "rules": "7dd845c8b4b0e115",
     "words": "4363d014a8c1513f"
   },
-  "checkedAt": "2026-11-18T02:37:21Z",
+  "checkedAt": "2026-11-18T02:37:47Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,7 +17,7 @@
       "key": "jr_89e6d2ce",
       "when": "earlier",
       "status": "met",
-      "how": "Evidence page shows 1 Claude call, claude-haiku-5-5, 5,338/296 tokens and cost of the Anthropic credit, answering the API allowance question."
+      "how": "Evidence page shows 1 Claude call, claude-haiku-5-5, 5,338/296 tokens and cost of the Anthropic credit."
     },
     {
       "said": "get the anthropic api key wired . it's already present - find it. I'm not adding more credit, fix anthropic route until it works",
@@ -25,32 +25,32 @@
       "key": "jr_58ec95b7",
       "when": "newest",
       "status": "met",
-      "how": "Card line says it ran on the Anthropic credit for under a tenth of a cent; evidence shows the run on production and helpers on Anthropic."
+      "how": "Card line says it ran on the Anthropic credit for under a tenth of a cent; evidence shows production run and health ok."
     },
     {
       "said": "Can you hire a therapist on your memory?",
       "where": "2026-11-10",
       "status": "elsewhere",
-      "how": "His therapist question is about the helper's concept, not this card's run; the card's source cites his 10 November note."
+      "how": "His therapist question concerns the helper's concept, not this card's run; the card's source cites his 10 November note."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 px the first screen has a clean punchline, but the top tiles crowd and the Pattern tile clips; the 1280 px page is clean and consistent with one ink and accent."
+    "summary": "The 390 px first screen opens with the punchline box and the four status tiles; the page has no sideways scroll, and the 1280 px layout is clean with a consistent single ink and accent."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the Patterns and ideas helper is useful enough to keep on, with the team recommending yes.",
+    "asked": "Decide whether this card is useful enough to keep the helper on, with the team recommending yes.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "42dd7d1e34d954b2",
-    "walkedAt": "2026-11-18T02:37:21Z",
+    "walkedAt": "2026-11-18T02:37:47Z",
     "steps": [
       {
         "n": 1,
