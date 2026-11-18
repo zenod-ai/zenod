@@ -158,3 +158,63 @@
   .mv-books { height: 6.5rem; }
   .mv-literals li { font-size: 0.85rem; }
 }
+
+/* E25-S3 it2: arrows between the parts of a stage, across on wide screens, down on phones. */
+.mv-arrows, .mv-rd-mid { display: grid; gap: 2.2rem; align-content: center; }
+.mv-arrow { position: relative; display: block; height: 2px; min-width: 2.2rem; background: var(--pp-ink); margin: 0.9rem 0.1rem; }
+.mv-arrow::after { content: ""; position: absolute; right: -2px; top: -5px; border-left: 10px solid var(--pp-ink); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+.mv-arrow-back { background: var(--pp-accent); }
+.mv-arrow-back::after { right: auto; left: -2px; border-left: 0; border-right: 10px solid var(--pp-accent); }
+.mv-arrow small { position: absolute; left: 50%; bottom: 0.45rem; transform: translateX(-50%); font: 500 0.72rem var(--pp-sans); color: var(--pp-muted); white-space: nowrap; }
+.mv-arrow-back small { bottom: auto; top: 0.45rem; color: var(--pp-accent); }
+.pp .scene.js .mv-arrow.st:not(.go) { transform: scaleX(0); transform-origin: left; }
+.pp .scene.js .mv-arrow-back.st:not(.go) { transform-origin: right; }
+.pp .scene.js .mv-arrow.st { transition: transform .6s ease, opacity .4s; }
+.mv-lib { grid-template-columns: minmax(0, 1fr) 3rem minmax(0, 1.1fr) 3rem minmax(0, 1fr); gap: 0.6rem; }
+
+/* 5. Raw and organized: the raw file stays, the organized one is made again. */
+.mv-rd { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem minmax(0, 1fr); gap: 0.8rem; align-items: center; }
+.mv-rd-raw, .mv-rd-der { background: var(--pp-bg); border-radius: 6px; padding: 1rem; }
+.mv-rd-raw { border: 1.5px solid var(--pp-ink); }
+.pp .mv-rd-k { font: 600 0.75rem var(--pp-sans); text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-muted); margin-bottom: 0.5rem; }
+.pp .mv-rd-words { font: 400 1rem/1.4 var(--pp-serif); border-left: 2px solid var(--line); padding-left: 0.7rem; margin: 0 0 0.6rem; }
+.mv-rd-out { display: grid; }
+.mv-rd-out > * { grid-area: 1 / 1; }
+.mv-rd-der { border: 1px dashed var(--pp-ink); }
+.mv-rd-v2 { border: 1.5px solid var(--pp-accent); }
+.pp .mv-rd-page { font: 500 0.95rem var(--pp-sans); padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; background: var(--pp-stage); border-radius: 3px; }
+.mv-rd-v2 .mv-rd-page { background: #dfeee4; }
+.pp .scene.q .mv-rd-der:not(.mv-rd-v2) { opacity: 0; }
+.pp .scene:not(.js) .mv-rd-der:not(.mv-rd-v2) { display: none; }
+
+/* 6. Yours: voice note, Zenod, then your Drive or your GitHub. */
+.mv-yours { display: grid; grid-template-columns: auto minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr) minmax(0, 1.6fr); align-items: center; gap: 0.6rem; }
+.mv-yours-in { display: inline-flex; align-items: center; gap: 0.45rem; }
+.mv-yours-z { display: grid; justify-items: center; gap: 0.3rem; }
+.mv-yours-z b { font: 500 1.15rem var(--pp-serif); }
+.mv-yours-split { display: grid; gap: 4.5rem; }
+.mv-yours-split .mv-arrow:first-child { transform: rotate(-18deg); }
+.mv-yours-split .mv-arrow:last-child { transform: rotate(18deg); }
+.pp .scene.js .mv-yours-split .mv-arrow.st:not(.go) { opacity: 0; }
+.mv-yours-homes { display: grid; gap: 0.5rem; }
+.pp .mv-yours-home { display: grid; grid-template-columns: auto 1fr; column-gap: 0.6rem; align-items: center; background: var(--pp-bg); border: 1.5px solid var(--pp-ink); border-radius: 6px; padding: 0.75rem 0.9rem; }
+.mv-yours-home b { font: 500 1.05rem var(--pp-serif); }
+.mv-yours-home small { grid-column: 2; font: 400 0.8rem var(--pp-sans); color: var(--pp-muted); }
+.pp .mv-yours-or { text-align: center; font: 500 0.85rem var(--pp-sans); color: var(--pp-muted); }
+.mv-helpers .mv-out { align-self: center; }
+
+@media (max-width: 640px) {
+  .mv-lib, .mv-rd, .mv-yours { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
+  .mv-arrows, .mv-rd-mid, .mv-yours-split { grid-template-columns: repeat(2, auto); justify-content: center; gap: 3rem; }
+  .mv-arrow { width: 2px; height: 2.2rem; min-width: 0; margin: 0.2rem auto; }
+  .mv-arrow::after { right: -5px; top: auto; bottom: -2px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid var(--pp-ink); border-bottom: 0; }
+  .mv-arrow-back::after { left: -5px; bottom: auto; top: -2px; border-top: 0; border-bottom: 10px solid var(--pp-accent); border-right: 6px solid transparent; }
+  .mv-arrow small { left: 0.6rem; bottom: 50%; transform: translateY(50%); }
+  .mv-arrow-back small { top: auto; }
+  .pp .scene.js .mv-arrow.st:not(.go) { transform: scaleY(0); transform-origin: top; }
+  .pp .scene.js .mv-arrow-back.st:not(.go) { transform-origin: bottom; }
+  .mv-yours > .mv-arrow { margin: 0.2rem auto; }
+  .mv-yours-split .mv-arrow:first-child, .mv-yours-split .mv-arrow:last-child { transform: none; }
+  .mv-yours-in, .mv-yours-z { justify-self: center; }
+  .mv-rd-mid { gap: 7.5rem; }
+}

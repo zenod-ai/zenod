@@ -12,11 +12,8 @@
 // which signs them in and opens Stripe Checkout with the code already applied.
 import * as React from "react";
 
-import log from "@/assets/shots/log.webp";
-import logPhone from "@/assets/shots/log-phone.webp";
-import graphLive from "@/assets/shots/graph-live.webp";
-import graphLivePhone from "@/assets/shots/graph-live-phone.webp";
 import { WhatsappScene } from "@/components/paper-landing";
+import { CloudStage, KeptStage } from "@/components/five-moves";
 import { countSignup, currentVisitSource } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
 import {
@@ -293,17 +290,8 @@ function Promises() {
             </p>
           </div>
           <figure className="pp-promise-fig">
-            <picture className="pp-stage">
-              <source media="(max-width: 560px)" srcSet={logPhone} width={760} height={1968} />
-              <img
-                src={log}
-                width={1840}
-                height={1518}
-                loading="lazy"
-                alt="A day’s log file in a GitHub repository: dated entries, each with its source and the words quoted unchanged"
-              />
-            </picture>
-            <figcaption>The day’s log in your own GitHub repository.</figcaption>
+            <KeptStage />
+            <figcaption>The day’s log in your own Google Drive or GitHub, with demo content.</figcaption>
           </figure>
         </li>
         <li className="pp-promise">
@@ -321,17 +309,8 @@ function Promises() {
             </p>
           </div>
           <figure className="pp-promise-fig">
-            <picture className="pp-stage">
-              <source media="(max-width: 560px)" srcSet={graphLivePhone} width={716} height={1034} />
-              <img
-                src={graphLive}
-                width={1272}
-                height={1114}
-                loading="lazy"
-                alt="The Zenod graph view: one memory in the middle, its topic above, and lines to linked memories drawn strong, medium or weak"
-              />
-            </picture>
-            <figcaption>The graph view in the Zenod app, with demo memories.</figcaption>
+            <CloudStage />
+            <figcaption>How Zenod links what you said, with demo content.</figcaption>
           </figure>
         </li>
       </ol>
