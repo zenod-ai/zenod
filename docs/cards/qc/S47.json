@@ -1,40 +1,40 @@
 {
   "row": "S47",
   "card": "docs/cards/S47.md",
-  "cardSha": "3328878429e35967",
+  "cardSha": "5a5f33caf9fef66e",
   "inputs": {
-    "card": "3328878429e35967",
+    "card": "5a5f33caf9fef66e",
     "page": "cf49b34bf8e813c5",
     "rules": "7dd845c8b4b0e115",
     "words": "e48f40f49658ebad"
   },
-  "checkedAt": "2026-11-18T08:34:34Z",
+  "checkedAt": "2026-11-18T08:34:59Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "personas that are kind of dispatched on your memory",
       "where": "the card's source",
       "status": "met",
-      "how": "Screens show five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) plus a quiet Keep my memory tidy switch, with helpers underneath; the phrase 'personas dispatched on your memory' is reflected in the regroup."
+      "how": "Screens show five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) plus a quiet Keep my memory tidy switch."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The live Helpers screen renders at 390 and 1280 px with five personas, a tidy switch and a coming-soon item, no sideways overflow; the page reads cleanly."
+    "summary": "Both widths show the Helpers screen and evidence page rendered without sideways overflow; the phone and laptop captures are legible."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the five personas read clearly on the Helpers screen, and he recommends yes.",
+    "asked": "x",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "cf49b34bf8e813c5",
-    "walkedAt": "2026-11-18T08:34:34Z",
+    "walkedAt": "2026-11-18T08:34:59Z",
     "steps": [
       {
         "n": 1,
