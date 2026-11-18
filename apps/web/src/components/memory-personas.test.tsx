@@ -70,10 +70,9 @@ describe("MemoryPersonas", () => {
   it("switches a persona off", async () => {
     const calls = mockFetch((_url, init) => (init?.method === "POST" ? list({ ...RECAP, enabled: false, nextWakeAt: null }) : list(RECAP)))
     render(<MemoryPersonas />)
-    const toggle = await screen.findByRole("switch")
-    expect(toggle.getAttribute("aria-checked")).toBe("true")
+    const toggle = await screen.findByRole("switch", { name: "Remind me on" })
     fireEvent.click(toggle)
-    await waitFor(() => expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe("false"))
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Remind me off" })).toBeTruthy())
     expect(calls.at(-1)).toMatchObject({ url: "/api/console/personas/weekly-recap", method: "POST", body: { enabled: false } })
   })
 
@@ -105,11 +104,13 @@ describe("MemoryPersonas catalog", () => {
     render(<MemoryPersonas />)
     expect(await screen.findByText("Open loops finder")).toBeTruthy()
     expect(screen.getByText("Finds things you said you would do.")).toBeTruthy()
-    expect(screen.getAllByRole("switch").map((s) => s.getAttribute("aria-checked"))).toEqual(["true", "false"])
+    expect(screen.getByRole("switch", { name: "Weekly recap on" })).toBeTruthy()
+    expect(screen.getByRole("switch", { name: "Open loops finder off" })).toBeTruthy()
     expect(screen.getAllByRole("button", { name: "Run now" })).toHaveLength(1)
     expect(screen.getByRole("list", { name: "Open loops finder's skills" }).textContent).toContain("Ask you a question")
     expect(screen.getByText("Off: it never runs until you switch it on.")).toBeTruthy()
-    expect(screen.getByText(/1 of 2 on/)).toBeTruthy()
+    expect(screen.getByText("1 of 2 helpers on")).toBeTruthy()
+    expect(screen.getByText(/1 of 4 on\./)).toBeTruthy()
   })
 
   it("switches one persona on and sets its cadence to every few days", async () => {
@@ -147,5 +148,61 @@ describe("MemoryPersonas catalog", () => {
     render(<MemoryPersonas />)
     expect(await screen.findByText("Open loops finder")).toBeTruthy()
     expect(screen.queryByRole("checkbox")).toBeNull()
+  })
+})
+
+// EPIC-14 S47 (Jordi's E14-A12 yes): five personas and one tidy switch over the nine helpers.
+const helper = (id: string, name: string, enabled: boolean): Persona => ({ ...RECAP, id, name, enabled, nextWakeAt: null })
+const NINE = (on: (id: string) => boolean) =>
+  [
+    ["weekly-recap", "Weekly recap"], ["open-loops", "Open loops finder"], ["people-follow-ups", "People and follow-ups"],
+    ["topic-gardener", "Topic gardener"], ["ideas-digest", "Ideas digest"], ["something-to-try", "Something to try"],
+    ["patterns-and-ideas", "Patterns and ideas"], ["memory-health", "Health of your memory"], ["clarifier", "Clarifier"],
+  ].map(([id, name]) => helper(id!, name!, on(id!)))
+const nine = (on: (id: string) => boolean): PersonaList => ({ personas: NINE(on), budget: { spentUsd: 0, capUsd: 3 }, skills: SKILLS })
+
+describe("MemoryPersonas: five personas", () => {
+  it("shows the five personas and the tidy switch, every helper of an all-on account still on", async () => {
+    mockFetch(() => nine(() => true))
+    render(<MemoryPersonas />)
+    for (const name of ["Remind me", "Your ideas", "New possibilities", "Reflect", "Keep my memory tidy"])
+      expect(await screen.findByRole("switch", { name: `${name} on` })).toBeTruthy()
+    expect(screen.queryByRole("switch", { name: /Make it easier/ })).toBeNull()
+    expect(screen.getByTestId("persona-make-it-easier").textContent).toContain("Coming soon")
+    expect(screen.getByText(/4 of 4 on\./)).toBeTruthy()
+    // the nine helpers are all listed underneath, plus the quick index
+    expect(screen.getAllByRole("switch", { name: / on$/ })).toHaveLength(5 + 9)
+    expect(screen.getByText("Quick index")).toBeTruthy()
+    expect(screen.queryByRole("list", { name: "Other helpers" })).toBeNull()
+  })
+
+  it("a tester with Weekly recap and Open loops on sees only Remind me on", async () => {
+    mockFetch(() => nine((id) => id === "weekly-recap" || id === "open-loops"))
+    render(<MemoryPersonas />)
+    expect(await screen.findByRole("switch", { name: "Remind me on" })).toBeTruthy()
+    for (const name of ["Your ideas", "New possibilities", "Reflect", "Keep my memory tidy"])
+      expect(screen.getByRole("switch", { name: `${name} off` })).toBeTruthy()
+    expect(screen.getByRole("switch", { name: "People and follow-ups off" })).toBeTruthy()
+    expect(screen.queryByText(/helpers on$/)).toBeNull()
+    expect(screen.getByText(/1 of 4 on\./)).toBeTruthy()
+  })
+
+  it("one switch turns every helper of a persona on together", async () => {
+    let state = nine(() => false)
+    const calls = mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        const id = url.split("/").at(-1)!
+        const body = JSON.parse(String(init.body)) as { enabled: boolean }
+        state = { ...state, personas: state.personas.map((p) => (p.id === id ? { ...p, enabled: body.enabled } : p)) }
+      }
+      return state
+    })
+    render(<MemoryPersonas />)
+    fireEvent.click(await screen.findByRole("switch", { name: "Keep my memory tidy off" }))
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Keep my memory tidy on" })).toBeTruthy())
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.url)).toEqual([
+      "/api/console/personas/clarifier", "/api/console/personas/topic-gardener", "/api/console/personas/memory-health",
+    ])
+    expect(screen.getByRole("switch", { name: "Remind me off" })).toBeTruthy()
   })
 })

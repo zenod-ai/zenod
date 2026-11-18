@@ -39,3 +39,32 @@
   font-weight: 500;
   letter-spacing: 0.02em;
 }
+
+/* EPIC-14 S47: five personas and one quiet tidy switch; the helpers inside fold underneath. Rules,
+   not boxes; the switch is the one accent. */
+.zg-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--zp-ink); }
+.zg-item { display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem 0; border-bottom: 1px solid var(--zp-line); }
+.zg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.zg-words { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.zg-name { font: 400 1.32rem / 1.3 var(--zp-serif); margin: 0; color: var(--zp-ink); }
+.zg-line { margin: 0; font-size: 0.96rem; line-height: 1.45; color: var(--zp-muted); max-width: 52ch; text-wrap: pretty; }
+.zg-part { margin: 0; font-size: 0.84rem; color: var(--zp-faint); font-variant-numeric: tabular-nums; }
+.zg-head .zr-switch { margin-top: 0.2rem; min-height: 2rem; }
+.zg-soon { flex: none; margin-top: 0.3rem; font-size: 0.84rem; color: var(--zp-faint); border: 1px dashed var(--zp-line); border-radius: 999px; padding: 0.15rem 0.7rem; }
+.zg-coming .zg-name { color: var(--zp-muted); }
+.zg-always { flex: none; font-size: 0.84rem; color: var(--zp-muted); }
+.zg-inside > summary { cursor: pointer; font-size: 0.88rem; color: var(--zp-muted); width: fit-content; padding: 0.35rem 0; list-style: none; }
+.zg-inside > summary::-webkit-details-marker { display: none; }
+.zg-inside > summary::before { content: "+ "; color: var(--zp-faint); }
+.zg-inside[open] > summary::before { content: "− "; }
+.zg-inside[open] > summary { margin-bottom: 0.4rem; }
+.zg-inside .zi-list { border-top-color: var(--zp-line); margin-left: 0.9rem; }
+.zg-inside .zi-what { font-size: 1.08rem; }
+.zg-note { margin: 0 0 0.5rem 0.9rem; }
+.zg-tidy { margin-top: 1.6rem; border-top-color: var(--zp-line); }
+.zg-quiet .zg-name { font: 500 1rem / 1.4 var(--zp-sans); }
+.zg-quiet .zg-line { font-size: 0.9rem; color: var(--zp-faint); }
+@media (max-width: 640px) {
+  .zg-name { font-size: 1.2rem; }
+  .zg-inside .zi-list, .zg-note { margin-left: 0; }
+}
