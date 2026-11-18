@@ -1,41 +1,42 @@
 {
   "row": "S47",
   "card": "docs/cards/S47.md",
-  "cardSha": "e5bd51d104631124",
+  "cardSha": "027d2cca35f979cc",
   "inputs": {
-    "card": "e5bd51d104631124",
+    "card": "027d2cca35f979cc",
     "page": "cf49b34bf8e813c5",
     "rules": "7dd845c8b4b0e115",
     "words": "e48f40f49658ebad"
   },
-  "checkedAt": "2026-11-18T09:29:58Z",
+  "checkedAt": "2026-11-18T09:30:37Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "personas that are kind of dispatched on your memory",
       "where": "the card's source",
       "status": "met",
-      "how": "Evidence page shows five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) plus a quiet Keep my memory tidy switch on the Helpers screen."
+      "how": "Evidence page shows five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) with one switch each, plus a quiet Keep my memory tidy switch."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the Helpers screen with five persona switches and one tidy switch, a persona table, and the opened Remind me helpers; no feedback block or sideways scroll is visible."
+    "summary": "At 390 and 1280 px the live Helpers screen shows five personas with one switch each, the tidy switch, and Make it easier as coming soon; the page loads with no sideways overflow and the punchline box comes first."
   },
-  "pass": true,
-  "held": [],
+  "pass": false,
+  "held": [
+    "dead end: step 3, the link 'Open your own Helpers screen' on http://vps3.taild81fbb.ts.net:8921/e14-s47/ never arrives (https://cloud.zenod.dev/app)"
+  ],
   "reader": {
-    "asked": "He must decide whether the five personas read clearly on his Helpers screen, answering yes or no.",
-    "ambiguous": "",
-    "note": "\"personas that are kind of dispatched on your memory\" is not in the card's delivered lines; a stranger may not know what 'personas' means here, but the decision asks only whether the screen reads clearly, so the answer stays the same."
+    "asked": "He must decide whether the five personas read clearly on his Helpers screen, answering the recommended yes or no.",
+    "ambiguous": ""
   },
   "clicks": {
-    "dead": null,
+    "dead": "step 3, the link 'Open your own Helpers screen' on http://vps3.taild81fbb.ts.net:8921/e14-s47/ never arrives (https://cloud.zenod.dev/app)",
     "end": "a page to read",
     "page": "cf49b34bf8e813c5",
-    "walkedAt": "2026-11-18T09:29:58Z",
+    "walkedAt": "2026-11-18T09:30:37Z",
     "steps": [
       {
         "n": 1,
@@ -53,9 +54,10 @@
         "n": 3,
         "what": "open the link 'Open your own Helpers screen'",
         "url": "https://cloud.zenod.dev/app",
-        "result": "answered 200"
+        "result": "did not open (apiRequestContext.get: Timeout 15000ms exceeded.)"
       }
-    ]
+    ],
+    "shot": "S47-dead.webp"
   },
   "shots": [
     {
