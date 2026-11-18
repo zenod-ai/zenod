@@ -192,7 +192,7 @@ function PersonaCard({
       className={`zi-item zr-item${persona.enabled ? " zr-on" : " zi-quiet"}`}
     >
       <div className="zr-head">
-        <h3 className="zi-what">{persona.name}</h3>
+        <h4 className="zi-what">{persona.name}</h4>
         <button
           type="button"
           className="zr-switch"
@@ -289,6 +289,185 @@ function PersonaCard({
   )
 }
 
+// EPIC-14 S47 (Jordi's E14-A12 yes, 18 Nov): the nine helpers regrouped into five memory personas a
+// user switches on, plus one quiet "Keep my memory tidy" switch. One switch per persona turns its
+// helpers on or off together; the helpers stay listed underneath with their own controls. The
+// grouping lives here only: what is stored and what runs is per helper, exactly as before, so an
+// account's switches carry over unchanged (a persona reads on while any of its helpers is on).
+export type PersonaGroup = {
+  id: string
+  name: string
+  line: string
+  /** The helpers its switch turns on and off together. */
+  helpers: readonly string[]
+  /** Listed with it, each still on its own switch (People and follow-ups joins Remind me in S48). */
+  alongside?: readonly string[]
+  /** Not built yet: shown as coming, no switch (Make it easier, S49). */
+  coming?: boolean
+}
+
+export const PERSONA_GROUPS: readonly PersonaGroup[] = [
+  {
+    id: "remind-me",
+    name: "Remind me",
+    line: "Loose ends you said you would do, and your week in a few lines.",
+    helpers: ["open-loops", "weekly-recap"],
+    alongside: ["people-follow-ups"],
+  },
+  {
+    id: "your-ideas",
+    name: "Your ideas",
+    line: "The ideas you keep coming back to, gathered in one place.",
+    helpers: ["ideas-digest"],
+  },
+  {
+    id: "new-possibilities",
+    name: "New possibilities",
+    line: "One thing you have not thought of, from what you said.",
+    helpers: ["something-to-try"],
+  },
+  {
+    id: "reflect",
+    name: "Reflect",
+    line: "Gently names what keeps coming back, with one idea to try.",
+    helpers: ["patterns-and-ideas"],
+  },
+  {
+    id: "make-it-easier",
+    name: "Make it easier",
+    line: "One thing you do again and again that could take less time or money.",
+    helpers: [],
+    coming: true,
+  },
+]
+
+export const TIDY_GROUP: PersonaGroup = {
+  id: "tidy",
+  name: "Keep my memory tidy",
+  line: "Asks about unclear notes, keeps topics neat and checks your memory's health.",
+  helpers: ["clarifier", "topic-gardener", "memory-health"],
+}
+
+function GroupRow({
+  group,
+  personas,
+  others,
+  teamConnected,
+  building,
+  quiet,
+  onList,
+}: {
+  group: PersonaGroup
+  personas: Persona[]
+  others: Persona[]
+  teamConnected: boolean
+  building: boolean
+  quiet?: boolean
+  onList: (list: PersonaList) => void
+}) {
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const on = personas.filter((persona) => persona.enabled).length
+  const enabled = on > 0
+
+  async function toggle() {
+    setBusy(true)
+    setError(null)
+    try {
+      let last: PersonaList | null = null
+      for (const persona of personas) {
+        if (persona.enabled !== !enabled)
+          last = await setPersonaEnabled(persona.id, !enabled)
+      }
+      if (last) onList(last)
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const listed = [...personas, ...others]
+  return (
+    <li
+      className={`zg-item${quiet ? " zg-quiet" : ""}${enabled ? " zg-on" : ""}${group.coming ? " zg-coming" : ""}`}
+      data-testid={`persona-${group.id}`}
+    >
+      <div className="zg-head">
+        <div className="zg-words">
+          <h3 className="zg-name">{group.name}</h3>
+          <p className="zg-line">{group.line}</p>
+          {!group.coming && enabled && on < personas.length ? (
+            <p className="zg-part">
+              {on} of {personas.length} helpers on
+            </p>
+          ) : null}
+        </div>
+        {group.coming ? (
+          <span className="zg-soon">Coming soon</span>
+        ) : (
+          <button
+            type="button"
+            className="zr-switch"
+            role="switch"
+            aria-checked={enabled}
+            aria-label={`${group.name} ${enabled ? "on" : "off"}${building ? ", still building" : ""}`}
+            disabled={building || busy || personas.length === 0}
+            onClick={toggle}
+          >
+            <i aria-hidden="true" />
+            {enabled ? "On" : "Off"}
+          </button>
+        )}
+      </div>
+      {error ? (
+        <p className="zi-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {listed.length > 0 || group.id === TIDY_GROUP.id ? (
+        <details className="zg-inside">
+          <summary>
+            {group.id === TIDY_GROUP.id
+              ? `The helpers inside (${listed.length + 1})`
+              : `The helper${listed.length === 1 ? "" : "s"} inside (${listed.length})`}
+          </summary>
+          {others.length > 0 ? (
+            <p className="zp-hint zg-note">
+              {others.map((persona) => persona.name).join(", ")} keeps its own
+              switch for now; it joins {group.name} soon.
+            </p>
+          ) : null}
+          <ul className="zi-list" aria-label={`${group.name}: its helpers`}>
+            {listed.map((persona) => (
+              <PersonaCard
+                key={persona.id}
+                persona={persona}
+                teamConnected={teamConnected}
+                building={building}
+                onList={onList}
+              />
+            ))}
+            {group.id === TIDY_GROUP.id ? (
+              <li className="zi-item zr-item zr-on">
+                <div className="zr-head">
+                  <h4 className="zi-what">Quick index</h4>
+                  <span className="zg-always">Always on</span>
+                </div>
+                <p className="zr-purpose">
+                  Learns the words you use for people, places and projects, so
+                  Zenod reads what you mean. It is part of how your notes are
+                  filed, so it has no switch.
+                </p>
+              </li>
+            ) : null}
+          </ul>
+        </details>
+      ) : null}
+    </li>
+  )
+}
+
 export function MemoryPersonas({ active = true }: { active?: boolean }) {
   const [state, setState] = React.useState<State>({ kind: "loading" })
 
@@ -313,6 +492,71 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
 
   const building = state.kind === "ready" && state.list.building === true
 
+  function rows(list: PersonaList) {
+    const byId = new Map(list.personas.map((persona) => [persona.id, persona]))
+    const pick = (ids: readonly string[] = []) =>
+      ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
+    const grouped = new Set(
+      [...PERSONA_GROUPS, TIDY_GROUP].flatMap((group) => [
+        ...group.helpers,
+        ...(group.alongside ?? []),
+      ])
+    )
+    // A helper no persona holds yet still shows, with its own switch, so nothing is ever hidden.
+    const loose = list.personas.filter((persona) => !grouped.has(persona.id))
+    const teamConnected = list.teamConnected === true
+    const personaOn = PERSONA_GROUPS.filter((group) =>
+      pick(group.helpers).some((persona) => persona.enabled)
+    ).length
+    const live = PERSONA_GROUPS.filter((group) => !group.coming).length
+    return (
+      <>
+        <ul className="zg-list" aria-label="Personas">
+          {PERSONA_GROUPS.map((group) => (
+            <GroupRow
+              key={group.id}
+              group={group}
+              personas={pick(group.helpers)}
+              others={pick(group.alongside)}
+              teamConnected={teamConnected}
+              building={building}
+              onList={onList}
+            />
+          ))}
+        </ul>
+        <ul className="zg-list zg-tidy" aria-label="Keep my memory tidy">
+          <GroupRow
+            group={TIDY_GROUP}
+            personas={pick(TIDY_GROUP.helpers)}
+            others={[]}
+            teamConnected={teamConnected}
+            building={building}
+            quiet
+            onList={onList}
+          />
+        </ul>
+        {loose.length > 0 ? (
+          <ul className="zi-list" aria-label="Other helpers">
+            {loose.map((persona) => (
+              <PersonaCard
+                key={persona.id}
+                persona={persona}
+                teamConnected={teamConnected}
+                building={building}
+                onList={onList}
+              />
+            ))}
+          </ul>
+        ) : null}
+        <p className="zp-hint zi-foot">
+          {personaOn} of {live} on. Together they spend at most{" "}
+          {usd(list.budget.capUsd)} a month of your AI allowance. This month:{" "}
+          {usd(list.budget.spentUsd)}.
+        </p>
+      </>
+    )
+  }
+
   return (
     <section className="zp zi" aria-labelledby="memory-personas-heading">
       <div className="zp-head">
@@ -322,7 +566,7 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
             Still building
           </p>
         ) : null}
-        <h2 id="memory-personas-heading">Helpers that read your memory.</h2>
+        <h2 id="memory-personas-heading">Your helpers</h2>
         {building ? (
           <p className="zp-lede" data-testid="helpers-building-note">
             Helpers are switched off while we finish building them. Your
@@ -330,17 +574,10 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
           </p>
         ) : null}
         <p className="zp-lede zr-what" data-testid="helpers-what">
-          A helper is a harness that wakes up bound to a persona, reads your
-          memory and puts cards in your inbox.
+          Switch one on and it reads your memory and leaves cards in your
+          inbox. Nothing changes without your yes, and none of them ever
+          messages anyone.
         </p>
-        {building ? null : (
-          <p className="zp-lede">
-            Switch on the ones you want. Each wakes on its own schedule inside
-            your Zenod account, uses only the skills listed, writes only into
-            its own folder and leaves what it finds in your inbox. None of
-            them ever messages anyone.
-          </p>
-        )}
       </div>
       <div className="zp-stage">
         <div className="zp-screen zi-screen">
@@ -351,25 +588,7 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
               Your helpers could not be opened: {state.message}
             </p>
           ) : (
-            <>
-              <ul className="zi-list" aria-label="Helpers">
-                {state.list.personas.map((persona) => (
-                  <PersonaCard
-                    key={persona.id}
-                    persona={persona}
-                    teamConnected={state.list.teamConnected === true}
-                    building={building}
-                    onList={onList}
-                  />
-                ))}
-              </ul>
-              <p className="zp-hint zi-foot">
-                {state.list.personas.filter((p) => p.enabled).length} of{" "}
-                {state.list.personas.length} on. All helpers together spend
-                at most {usd(state.list.budget.capUsd)} a month of your AI
-                allowance. This month: {usd(state.list.budget.spentUsd)}.
-              </p>
-            </>
+            rows(state.list)
           )}
         </div>
       </div>
