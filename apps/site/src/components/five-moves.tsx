@@ -197,6 +197,32 @@ const HELPERS = [
   { name: "Topic gardener", does: "suggests one tidy-up of how your memory is filed." },
 ];
 
+// The six helpers drawn as a ring around your memory (E25-S3): the shape says
+// they all read the one memory; Weekly recap, lit, is the one at work below.
+const RING = HELPERS.map((helper, i) => {
+  const a = ((-90 + 60 * i) * Math.PI) / 180;
+  return { name: helper.name, x: 220 + 150 * Math.cos(a), y: 150 + 108 * Math.sin(a), w: helper.name.length * 9.2 + 26 };
+});
+
+function HelperRing() {
+  return (
+    <svg className="mv-ring" viewBox="0 0 440 300" aria-hidden="true">
+      {RING.map((n) => (
+        <line key={`l-${n.name}`} x1="220" y1="150" x2={n.x} y2={n.y} className="mv-ring-spoke" />
+      ))}
+      <circle cx="220" cy="150" r="56" className="mv-ring-core" />
+      <text x="220" y="145" className="mv-ring-core-t">Your</text>
+      <text x="220" y="168" className="mv-ring-core-t">memory</text>
+      {RING.map((n) => (
+        <g key={n.name} className={n.name === "Weekly recap" ? "mv-ring-n on" : "mv-ring-n"}>
+          <rect x={n.x - n.w / 2} y={n.y - 17} width={n.w} height="34" rx="17" />
+          <text x={n.x} y={n.y + 5.5}>{n.name}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 // 3. Helpers read the memory at night and add to it: the weekly recap writes a
 // new memory into its own folder, another helper leaves a suggestion.
 function HelpersStage() {
@@ -205,8 +231,9 @@ function HelpersStage() {
       className="mv-stage scene mv-helpers"
       data-len="11000"
       role="img"
-      aria-label="At night the Weekly recap helper reads the 23 memories you saved this week and writes a recap into its own folder, which becomes a new memory. The Health of your memory helper leaves a suggestion in your inbox: file 4 loose pages under Garden shed, with Do it and Not now."
+      aria-label="Six helpers sit around your memory: Open loops, Weekly recap, Something to try, Patterns and ideas, Ideas digest and Topic gardener. At night the Weekly recap helper reads the 23 memories you saved this week and writes a recap into its own folder, which becomes a new memory. The Health of your memory helper leaves a suggestion in your inbox: file 4 loose pages under Garden shed, with Do it and Not now."
     >
+      <HelperRing />
       <div className="mv-helper st" data-at="200">
         <p className="mv-helper-name">
           <span className="mv-moon" aria-hidden="true" /> Weekly recap
