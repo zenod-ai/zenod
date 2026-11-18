@@ -1,0 +1,118 @@
+{
+  "row": "E25-S3",
+  "card": "docs/cards/E25-S3.md",
+  "cardSha": "846292a98d77ee35",
+  "inputs": {
+    "card": "846292a98d77ee35",
+    "page": "973df67f03bcfd9c",
+    "rules": "7dd845c8b4b0e115",
+    "words": "a0aa04dc7d177402"
+  },
+  "checkedAt": "2026-11-18T07:16:09Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "this is a self-organizing digital memory, where you can use WhatsApp to just send voice notes and ... it all organizes, self-organizes into your digital memory. And then you can connect all your agents via MCP ... you could have like personas that are kind of dispatched on your memory to look for like things that you should be reminded of or maybe look for ideas or look for possibilities you haven't thought of or maybe more therapy stuff or more like optimization ... And we should have all the landing page, really make sure that we have it up to date with all the latest and coolest way to explain stuff.",
+      "where": "vn_101d2c67",
+      "status": "met",
+      "how": "Hero reads 'A digital memory that organizes itself'; WhatsApp voice notes and the log, cloud and helper sections are on the page."
+    },
+    {
+      "said": "a self-organizing digital memory ... connect all your agents via MCP ... personas",
+      "where": "vn_101d2c67",
+      "status": "met",
+      "how": "Hero says connect all your agents over MCP; section 5 lists Claude, ChatGPT, Cursor; section 3 shows helpers as personas."
+    }
+  ],
+  "visual": {
+    "pass": false,
+    "problems": [
+      "at 1280 px: Section 2 'From your words, a cloud of thoughts' is a cycle-like network of linked thoughts drawn as a node graph, which fits; however the helpers section (3) is a plain list of six helpers, not a shape, and the MCP section uses a hub diagram, so the list-of-helpers idea lacks a shape. (rule 2)"
+    ],
+    "breaches": [
+      {
+        "rule": 2,
+        "width": 1280,
+        "what": "Section 2 'From your words, a cloud of thoughts' is a cycle-like network of linked thoughts drawn as a node graph, which fits; however the helpers section (3) is a plain list of six helpers, not a shape, and the MCP section uses a hub diagram, so the list-of-helpers idea lacks a shape."
+      }
+    ],
+    "summary": "Desktop and phone screens show the live page with a clear digital memory hero, WhatsApp voice note demo, graph diagram and MCP hub; phone layout fits without sideways scroll, with the helper list the weakest shape."
+  },
+  "pass": false,
+  "held": [
+    "failed the visual check: at 1280 px: Section 2 'From your words, a cloud of thoughts' is a cycle-like network of linked thoughts drawn as a node graph, which fits; however the helpers section (3) is a plain list of six helpers, not a shape, and the MCP section uses a hub diagram, so the list-of-helpers idea lacks a shape. (rule 2)"
+  ],
+  "reader": {
+    "asked": "Decide whether the zenod.dev page now explains Zenod the way he does, by saying yes or no.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": null,
+    "page": "973df67f03bcfd9c",
+    "walkedAt": "2026-11-18T07:16:09Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "https://zenod.dev/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "press 'Get started'",
+        "url": "https://zenod.dev/#start",
+        "result": "leads to https://zenod.dev/#start"
+      },
+      {
+        "n": 3,
+        "what": "press 'Connect your AI tool'",
+        "url": "https://zenod.dev/connect",
+        "result": "leads to https://zenod.dev/connect"
+      },
+      {
+        "n": 4,
+        "what": "follow 'Connect your AI tool' to",
+        "url": "https://zenod.dev/connect",
+        "result": "opened"
+      },
+      {
+        "n": 5,
+        "what": "press 'Get started'",
+        "url": "https://zenod.dev/pricing",
+        "result": "leads to https://zenod.dev/pricing"
+      },
+      {
+        "n": 6,
+        "what": "follow 'Get started' to",
+        "url": "https://zenod.dev/pricing",
+        "result": "opened"
+      },
+      {
+        "n": 7,
+        "what": "press 'Get started'",
+        "url": "https://zenod.dev/pricing#start",
+        "result": "leads to https://zenod.dev/pricing#start"
+      },
+      {
+        "n": 8,
+        "what": "press 'View install guide'",
+        "url": "https://zenod.dev/pricing",
+        "result": "opens https://github.com/zenod-ai/zenod#readme"
+      }
+    ],
+    "unfinished": "https://zenod.dev/pricing"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "https://zenod.dev/",
+      "file": "E25-S3-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "https://zenod.dev/",
+      "file": "E25-S3-1280.webp"
+    }
+  ]
+}
