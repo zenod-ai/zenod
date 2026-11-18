@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { MemoryChat } from "@/components/memory-chat"
-import { memoryPathFromHash, plainWikilinks, presentAnswer, withTimeZone } from "@/lib/memory-chat"
+import { FIRST_QUESTIONS, memoryPathFromHash, plainWikilinks, presentAnswer, withTimeZone } from "@/lib/memory-chat"
 
 // EPIC-12 E12-S1: the hosted app's chat with your memory; E12-S1b: the answer streams in and is
 // checked. EPIC-16 E16-B1: one Send button; Zenod decides to keep, answer or both and says which.
@@ -68,12 +68,33 @@ afterEach(() => {
 describe("MemoryChat one Send (E16-B1)", () => {
   it("has one box to talk to the librarian, one Send button and no Ask, Keep or Ask the desk (EPIC-22)", () => {
     render(<MemoryChat />)
-    expect(screen.getByRole("textbox", { name: "Talk to your librarian" }).getAttribute("placeholder")).toBe("Talk to your librarian")
+    expect(screen.getByRole("textbox", { name: "Talk to your librarian" }).getAttribute("placeholder")).toBe("Find a memory, or tell me one")
     expect(screen.getByRole("button", { name: "Send" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Ask" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Keep" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Ask the desk" })).toBeNull()
     expect(screen.getByText("Zenod picks the mode and says which. Tap the label to change it.")).toBeTruthy()
+  })
+
+  it("leads with finding a memory and puts the call button beside the microphone (E12-S40)", () => {
+    render(<MemoryChat />)
+    expect(screen.getByRole("heading", { name: "Find a memory" })).toBeTruthy()
+    for (const question of FIRST_QUESTIONS) expect(screen.getByRole("button", { name: question })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "WhatsApp voice note" }).getAttribute("href")).toBe("#phylax-channels")
+    const compose = screen.getByRole("textbox", { name: "Talk to your librarian" }).closest("form")!
+    const controls = Array.from(compose.children).map((el) => el.getAttribute("data-testid") ?? el.tagName.toLowerCase())
+    const call = controls.indexOf("memory-call-button")
+    expect(call).toBe(controls.indexOf("textarea") - 1)
+    expect(controls[controls.length - 1]).toBe("button")
+  })
+
+  it("asks a first-screen question with one tap (E12-S40)", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    fireEvent.click(screen.getByRole("button", { name: FIRST_QUESTIONS[0] }))
+    expect((await screen.findAllByText(FIRST_QUESTIONS[0])).length).toBeGreaterThan(0)
+    await waitFor(() => expect(JSON.stringify(live.calls)).toContain(FIRST_QUESTIONS[0]))
+    expect(screen.queryByTestId("memory-first")).toBeNull()
   })
 
   it("answers a question from memory, says nothing was saved, and offers no Keep", async () => {

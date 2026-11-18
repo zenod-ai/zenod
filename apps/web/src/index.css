@@ -214,6 +214,15 @@
 .zp-stage { background: var(--zp-stage); border-radius: 6px; padding: clamp(0.6rem, 1.6vw, 1.25rem); }
 .zp-screen { background: var(--zp-bg); border-radius: 4px; padding: clamp(0.9rem, 2vw, 1.4rem); display: flex; flex-direction: column; gap: 0.75rem; min-height: min(68svh, 640px); }
 .zp-log { display: flex; flex-direction: column; gap: 0.85rem; flex: 1; overflow-y: auto; max-height: 60svh; padding-right: 0.25rem; }
+/* E12-S40: the first screen leads with finding a memory. */
+.zp-first { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 0.6rem; text-align: center; padding: 1rem 0; }
+.zp-firsthead { margin: 0; font: 400 1.5rem / 1.2 var(--zp-serif); color: var(--zp-ink); }
+.zp-firstlead { margin: 0; color: var(--zp-muted); font-size: 0.98rem; }
+.zp-firsttries { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.25rem; }
+.zp .zp-try { background: transparent; color: var(--zp-ink); border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.5rem 0.95rem; font: 400 0.92rem var(--zp-sans); min-height: 2.75rem; cursor: pointer; }
+.zp .zp-try:hover, .zp .zp-try:focus-visible { border-color: var(--zp-accent); }
+.zp-firstadd { margin: 0.6rem 0 0; max-width: 30rem; color: var(--zp-faint); font-size: 0.88rem; line-height: 1.5; }
+.zp-firstadd a { color: var(--zp-accent); text-decoration: underline; text-underline-offset: 2px; }
 .zp-empty { color: var(--zp-faint); font: 400 1.05rem / 1.5 var(--zp-serif); margin: auto 0; text-align: center; }
 .zp-turn { display: flex; flex-direction: column; gap: 0.55rem; }
 .zp-msg { max-width: 82%; padding: 0.7rem 0.95rem; border-radius: 12px; line-height: 1.5; font-size: 0.98rem; animation: zp-in 450ms ease both; }
@@ -274,8 +283,8 @@
   .zp-screen { min-height: 52svh; }
   .zp-used li { grid-template-columns: minmax(0, 1fr) 4rem 2.6rem; }
   .zp-compose { border-radius: 14px; flex-wrap: wrap; padding: 0.5rem 0.6rem; }
-  .zp-compose textarea { flex-basis: 100%; }
-  .zp-compose .zp-send { margin-left: auto; }
+  .zp-compose textarea { flex-basis: 100%; order: -1; }
+  .zp-compose .zp-send { margin-left: auto; min-height: 2.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .zp-msg, .zp-used, .zp-bar i, .zp-typing i { animation: none; }
@@ -450,7 +459,8 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
   .zp-callmark-live { animation: none; }
 }
 @media (max-width: 640px) {
-  .zp-compose .zp-mic { margin-left: auto; }
+  /* E12-S40: microphone and call sit together at the left, Send at the right; 44 px to touch. */
+  .zp-compose .zp-mic { width: 2.75rem; height: 2.75rem; }
   .zp-recording { flex-wrap: nowrap; gap: 0.45rem; }
   .zp-recstate { display: none; }
   .zp-reclevel { min-width: 1.5rem; }
