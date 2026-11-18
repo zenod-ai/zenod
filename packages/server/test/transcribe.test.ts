@@ -1,5 +1,5 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,8 @@ import {
   transcribeAudio,
   transcriptionFailureFromResponse,
   transcriptionFailureFromThrown,
+  WHISPER_NICE,
+  WHISPER_THREADS,
 } from "../src/transcribe.js";
 
 // Real OpenRouter 402 body from the incident log that motivated typed codes.
@@ -189,5 +191,14 @@ describe("transcribeAudio provider routing (cloud covers short audio without whi
     });
     expect(result.provider).toMatch(/^groq/);
     expect(result.provider).not.toMatch(/whisper\.cpp/);
+  });
+});
+
+describe("local whisper.cpp stays a background job (EPIC-20 A4)", () => {
+  it("uses half the CPUs at the lowest priority by default", () => {
+    if (process.env.ZENOD_WHISPER_THREADS === undefined) {
+      expect(Number(WHISPER_THREADS)).toBe(Math.max(1, Math.floor(availableParallelism() / 2)));
+    }
+    if (process.env.ZENOD_WHISPER_NICE === undefined) expect(WHISPER_NICE).toBe(19);
   });
 });

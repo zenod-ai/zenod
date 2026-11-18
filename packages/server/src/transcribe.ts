@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, setPriority, tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -41,7 +41,8 @@ import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
  *   ZENOD_WHISPER_MODEL    (default: large-v3-turbo)
  *   ZENOD_WHISPER_MODEL_DIR(default: /data/models)
  *   ZENOD_WHISPER_LANGUAGE (default: auto — detects the spoken language per file)
- *   ZENOD_WHISPER_THREADS  (default: 4)
+ *   ZENOD_WHISPER_THREADS  (default: half the CPUs, at least 1)
+ *   ZENOD_WHISPER_NICE     (default: 19 — lowest CPU priority; 0 disables)
  */
 
 /**
@@ -162,7 +163,13 @@ export function resolveWhisperModel(model: string | null | undefined = DEFAULT_W
 const WHISPER_BINARY = process.env.ZENOD_WHISPER_BINARY ?? "whisper-cli";
 const MODEL_DIR = process.env.ZENOD_WHISPER_MODEL_DIR ?? "/data/models";
 const LANGUAGE = process.env.ZENOD_WHISPER_LANGUAGE ?? "auto";
-const THREADS = process.env.ZENOD_WHISPER_THREADS ?? "4";
+// Local whisper.cpp is a CPU-bound batch job. With every core and normal
+// priority, one long voice note pinned all of VPS1's 4 cores for half an hour
+// (EPIC-20 A4, 2026-11-18). Half the cores at the lowest priority bounds that:
+// the note still finishes, and the gateway, the chat and the host come first.
+export const WHISPER_THREADS =
+  process.env.ZENOD_WHISPER_THREADS ?? String(Math.max(1, Math.floor(availableParallelism() / 2)));
+export const WHISPER_NICE = Math.min(19, Math.max(0, Number(process.env.ZENOD_WHISPER_NICE ?? 19) || 0));
 export const GROQ_STT_MODEL = process.env.ZENOD_GROQ_STT_MODEL ?? "whisper-large-v3-turbo";
 const GROQ_STT_URL = process.env.ZENOD_GROQ_BASE_URL
   ? `${process.env.ZENOD_GROQ_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`
@@ -311,13 +318,22 @@ async function downloadModel(model: string, dest: string): Promise<void> {
 function run(
   command: string,
   args: string[],
-  opts: { onStderrLine?: (line: string) => void; signal?: AbortSignal } = {},
+  opts: { onStderrLine?: (line: string) => void; signal?: AbortSignal; niceness?: number } = {},
 ): Promise<void> {
-  const { onStderrLine, signal } = opts;
+  const { onStderrLine, signal, niceness } = opts;
   return new Promise((resolve, reject) => {
     // The signal option makes Node kill the child (SIGTERM) on abort — that's
     // how a Cancel from the UI stops a long whisper run mid-file.
     const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"], ...(signal ? { signal } : {}) });
+    if (niceness && child.pid !== undefined) {
+      // Lowering a child's priority needs no privilege; a failure only means
+      // the job runs at normal priority, never that it fails.
+      try {
+        setPriority(child.pid, niceness);
+      } catch {
+        /* best effort */
+      }
+    }
     let stderr = "";
     let lineBuf = "";
     child.stderr.on("data", (chunk: Buffer) => {
@@ -1366,9 +1382,10 @@ async function runTranscription(
     const outBase = join(dir, "out");
     try {
       await writeFile(input, data);
-      await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal });
-      await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", THREADS, "-pp", "-otxt", "-of", outBase], {
+      await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal, niceness: WHISPER_NICE });
+      await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", WHISPER_THREADS, "-pp", "-otxt", "-of", outBase], {
         signal,
+        niceness: WHISPER_NICE,
         onStderrLine: onProgress
           ? (line) => {
               const pct = parseWhisperProgress(line);
