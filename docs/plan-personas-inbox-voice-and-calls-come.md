@@ -29,14 +29,14 @@ Goal sentence: A plan at one link for personas, an inbox and calling your memory
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-18T09:30Z S48 ticket worker (run_1da1afd6): Remind me takes in People and follow-ups, New possibilities every 3 days, live 6073ad4 ; 2026-11-18T08:40Z S47 ticket worker (run_45f856b5): Helpers screen shows five memory personas and a tidy switch, live 7cd94c3, card in review ; 2026-11-18T05:00Z S46 ticket worker (run_feacdd2f): five memory personas plan ready, ask E14-A12 prepared for the Delivery Manager ; 2026-11-18T02:40Z S41 ticket worker (run_ffed323d): Patterns and ideas posted its first card on Claude on 18 Nov 02:05Z ($0.00068), card in review ; 2026-11-17T20:10Z S44 ticket worker (run_9cdcc383): his S30 pick applied for new testers, live 9deb454 ; 2026-11-17T08:10Z S30 ticket worker (run_a97b64b1): the helper week on his memory judged; we recommend testers start with Weekly recap and Open loops on (Open loops every 3 days, no repeats), the other five off for testers and on for him; he tapped 5 times, all on 10 Nov, none after; card in review ; earlier (2026-11-12 roll-up): helpers, suggestion cards, quick index, clarifier and daily idea card live and approved; S41 runs on Claude on production since 12 Nov, its only run on 15 Nov 02:00Z found nothing to say
-Result: S44 live 9deb454 (19:59Z): new testers start with Weekly recap and Open loops (every 3 days) on, the rest off; the 13 Nov tester got the same, nothing sent; Jordi's accounts unchanged ; S30 approved 17 Nov (Recap and loops)
+Last attempted: 2026-11-18T21:15Z roll-up (DM run_b65011d7): S47 approved by Jordi 18 Nov, the Helpers screen shows five memory personas and one tidy switch ; S48 and S49 live and folded into S47 (Remind me covers people, New possibilities every 3 days, Make it easier built) ; S50 one card a day and no repeats live c97c5c61, proof read 19 Nov 06:30Z ; S41 approved by Jordi 18 Nov, the patterns helper stays on for him ; S46 done (fed E14-A12, approved) ; S44 done
+Result: production ed5f2fb4: five memory personas live; new testers start with Remind me on
 Evidence: [S46 proposal](http://vps3.taild81fbb.ts.net:8921/e14-s46/) · [S46 evidence](evidence/e14-s46-2026-11-18.md) · [S41 round 5](evidence/e14-s41-r5-2026-11-18.md) · [S44](evidence/e14-s44-2026-11-17.md) · [S30 verdict](http://vps3.taild81fbb.ts.net:8921/e14-s30/) · [S30 evidence](evidence/e14-s30-2026-11-17.md) · [S41 round 4](evidence/e14-s41-r4-2026-11-17.md) · [S42](evidence/e14-s42-2026-11-11.md) · [S36](evidence/e14-s36-2026-11-11.md)
-Waiting on: nobody (S41's card is in review)
+Waiting on: the date 2026-11-19 06:30Z for S50's proof on his helper runs
 Approved work: none
-Next action: post E14-A12 (S46's five memory personas plan, [proposal](http://vps3.taild81fbb.ts.net:8921/e14-s46/)) and close S46 done (fed E14-A12) ; S45 stays a draft until Jordi starts it (folded into the E14-A12 plan on a yes) ; S41 in review (its first card, 18 Nov)
+Next action: S50 reads his 19 Nov helper runs (one card at most, no repeat), then closes into S47
 Source revision: production 9deb454
-Verified at: 2026-11-17T20:05Z (S44: production 9deb454 roster log, health sha) ; 2026-11-17T08:10Z (S30 tally to 17 Nov 08:00Z, 694 log reads; page curl 200)
+Verified at: 2026-11-18T21:15Z (production ed5f2fb4; rows S41 to S50 read)
 
 ## Non-Goals
 
