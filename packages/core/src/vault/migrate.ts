@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CONFIG_PATH } from "./config.js";
 
@@ -39,7 +39,8 @@ const AREAS_INDEX = `# Areas Index
 Ongoing life domains without a finish line — vehicle, insurance, taxes, travel, health, housing, finance, family, legal/admin.
 `;
 
-const OKF_INDEX = `---
+/** The starter index written before 2026-11-18: its folder links show as unresolved in Obsidian. */
+export const LEGACY_OKF_INDEX = `---
 okf_version: "0.1"
 ---
 
@@ -59,11 +60,34 @@ This vault is a Zenod profile of Open Knowledge Format (OKF): markdown concept p
 - [_attachments](_attachments/) - write-once source artifacts.
 `;
 
+export const OKF_INDEX = `---
+okf_version: "0.1"
+---
+
+# Zenod Vault
+
+This vault is a Zenod profile of Open Knowledge Format (OKF): markdown concept pages with YAML frontmatter, plus Zenod's stricter evidence, citation, lint, and git-audit guarantees.
+
+## Concepts
+
+- [[Areas/Areas Index|Areas]] - ongoing life domains.
+- Projects live in \`Projects/\` - finite work and outcomes.
+- Notes live in \`Notes/\` - reusable knowledge.
+
+## Evidence
+
+- Receipts live in \`Log/\` - append-only evidence.
+- Source files live in \`_attachments/\` - write-once artifacts.
+`;
+
 /**
  * Schema v1 migration (docs/M0-SPEC.md § Concurrency & git contract):
  * adds .brain/config.yml, Areas/, and templates to an existing simple vault.
- * Idempotent and additive only — never touches existing files. Returns the
- * list of files it created (empty = vault already conformant).
+ * Idempotent and additive only — never touches existing files, with one
+ * exception: an index.md still byte-identical to LEGACY_OKF_INDEX (the
+ * untouched starter whose folder links Obsidian shows as unresolved) is
+ * rewritten to OKF_INDEX. Returns the list of files it created or rewrote
+ * (empty = vault already conformant).
  */
 export async function ensureSchemaV1(vaultPath: string): Promise<string[]> {
   const created: string[] = [];
@@ -78,7 +102,13 @@ export async function ensureSchemaV1(vaultPath: string): Promise<string[]> {
   for (const [relPath, content] of candidates) {
     const absolute = join(vaultPath, relPath);
     const exists = await access(absolute).then(() => true).catch(() => false);
-    if (exists) continue;
+    if (exists) {
+      if (relPath === "index.md" && (await readFile(absolute, "utf8")) === LEGACY_OKF_INDEX) {
+        await writeFile(absolute, content);
+        created.push(relPath);
+      }
+      continue;
+    }
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content);
     created.push(relPath);
