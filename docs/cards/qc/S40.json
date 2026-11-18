@@ -1,0 +1,74 @@
+{
+  "row": "S40",
+  "card": "docs/cards/S40.md",
+  "cardSha": "e1eecb3133bb9811",
+  "inputs": {
+    "card": "e1eecb3133bb9811",
+    "page": "d76c371f1fa42d42",
+    "rules": "7dd845c8b4b0e115",
+    "words": "87e1f514c526332e"
+  },
+  "checkedAt": "2026-11-18T19:18:50Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "the current app for the phone has like a weird layout, you know. It has like a button that is kind of randomly in the middle, hanging out of nowhere. So we need to focus that, but I think for the phone, for the app, it's Make it more about the retrieval. Like, can you, you can look for a memory",
+      "where": "vn_e1aa5d65",
+      "status": "met",
+      "how": "Phone screen shows mic and call together on the left and Send on the right, call button no longer floating mid-row."
+    },
+    {
+      "said": "a button that is kind of randomly in the middle ... make it more about the retrieval",
+      "where": "vn_e1aa5d65",
+      "status": "met",
+      "how": "Phone first screen opens on Find a memory with two tappable questions, WhatsApp voice note leads the adding text."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Phone and laptop screens render cleanly with no sideways overflow; the controls sit together and the find-a-memory view leads, with the before and after frames shown."
+  },
+  "pass": false,
+  "held": [
+    "dead end: step 2, the link 'cloud.zenod.dev' on http://vps3.taild81fbb.ts.net:8921/e12-s40/ never arrives (https://cloud.zenod.dev/app)"
+  ],
+  "reader": {
+    "asked": "Decide whether the phone screen now feels calm and leads with finding a memory, as recommended.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": "step 2, the link 'cloud.zenod.dev' on http://vps3.taild81fbb.ts.net:8921/e12-s40/ never arrives (https://cloud.zenod.dev/app)",
+    "end": "a page to read",
+    "page": "d76c371f1fa42d42",
+    "walkedAt": "2026-11-18T19:18:50Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:8921/e12-s40/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link 'cloud.zenod.dev'",
+        "url": "https://cloud.zenod.dev/app",
+        "result": "did not open (apiRequestContext.get: Timeout 15000ms exceeded.)"
+      }
+    ],
+    "shot": "S40-dead.webp"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e12-s40/",
+      "file": "S40-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e12-s40/",
+      "file": "S40-1280.webp"
+    }
+  ]
+}
