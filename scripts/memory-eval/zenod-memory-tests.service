@@ -1,0 +1,11 @@
+[Unit]
+Description=Zenod memory test suite (E15-Q2): nightly on the sha production runs; each release is gated by promote-production.sh
+
+[Service]
+Type=oneshot
+Nice=10
+# The suite needs Node 22 (node:sqlite); /usr/bin/node is v18 (E14-S11).
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The script as on origin/main, so a merged change is used on the next run.
+ExecStart=/bin/bash -c 'git -C /var/lib/vps3-scratch/t3agent/github/zenod fetch -q origin main && git -C /var/lib/vps3-scratch/t3agent/github/zenod show origin/main:scripts/memory-eval/nightly.sh > %h/zenod-eval/nightly.sh && bash %h/zenod-eval/nightly.sh'
+TimeoutStartSec=3600

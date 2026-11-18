@@ -1,0 +1,9 @@
+[Unit]
+Description=Zenod memory test suite nightly at 02:20 UTC, promote closed (E15-Q2; every 30 min until EPIC-24 M20)
+
+[Timer]
+OnCalendar=*-*-* 02:20:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
