@@ -61,7 +61,8 @@
 .zg-inside .zi-list { border-top-color: var(--zp-line); margin-left: 0.9rem; }
 .zg-inside .zi-what { font-size: 1.08rem; }
 .zg-note { margin: 0 0 0.5rem 0.9rem; }
-.zg-tidy { margin-top: 1.6rem; border-top-color: var(--zp-line); }
+.zg-tidy { margin-top: 1.6rem; border-top: 0; }
+.zg-inside .zi-list > li:last-child { border-bottom: 0; padding-bottom: 0.2rem; }
 .zg-quiet .zg-name { font: 500 1rem / 1.4 var(--zp-sans); }
 .zg-quiet .zg-line { font-size: 0.9rem; color: var(--zp-faint); }
 @media (max-width: 640px) {
