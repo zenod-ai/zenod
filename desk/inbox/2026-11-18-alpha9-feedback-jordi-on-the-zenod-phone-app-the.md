@@ -2,8 +2,10 @@
 from: alpha9
 about: Jordi on the Zenod phone app: the call button floats in the middle of the chat box
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-18-zenod-re-jordi-on-the-zenod-phone-app-the-cal.md
 kind: product-feedback
+row: S40
 source: card note on agent_team E84-S47, 18 Nov 2026 17:27Z, vn_e1aa5d65, https://team.alpha9.io/api/voice/notes/vn_e1aa5d65/audio
 product-from: vn_e1aa5d65: 'the current app for the phone' while speaking about Xenot (Zenod)
 ---
