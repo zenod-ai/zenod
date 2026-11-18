@@ -427,3 +427,6 @@ export async function readAsPlaces(): Promise<Array<{ path: string; title: strin
   const index = await request<{ status: string; places?: Array<{ path: string; title: string; lineage: string[]; names: string[]; memories: number }> }>("/api/console/quick-index")
   return index.places ?? []
 }
+
+/** E12-S40: the questions the chat's first screen offers, ones every memory can answer. */
+export const FIRST_QUESTIONS = ["What did I say yesterday?", "What did I keep this week?"] as const

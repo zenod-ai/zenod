@@ -11,6 +11,7 @@ import {
   lookUpInMemory,
   MemoryChatError,
   recordModeSwitch,
+  FIRST_QUESTIONS,
   presentAnswer,
   readAsPlaces,
   sendToMemory,
@@ -699,6 +700,30 @@ const failureText = (error: unknown) =>
     ? error.message
     : "Something went wrong. Try again."
 
+/**
+ * E12-S40: the chat's first screen leads with finding a memory (Jordi, 18 Nov: "make it more about the
+ * retrieval"); adding one leads with a WhatsApp voice note, then a link or a photo.
+ */
+function FirstScreen({ onAsk }: { onAsk: (question: string) => void }) {
+  return (
+    <div className="zp-first" data-testid="memory-first">
+      <h2 className="zp-firsthead">Find a memory</h2>
+      <p className="zp-firstlead">Ask about anything you told Zenod, in your own words.</p>
+      <div className="zp-firsttries">
+        {FIRST_QUESTIONS.map((question) => (
+          <button key={question} type="button" className="zp-try" onClick={() => onAsk(question)}>
+            {question}
+          </button>
+        ))}
+      </div>
+      <p className="zp-firstadd">
+        To add a memory, send Zenod a <a href="#phylax-channels">WhatsApp voice note</a>, even a
+        30-minute one. A link or a photo works too.
+      </p>
+    </div>
+  )
+}
+
 export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?: CallMedia } } = {}) {
   const call = useMemoryCall(callDeps)
   const [turns, setTurns] = React.useState<Turn[]>([])
@@ -857,8 +882,8 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
     }
   }
 
-  async function send() {
-    const message = draft.trim()
+  async function send(asked?: string) {
+    const message = (asked ?? draft).trim()
     if (!message || sending) return
     setDraft("")
     setSending(true)
@@ -928,11 +953,7 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
         <div className="zp-screen">
           <div className="zp-log" aria-live="polite">
             {turns.length === 0 ? (
-              <p className="zp-empty">
-                Tell me something and I keep it. Ask and I look it up. Want to
-                think out loud? We talk it over. Something filed wrong? I make it
-                a job. Try “who are you?”
-              </p>
+              <FirstScreen onAsk={(question) => void send(question)} />
             ) : null}
             {turns.map((turn) =>
               turn.kind === "message" ? (
@@ -1002,9 +1023,11 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
               }
               onNotice={(text) => push({ kind: "error", text })}
             />
+            {/* E12-S40: the call button sits with the microphone, never alone mid-row on a phone. */}
+            <CallButton call={call} onNotice={(text) => push({ kind: "error", text })} />
             <textarea
               aria-label="Talk to your librarian"
-              placeholder={talking ? `Reply to ${talking.name}…` : "Talk to your librarian"}
+              placeholder={talking ? `Reply to ${talking.name}…` : "Find a memory, or tell me one"}
               value={draft}
               rows={1}
               maxLength={2000}
@@ -1016,7 +1039,6 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
                 }
               }}
             />
-            <CallButton call={call} onNotice={(text) => push({ kind: "error", text })} />
             <button
               type="submit"
               className="zp-send"
