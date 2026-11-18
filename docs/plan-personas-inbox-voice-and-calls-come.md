@@ -32,7 +32,7 @@ Status: active
 Last attempted: 2026-11-18T02:40Z S41 ticket worker (run_ffed323d): Patterns and ideas posted its first card on Claude on 18 Nov 02:05Z ($0.00068), card in review ; 2026-11-17T20:10Z S44 ticket worker (run_9cdcc383): his S30 pick applied for new testers, live 9deb454 ; 2026-11-17T08:10Z S30 ticket worker (run_a97b64b1): the helper week on his memory judged; we recommend testers start with Weekly recap and Open loops on (Open loops every 3 days, no repeats), the other five off for testers and on for him; he tapped 5 times, all on 10 Nov, none after; card in review ; earlier (2026-11-12 roll-up): helpers, suggestion cards, quick index, clarifier and daily idea card live and approved; S41 runs on Claude on production since 12 Nov, its only run on 15 Nov 02:00Z found nothing to say
 Result: S44 live 9deb454 (19:59Z): new testers start with Weekly recap and Open loops (every 3 days) on, the rest off; the 13 Nov tester got the same, nothing sent; Jordi's accounts unchanged ; S30 approved 17 Nov (Recap and loops)
 Evidence: [S41 round 5](evidence/e14-s41-r5-2026-11-18.md) · [S44](evidence/e14-s44-2026-11-17.md) · [S30 verdict](http://vps3.taild81fbb.ts.net:8921/e14-s30/) · [S30 evidence](evidence/e14-s30-2026-11-17.md) · [S41 round 4](evidence/e14-s41-r4-2026-11-17.md) · [S42](evidence/e14-s42-2026-11-11.md) · [S36](evidence/e14-s36-2026-11-11.md)
-Waiting on: Jordi's review of S41 (Patterns and ideas posted its first card 18 Nov 02:05Z)
+Waiting on: nobody (S41's card is in review)
 Approved work: none
 Next action: S45 stays a draft until Jordi starts it ; S41 in review (its first card, 18 Nov)
 Source revision: production 9deb454
