@@ -1,21 +1,21 @@
 {
   "row": "E25-S3",
   "card": "docs/cards/E25-S3.md",
-  "cardSha": "846292a98d77ee35",
+  "cardSha": "b32f75f7972eb153",
   "inputs": {
-    "card": "846292a98d77ee35",
-    "page": "973df67f03bcfd9c",
+    "card": "b32f75f7972eb153",
+    "page": "e812d30bf2f6387c",
     "rules": "7dd845c8b4b0e115",
     "words": "a0aa04dc7d177402"
   },
-  "checkedAt": "2026-11-18T07:16:09Z",
+  "checkedAt": "2026-11-18T08:28:35Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "this is a self-organizing digital memory, where you can use WhatsApp to just send voice notes and ... it all organizes, self-organizes into your digital memory. And then you can connect all your agents via MCP ... you could have like personas that are kind of dispatched on your memory to look for like things that you should be reminded of or maybe look for ideas or look for possibilities you haven't thought of or maybe more therapy stuff or more like optimization ... And we should have all the landing page, really make sure that we have it up to date with all the latest and coolest way to explain stuff.",
       "where": "vn_101d2c67",
       "status": "met",
-      "how": "Hero reads 'A digital memory that organizes itself'; WhatsApp voice notes and the log, cloud and helper sections are on the page."
+      "how": "Hero reads 'A digital memory that organizes itself'; WhatsApp voice notes and the log, cloud and helper sections show self-organizing."
     },
     {
       "said": "a self-organizing digital memory ... connect all your agents via MCP ... personas",
@@ -25,32 +25,22 @@
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 1280 px: Section 2 'From your words, a cloud of thoughts' is a cycle-like network of linked thoughts drawn as a node graph, which fits; however the helpers section (3) is a plain list of six helpers, not a shape, and the MCP section uses a hub diagram, so the list-of-helpers idea lacks a shape. (rule 2)"
-    ],
-    "breaches": [
-      {
-        "rule": 2,
-        "width": 1280,
-        "what": "Section 2 'From your words, a cloud of thoughts' is a cycle-like network of linked thoughts drawn as a node graph, which fits; however the helpers section (3) is a plain list of six helpers, not a shape, and the MCP section uses a hub diagram, so the list-of-helpers idea lacks a shape."
-      }
-    ],
-    "summary": "Desktop and phone screens show the live page with a clear digital memory hero, WhatsApp voice note demo, graph diagram and MCP hub; phone layout fits without sideways scroll, with the helper list the weakest shape."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Desktop and phone pages render cleanly with no sideways overflow; the hero states the answer, sections show the voice-note log, cloud graph and helpers."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: at 1280 px: Section 2 'From your words, a cloud of thoughts' is a cycle-like network of linked thoughts drawn as a node graph, which fits; however the helpers section (3) is a plain list of six helpers, not a shape, and the MCP section uses a hub diagram, so the list-of-helpers idea lacks a shape. (rule 2)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether the zenod.dev page now explains Zenod the way he does, by saying yes or no.",
+    "asked": "Decide whether the rewritten zenod.dev now explains Zenod the way Jordi does, using the evidence page.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": null,
-    "page": "973df67f03bcfd9c",
-    "walkedAt": "2026-11-18T07:16:09Z",
+    "page": "e812d30bf2f6387c",
+    "walkedAt": "2026-11-18T08:28:35Z",
     "steps": [
       {
         "n": 1,
