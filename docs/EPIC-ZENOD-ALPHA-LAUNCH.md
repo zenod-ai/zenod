@@ -40,15 +40,15 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 
 Status: active
 Phase: tester door open on production; launch work runs in EPIC-7 (testers), EPIC-23 and EPIC-26 (first tester and invites); A0 done 2026-10-25
-Last verified: 2026-11-17
-Last attempted: 2026-11-17T10:03Z roll-up (run_d27b6312): docs/EPIC-7-REAL-USER-TEST.md (active): every tester step from sign-up to WhatsApp reply to voice feedback has a live path and a public count; the feedback link card (E7-S9) waits on his review; still 1 sign-up, 0 WhatsApp links ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): health.zenod.dev done, waits only for his mark
-Result: production zenod-mt 9f650ae2; public counts 1 application, 1 sign-up, 0 WhatsApp replies, 0 feedback, 0 paying; stuck sign-ups reach the team within the hour and get a next-day email; new testers get a feedback link in the app and in the thank-you email
+Last verified: 2026-11-18
+Last attempted: 2026-11-18T11:04Z roll-up (run_e6c76c04): docs/EPIC-7-REAL-USER-TEST.md (active): per-post sign-up counts live (E7-S11); our only tester cannot be reached on WhatsApp because no number was kept when our server failed on 13 Nov, three emails unanswered, nothing more from us unless he replies (E7-S12); keeping a stuck tester's typed number is a draft for Jordi (E7-S13) ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): health.zenod.dev done, waits only for his mark
+Result: production zenod-mt c97c5c61; public counts 1 application, 1 sign-up, 0 WhatsApp replies, 0 feedback; every tester step is live, recruiting is the gap
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: testers recruited by zenod-social ; Jordi: the E7-S9 card and his mark on EPIC-6
+Waiting on: testers recruited by zenod-social ; Jordi: his mark on EPIC-6, whether to start E7-S13
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
 Next action: E26-S3 watches the next tester sign up, link WhatsApp, get a reply and leave feedback (EPIC-7 E7-2..E7-4)
-Verified at: 2026-11-17T10:03Z (production 9f650ae2 via /api/health; EPIC-7 and EPIC-6 Current States read)
+Verified at: 2026-11-18T11:04Z (production c97c5c61 via /api/health and /api/public/counts; EPIC-7 and EPIC-6 Current States read)
 
 ## Waiting on
 
