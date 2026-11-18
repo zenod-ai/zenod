@@ -7,6 +7,7 @@ The live page for deploying Zenod: the boundary, how production rolls, how to up
 Update this section whenever a deploy is verified (record the SHA from health, the date and how it was checked).
 
 - **Production changes only on a promote (root D28, EPIC-24 M10, since 2026-11-11).** Every push to `main` that publishes rolls **staging**; production stays where it is until `scripts/promote-production.sh` passes its gate and re-pins it. See "Staging and promote" below. The two bullets after this one describe the push-to-main roll (D27) that this replaced.
+- **Production health** (2026-11-18 02:44:53 UTC, promote for E7-S11): sha `3ec90ca07a1c7d722b65abb856552214cd70e1d0` (was `9deb454`), gate demo 96/100/1.7, real notes 94.1/93/3.1; rollback target `9deb454`. [Evidence](evidence/e7-s11-2026-11-18.md).
 - **Production health** (`https://cloud.zenod.dev/api/health`, 2026-11-11 04:04:13 UTC, first promote): status ok, sha `7f36574848075de0d9887799bd1d955da4c02a41` (was `3831b06`), `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-7f36574`; staging on the same sha. Rollback target `3831b06` (`scripts/promote-production.sh --rollback`). [Evidence](evidence/e24-m10-2026-11-11.md).
 
 - **Production health** (`https://cloud.zenod.dev/api/health`, 2026-10-25 ~04:20 UTC): status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983` (#1435, the first push-to-main roll proven through the new check). Dokploy app `zenod-mt` (`2dkayH_eAur427leH64MT`, project zenod/production) runs `ghcr.io/zenod-ai/zenod:sha-ae3e77a`, status done.
