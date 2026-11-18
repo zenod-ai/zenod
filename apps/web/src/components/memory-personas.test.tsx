@@ -110,7 +110,7 @@ describe("MemoryPersonas catalog", () => {
     expect(screen.getByRole("list", { name: "Open loops finder's skills" }).textContent).toContain("Ask you a question")
     expect(screen.getByText("Off: it never runs until you switch it on.")).toBeTruthy()
     expect(screen.getByText("1 of 2 helpers on")).toBeTruthy()
-    expect(screen.getByText(/1 of 4 on\./)).toBeTruthy()
+    expect(screen.getByText(/1 of 5 on\./)).toBeTruthy()
   })
 
   it("switches one persona on and sets its cadence to every few days", async () => {
@@ -157,7 +157,7 @@ const NINE = (on: (id: string) => boolean) =>
   [
     ["weekly-recap", "Weekly recap"], ["open-loops", "Open loops finder"], ["people-follow-ups", "People and follow-ups"],
     ["topic-gardener", "Topic gardener"], ["ideas-digest", "Ideas digest"], ["something-to-try", "Something to try"],
-    ["patterns-and-ideas", "Patterns and ideas"], ["memory-health", "Health of your memory"], ["clarifier", "Clarifier"],
+    ["patterns-and-ideas", "Patterns and ideas"], ["make-it-easier", "Easier ways"], ["memory-health", "Health of your memory"], ["clarifier", "Clarifier"],
   ].map(([id, name]) => helper(id!, name!, on(id!)))
 const nine = (on: (id: string) => boolean): PersonaList => ({ personas: NINE(on), budget: { spentUsd: 0, capUsd: 3 }, skills: SKILLS })
 
@@ -165,13 +165,13 @@ describe("MemoryPersonas: five personas", () => {
   it("shows the five personas and the tidy switch, every helper of an all-on account still on", async () => {
     mockFetch(() => nine(() => true))
     render(<MemoryPersonas />)
-    for (const name of ["Remind me", "Your ideas", "New possibilities", "Reflect", "Keep my memory tidy"])
+    for (const name of ["Remind me", "Your ideas", "New possibilities", "Reflect", "Make it easier", "Keep my memory tidy"])
       expect(await screen.findByRole("switch", { name: `${name} on` })).toBeTruthy()
-    expect(screen.queryByRole("switch", { name: /Make it easier/ })).toBeNull()
-    expect(screen.getByTestId("persona-make-it-easier").textContent).toContain("Coming soon")
-    expect(screen.getByText(/4 of 4 on\./)).toBeTruthy()
-    // the nine helpers are all listed underneath, plus the quick index
-    expect(screen.getAllByRole("switch", { name: / on$/ })).toHaveLength(5 + 9)
+    // S49: Make it easier is built, so its persona has a switch and is no longer "coming soon"
+    expect(screen.getByTestId("persona-make-it-easier").textContent).not.toContain("Coming soon")
+    expect(screen.getByText(/5 of 5 on\./)).toBeTruthy()
+    // the ten helpers are all listed underneath, plus the quick index
+    expect(screen.getAllByRole("switch", { name: / on$/ })).toHaveLength(6 + 10)
     expect(screen.getByText("Quick index")).toBeTruthy()
     expect(screen.queryByRole("list", { name: "Other helpers" })).toBeNull()
   })
@@ -180,11 +180,11 @@ describe("MemoryPersonas: five personas", () => {
     mockFetch(() => nine((id) => id === "weekly-recap" || id === "open-loops"))
     render(<MemoryPersonas />)
     expect(await screen.findByRole("switch", { name: "Remind me on" })).toBeTruthy()
-    for (const name of ["Your ideas", "New possibilities", "Reflect", "Keep my memory tidy"])
+    for (const name of ["Your ideas", "New possibilities", "Reflect", "Make it easier", "Keep my memory tidy"])
       expect(screen.getByRole("switch", { name: `${name} off` })).toBeTruthy()
     expect(screen.getByRole("switch", { name: "People and follow-ups off" })).toBeTruthy()
     expect(screen.queryByText(/helpers on$/)).toBeNull()
-    expect(screen.getByText(/1 of 4 on\./)).toBeTruthy()
+    expect(screen.getByText(/1 of 5 on\./)).toBeTruthy()
   })
 
   it("one switch turns every helper of a persona on together", async () => {

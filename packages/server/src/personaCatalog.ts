@@ -4,6 +4,7 @@ import type { PersonaContext, PersonaDefinition, PersonaSchedule, PersonaSkill }
 import { hasWorkCode, isProjectWork } from "./helperScope.js";
 import { createClarifier } from "./clarifier.js";
 import { createPatterns } from "./patterns.js";
+import { createMakeItEasier } from "./makeItEasier.js";
 import { cleanHelperCard, HELPER_CARD_ASK, HELPER_CARD_WORDS, namedCard, namedMemories, pictureTitle, pictureWords, type HelperCard } from "./helperCard.js";
 
 /**
@@ -700,8 +701,11 @@ export const CLARIFIER: PersonaDefinition = createClarifier({ memoryOnly: MEMORY
 /** S41: one pattern in how the person thinks or works, and one idea research supports, every few days. */
 export const PATTERNS_AND_IDEAS: PersonaDefinition = createPatterns({ memoryOnly: MEMORY_ONLY, memoryTitle, memoryWords, parseJsonReply, memoryPhrases });
 
+/** S49: once a week, one effort the person keeps spending and one way to spend less time, money or effort on it. */
+export const MAKE_IT_EASIER: PersonaDefinition = createMakeItEasier({ memoryTitle, memoryWords, parseJsonReply, memoryPhrases });
+
 /** Every persona the runner knows, in catalog order. All are off by default; a new account starts with Weekly recap and Open loops switched on (S44, personaStore TESTER_DEFAULT_HELPERS). */
-export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, SOMETHING_TO_TRY, PATTERNS_AND_IDEAS, MEMORY_HEALTH, CLARIFIER];
+export const BUILT_IN_PERSONAS: readonly PersonaDefinition[] = [WEEKLY_RECAP, OPEN_LOOPS, PEOPLE_FOLLOW_UPS, TOPIC_GARDENER, IDEAS_DIGEST, SOMETHING_TO_TRY, PATTERNS_AND_IDEAS, MAKE_IT_EASIER, MEMORY_HEALTH, CLARIFIER];
 
 export function personaById(id: string): PersonaDefinition | null {
   return BUILT_IN_PERSONAS.find((persona) => persona.id === id) ?? null;
