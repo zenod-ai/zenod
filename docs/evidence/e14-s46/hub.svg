@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="Instrument Sans, system-ui, sans-serif">
+<rect width="1200" height="800" fill="#f6f2e9"/>
+<g stroke="#c9c1ae" stroke-width="1.5">
+<line x1="600" y1="370" x2="600" y2="120"/><line x1="600" y1="370" x2="960" y2="270"/><line x1="600" y1="370" x2="860" y2="590"/><line x1="600" y1="370" x2="340" y2="590"/><line x1="600" y1="370" x2="240" y2="270"/>
+</g>
+<circle cx="600" cy="370" r="108" fill="#1f4d3a"/>
+<text x="600" y="362" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="30" fill="#f6f2e9">Your memory</text>
+<text x="600" y="392" text-anchor="middle" font-size="15" fill="#cfe0d4">every note, voice first</text>
+<g font-size="15" fill="#4a554e">
+<!-- 1 Remind -->
+<rect x="440" y="40" width="320" height="120" rx="10" fill="#f6f2e9" stroke="#1f4d3a" stroke-width="2"/>
+<text x="600" y="72" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="26" fill="#18211c">Remind me</text>
+<text x="600" y="98" text-anchor="middle">what you should not forget</text>
+<text x="600" y="124" text-anchor="middle" fill="#8d948c">Open loops · People · Weekly recap</text>
+<text x="600" y="146" text-anchor="middle" fill="#1f4d3a" font-weight="500">on for every tester</text>
+<!-- 2 Ideas -->
+<rect x="820" y="210" width="320" height="120" rx="10" fill="#f6f2e9" stroke="#18211c" stroke-width="1.2"/>
+<text x="980" y="244" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="26" fill="#18211c">Your ideas</text>
+<text x="980" y="270" text-anchor="middle">the ones you keep coming back to</text>
+<text x="980" y="296" text-anchor="middle" fill="#8d948c">today: Ideas digest</text>
+<!-- 3 Possibilities -->
+<rect x="700" y="540" width="330" height="120" rx="10" fill="#f6f2e9" stroke="#18211c" stroke-width="1.2"/>
+<text x="865" y="574" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="26" fill="#18211c">New possibilities</text>
+<text x="865" y="600" text-anchor="middle">what you have not thought of</text>
+<text x="865" y="626" text-anchor="middle" fill="#8d948c">today: Something to try</text>
+<!-- 4 Reflect -->
+<rect x="170" y="540" width="330" height="120" rx="10" fill="#f6f2e9" stroke="#18211c" stroke-width="1.2"/>
+<text x="335" y="574" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="26" fill="#18211c">Reflect</text>
+<text x="335" y="600" text-anchor="middle">gently names a pattern</text>
+<text x="335" y="626" text-anchor="middle" fill="#8d948c">today: Patterns and ideas</text>
+<!-- 5 Easier (new) -->
+<rect x="60" y="210" width="320" height="120" rx="10" fill="#f6f2e9" stroke="#8a4b1c" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="220" y="244" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="26" fill="#18211c">Make it easier</text>
+<text x="220" y="270" text-anchor="middle">one thing to do faster or less</text>
+<text x="220" y="296" text-anchor="middle" fill="#8a4b1c" font-weight="500">new: the one to build</text>
+</g>
+<text x="600" y="730" text-anchor="middle" font-size="16" fill="#4a554e">Underneath, one quiet switch: <tspan fill="#18211c">Keep my memory tidy</tspan> (Quick index · Clarifier · Topic gardener · Health)</text>
+<text x="600" y="760" text-anchor="middle" font-size="14" fill="#8d948c">All five post to the inbox only, at most one card a day together, never in WhatsApp</text>
+</svg>

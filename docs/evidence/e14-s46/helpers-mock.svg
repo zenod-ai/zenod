@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 860" font-family="Instrument Sans, system-ui, sans-serif">
+<rect width="420" height="860" rx="36" fill="#18211c"/>
+<rect x="14" y="14" width="392" height="832" rx="26" fill="#f6f2e9"/>
+<text x="38" y="62" font-family="Newsreader, Georgia, serif" font-size="22" fill="#18211c">Zenod</text>
+<g font-size="13" fill="#4a554e"><text x="38" y="94">Chat</text><text x="88" y="94">Inbox</text><text x="142" y="94" fill="#18211c" font-weight="500">Helpers</text><text x="208" y="94">Memory</text></g>
+<line x1="142" y1="100" x2="196" y2="100" stroke="#1f4d3a" stroke-width="2"/>
+<text x="38" y="140" font-family="Newsreader, Georgia, serif" font-size="26" fill="#18211c">Your helpers</text>
+<text x="38" y="164" font-size="13" fill="#4a554e">Switch one on and it reads your memory</text>
+<text x="38" y="182" font-size="13" fill="#4a554e">and leaves cards in your inbox. Nothing</text>
+<text x="38" y="200" font-size="13" fill="#4a554e">changes without your yes.</text>
+<g id="rows" font-size="13">
+<!-- row template: y offsets -->
+<g transform="translate(0,222)">
+<rect x="30" y="0" width="360" height="92" rx="10" fill="none" stroke="#c9c1ae"/>
+<text x="48" y="30" font-family="Newsreader, Georgia, serif" font-size="19" fill="#18211c">Remind me</text>
+<text x="48" y="52" fill="#4a554e">Loose ends, people to call back,</text>
+<text x="48" y="70" fill="#4a554e">your week in a line. Every 3 days.</text>
+<rect x="320" y="16" width="52" height="28" rx="14" fill="#1f4d3a"/><circle cx="358" cy="30" r="11" fill="#f6f2e9"/>
+</g>
+<g transform="translate(0,324)">
+<rect x="30" y="0" width="360" height="92" rx="10" fill="none" stroke="#c9c1ae"/>
+<text x="48" y="30" font-family="Newsreader, Georgia, serif" font-size="19" fill="#18211c">Your ideas</text>
+<text x="48" y="52" fill="#4a554e">The ideas you keep coming back to,</text>
+<text x="48" y="70" fill="#4a554e">gathered in one place. Weekly.</text>
+<rect x="320" y="16" width="52" height="28" rx="14" fill="#ded6c4"/><circle cx="334" cy="30" r="11" fill="#f6f2e9"/>
+</g>
+<g transform="translate(0,426)">
+<rect x="30" y="0" width="360" height="92" rx="10" fill="none" stroke="#c9c1ae"/>
+<text x="48" y="30" font-family="Newsreader, Georgia, serif" font-size="19" fill="#18211c">New possibilities</text>
+<text x="48" y="52" fill="#4a554e">One thing you have not thought of,</text>
+<text x="48" y="70" fill="#4a554e">from what you said. Every 3 days.</text>
+<rect x="320" y="16" width="52" height="28" rx="14" fill="#ded6c4"/><circle cx="334" cy="30" r="11" fill="#f6f2e9"/>
+</g>
+<g transform="translate(0,528)">
+<rect x="30" y="0" width="360" height="92" rx="10" fill="none" stroke="#c9c1ae"/>
+<text x="48" y="30" font-family="Newsreader, Georgia, serif" font-size="19" fill="#18211c">Reflect</text>
+<text x="48" y="52" fill="#4a554e">Gently names what keeps coming back,</text>
+<text x="48" y="70" fill="#4a554e">with one idea to try. Every 3 days.</text>
+<rect x="320" y="16" width="52" height="28" rx="14" fill="#ded6c4"/><circle cx="334" cy="30" r="11" fill="#f6f2e9"/>
+</g>
+<g transform="translate(0,630)">
+<rect x="30" y="0" width="360" height="92" rx="10" fill="none" stroke="#c9c1ae"/>
+<text x="48" y="30" font-family="Newsreader, Georgia, serif" font-size="19" fill="#18211c">Make it easier</text>
+<text x="48" y="52" fill="#4a554e">One thing you do again and again</text>
+<text x="48" y="70" fill="#4a554e">that could take less. Weekly.</text>
+<rect x="320" y="16" width="52" height="28" rx="14" fill="#ded6c4"/><circle cx="334" cy="30" r="11" fill="#f6f2e9"/>
+</g>
+<g transform="translate(0,740)">
+<text x="38" y="20" fill="#18211c">Keep my memory tidy</text>
+<text x="38" y="40" fill="#8d948c">Index, questions, tidy-ups. Quiet.</text>
+<rect x="320" y="6" width="52" height="28" rx="14" fill="#1f4d3a"/><circle cx="358" cy="20" r="11" fill="#f6f2e9"/>
+</g>
+</g>
+<text x="210" y="822" text-anchor="middle" font-size="12" fill="#8d948c">Tap a helper to see how often and what it read</text>
+</svg>

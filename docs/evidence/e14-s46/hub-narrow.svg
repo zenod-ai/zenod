@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 940" font-family="Instrument Sans, system-ui, sans-serif">
+<rect width="600" height="940" fill="#f6f2e9"/>
+<g stroke="#c9c1ae" stroke-width="2"><line x1="300" y1="440" x2="300" y2="160"/><line x1="300" y1="440" x2="455" y2="300"/><line x1="300" y1="440" x2="455" y2="620"/><line x1="300" y1="440" x2="145" y2="620"/><line x1="300" y1="440" x2="145" y2="300"/></g>
+<circle cx="300" cy="440" r="92" fill="#1f4d3a"/>
+<text x="300" y="436" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="30" fill="#f6f2e9">Your</text>
+<text x="300" y="468" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-size="30" fill="#f6f2e9">memory</text>
+<g text-anchor="middle">
+<rect x="150" y="30" width="300" height="130" rx="12" fill="#f6f2e9" stroke="#1f4d3a" stroke-width="3"/>
+<text x="300" y="72" font-family="Newsreader, Georgia, serif" font-size="34" fill="#18211c">Remind me</text>
+<text x="300" y="104" font-size="20" fill="#4a554e">what not to forget</text>
+<text x="300" y="138" font-size="20" fill="#1f4d3a" font-weight="500">on for every tester</text>
+<rect x="320" y="215" width="270" height="110" rx="12" fill="#f6f2e9" stroke="#18211c" stroke-width="1.5"/>
+<text x="455" y="259" font-family="Newsreader, Georgia, serif" font-size="32" fill="#18211c">Your ideas</text>
+<text x="455" y="293" font-size="20" fill="#4a554e">Ideas digest</text>
+<rect x="10" y="215" width="270" height="110" rx="12" fill="#f6f2e9" stroke="#8a4b1c" stroke-width="3" stroke-dasharray="10 7"/>
+<text x="145" y="259" font-family="Newsreader, Georgia, serif" font-size="30" fill="#18211c">Make it easier</text>
+<text x="145" y="293" font-size="20" fill="#8a4b1c" font-weight="500">new: to build</text>
+<rect x="320" y="580" width="270" height="110" rx="12" fill="#f6f2e9" stroke="#18211c" stroke-width="1.5"/>
+<text x="455" y="624" font-family="Newsreader, Georgia, serif" font-size="28" fill="#18211c">New possibilities</text>
+<text x="455" y="658" font-size="20" fill="#4a554e">Something to try</text>
+<rect x="10" y="580" width="270" height="110" rx="12" fill="#f6f2e9" stroke="#18211c" stroke-width="1.5"/>
+<text x="145" y="624" font-family="Newsreader, Georgia, serif" font-size="32" fill="#18211c">Reflect</text>
+<text x="145" y="658" font-size="20" fill="#4a554e">Patterns and ideas</text>
+<text x="300" y="770" font-size="22" fill="#18211c">Underneath: Keep my memory tidy</text>
+<text x="300" y="802" font-size="19" fill="#4a554e">Quick index · Clarifier · Gardener · Health</text>
+<text x="300" y="860" font-size="19" fill="#8d948c">Inbox only, at most one card a day,</text>
+<text x="300" y="888" font-size="19" fill="#8d948c">never in WhatsApp</text>
+</g>
+</svg>
