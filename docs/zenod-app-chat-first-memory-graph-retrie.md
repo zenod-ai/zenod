@@ -32,14 +32,14 @@ Goal sentence: Cloud Zenod opens on a chat with your memory and shows it as a gr
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-12T18:11Z Delivery Manager roll-up (run_73f26beb): the graph, retrieval and answer rows S1 to S3, S8, S11, S13 to S25, S27, S29, S31 to S33, S35, S36 done and approved ; S38 (named-day questions in his time zone) approved by Jordi 2026-11-11 ; S30 confidence calibration rechecked now (worker run_b6b6b9ae), waiting for 20+ of his Right place and Wrong place answers, and any tuning ships only after the engine freeze ends 2026-11-24 ; S4, S5, S7, S9, S12, S26, S28, S34, S37 draft
-Result: retrieval is right for named-day and yesterday questions in his time zone; production d4403df answers on Claude Sonnet; the confidence number waits for his corrections before it can be tuned
+Last attempted: 2026-11-18T20:08Z roll-up (DM run_f18dda7f): S40 in his review, on a phone the app now opens on Find a memory with two questions to tap, the call button sits with the microphone, adding memory leads with a WhatsApp voice note (live ed5f2fb) ; S30 waits on his Right place and Wrong place answers ; S34, S37, S39 drafts ; S31 to S38 others done
+Result: production ed5f2fb4: the phone app leads with retrieval; retrieval is right for named-day and yesterday questions; the engine is frozen to 24 Nov
 Evidence: [S30](http://vps3.taild81fbb.ts.net:8921/e12-s30/) · [E7-S3 production answers](http://vps3.taild81fbb.ts.net:8921/e7-s3/)
-Waiting on: his Right place and Wrong place answers (S30), no ask ; the engine freeze until 2026-11-24 (EPIC-22)
+Waiting on: his review of S40 ; his Right place and Wrong place answers (S30) ; the engine freeze until 2026-11-24 (EPIC-22)
 Approved work: none
-Next action: integrate the S30 recheck; nothing else due until his corrections arrive or the freeze ends
+Next action: his S40 verdict; S30 recheck when his answers arrive or the freeze ends
 Source revision: production d4403df
-Verified at: 2026-11-12T18:11Z (EPIC-12 ledger read)
+Verified at: 2026-11-18T20:08Z (production ed5f2fb4; EPIC-12 ledger read)
 
 ## Non-Goals
 
