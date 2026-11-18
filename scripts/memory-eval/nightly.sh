@@ -5,8 +5,11 @@
 # record each to the private history, and redraws the dashboard (served at :8921/memory-tests/).
 # The vault is a read-only clone; each run works on a throwaway copy and never pushes.
 #
-# Driven by the user timer zenod-memory-tests.timer (every 30 minutes): it runs when production's sha
-# changed since the last run, or when the last run is more than 24 hours old.
+# Driven by the user timer zenod-memory-tests.timer (scripts/memory-eval/zenod-memory-tests.timer), once a
+# night at 02:20 UTC, when the promote is closed (EPIC-24 M20, 2026-11-18; it polled every 30 min before):
+# it measures the sha production runs unless that sha was measured less than ZENOD_REMEASURE_HOURS (20) ago.
+# Each release is also measured before it goes out: scripts/promote-production.sh runs this suite on the
+# exact commit as its gate, so a release never waits for this run to be checked.
 set -euo pipefail
 REPO=${ZENOD_REPO:-/var/lib/vps3-scratch/t3agent/github/zenod}
 VAULT_CLONE=${ZENOD_VAULT_CLONE:-/var/lib/vps3-scratch/t3agent/github/obsidian-brain}
@@ -19,7 +22,7 @@ mkdir -p "$EVAL/history" "$EVAL/builds" "$EVAL/vaults" "$EVAL/runs"
 sha=$(curl -fsS -m 20 https://cloud.zenod.dev/api/health | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha","")[:7])' || true)
 [ -n "$sha" ] || { echo "no production sha; skip"; exit 0; }
 stamp="$EVAL/history/.last"
-if [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$sha" ] && [ $(( $(date +%s) - $(cut -d' ' -f2 "$stamp") )) -lt 86400 ] && [ "${1:-}" != "--force" ]; then
+if [ -f "$stamp" ] && [ "$(cut -d' ' -f1 "$stamp")" = "$sha" ] && [ $(( $(date +%s) - $(cut -d' ' -f2 "$stamp") )) -lt $(( ${ZENOD_REMEASURE_HOURS:-20} * 3600 )) ] && [ "${1:-}" != "--force" ]; then
   echo "production $sha already measured"; exit 0
 fi
 
