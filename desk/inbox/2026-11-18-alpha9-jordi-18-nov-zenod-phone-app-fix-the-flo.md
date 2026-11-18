@@ -2,7 +2,8 @@
 from: alpha9
 about: Jordi 18 Nov: Zenod phone app: fix the floating button, lead with retrieval, WhatsApp ingestion as the main example
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-18-zenod-re-jordi-18-nov-zenod-phone-app-fix-the.md
 ---
 Two asks for the Zenod phone app, answered on his inbox with a phone screenshot:
 1. Fix the layout: a button floats in the middle of the screen with no place; put every control where it belongs.
