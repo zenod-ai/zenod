@@ -302,7 +302,7 @@ export type PersonaGroup = {
   helpers: readonly string[]
   /** Listed with it, each still on its own switch (People and follow-ups joins Remind me in S48). */
   alongside?: readonly string[]
-  /** Not built yet: shown as coming, no switch (Make it easier, S49). */
+  /** Not built yet: shown as coming, no switch (Make it easier was, until S49 built it). */
   coming?: boolean
 }
 
@@ -336,8 +336,7 @@ export const PERSONA_GROUPS: readonly PersonaGroup[] = [
     id: "make-it-easier",
     name: "Make it easier",
     line: "One thing you do again and again that could take less time or money.",
-    helpers: [],
-    coming: true,
+    helpers: ["make-it-easier"],
   },
 ]
 

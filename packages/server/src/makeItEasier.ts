@@ -6,7 +6,7 @@ import { cleanHelperCard, HELPER_CARD_WORDS, namedCard, namedMemories } from "./
 import { soundsClinical, soundsLikeDistress } from "./patterns.js";
 
 /**
- * Make it easier (EPIC-14 S49), the fifth memory persona Jordi approved in E14-A12 (18 Nov). His words
+ * Easier ways (EPIC-14 S49), the helper behind Make it easier, the fifth memory persona Jordi approved in E14-A12 (18 Nov). His words
  * (vn_101d2c67): "personas that are kind of dispatched on your memory to look for ... possibilities you
  * haven't thought of or maybe more therapy stuff or more like optimization".
  *
@@ -77,7 +77,7 @@ export function parseEasierWay(reply: Record<string, unknown> | null): EasierWay
 }
 
 const SYSTEM = [
-  "You are Make it easier, a practical, friendly helper that reads what a person said in their own notes over the last month, mostly their voice notes.",
+  "You are Easier ways, a practical, friendly helper that reads what a person said in their own notes over the last month, mostly their voice notes.",
   "Look for ONE thing in their everyday life they spend time, money or effort on again and again: a chore, an errand, a trip, a payment, a way they do something by hand, something they keep looking up or redoing.",
   "Name it plainly in one sentence said to them, never a judgement. Then offer ONE concrete, doable way to spend less time, money or effort on it: batch it, automate it, set it up once, buy or cancel something, hand it off, or drop a step. Say exactly what to do, not a general tip.",
   "Pick the one with the biggest saving that they could start this week. Only name tools, services or prices you are sure exist; never invent them.",
@@ -105,7 +105,7 @@ export function createMakeItEasier(words: MakeItEasierWords): PersonaDefinition 
 
   return {
     id: MAKE_IT_EASIER_ID,
-    name: "Make it easier",
+    name: "Easier ways",
     purpose: "Once a week, one thing you do again and again, and one way to spend less time, money or effort on it.",
     brief: "Once a week it reads what you said in the last 30 days, your voice notes first. When you keep spending time, money or effort on the same thing, like an errand, a payment or a job you do by hand, it names it and offers one concrete way to make it easier, with the notes it saw it in. It stays quiet when a note sounds hard and never gives you project work.",
     schedule: { every: "week" },
@@ -192,5 +192,5 @@ export function createMakeItEasier(words: MakeItEasierWords): PersonaDefinition 
 }
 
 function note(today: string, read: number, body: string[]): string {
-  return ["---", `title: Make it easier ${today}`, "type: persona-note", `persona: ${MAKE_IT_EASIER_ID}`, `created: ${today}`, `memories_read: ${read}`, "---", "", `# Make it easier ${today}`, "", ...body, ""].join("\n");
+  return ["---", `title: Easier ways ${today}`, "type: persona-note", `persona: ${MAKE_IT_EASIER_ID}`, `created: ${today}`, `memories_read: ${read}`, "---", "", `# Easier ways ${today}`, "", ...body, ""].join("\n");
 }

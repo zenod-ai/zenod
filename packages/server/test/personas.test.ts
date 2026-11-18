@@ -541,7 +541,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
   ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 
   it("lists ten personas with a purpose and their skills; all start off (E23-A2), so none wakes until switched on", () => {
-    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Patterns and ideas", "Make it easier", "Health of your memory", "Clarifier"]);
+    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Something to try", "Patterns and ideas", "Easier ways", "Health of your memory", "Clarifier"]);
     expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual([]);
     for (const persona of BUILT_IN_PERSONAS) {
       expect(persona.purpose.length).toBeGreaterThan(10);
@@ -823,7 +823,7 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     expect(stub.calls[0]!.system).toContain("time, money or effort");
     expect(stub.calls[0]!.system).toContain("real distress");
     const card = inbox.list()[0]!;
-    expect(card).toMatchObject({ kind: "finding", from: "Make it easier", title: easier.idea, body: `${easier.noticed}\n\nSaves time.`, card: { picture: { change: "try", from: "monthly pharmacy refill trips", to: "a standing delivery order" }, yes: easier.yes, no: easier.no } });
+    expect(card).toMatchObject({ kind: "finding", from: "Easier ways", title: easier.idea, body: `${easier.noticed}\n\nSaves time.`, card: { picture: { change: "try", from: "monthly pharmacy refill trips", to: "a standing delivery order" }, yes: easier.yes, no: easier.no } });
     expect(card.links.map((l) => l.path)).toEqual(["Log/2026-11-07.md", "Log/2026-10-28.md", "Log/2026-10-15.md", "Personas/make-it-easier/2026-11-08.md"]);
     expect(written[0]!.files[0]!.content).toContain("## Easier\n\nAsk the pharmacy to deliver");
 
