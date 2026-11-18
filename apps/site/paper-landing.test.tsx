@@ -12,28 +12,28 @@ function render(pathname: string) {
 }
 
 describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
-  it("tells Jordi's story in order: voice in, MCP, kept, filed, graph, editor, ask, strength, custody, console, pricing last", () => {
+  it("tells Jordi's story in order: hero, seven animated diagrams, pricing last (E25-S3 it2)", () => {
     const html = render("/");
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    const order = ["mcp", "how", "kept", "filed", "graph", "constellation", "save", "ask", "strength", "yours", "console", "start"];
+    const order = ["how", "forever", "cloud", "mcp", "librarian", "kept", "yours", "helpers", "start"];
     const at = order.map((id) => html.indexOf(`id="${id}"`));
     for (const index of at) expect(index).toBeGreaterThan(-1);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(html).toContain("WhatsApp");
-    expect(html).toContain("Claude Code");
+    // Jordi, vn_668d73df: no screenshot sections, no garden example, no made-up names.
+    for (const gone of ['id="console"', 'id="graph"', 'id="constellation"', 'id="strength"', "pp-show", "<img"]) expect(html).not.toContain(gone);
+    expect(html).not.toMatch(/garden shed|\bshed\b|cedar|westcomb|cabin decision/i);
   });
-
-  it("shows each benefit after its screenshot, and every screenshot has a real description", () => {
-    const html = render("/");
-    for (const section of html.matchAll(/<section class="pp-show[^"]*"[^>]*>([\s\S]*?)<\/section>/g)) {
-      const body = section[1];
-      expect(body.indexOf("<img")).toBeGreaterThan(-1);
-      expect(body.indexOf("<img")).toBeLessThan(body.indexOf("<h2"));
-    }
-    expect(html.match(/<section class="pp-show/g)).toHaveLength(6);
-    for (const match of html.matchAll(/<img[^>]*alt="([^"]*)"/g)) expect(match[1].length).toBeGreaterThan(60);
+  it("explains the raw file and the organized file, and that the organized one can be made again (E25-S3 it2)", () => {
+    const html = render("/").replace(/\s+/g, " ");
+    const kept = html.slice(html.indexOf('id="kept"'), html.indexOf('id="yours"'));
+    expect(kept).toContain("Kept exactly as you said it.");
+    expect(kept).toContain("Raw file");
+    expect(kept).toContain("Kept forever. Never edited.");
+    expect(kept).toContain("Organized file · made again");
+    const yours = html.slice(html.indexOf('id="yours"'), html.indexOf('id="helpers"'));
+    for (const line of ["The library is yours.", "Voice note", "Zenod", "Your Google Drive", "Your GitHub repo", "Obsidian"]) expect(yours).toContain(line);
   });
-
   it("keeps the public offer and a checkout that stays closed until paid signup is ready", () => {
     const html = render("/").replace(/\s+/g, " ");
     expect(html).toContain("€9/month + VAT");
@@ -96,9 +96,9 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
 
   it("says early that AI tools connect over MCP from the cloud, with a visual and the real connect page", () => {
     const html = render("/");
-    const mcp = html.slice(html.indexOf('id="mcp"'), html.indexOf('id="how"'));
+    const mcp = html.slice(html.indexOf('id="mcp"'), html.indexOf('id="librarian"'));
     expect(html.indexOf('id="mcp"')).toBeLessThan(html.indexOf('id="kept"'));
-    expect(mcp).toContain("over MCP, from the cloud");
+    expect(mcp).toContain("Over MCP, from the cloud");
     expect(mcp).toContain("cloud.zenod.dev/mcp");
     for (const tool of ["WhatsApp", "Claude", "ChatGPT", "Codex", "Cursor", "VS Code", "Gemini CLI"]) expect(mcp).toContain(tool);
     expect(mcp).toContain("MCP Registry as Zenod");
@@ -106,67 +106,24 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(mcp).toContain('href="/connect"');
     expect(mcp).toMatch(/class="mv-stage scene mv-hub"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/);
   });
-
-  it("opens with five short animated moves before the MCP section (EPIC-25)", () => {
+  it("shows every idea as one animated diagram, connecting agents third and helpers last (EPIC-25, E25-S3 it2)", () => {
     const html = render("/");
-    const order = ["how-zenod-works", "forever", "cloud", "helpers", "librarian", "mcp", "kept"];
-    const at = order.map((id) => html.indexOf(`id="${id}"`));
-    for (const index of at) expect(index).toBeGreaterThan(-1);
-    expect([...at].sort((a, b) => a - b)).toEqual(at);
-    const moves = html.slice(at[0], at[5]);
+    const moves = html.slice(html.indexOf('id="how"'), html.indexOf('id="start"'));
     expect(moves).toContain("forever, exactly as you said them");
     expect(moves).toContain("Google Drive or GitHub");
     expect(moves).toContain("cloud of thoughts");
-    expect(moves).toContain("Send helpers into your memory");
+    expect(moves).toContain("Connect all your agents to one memory.");
+    expect(moves).toContain("Zenod is the librarian");
+    expect(moves).toContain("Send agents to mine your memory.");
     for (const helper of ["Open loops", "Weekly recap", "Something to try", "Patterns and ideas", "Ideas digest", "Topic gardener"]) expect(moves).toContain(helper);
     expect(moves).not.toContain("Still building");
-    expect(moves).toContain("Zenod is the librarian");
-    expect(html).toContain("Connect all your agents to one memory.");
+    // The librarian is drawn with arrows in and out.
+    const lib = html.slice(html.indexOf('id="librarian"'), html.indexOf('id="kept"'));
+    expect(lib.match(/class="mv-arrow[ "]/g)!.length).toBe(4);
     // Every stage is a scene with a description, so the final frame says it without motion.
-    expect(html.match(/class="mv-stage scene[^"]*"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/g)).toHaveLength(5);
-  });
-
-  it("marks the graph view and match strengths live, each with a real screen of the app (EPIC-18 W4)", () => {
-    const html = render("/");
-    // Three product scenes plus the five moves (the fifth replaced the old MCP scene).
-    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(8);
-    // Everything on the page shipped: no Coming tag is left.
+    expect(html.match(/class="mv-stage scene[^"]*"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/g)).toHaveLength(7);
     expect(html).not.toContain("pp-tag-soon");
-    const graph = html.slice(html.indexOf('id="graph"'), html.indexOf('id="constellation"'));
-    expect(graph.match(/pp-tag-live/g)!.length).toBe(2);
-    expect(graph).toContain("Graph tab");
-    expect(graph).toMatch(/<img[^>]*src="[^"]*graph-live[^"]*\.webp"[^>]*alt="[^"]{60,}"/);
-    expect(graph).toMatch(/srcSet="[^"]*graph-live-phone[^"]*\.webp"/);
-    const strength = html.slice(html.indexOf('id="strength"'), html.indexOf('id="yours"'));
-    expect(strength).toContain("pp-tag-live");
-    expect(strength).not.toContain("is coming");
-    expect(strength).toContain("Show in graph");
-    expect(strength).toMatch(/<img[^>]*src="[^"]*lit[^"]*\.webp"[^>]*alt="[^"]{60,}"/);
-    expect(strength).toMatch(/data-p="92"/);
-    expect(strength).toContain('data-type="Lisbon flat and the landlord"');
-    // The scene markup is static: without script every step is visible, and no link leads nowhere.
-    for (const name of ["whatsapp", "retrieval-screen", "retrieval-results", "constellation"]) {
-      const scene = readFileSync(new URL(`./src/scenes/${name}.html`, import.meta.url), "utf8");
-      expect(scene).not.toMatch(/href=/);
-    }
   });
-
-  it("explains the weighted memory graph as a constellation, with a retrieval at 80% that follows the strong paths (EPIC-18 W2)", () => {
-    const html = render("/").replace(/\s+/g, " ");
-    const cst = html.slice(html.indexOf('id="constellation"'), html.indexOf('id="save"'));
-    expect(cst).toContain("Live");
-    expect(cst).toContain("librarian that keeps an index of your memory");
-    expect(cst).toContain("above 80%");
-    for (const weight of ["100%", "60%", "5%"]) expect(cst).toContain(`>${weight}<`);
-    expect(cst).toContain("1 × 0.9 × 0.95 = 0.855");
-    expect(cst).toMatch(/<svg class="g cst"[^>]*role="img"[^>]*aria-label="[^"]{80,}"/);
-    // Every kept memory is a path whose multiplied strength stays at or above 0.8; every faded one falls below.
-    const scene = readFileSync(new URL("./src/scenes/constellation.html", import.meta.url), "utf8");
-    expect(scene.match(/class="cp"/g)).toHaveLength(5);
-    expect(scene.match(/class="c[en] weak"/g)).toHaveLength(10);
-    expect(cst).toMatch(/Left out, below 0\.8: Timber yard receipt 0\.77/);
-  });
-
   it("plays the WhatsApp scene with production's replies word for word (root L-6)", () => {
     const scene = readFileSync(new URL("./src/scenes/whatsapp.html", import.meta.url), "utf8");
     const runtime = readFileSync(new URL("../../packages/server/src/phylaxPortedRuntime.ts", import.meta.url), "utf8");
@@ -293,6 +250,6 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
   });
 
   it("names the demo data in the footer", () => {
-    expect(render("/")).toContain("Screens show the real product with demo people and notes.");
+    expect(render("/")).toContain("Examples use demo people and notes.");
   });
 });
