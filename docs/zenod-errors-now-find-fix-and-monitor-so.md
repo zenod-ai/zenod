@@ -30,14 +30,14 @@ Goal sentence: The errors Jordi is hitting are fixed today, and the team hears o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-13T13:10Z M15 worker (run_9fa1636a): production's 4 heap crashes on 13 Nov traced to one MCP read loading the whole task-job history; fixed in #1658 (4011d6ae) with lean receipts and a 448 MB heap guard in the image; earlier: 2026-11-12T01:33Z Delivery Manager roll-up (M1, M2, M10 approved; M3 closed clean; M7 still slow, M14 drafted)
-Result: Jordi's errors from 10 Nov are fixed and six alarms watch for new ones; a separate staging and a gated hourly promote exist; filing on production is stable since the memory raise, pending M3's recheck; search speed pending M7's recheck
+Last attempted: 2026-11-18T22:12Z roll-up (DM run_7b73ac7d): M20 done, Zenod timers lighter (memory tests nightly 02:20Z, pageviews hourly, e22 refresh stopped) live cd4d1d6, first nightly run checked 19 Nov 02:45Z ; M7 search speed still waits on VPS1 load under 4 (load 14.7 on 4 cores at 22:10Z), recheck after A4's 19 Nov night measure ; M15, M13, M12, M11 done ; M14, M16 to M19 drafts for Jordi
+Result: production ed5f2fb4; filing stable, the promote gate passes (real notes 91.2 vs 90); search speed is still about 1.8 s median, mostly the GitHub pull and VPS1 load
 Evidence: [M1](evidence/e24-m1-2026-11-10.md) · [M3](evidence/e24-m3-2026-11-10.md) · [M7](evidence/e24-m7-2026-11-10.md) · [M12](evidence/e24-m12-2026-11-11.md) · [M13](evidence/e24-m13-2026-11-11.md) · [M15](evidence/e24-m15-2026-11-13.md)
-Waiting on: M7 recheck after VPS1 load drops ; Jordi: infra-vps/EPIC-2-A50 for production promotes
+Waiting on: VPS1 load back under 4 (infra-vps; A4 fixes Phylax's nightly part) for the M7 recheck ; Jordi: drafts M14, M16 to M19
 Approved work: none
-Next action: the hourly promote moves #1658 (4011d6ae) to production, then infra-vps E15-R25 watches 24 h with no exit 134; on EPIC-2-A50 yes the M12 timer promotes staging to production; then E24-3, the week-long watch
+Next action: 19 Nov: read A4's night load and M20's first nightly run, then recheck M7 search speed on production
 Source revision: production d9ebdd6, staging e0b6d80 and later
-Verified at: 2026-11-13T13:10Z (#1658 ci green and merged 4011d6ae; not yet on staging or production)
+Verified at: 2026-11-18T22:12Z (production ed5f2fb4; VPS1 /proc/loadavg 14.68 at 22:10Z; rows M1 to M20 read)
 
 ## Waiting on
 
