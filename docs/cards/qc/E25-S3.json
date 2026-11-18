@@ -1,46 +1,60 @@
 {
   "row": "E25-S3",
   "card": "docs/cards/E25-S3.md",
-  "cardSha": "b32f75f7972eb153",
+  "cardSha": "a792aa7ace056d9c",
   "inputs": {
-    "card": "b32f75f7972eb153",
-    "page": "e812d30bf2f6387c",
+    "card": "a792aa7ace056d9c",
+    "page": "2efab4e331f453db",
     "rules": "7dd845c8b4b0e115",
-    "words": "a0aa04dc7d177402"
+    "words": "0386fccfee447245"
   },
-  "checkedAt": "2026-11-18T08:28:35Z",
+  "checkedAt": "2026-11-18T18:43:28Z",
   "by": "card_qc.py (console judge)",
   "words": [
+    {
+      "said": "Don't talk about the shit. … I don't, a garden shit. … Can you do a normal example that is more normal, please? … And then I see some in some West Combrie, like, can you render this yourself? … There is one section that is like one of the PNGs is not loading and kept exactly as you said it, but we need to explain is that we have a raw file and then a derived file and we keep both and the derived you can recreate as new, more powerful agents come, but we always kept. … You need to make this point more clearly. … Can we have a normal example, please, man? … If you just show a screenshot of a GitHub repo, it's not so clear, you know? … I love point three. … It's a point three.",
+      "where": "vn_668d73df, his note on this card 2026-11-18",
+      "key": "vn_668d73df",
+      "when": "newest",
+      "status": "met",
+      "how": "Birthday dinner and dentist log, raw and organized file diagram, library diagram, and no garden or Westcombe on the evidence page."
+    },
     {
       "said": "this is a self-organizing digital memory, where you can use WhatsApp to just send voice notes and ... it all organizes, self-organizes into your digital memory. And then you can connect all your agents via MCP ... you could have like personas that are kind of dispatched on your memory to look for like things that you should be reminded of or maybe look for ideas or look for possibilities you haven't thought of or maybe more therapy stuff or more like optimization ... And we should have all the landing page, really make sure that we have it up to date with all the latest and coolest way to explain stuff.",
       "where": "vn_101d2c67",
       "status": "met",
-      "how": "Hero reads 'A digital memory that organizes itself'; WhatsApp voice notes and the log, cloud and helper sections show self-organizing."
+      "how": "Hero reads self-organizing digital memory with WhatsApp voice notes; MCP agents and helpers as personas appear lower down."
     },
     {
-      "said": "a self-organizing digital memory ... connect all your agents via MCP ... personas",
-      "where": "vn_101d2c67",
+      "said": "I think there is too much text, you know? I love that each thing is an animation with a diagram. That I love.",
+      "where": "vn_668d73df",
       "status": "met",
-      "how": "Hero says connect all your agents over MCP; section 5 lists Claude, ChatGPT, Cursor; section 3 shows helpers as personas."
+      "how": "Evidence page text is shorter and each idea has its own diagram, though the hero still carries two paragraphs."
+    },
+    {
+      "said": "Can we have a normal example ... too much text",
+      "where": "vn_668d73df",
+      "status": "met",
+      "how": "Birthday and dentist example replaces garden text; each section is a diagram with short captions."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Desktop and phone pages render cleanly with no sideways overflow; the hero states the answer, sections show the voice-note log, cloud graph and helpers."
+    "summary": "At 390 px buttons and text fit with no sideways scroll; the first screen opens with the h1 and prose before the chat mockup. At 1280 px the hero, chat mockup and diagrams render cleanly with no broken images."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the rewritten zenod.dev now explains Zenod the way Jordi does, using the evidence page.",
+    "asked": "Decide whether the redrawn zenod.dev page now explains Zenod clearly, so he can approve or reject the card.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": null,
-    "page": "e812d30bf2f6387c",
-    "walkedAt": "2026-11-18T08:28:35Z",
+    "page": "2efab4e331f453db",
+    "walkedAt": "2026-11-18T18:43:28Z",
     "steps": [
       {
         "n": 1,
