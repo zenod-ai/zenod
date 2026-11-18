@@ -30,14 +30,14 @@ Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-10 roll-up: A1 done (WhatsApp uses the cloud chat's brain, closed by Jordi) ; A2 draft (the first reply after a restart, 17.5 s, E20-3) ; related: ZAL A15 and A16 made voice notes save with a local transcription fallback and receipts after reconnect ; EPIC-24 M6 is making releases seamless, which also removes most first-reply delays after a restart
-Result: WhatsApp text and voice work with the same brain as the cloud chat; answers 6.6 s typical; first answer after a restart still slow
+Last attempted: 2026-11-18T07:45Z roll-up (DM run_5b5c2d7b): A4 Phylax nightly job fix live d089571, the night of 19 Nov is measured ; A3 picture alerts live, waits for the console's first picture alert ; A2 draft (slow first answer after a release) ; A1 done
+Result: WhatsApp text and voice use the same brain as the chat; Phylax's growing 02:00 CET job is fixed and waits for one night's proof
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
-Waiting on: nobody; A2 waits on EPIC-24 M6 (seamless releases) to see whether the slow first answer remains
+Waiting on: the night of 2026-11-19 01:00-03:00Z (A4) ; the console's first picture alert (A3)
 Approved work: L-6 mandate (vn_14cb0d46)
-Next action: after M6 lands, measure the first WhatsApp answer after a release; start A2 only if it is still over a few seconds
+Next action: A4 measures VPS1 load on the night of 19 Nov and tells infra-vps
 Source revision: main `468ee50` live
-Verified at: 2026-11-10T08:10Z
+Verified at: 2026-11-18T07:45Z (rows A1..A4 read; production e86c6e34)
 
 ## Non-Goals
 
