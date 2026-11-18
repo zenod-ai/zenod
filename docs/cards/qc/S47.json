@@ -4,39 +4,38 @@
   "cardSha": "027d2cca35f979cc",
   "inputs": {
     "card": "027d2cca35f979cc",
-    "page": "cf49b34bf8e813c5",
+    "page": "740a4bd8865386e3",
     "rules": "7dd845c8b4b0e115",
     "words": "e48f40f49658ebad"
   },
-  "checkedAt": "2026-11-18T09:30:37Z",
+  "checkedAt": "2026-11-18T09:31:10Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "personas that are kind of dispatched on your memory",
       "where": "the card's source",
       "status": "met",
-      "how": "Evidence page shows five personas (Remind me, Your ideas, New possibilities, Reflect, Make it easier) with one switch each, plus a quiet Keep my memory tidy switch."
+      "how": "Phone and laptop screens show five persona cards (Remind me, Your ideas, New possibilities, Reflect, Make it easier) with one switch each, plus the Keep my memory tidy switch."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 and 1280 px the live Helpers screen shows five personas with one switch each, the tidy switch, and Make it easier as coming soon; the page loads with no sideways overflow and the punchline box comes first."
+    "summary": "Both widths open with the punchline box and show the live Helpers screen with five personas and the tidy switch; the card has no feedback block, which is fine for an evidence page."
   },
-  "pass": false,
-  "held": [
-    "dead end: step 3, the link 'Open your own Helpers screen' on http://vps3.taild81fbb.ts.net:8921/e14-s47/ never arrives (https://cloud.zenod.dev/app)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "He must decide whether the five personas read clearly on his Helpers screen, answering the recommended yes or no.",
-    "ambiguous": ""
+    "asked": "Decide whether the five personas read clearly on the Helpers screen, answering yes or no.",
+    "ambiguous": "",
+    "note": "\"Make it easier now finds one easier way each week\" could be read as already switched on for testers, or as off until a user switches it on; the evidence says it is off until switched on, but the card line does not say so."
   },
   "clicks": {
-    "dead": "step 3, the link 'Open your own Helpers screen' on http://vps3.taild81fbb.ts.net:8921/e14-s47/ never arrives (https://cloud.zenod.dev/app)",
+    "dead": null,
     "end": "a page to read",
-    "page": "cf49b34bf8e813c5",
-    "walkedAt": "2026-11-18T09:30:37Z",
+    "page": "740a4bd8865386e3",
+    "walkedAt": "2026-11-18T09:31:10Z",
     "steps": [
       {
         "n": 1,
@@ -52,12 +51,11 @@
       },
       {
         "n": 3,
-        "what": "open the link 'Open your own Helpers screen'",
-        "url": "https://cloud.zenod.dev/app",
-        "result": "did not open (apiRequestContext.get: Timeout 15000ms exceeded.)"
+        "what": "open the link 'cloud.zenod.dev'",
+        "url": "https://cloud.zenod.dev/",
+        "result": "answered 200"
       }
-    ],
-    "shot": "S47-dead.webp"
+    ]
   },
   "shots": [
     {
