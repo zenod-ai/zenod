@@ -2,7 +2,8 @@
 from: alpha9
 about: Also in Jordi's note vn_101d2c67 (E75-S24): the landing page up to date, personas on your memory; Obsidian answered
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-18-zenod-re-also-in-jordi-s-note-vn-101d2c67-e75.md
 product-from: vn_101d2c67 was said on his card 'The Zenod influencer list now holds 50 people' (E75-S24, objective Zenod: 5 testers); the earlier zenod note 1015e5d2 places the same words on Zenod
 ---
 Same ask as desk/inbox/2026-11-18-alpha9-jordi-18-nov-04-1xz-do-the-memory-files.md, one ask not two; this adds his exact words and our answer to its point 1.
