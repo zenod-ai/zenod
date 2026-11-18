@@ -450,7 +450,7 @@ describe("persona settings routes (EPIC-14 S4)", () => {
     try {
       const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
       expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
-        ["weekly-recap", true, null], ["open-loops", true, null], ["people-follow-ups", false, null],
+        ["weekly-recap", true, null], ["open-loops", true, null], ["people-follow-ups", true, null],
         ["topic-gardener", false, null], ["ideas-digest", false, null], ["something-to-try", false, null], ["patterns-and-ideas", false, null], ["make-it-easier", false, null], ["memory-health", false, null], ["clarifier", false, null],
       ]);
       // S44: a new account starts with Weekly recap and Open loops (every 3 days) on, the rest off.
@@ -586,7 +586,8 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     await mkdir(fresh.dataDir, { recursive: true });
     try {
       const store = personasFor(fresh);
-      expect(BUILT_IN_PERSONAS.filter((p) => personaEnabled(store, p)).map((p) => p.id)).toEqual(["weekly-recap", "open-loops"]);
+      expect(BUILT_IN_PERSONAS.filter((p) => personaEnabled(store, p)).map((p) => p.id)).toEqual(["weekly-recap", "open-loops", "people-follow-ups"]);
+      expect(personaSchedule(store, PEOPLE_FOLLOW_UPS)).toEqual({ every: "days", days: 3 });
       expect(personaSchedule(store, OPEN_LOOPS)).toEqual({ every: "days", days: 3 });
       expect(personaSchedule(store, WEEKLY_RECAP)).toEqual({ every: "week" });
       // A tester's own switch-off stays off when the store opens again.
@@ -718,6 +719,44 @@ describe("persona catalog (EPIC-14 S4 round 2)", () => {
     owner.setEnabled("something-to-try", false);
     expect(owner.keepOnIfUsedBefore("something-to-try", WEEKLY_RECAP_OFF_SINCE)).toBe(false);
     expect(owner.enabled("something-to-try")).toBe(false);
+  });
+
+  it("S48: New possibilities (Something to try) runs every 3 days; a cadence the user set stays", () => {
+    expect(SOMETHING_TO_TRY.schedule).toEqual({ every: "days", days: 3 });
+    const store = new PersonaStore(join(dir, "s48-try.sqlite"));
+    expect(personaSchedule(store, SOMETHING_TO_TRY)).toEqual({ every: "days", days: 3 });
+    store.setCadence("something-to-try", { every: "night" }, false);
+    expect(personaSchedule(store, SOMETHING_TO_TRY)).toEqual({ every: "night" });
+    store.setCadence("something-to-try", { every: "days", days: 5 }, false);
+    expect(personaSchedule(store, SOMETHING_TO_TRY)).toEqual({ every: "days", days: 5 });
+  });
+
+  it("S48: Remind me takes in People and follow-ups for a tester with Remind me on, never for the owner or a tester's own off", () => {
+    const join_ = (store: PersonaStore) => store.joinIfGroupOn("people-follow-ups", ["open-loops", "weekly-recap"], WEEKLY_RECAP_OFF_SINCE, { every: "days", days: 3 });
+    const later = () => new Date("2026-11-17T20:00:00Z");
+    // A tester on the S44 defaults: People and follow-ups switches on, every 3 days, once.
+    const tester = new PersonaStore(join(dir, "s48-tester.sqlite"), later);
+    tester.applyTesterDefaults(TESTER_DEFAULT_HELPERS.filter((d) => d.personaId !== "people-follow-ups"));
+    expect(join_(tester)).toBe(true);
+    expect(tester.enabled("people-follow-ups")).toBe(true);
+    expect(personaSchedule(tester, PEOPLE_FOLLOW_UPS)).toEqual({ every: "days", days: 3 });
+    tester.setEnabled("people-follow-ups", false);
+    expect(join_(tester)).toBe(false);
+    expect(tester.enabled("people-follow-ups")).toBe(false);
+    // A tester who switched Remind me off: nothing switches on.
+    const off = new PersonaStore(join(dir, "s48-off.sqlite"), later);
+    off.setEnabled("open-loops", false);
+    off.setEnabled("weekly-recap", false);
+    expect(join_(off)).toBe(false);
+    expect(off.enabled("people-follow-ups")).toBeNull();
+    // The owner's account (helpers used before 11 Nov): left exactly as it is, on stays on, off stays off.
+    const owner = new PersonaStore(join(dir, "s48-owner.sqlite"), () => new Date("2026-11-05T03:00:00Z"));
+    owner.setEnabled("open-loops", true);
+    expect(join_(owner)).toBe(false);
+    expect(owner.enabled("people-follow-ups")).toBeNull();
+    owner.setEnabled("people-follow-ups", true);
+    expect(join_(owner)).toBe(false);
+    expect(owner.enabled("people-follow-ups")).toBe(true);
   });
 
   it("Patterns and ideas names one pattern gently with one idea research supports, as a why yes, why not card (S41)", async () => {

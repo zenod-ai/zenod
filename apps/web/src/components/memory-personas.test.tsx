@@ -176,15 +176,39 @@ describe("MemoryPersonas: five personas", () => {
     expect(screen.queryByRole("list", { name: "Other helpers" })).toBeNull()
   })
 
-  it("a tester with Weekly recap and Open loops on sees only Remind me on", async () => {
-    mockFetch(() => nine((id) => id === "weekly-recap" || id === "open-loops"))
+  it("a tester with Remind me on (S44 and S48 defaults) sees only Remind me on", async () => {
+    mockFetch(() => nine((id) => ["weekly-recap", "open-loops", "people-follow-ups"].includes(id)))
     render(<MemoryPersonas />)
     expect(await screen.findByRole("switch", { name: "Remind me on" })).toBeTruthy()
     for (const name of ["Your ideas", "New possibilities", "Reflect", "Make it easier", "Keep my memory tidy"])
       expect(screen.getByRole("switch", { name: `${name} off` })).toBeTruthy()
-    expect(screen.getByRole("switch", { name: "People and follow-ups off" })).toBeTruthy()
+    expect(screen.getByRole("switch", { name: "People and follow-ups on" })).toBeTruthy()
     expect(screen.queryByText(/helpers on$/)).toBeNull()
     expect(screen.getByText(/1 of 5 on\./)).toBeTruthy()
+  })
+
+  it("S48: People and follow-ups is inside Remind me: one switch turns all three on, a part-on Remind me says so", async () => {
+    let state = nine((id) => id === "weekly-recap" || id === "open-loops")
+    const calls = mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        const id = url.split("/").at(-1)!
+        const body = JSON.parse(String(init.body)) as { enabled: boolean }
+        state = { ...state, personas: state.personas.map((p) => (p.id === id ? { ...p, enabled: body.enabled } : p)) }
+      }
+      return state
+    })
+    render(<MemoryPersonas />)
+    expect(await screen.findByText("2 of 3 helpers on")).toBeTruthy()
+    fireEvent.click(screen.getByRole("switch", { name: "Remind me on" }))
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Remind me off" })).toBeTruthy())
+    fireEvent.click(screen.getByRole("switch", { name: "Remind me off" }))
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Remind me on" })).toBeTruthy())
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.url)).toEqual([
+      "/api/console/personas/open-loops", "/api/console/personas/weekly-recap",
+      "/api/console/personas/open-loops", "/api/console/personas/weekly-recap", "/api/console/personas/people-follow-ups",
+    ])
+    expect(screen.getByRole("switch", { name: "People and follow-ups on" })).toBeTruthy()
+    expect(screen.queryByText(/helpers on$/)).toBeNull()
   })
 
   it("one switch turns every helper of a persona on together", async () => {

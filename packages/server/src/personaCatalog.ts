@@ -566,9 +566,11 @@ const TRY_SYSTEM = [
 export const SOMETHING_TO_TRY: PersonaDefinition = {
   id: "something-to-try",
   name: "Something to try",
-  purpose: "One small thing to try each day, drawn from what you have been talking about.",
-  brief: "Once a day it reads what you said in the last 3 days, your voice notes first, and posts one small thing you could try because of it, with the notes it comes from. It never gives you project work.",
-  schedule: { every: "night" },
+  purpose: "One small thing to try every few days, drawn from what you have been talking about.",
+  brief: "Every 3 days it reads what you said in the last 3 days, your voice notes first, and posts one small thing you could try because of it, with the notes it comes from. It never gives you project work.",
+  // EPIC-14 S48 (Jordi's E14-A12 yes, 18 Nov): New possibilities runs every 3 days, the same 3 days it
+  // reads, instead of every night. A cadence the user set themselves is stored and still wins.
+  schedule: { every: "days", days: 3 },
   skills: ["read", "write-own-folder", "post-inbox"],
   defaultEnabled: false,
   // One cheap call a day, plus reading its own last few days back.

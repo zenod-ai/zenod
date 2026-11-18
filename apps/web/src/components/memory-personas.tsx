@@ -300,7 +300,7 @@ export type PersonaGroup = {
   line: string
   /** The helpers its switch turns on and off together. */
   helpers: readonly string[]
-  /** Listed with it, each still on its own switch (People and follow-ups joins Remind me in S48). */
+  /** Listed with it, each still on its own switch, outside the persona's switch. */
   alongside?: readonly string[]
   /** Not built yet: shown as coming, no switch (Make it easier was, until S49 built it). */
   coming?: boolean
@@ -310,9 +310,9 @@ export const PERSONA_GROUPS: readonly PersonaGroup[] = [
   {
     id: "remind-me",
     name: "Remind me",
-    line: "Loose ends you said you would do, and your week in a few lines.",
-    helpers: ["open-loops", "weekly-recap"],
-    alongside: ["people-follow-ups"],
+    line: "Loose ends you said you would do, people to get back to, and your week in a few lines.",
+    // S48: People and follow-ups joined; the switch turns all three on and off together.
+    helpers: ["open-loops", "weekly-recap", "people-follow-ups"],
   },
   {
     id: "your-ideas",
