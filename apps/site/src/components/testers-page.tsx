@@ -14,6 +14,7 @@ import * as React from "react";
 
 import { WhatsappScene } from "@/components/paper-landing";
 import { CloudStage, KeptStage } from "@/components/five-moves";
+import { SampleMemory } from "@/components/sample-memory";
 import { countSignup, currentVisitSource } from "@/lib/counter";
 import { startScenes } from "@/lib/scenes";
 import {
@@ -355,6 +356,9 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
             </div>
           ) : null}
         </section>
+
+        {/* E26-S35: Zenod at work in the first screens, before the promises and the form. */}
+        <SampleMemory />
 
         <Promises />
 

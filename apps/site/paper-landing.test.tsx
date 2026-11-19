@@ -190,6 +190,21 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(testers).toContain("<summary>Menu</summary>");
   });
 
+  it("shows a read-only sample memory, Sara's week, above the promises and the form (E26-S35)", () => {
+    const testers = render("/testers").replace(/<!-- -->/g, "").replace(/\s+/g, " ");
+    const sample = testers.indexOf('data-testid="sample-memory"');
+    expect(sample).toBeGreaterThan(0);
+    expect(sample).toBeLessThan(testers.indexOf("What you get"));
+    expect(sample).toBeLessThan(testers.indexOf('id="apply"'));
+    expect(sample).toBeGreaterThan(testers.indexOf('href="#apply">Apply now'));
+    expect(testers).toContain("Sara’s week, as Zenod keeps it.");
+    // A thought is open from the start, showing the voice note it came from, word for word.
+    expect(testers).toContain("Sara’s birthday is Saturday. Book dinner for six at the Italian place.");
+    expect(testers.match(/class="sm-n[^"]*" role="button" tabindex="0"/g)?.length).toBe(7);
+    expect(testers).not.toMatch(/garden|\bshed\b|westcomb|cabin/i);
+    expect(testers).toContain("Your first 30 memories free. No card.");
+  });
+
   it("carries a tester code from /testers?code= into the one-link funnel (EPIC-26 T1)", () => {
     vi.stubGlobal("window", { location: { pathname: "/testers", search: "?code=TESTER1" } });
     const withCode = renderToStaticMarkup(createElement(App)).replace(/\s+/g, " ");
