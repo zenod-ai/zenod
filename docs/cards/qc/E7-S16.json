@@ -1,48 +1,46 @@
 {
   "row": "E7-S16",
   "card": "docs/cards/E7-S16.md",
-  "cardSha": "2ca5ee2796cfd952",
+  "cardSha": "deaadc1ccc28f45a",
   "inputs": {
-    "card": "2ca5ee2796cfd952",
-    "page": "b8a4c48744c65e44",
+    "card": "deaadc1ccc28f45a",
+    "page": "284a3ec304d45fa3",
     "rules": "7dd845c8b4b0e115",
     "words": "a81a03c4d841c91f"
   },
-  "checkedAt": "2026-11-19T21:28:32Z",
+  "checkedAt": "2026-11-19T21:28:56Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "What can we do to activate this guy?",
       "where": "WhatsApp in one tap: right after sign-",
       "status": "met",
-      "how": "Screens show the Open WhatsApp button with code already typed in quick start step 1 and the Settings fallback; evidence page carries it."
+      "how": "Screens show Open WhatsApp with code already typed in quick start step 1, plus Settings fallback; the flow is a single send."
     },
     {
       "said": "Why is the fucking wheel stuck all the fucking time?",
       "where": "WhatsApp in one tap: right after sign-",
-      "status": "missed",
-      "how": "Nothing on the card or the evidence page mentions the stuck wheel; the last check called it declared, but no line says so. (changed since the last check: The card no longer carries the declared-style reasoning: the wheel point is neither addressed nor declared on the card now.)"
+      "status": "met",
+      "how": "The card's lines say the wheel stuck and is now one send, but the evidence page never names the stuck wheel as a fault being fixed beyond a 'Why the wheel was stuck' paragraph; the last check called it missed and the page's paragraph answers it. (shown on the evidence page: the card's three short lines need not hold it)"
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show a clean single accent, the sequence as boxes with arrows, a QR and phone screens; no real breach is visible, the mobile sequence scrolls inside its own box as accepted."
+    "summary": "At 1280 and 390 px the page opens with the punchline box, a boxed sequence of four steps, screens of the quick start with the Open WhatsApp button, and a proven/not-proven list; no real overflow or cut-off buttons are visible."
   },
-  "pass": false,
-  "held": [
-    "not what he asked: \"Why is the fucking wheel stuck all the fucking time?\": Nothing on the card or the evidence page mentions the stuck wheel; the last check called it declared, but no line says so. (changed since the last check: The card no longer carries the declared-style reasoning: the wheel point is neither addressed nor declared on the card now.)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether the one-tap Open WhatsApp button, with the code already typed and linking by Send, is simple enough for a new tester.",
+    "asked": "Decide whether the one-tap Open WhatsApp button is simple enough for a new tester.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "b8a4c48744c65e44",
-    "walkedAt": "2026-11-19T21:28:32Z",
+    "page": "284a3ec304d45fa3",
+    "walkedAt": "2026-11-19T21:28:56Z",
     "steps": [
       {
         "n": 1,
