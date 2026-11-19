@@ -3,7 +3,7 @@ from: alpha9
 about: A delivered or read state for each WhatsApp notify, so Jordi's briefings are confirmed delivered, not only sent (E42-S137)
 reply-to: AlfaBlok/epic-team
 status: answered
-answered: AlfaBlok/epic-team:desk/inbox/2026-11-19-zenod-re-a-delivered-or-read-state-for-each-w.md
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-19-zenod-re-a-delivered-or-read-state-for-each-w-2.md
 ---
 Jordi 19 Nov 14:14Z (vn_96d07e80): "Daily briefing should be when I wake up ... at 6 a.m. ... on my WhatsApp with the pictures", and he asked for delivery confirmed, not just sent.
 
