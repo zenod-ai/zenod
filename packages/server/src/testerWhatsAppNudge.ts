@@ -36,12 +36,12 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-/** The approved email (E26-A17), word for word. */
+/** The approved email (E26-A17), word for word; its middle sentence names the one-tap button (E26-A18, E26-S36). */
 export function testerWhatsAppNudgeMail(to: string, firstName: string | null): ZenodMail {
   const hi = firstName ? `Hi ${firstName},` : "Hi,";
   const paragraphs = [
     hi,
-    "You signed up for Zenod yesterday but your WhatsApp isn't linked yet, so Zenod can't hear your voice notes. It takes a minute: open cloud.zenod.dev, go to Settings, WhatsApp and Telegram, type your number, press Create one-time code and send that code from the same phone to the number shown.",
+    "You signed up for Zenod yesterday but your WhatsApp isn't linked yet, so Zenod can't hear your voice notes. It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send.",
     "If anything on that page goes wrong, just reply to this email and tell me what you see. I read every reply.",
     "Jordi",
   ];

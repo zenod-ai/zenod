@@ -39,10 +39,10 @@ function setup(accounts: CustomerAccount[], reads: Record<string, WhatsAppSetupR
 }
 
 describe("the approved email", () => {
-  it("is word for word Jordi's E26-A17 text", () => {
+  it("is word for word Jordi's E26-A17 text (middle sentence per E26-A18)", () => {
     const mail = testerWhatsAppNudgeMail("ana@x.io", "Ana");
     expect(mail.subject).toBe("Your Zenod WhatsApp link");
-    expect(mail.text.replace(/\n\n/g, " ")).toBe("Hi Ana, You signed up for Zenod yesterday but your WhatsApp isn't linked yet, so Zenod can't hear your voice notes. It takes a minute: open cloud.zenod.dev, go to Settings, WhatsApp and Telegram, type your number, press Create one-time code and send that code from the same phone to the number shown. If anything on that page goes wrong, just reply to this email and tell me what you see. I read every reply. Jordi");
+    expect(mail.text.replace(/\n\n/g, " ")).toBe("Hi Ana, You signed up for Zenod yesterday but your WhatsApp isn't linked yet, so Zenod can't hear your voice notes. It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send. If anything on that page goes wrong, just reply to this email and tell me what you see. I read every reply. Jordi");
     expect(testerWhatsAppNudgeMail("b@x.io", null).text.startsWith("Hi,\n\n")).toBe(true);
   });
 });
