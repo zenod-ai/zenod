@@ -1756,10 +1756,13 @@ export class ZenodPhylaxAdapter {
       "SELECT * FROM zenod_phylax_bindings WHERE phylax_tenant_id=?",
     ).get(tenant.tenantId) as unknown as BindingRow | undefined ?? null;
     let binding = readBinding();
-    if (binding && binding.state === "unavailable" && this.retryUnavailableNow(binding.account_id)) {
+    const retry = binding && binding.state === "unavailable" ? this.retryUnavailable(binding.account_id) : null;
+    if (retry) {
       // E7-S15: a binding marked unavailable while Phylax was unreachable (a VPS1 disk freeze, a restart) waited for
       // the next background refresh, so a tester asking for a WhatsApp code in that gap got a 503. Retry it once now.
-      await this.reconcileAccount(binding.account_id).catch(() => {});
+      // EPIC-24 M23: a retry already running (the setup page polls the channels every 3 s, so a poll usually starts
+      // it) is awaited too; a new tester's code request at 19 Nov 19:07Z got a 503 while that poll's retry ran.
+      await retry;
       binding = readBinding();
     }
     if (!binding || binding.state !== "active") return this.unavailable(action);
@@ -1875,12 +1878,22 @@ export class ZenodPhylaxAdapter {
   private readonly unavailableRetriedAt = new Map<string, number>();
 
   /** At most one on-demand retry of an unavailable binding per account every 30 s, so a down Phylax is not hammered. */
-  private retryUnavailableNow(accountId: string): boolean {
+  private readonly unavailableRetryRun = new Map<string, Promise<void>>();
+
+  /** The on-demand retry to wait for: the one already running for this account, else a new one (at most one start
+   * per account every 30 s), else null. Never rejects. */
+  private retryUnavailable(accountId: string): Promise<void> | null {
+    const running = this.unavailableRetryRun.get(accountId);
+    if (running) return running;
     const now = Date.now();
     const last = this.unavailableRetriedAt.get(accountId) ?? 0;
-    if (now - last < 30_000) return false;
+    if (now - last < 30_000) return null;
     this.unavailableRetriedAt.set(accountId, now);
-    return true;
+    const run = this.reconcileAccount(accountId).catch(() => {}).finally(() => {
+      if (this.unavailableRetryRun.get(accountId) === run) this.unavailableRetryRun.delete(accountId);
+    });
+    this.unavailableRetryRun.set(accountId, run);
+    return run;
   }
 
   private unavailable(action?: { operation: HostedChannelMutationName; operationId: string }) {

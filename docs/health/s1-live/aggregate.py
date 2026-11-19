@@ -249,6 +249,9 @@ def components(d: dict) -> list[dict]:
     failing = saves_failing((v.get("zenod_log") or {}).get("capturesFailingSince"), ref)
     if ac.get("error"):
         col, prob = "red", "tester-watch could not read the ledgers"
+    elif ac.get("missedAt"):
+        col, prob = "amber", (f"tester-watch missed one read at {ago(ac['missedAt'], ref)} (a promote restarting zenod-mt "
+                              f"does this); showing the read from {ago(ac.get('readAt'), ref)}")
     elif failing:
         col, prob = "red", f"saves failing since {ago(iso(failing), ref)}: no save has finished since"
     elif bk is None or bk["daysLeft"] <= 0:
@@ -283,8 +286,9 @@ def components(d: dict) -> list[dict]:
     hb_age = (ref.timestamp() * 1000 - hb) / 1000 if hb else None
     pl = v.get("phylax_log") or {}
     col, prob = "green", None
-    stall = reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref,
-                        chat_replies=(v.get("zenod_log") or {}).get("chatReplies"))
+    # EPIC-24 M23: with the ledgers unread the last "Saved" reply is unknown, not absent (row 3 shows the failure)
+    stall = None if ac.get("error") else reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref,
+                                                     chat_replies=(v.get("zenod_log") or {}).get("chatReplies"))
     if p.get("status") != 200 or pj.get("status") != "ok" or wa.get("state") != "connected":
         col, prob = "red", f"/api/health → {p.get('status')} “{pj.get('status')}”, WhatsApp {wa.get('state')}"
     elif stall:
@@ -401,10 +405,13 @@ def components(d: dict) -> list[dict]:
     tw = v.get("testers") or {}
     # A tester alert (renewal due, subscription past_due, cap near, failed captures) needs an agent today: red, so
     # it reaches the HQ alert thread (E23-U1). Read problems alone stay amber.
-    col = "red" if not tw or tw.get("alerts") else ("amber" if tw.get("problems") else "green")
+    col = "red" if not tw or tw.get("alerts") else ("amber" if tw.get("problems") or tw.get("missedAt") else "green")
     row(id="tester_watch", n="10", name="Tester watch", where="VPS1 · /usr/local/bin/tester-watch, read-only",
         status=col,
         problem=None if col == "green" else (("; ".join(tw.get("alertLines") or [])
+                                              or (f"tester-watch missed one read at {ago(tw['missedAt'], ref)} (a promote "
+                                                  "restarting zenod-mt does this); showing the last read"
+                                                  if tw.get("missedAt") and not tw.get("problems") else None)
                                               or f"{tw.get('alerts')} alerts, {tw.get('problems')} read problems") if tw
                                              else "tester-watch did not answer"),
         signal=(f"{tw.get('count')} tester codes issued, {tw.get('signedUp')} signed up; {tw.get('alerts')} alerts, "
@@ -473,8 +480,8 @@ def components(d: dict) -> list[dict]:
               "packages/server/test/opsAlerts.test.ts; test_aggregate.py AlertRows")
 
     # replies: the ZAL-A8 stall rule at 15 min instead of 60, plus staged faults
-    rstall = reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref, minutes=ALERT_MIN,
-                         chat_replies=zl.get("chatReplies"))
+    rstall = None if ac.get("error") else reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref,
+                                                      minutes=ALERT_MIN, chat_replies=zl.get("chatReplies"))
     rdrill = recent_ops(ops, ("reply",), ref)
     rprob = None
     if rstall:
@@ -759,6 +766,32 @@ def remember_chat_replies(raw: dict, st: dict, ref: dt.datetime) -> dict:
     return out
 
 
+TW_GRACE_MIN = 20  # EPIC-24 M23: one missed tester-watch read (a promote swapping zenod-mt) shows the last reading
+
+
+def remember_testers(raw: dict, st: dict, ref: dt.datetime) -> dict:
+    """EPIC-24 M23: tester-watch reads the ledgers on zenod-mt's volume; the 22:56Z probe on 19 Nov ran 11 s after a
+    promote started the new zenod-mt and the read failed. That one miss turned four rows red, two of them falsely
+    ("no Saved reply" since the oldest message of the day, as the last Saved reply was unknown). A good read is kept
+    in the state; a failed read within TW_GRACE_MIN of it shows the kept one, marked `missedAt` (amber, no alert).
+    A second miss in a row stays red. Mutates `st` (the caller's copy), returns a new raw."""
+    v = raw.get("vps1")
+    if not isinstance(v, dict):
+        return raw
+    ac = v.get("accounts") or {}
+    if ac and not ac.get("error"):
+        st["testersLast"] = {"at": iso(ref), "accounts": ac, "testers": v.get("testers")}
+        return raw
+    last = st.get("testersLast") or {}
+    at = parse_ts(last.get("at"))
+    if not ac.get("error") or not at or (ref - at).total_seconds() > TW_GRACE_MIN * 60:
+        return raw
+    out = json.loads(json.dumps(raw))
+    out["vps1"]["accounts"] = dict(last["accounts"], missedAt=iso(ref), readAt=last["at"], missError=ac["error"])
+    out["vps1"]["testers"] = dict(last["testers"], missedAt=iso(ref)) if last.get("testers") else None
+    return out
+
+
 def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
     """Raw probe + previous state → (document, new state). Pure apart from the inputs."""
     st = json.loads(json.dumps(state))   # never mutate the caller's copy
@@ -769,6 +802,7 @@ def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
     ref = parse_ts(raw["probedAt"])
     raw = remember_chat_replies(raw, st, ref)
     raw = remember_credit(raw, st, ref)
+    raw = remember_testers(raw, st, ref)
     for c in components(raw):
         probe_status = c["status"]
         c["status"], c["problem"], smoke = merge_smoke(c["status"], c["problem"], raw.get("smoke"), c["id"], ref)
