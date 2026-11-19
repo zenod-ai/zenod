@@ -1,46 +1,46 @@
 {
   "row": "E26-S35",
   "card": "docs/cards/E26-S35.md",
-  "cardSha": "a88c0db8ab0ee576",
+  "cardSha": "2c38f0b947b16e44",
   "inputs": {
-    "card": "a88c0db8ab0ee576",
+    "card": "2c38f0b947b16e44",
     "page": "bfee8944310d732d",
     "rules": "7dd845c8b4b0e115",
     "words": "f6294860facec609"
   },
-  "checkedAt": "2026-11-19T22:16:16Z",
+  "checkedAt": "2026-11-19T22:20:15Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "So this graph functionality is incredibly cool. It really helps demonstrate, and I think it should be part of the landing page.",
       "where": "2026-11-19",
       "status": "declared",
-      "how": "The testers page shows Sara's week as a tappable thought graph under the hero. The card plainly says the home page is not done yet."
+      "how": "The testers page shows Sara's week as a tappable thought graph under the hero; the card's ✗ line says the home page is not done."
     },
     {
       "said": "this graph functionality is incredibly cool ... it should be part of the landing page\\",
       "where": "2026-11-08",
       "status": "declared",
-      "how": "Same request from 8 Nov: the graph is shown on the testers page, and the card's ✗ line states the landing page is not done."
+      "how": "Same 8 Nov request; the graph is on the testers page and the card's ✗ line says the landing page is not done."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 and 1280 px the sample graph, the linked-thought panel and the page text all fit with no sideways scroll and readable labels; the page opens with the hero, then the sample."
+    "summary": "Both widths show the hero, the offer and Apply now, then Sara's week as a drawn graph with a tappable note panel; no sideways overflow and the layout fits at 390 and 1280 px."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether Sara's week sample on zenod.dev/testers, a tappable graph of linked voice-note thoughts, is the right sample to show strangers, and say keep it or what to change.",
+    "asked": "He must decide whether Sara's week is the right sample to show strangers, answering Yes (keep it) or No (say what to change).",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
     "page": "bfee8944310d732d",
-    "walkedAt": "2026-11-19T22:16:16Z",
+    "walkedAt": "2026-11-19T22:20:15Z",
     "steps": [
       {
         "n": 1,
