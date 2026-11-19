@@ -30,14 +30,14 @@ Goal sentence: The errors Jordi is hitting are fixed today, and the team hears o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-18T22:12Z roll-up (DM run_7b73ac7d): M20 done, Zenod timers lighter (memory tests nightly 02:20Z, pageviews hourly, e22 refresh stopped) live cd4d1d6, first nightly run checked 19 Nov 02:45Z ; M7 search speed still waits on VPS1 load under 4 (load 14.7 on 4 cores at 22:10Z), recheck after A4's 19 Nov night measure ; M15, M13, M12, M11 done ; M14, M16 to M19 drafts for Jordi
-Result: production ed5f2fb4; filing stable, the promote gate passes (real notes 91.2 vs 90); search speed is still about 1.8 s median, mostly the GitHub pull and VPS1 load
+Last attempted: 2026-11-19T23:12Z roll-up (DM run_261ba31e): M21 done, four VPS1 disk freezes on 19 Nov took production down for minutes each; Zenod's watchdog now writes to the Zenod desk first; Hetzner support mailed (infra-vps EPIC-2-A58, answered) ; M22 done, the two false health alarms fixed live 92fe943 and a promote-lag check added ; M23 running, four evening alarms (a WhatsApp message at 17:45Z with no Saved reply first) ; M20 done, timers lighter ; M7 search speed still waits on VPS1 load ; M14, M16 to M19 drafts
+Result: production c68f23f; alarms reach the Zenod desk; health page checks re-installed from main; one WhatsApp message under investigation
 Evidence: [M1](evidence/e24-m1-2026-11-10.md) · [M3](evidence/e24-m3-2026-11-10.md) · [M7](evidence/e24-m7-2026-11-10.md) · [M12](evidence/e24-m12-2026-11-11.md) · [M13](evidence/e24-m13-2026-11-11.md) · [M15](evidence/e24-m15-2026-11-13.md) · [M22](evidence/e24-m22-2026-11-19.md)
-Waiting on: VPS1 load back under 4 (infra-vps; A4 fixes Phylax's nightly part) for the M7 recheck ; Jordi: drafts M14, M16 to M19
+Waiting on: M23 worker ; Hetzner's answer about VPS1's data volume (infra-vps follows it) ; Jordi: drafts M14, M16 to M19
 Approved work: none
-Next action: 19 Nov: read A4's night load and M20's first nightly run, then recheck M7 search speed on production
+Next action: M23 explains and fixes the evening alarms; then recheck M7 search speed when VPS1 is calm
 Source revision: production d9ebdd6, staging e0b6d80 and later
-Verified at: 2026-11-18T22:12Z (production ed5f2fb4; VPS1 /proc/loadavg 14.68 at 22:10Z; rows M1 to M20 read)
+Verified at: 2026-11-19T23:12Z (production c68f23f via /api/health; rows M7 to M23 read)
 
 ## Waiting on
 
