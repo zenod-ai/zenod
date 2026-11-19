@@ -447,6 +447,43 @@ class ChatRepliesSurviveRotation(unittest.TestCase):
         self.assertEqual(A.remember_chat_replies(old, st, A.parse_ts(old["probedAt"]))["vps1"]["zenod_log"]["chatReplies"], [])
 
 
+class TesterWatchMissDuringPromote(unittest.TestCase):
+    """EPIC-24 M23: on 19 Nov 22:56Z tester-watch ran 11 s after a promote started the new zenod-mt and failed once;
+    rows 3, 4, 10 and 14 went red, 4 and 14 falsely ("no Saved reply" since 17:45Z, which had its reply)."""
+
+    def _probe(self, at, fail=False):
+        d = raw(at)
+        d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T08:00:00Z", "2026-11-03T11:40:00Z"]
+        if fail:
+            d["vps1"]["accounts"] = {"error": "JSONDecodeError"}
+            d["vps1"]["testers"] = None
+        return d
+
+    def test_one_missed_read_is_amber_and_alerts_nothing(self):
+        doc, st = A.aggregate(self._probe(T0), {})
+        doc, st = A.aggregate(self._probe("2026-11-03T12:15:00Z", fail=True), st)
+        s = {c["id"]: c["status"] for c in doc["components"]}
+        self.assertEqual((s["database"], s["tester_watch"]), ("amber", "amber"))
+        self.assertEqual((s["phylax"], s["alert_replies"]), ("green", "green"))
+        self.assertIn("missed one read", next(c for c in doc["components"] if c["id"] == "database")["problem"])
+        self.assertFalse([t for t in doc["transitions"] if t["alert"]])
+        doc, st = A.aggregate(self._probe("2026-11-03T12:30:00Z"), st)   # the next read works: green again
+        self.assertEqual({c["id"]: c["status"] for c in doc["components"]}["database"], "green")
+
+    def test_a_second_miss_in_a_row_stays_red(self):
+        doc, st = A.aggregate(self._probe(T0), {})
+        doc, st = A.aggregate(self._probe("2026-11-03T12:15:00Z", fail=True), st)
+        doc, st = A.aggregate(self._probe("2026-11-03T12:30:00Z", fail=True), st)
+        s = {c["id"]: c["status"] for c in doc["components"]}
+        self.assertEqual((s["database"], s["tester_watch"]), ("red", "red"))
+
+    def test_unread_ledgers_never_claim_a_reply_stall(self):
+        # no earlier read to fall back on: the last "Saved" reply is unknown, so rows 4 and 14 do not call it missing
+        s = status(self._probe("2026-11-03T12:15:00Z", fail=True))
+        self.assertEqual((s["database"], s["tester_watch"]), ("red", "red"))
+        self.assertEqual((s["phylax"], s["alert_replies"]), ("green", "green"))
+
+
 class AlertRows(unittest.TestCase):
     """EPIC-24 M2: rows 13-18 turn red within one run of a failure a person would notice, and clear after 15 min."""
 

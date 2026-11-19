@@ -1623,6 +1623,29 @@ describe("Zenod Phylax product adapter", () => {
     adapter.close();
   });
 
+  it("EPIC-24 M23: a code request while the page's status poll is retrying the binding waits for that retry", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "e24m23-retry-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
+    const alpha = account("alpha");
+    await adapter.setEntitlement(alpha, true);
+    remote.loseAdjustResponseOnce = true;
+    await expect(adapter.topUpAllowance({
+      account: alpha, operationId: "topup-alpha-m23", amountUnits: 100_000, auditReason: "outage stand-in",
+    })).rejects.toThrow("adjust response lost");
+    expect(await adapter.whatsappSetup(alpha.account_id)).toMatchObject({ binding: "unavailable" });
+    const tenant = adapter.customerTenant(alpha, "memory-alpha")!;
+    const action = { operation: "whatsapp.challenge" as const, operationId: "challenge-alpha-m23", body: { link: true } };
+    // The 3 s status poll and the tester's tap land together: the poll starts the retry, the tap must not get a 503.
+    const [poll, tap] = await Promise.all([adapter.channels(tenant), adapter.channels(tenant, action)]);
+    expect(poll.status).toBe(200);
+    expect(tap.status).toBe(200);
+    expect(await adapter.whatsappSetup(alpha.account_id)).toMatchObject({ bound: true, attempts: 1, lastStatus: 200 });
+    adapter.close();
+  });
+
   it("isolates two tenant mappings and replays channel actions with the original revision", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-isolation-"));
     dirs.push(dataDir);
