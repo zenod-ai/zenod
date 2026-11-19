@@ -222,6 +222,7 @@ describe("dedicated Phylax deployment islands", () => {
         "get_recent_conversation_transcript",
         "install_operating_directive",
         "notify",
+        "notify_receipt",
         "send_message",
       ]);
       for (const forbidden of [
