@@ -27,7 +27,8 @@ Dokploy, no env (root L-5). `scripts/exec-smoke.mjs` writes to prod and stays ou
 | site.home | site | `zenod.dev/` 200, title has Zenod |
 | site.connect | site | `zenod.dev/connect` 200, title has Connect |
 | cloud.health | cloud | `/api/health` 200, status ok (sha, p99 reported) |
-| cloud.deployed-sha | cloud | live sha = newest successful `publish.yml` run on main (30 min grace for a roll) |
+| cloud.deployed-sha | cloud | staging sha = newest successful `publish.yml` run on main (30 min grace for a roll; root D28: production moves only on a promote) |
+| cloud.promote-lag | cloud | production = staging, or the hourly promote tick (`~/zenod-eval/promote-schedule.jsonl`, EPIC-24 M12) is waiting as designed; red when the tick is silent > 90 min, its last run failed (gate-failed, promote-failed, error), or 3 daytime ticks saw this staging sha without promoting it (EPIC-24 M22) |
 | mcp.unauthorized | cloud | `cloud.zenod.dev/mcp` 401 with `WWW-Authenticate … resource_metadata=` |
 | mcp.resource-metadata | cloud | `/.well-known/oauth-protected-resource` names `…/mcp` and an auth server |
 | mcp.auth-metadata | cloud | `/.well-known/oauth-authorization-server` has issuer, authorize and token endpoints |
@@ -36,7 +37,7 @@ Dokploy, no env (root L-5). `scripts/exec-smoke.mjs` writes to prod and stays ou
 | phylax.health | phylax | `phylax.zenod.dev/api/health` ok, no restart required, worker heartbeat < 120 s |
 | phylax.whatsapp | phylax | WhatsApp `connected`, receive path `ready` |
 | testers.check | tester_watch | `tester-watch --check` exit 0, `OK …` |
-| deploy.poller | deploy | `infra-vps-deploy-poller` logged a zenod-mt run in 10 min, no error |
+| deploy.poller | deploy | `infra-vps-deploy-poller` logged a zenod-staging or zenod-mt run in 10 min, no error (since root D28 it polls zenod-staging every 5 min; zenod-mt lines appear only on a promote) |
 | watchdog.timer | watchdog | S5 user timer `zenod-health-watchdog` (or the old root `zenod-watchdog`) active; delivery is S5's proof |
 | ingress.tunnel | ingress | `cloudflared-vps1-sites.service` active |
 | host.disk | host | VPS1 root disk < 85 % |
@@ -63,7 +64,7 @@ Component keys are the S2 aggregate's component ids, so the aggregator and the p
 ## Schedule and storage (VPS3)
 
 User timer `zenod-smoke-prod.timer` (`OnCalendar=*:0/15`), units in [s3-smoke/units/](s3-smoke/units/). The service
-runs the installed copy `~/.local/lib/zenod-smoke/smoke-prod.mjs` (re-copy from `main` after a change), stores into
+runs the installed copy `~/.local/lib/zenod-smoke/smoke-prod.mjs` (re-copy it and `s1-live/*.py` from `main` after every change, with the Install lines below: EPIC-24 M22 found the 3 and 10 Nov copies still running on 19 Nov, so M10's staging rules never went live and two checks raised false alarms), stores into
 `~/.local/share/zenod-health/smoke/` (`latest.json`, `runs/` last 96 = 24 h), treats exit 1 as a result rather than a
 unit failure, and then starts `epic6-s1-health-probe.service`, so the page shows a new result within a minute.
 The page code [s1-live/smoke_view.py](s1-live/smoke_view.py) renders a banner (last run, pass count, the last 16 runs
@@ -81,7 +82,7 @@ Install (VPS3, as t3agent):
 
 ```
 mkdir -p ~/.local/lib/zenod-smoke && cp scripts/smoke-prod.mjs ~/.local/lib/zenod-smoke/
-cp docs/health/s1-live/smoke_view.py ~/.local/lib/epic6-s1-health/
+cp docs/health/s1-live/*.py ~/.local/lib/epic6-s1-health/   # probe, aggregate, timeline, smoke_view: always all of them
 cp docs/health/s3-smoke/units/* ~/.config/systemd/user/ && systemctl --user daemon-reload
 systemctl --user enable --now zenod-smoke-prod.timer
 ```
