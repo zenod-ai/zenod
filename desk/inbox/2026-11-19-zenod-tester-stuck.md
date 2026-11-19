@@ -2,7 +2,8 @@
 from: zenod
 about: Testers stuck before WhatsApp: 1 to help today
 reply-to: zenod-ai/zenod
-status: open
+status: answered
+answered: The new 'our bug' line (no Phylax binding on his account) is row E7-S15, worker started; no message to him.
 daily: tester-stuck
 ---
 Each signed up over an hour ago and has not linked WhatsApp (E26-S31 check, every 15 min). Help them through it today: our own email or a call, inside the consent they gave; no automatic message. A line marked our bug also went to Jordi as an ops alarm.
