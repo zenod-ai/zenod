@@ -692,52 +692,78 @@ export async function probeAudioDurationSeconds(
   }
 }
 
+/** EPIC-20 A4: gpt-4o transcribe models cap their output, so a long note is sent in parts. */
+export const OPENAI_SEGMENT_SECONDS = positiveNumberFromEnv("ZENOD_OPENAI_SEGMENT_SECONDS", 300);
+
+async function openAiTranscribePart(
+  path: string,
+  apiKey: string,
+  model: string,
+  signal?: AbortSignal,
+): Promise<TranscriptionEnvelope> {
+  const form = new FormData();
+  form.append("file", new Blob([await readFile(path)], { type: "audio/mpeg" }), "audio.mp3");
+  form.append("model", model);
+  form.append("response_format", "text");
+  if (LANGUAGE !== "auto") form.append("language", LANGUAGE);
+  const timeout = AbortSignal.timeout(300_000);
+  const response = await fetch(OPENAI_STT_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  if (!response.ok) {
+    const body = (await response.text().catch(() => "")).slice(0, 400);
+    return transcriptionFailureFromResponse("openai", response.status, body);
+  }
+  return { success: true, transcript: (await response.text()).trim(), provider: `openai ${model}` };
+}
+
 async function transcribeWithOpenAI(
   data: Buffer,
   filename: string,
   apiKey: string,
   signal?: AbortSignal,
+  model: string = OPENAI_STT_MODEL,
 ): Promise<TranscriptionEnvelope> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-openai-"));
   const input = join(dir, `in${extname(filename) || ".m4a"}`);
-  const mp3 = join(dir, "audio.mp3");
   try {
     await writeFile(input, data);
+    // 16 kHz mono 32 kb/s MP3, cut into OPENAI_SEGMENT_SECONDS parts (a short note is one part).
     await run(
       "ffmpeg",
-      ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k", mp3],
+      [
+        "-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k",
+        "-f", "segment", "-segment_time", String(OPENAI_SEGMENT_SECONDS), "-reset_timestamps", "1",
+        join(dir, "seg%04d.mp3"),
+      ],
       { signal },
     );
-    const { size } = await stat(mp3);
-    if (size > OPENAI_MAX_UPLOAD_BYTES) {
-      return {
-        success: false,
-        provider: "openai",
-        error: `compressed audio exceeds OpenAI upload cap (${Math.round(size / 1_000_000)} MB)`,
-        failureReason: "unknown",
-      };
+    const parts = (await readdir(dir)).filter((f) => f.startsWith("seg")).sort().map((f) => join(dir, f));
+    if (parts.length === 0) {
+      return { success: false, provider: "openai", error: "segmenting audio produced no parts", failureReason: "unknown" };
     }
-    const form = new FormData();
-    form.append("file", new Blob([await readFile(mp3)], { type: "audio/mpeg" }), "audio.mp3");
-    form.append("model", OPENAI_STT_MODEL);
-    form.append("response_format", "text");
-    if (LANGUAGE !== "auto") form.append("language", LANGUAGE);
-    const timeout = AbortSignal.timeout(300_000);
-    const response = await fetch(OPENAI_STT_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
-      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    });
-    if (!response.ok) {
-      const body = (await response.text().catch(() => "")).slice(0, 400);
-      return transcriptionFailureFromResponse("openai", response.status, body);
+    for (const part of parts) {
+      const { size } = await stat(part);
+      if (size > OPENAI_MAX_UPLOAD_BYTES) {
+        return {
+          success: false,
+          provider: "openai",
+          error: `compressed audio exceeds OpenAI upload cap (${Math.round(size / 1_000_000)} MB)`,
+          failureReason: "unknown",
+        };
+      }
     }
-    const transcript = (await response.text()).trim();
+    const results = await Promise.all(parts.map((part) => openAiTranscribePart(part, apiKey, model, signal)));
+    const failed = results.find((result) => !result.success);
+    if (failed) return failed;
+    const transcript = results.map((result) => result.transcript ?? "").join(" ").trim();
     if (!transcript) {
       return { success: false, provider: "openai", error: "transcription returned empty text", failureReason: "unknown" };
     }
-    return { success: true, transcript, provider: `openai ${OPENAI_STT_MODEL}` };
+    return { success: true, transcript, provider: `openai ${model}` };
   } catch (err) {
     return transcriptionFailureFromThrown("openai", err);
   } finally {
@@ -1154,6 +1180,8 @@ export type TranscribeOptions =
       model?: string;
       groqApiKey?: string | null;
       openaiApiKey?: string | null;
+      /** OpenAI model for this call (default ZENOD_OPENAI_STT_MODEL); EPIC-20 A4 uses gpt-4o-mini-transcribe. */
+      openaiModel?: string | null;
       openrouterApiKey?: string | null;
       openrouterModel?: string | null;
       /** OpenRouter `user` attribution (tenant id) when many tenants share one key. */
@@ -1218,6 +1246,7 @@ async function runTranscription(
   const openaiApiKey = (typeof options === "function" ? undefined : options.openaiApiKey) ?? process.env.OPENAI_API_KEY;
   const openrouterApiKey =
     (typeof options === "function" ? undefined : options.openrouterApiKey) ?? process.env.OPENROUTER_API_KEY;
+  const openaiModel = (typeof options === "function" ? undefined : options.openaiModel?.trim()) || OPENAI_STT_MODEL;
   const openrouterUser = typeof options === "function" ? undefined : options.openrouterUser ?? undefined;
   const openrouterModel =
     (typeof options === "function" ? undefined : options.openrouterModel) ?? DEFAULT_OPENROUTER_STT_MODEL;
@@ -1256,7 +1285,7 @@ async function runTranscription(
         : isLongAudio && longProvider === "openrouter" && openrouterApiKey && !failed.has("openrouter")
         ? `openrouter ${openrouterModel}`
         : isLongAudio && longProvider === "openai" && openaiApiKey && !failed.has("openai")
-        ? `openai ${OPENAI_STT_MODEL}`
+        ? `openai ${openaiModel}`
         : isLongAudio
           ? `whisper.cpp ${modelName}`
           : groqApiKey && !failed.has("groq")
@@ -1264,7 +1293,7 @@ async function runTranscription(
             : canTryOpenRouter && !failed.has("openrouter")
               ? `openrouter ${openrouterModel}`
               : openaiApiKey && !failed.has("openai")
-                ? `openai ${OPENAI_STT_MODEL}`
+                ? `openai ${openaiModel}`
             : `whisper.cpp ${modelName}`;
     const configuredCloudProviders = [
       ...(groqApiKey ? ["groq"] : []),
@@ -1307,7 +1336,7 @@ async function runTranscription(
       cloudFailure = result;
       console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
     } else if (longProvider === "openai" && openaiApiKey) {
-      const result = await metered("openai", OPENAI_STT_MODEL, data, filename, meterOpts, () => transcribeWithOpenAI(data, filename, openaiApiKey, signal));
+      const result = await metered("openai", openaiModel, data, filename, meterOpts, () => transcribeWithOpenAI(data, filename, openaiApiKey, signal, openaiModel));
       if (result.success || signal?.aborted) return result;
       cloudFailure = result;
       console.warn(`[transcribe] openai failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
@@ -1352,7 +1381,7 @@ async function runTranscription(
     console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
   } else if (openaiApiKey) {
     // Same, for a short-audio-only OpenAI key.
-    const result = await metered("openai", OPENAI_STT_MODEL, data, filename, meterOpts, () => transcribeWithOpenAI(data, filename, openaiApiKey, signal));
+    const result = await metered("openai", openaiModel, data, filename, meterOpts, () => transcribeWithOpenAI(data, filename, openaiApiKey, signal, openaiModel));
     if (result.success || signal?.aborted) return result;
     cloudFailure = result;
     console.warn(`[transcribe] openai failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
