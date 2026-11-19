@@ -2,8 +2,10 @@
 from: zenod-social
 about: Zenod: a public sample memory graph on zenod.dev, so a reader tries it before applying
 reply-to: zenod-ai/zenod-social
-status: open
+status: answered
+answered: zenod-ai/zenod-social:desk/inbox/2026-11-19-zenod-re-zenod-a-public-sample-memory-graph-o.md
 kind: product-feedback
+row: E26-S35
 source: Jordi voice note 8 Nov 16:09 UTC, Log/2026-11-08.md#^e-6d07aa
 product-from: "Whereas for Zenot, it's pure memory" (Jordi voice note 8 Nov 15:51 UTC)
 ---
