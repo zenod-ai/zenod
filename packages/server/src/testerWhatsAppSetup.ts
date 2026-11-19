@@ -10,7 +10,7 @@ import type { WhatsAppSetupRead } from "./zenodPhylax.js";
  * account is a masked email plus the last 4 of its id.
  */
 export interface WhatsAppSetupStep {
-  /** linked | no_channel | not_started | waiting_for_code | code_expired | refused | our_error | unknown */
+  /** linked | no_channel | channel_unavailable | channel_setting_up | channel_suspended | not_started | waiting_for_code | code_expired | refused | our_error | unknown */
   step: string;
   /** one plain line for the team */
   text: string;
@@ -19,7 +19,25 @@ export interface WhatsAppSetupStep {
 }
 
 export function whatsappSetupStep(read: WhatsAppSetupRead | null): WhatsAppSetupStep {
-  if (!read || !read.bound) {
+  if (!read) {
+    return { step: "our_error", text: "WhatsApp setup unreadable (the server's read failed, e.g. its disk was slow)", ourBug: true };
+  }
+  if (!read.bound) {
+    // E7-S15: name the binding's real state; "missing" only when there is no binding row at all.
+    const why = read.bindingError ? `, ${read.bindingError}` : "";
+    if (read.binding === "unavailable") {
+      return {
+        step: "channel_unavailable",
+        text: `WhatsApp channel unavailable: Phylax did not answer${why}; retried on the next code request and every 5 min`,
+        ourBug: true,
+      };
+    }
+    if (read.binding === "setting_up") {
+      return { step: "channel_setting_up", text: `WhatsApp channel still being set up${why}`, ourBug: true };
+    }
+    if (read.binding === "suspended") {
+      return { step: "channel_suspended", text: "WhatsApp channel suspended: the subscription does not entitle it", ourBug: true };
+    }
     return { step: "no_channel", text: "no WhatsApp channel on the account yet (Phylax binding missing)", ourBug: true };
   }
   if (read.state === "verified") return { step: "linked", text: "WhatsApp linked", ourBug: false };
@@ -111,6 +129,7 @@ export function mountTesterWhatsAppSetupRoute(
         key: account.account_id.slice(-8),
         signedUpAt: account.claimed_at,
         whatsapp: read?.state ?? null,
+        binding: read?.binding ?? null,
         attempts: read?.attempts ?? 0,
         lastAttemptAt: read?.lastAttemptAt ? new Date(read.lastAttemptAt).toISOString() : null,
         lastStatus: read?.lastStatus ?? null,

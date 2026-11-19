@@ -1599,6 +1599,26 @@ describe("Zenod Phylax product adapter", () => {
     });
   });
 
+  it("E7-S15: a code request on a binding left unavailable by an outage retries it once instead of answering 503", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf6-unavailable-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
+    const alpha = account("alpha");
+    await adapter.setEntitlement(alpha, true);
+    remote.loseAdjustResponseOnce = true;
+    await expect(adapter.topUpAllowance({
+      account: alpha, operationId: "topup-alpha-s15", amountUnits: 100_000, auditReason: "outage stand-in",
+    })).rejects.toThrow("adjust response lost");
+    expect(await adapter.whatsappSetup(alpha.account_id)).toMatchObject({ bound: false, binding: "unavailable" });
+    const tenant = adapter.customerTenant(alpha, "memory-alpha")!;
+    const action = { operation: "whatsapp.challenge" as const, operationId: "challenge-alpha-s15", body: { sender: "+34 611 111 111" } };
+    expect((await adapter.channels(tenant, action)).status).toBe(200);
+    expect(await adapter.whatsappSetup(alpha.account_id)).toMatchObject({ bound: true, binding: "active", attempts: 1, lastStatus: 200 });
+    adapter.close();
+  });
+
   it("isolates two tenant mappings and replays channel actions with the original revision", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-isolation-"));
     dirs.push(dataDir);

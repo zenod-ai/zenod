@@ -22,7 +22,17 @@ describe("whatsappSetupStep", () => {
     expect(ours).toMatchObject({ step: "our_error", ourBug: true });
     expect(ours.text).toContain("503 channels_unavailable");
     expect(whatsappSetupStep(read({ state: null, attempts: 1 })).ourBug).toBe(true);
-    expect(whatsappSetupStep(null)).toMatchObject({ step: "no_channel", ourBug: true });
+    expect(whatsappSetupStep(null)).toMatchObject({ step: "our_error", ourBug: true });
+  });
+
+  it("E7-S15: tells a missing binding from one Phylax did not answer", () => {
+    expect(whatsappSetupStep(read({ bound: false, binding: null }))).toMatchObject({ step: "no_channel", ourBug: true });
+    const down = whatsappSetupStep(read({ bound: false, binding: "unavailable", bindingError: "fetch_failed" }));
+    expect(down).toMatchObject({ step: "channel_unavailable", ourBug: true });
+    expect(down.text).toContain("fetch_failed");
+    expect(down.text).not.toContain("missing");
+    expect(whatsappSetupStep(read({ bound: false, binding: "setting_up" })).step).toBe("channel_setting_up");
+    expect(whatsappSetupStep(read({ bound: false, binding: "suspended" })).step).toBe("channel_suspended");
   });
 });
 
