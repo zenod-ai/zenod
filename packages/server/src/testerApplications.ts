@@ -14,7 +14,6 @@ import { normalizeTesterEmail, type TesterFlow, type TesterStatus } from "./test
 import { cleanApplicantName, cleanApplicantSource } from "./testerApplicants.js";
 
 export const TESTER_APPLICATIONS_FILE = "tester-applications.jsonl";
-const USE_MIN = 10;
 const USE_MAX = 2000;
 const CONTACT_MIN = 3;
 const CONTACT_MAX = 200;
@@ -57,8 +56,9 @@ export function mountTesterApplications(app: Hono<{ Bindings: HttpBindings }>, o
     if (clean(body.website, 200)) return c.json({ ok: true });
     const use = clean(body.use, USE_MAX);
     const contact = clean(body.contact, CONTACT_MAX);
-    if (use.length < USE_MIN || use.length > USE_MAX) {
-      return c.json({ error: "Tell us in a sentence or two how you would use Zenod Memory." }, 400);
+    // E26-S34: the usage answer is optional (tester page test 1); only its length is capped.
+    if (use.length > USE_MAX) {
+      return c.json({ error: "Please keep your answer under 2,000 characters." }, 400);
     }
     if (contact.length < CONTACT_MIN || contact.length > CONTACT_MAX) {
       return c.json({ error: "Leave your email, so we can send you your link." }, 400);

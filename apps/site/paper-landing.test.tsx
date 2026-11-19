@@ -163,9 +163,9 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(home).toContain("Have a tester code? Enter it at checkout.");
     const testers = render("/testers").replace(/<!-- -->/g, "").replace(/\s+/g, " ");
     expect(testers.match(/<h1\b/g)).toHaveLength(1);
-    expect(testers).toContain("How are you going to be using Zenod Memory?");
+    expect(testers).toContain("Optional: how will you use it? One line helps us.");
     const field = (name: string) => testers.match(new RegExp(`<(?:input|textarea)[^>]*name="${name}"[^>]*>`))?.[0] ?? "";
-    expect(field("use")).toContain('required=""');
+    expect(field("use")).not.toContain("required"); // E26-S34: optional
     expect(field("contact")).toContain('required=""');
     expect(field("website")).toMatch(/tabindex="-1"/i);
     for (const line of ["Your first 30 memories free. No card.", "Take as long as you like to reach 30.", "When you reach 30, Zenod stays free until the end of that month.", "never charged unless you choose to pay", "Usage is capped", "everything you send is still kept", "first ten", "a few weeks", "send us a line"])

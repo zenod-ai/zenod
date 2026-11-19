@@ -24,7 +24,8 @@ export async function fetchFreeMemories(fetcher: typeof fetch = fetch): Promise<
   }
 }
 const STORE_KEY = "zenod.tester";
-export const TESTERS_QUESTION = "How are you going to be using Zenod Memory?";
+// E26-S34 (tester page test 1, zenod-social E46-A57): optional, email is the only required field.
+export const TESTERS_QUESTION = "Optional: how will you use it? One line helps us.";
 
 export type TesterApplyStatus = "accepted" | "waitlist" | null;
 
