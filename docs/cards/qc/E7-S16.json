@@ -1,14 +1,14 @@
 {
   "row": "E7-S16",
   "card": "docs/cards/E7-S16.md",
-  "cardSha": "deaadc1ccc28f45a",
+  "cardSha": "6446bb7eb203624e",
   "inputs": {
-    "card": "deaadc1ccc28f45a",
+    "card": "6446bb7eb203624e",
     "page": "284a3ec304d45fa3",
     "rules": "7dd845c8b4b0e115",
     "words": "a81a03c4d841c91f"
   },
-  "checkedAt": "2026-11-19T21:28:56Z",
+  "checkedAt": "2026-11-19T21:29:17Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -21,26 +21,26 @@
       "said": "Why is the fucking wheel stuck all the fucking time?",
       "where": "WhatsApp in one tap: right after sign-",
       "status": "met",
-      "how": "The card's lines say the wheel stuck and is now one send, but the evidence page never names the stuck wheel as a fault being fixed beyond a 'Why the wheel was stuck' paragraph; the last check called it missed and the page's paragraph answers it. (shown on the evidence page: the card's three short lines need not hold it)"
+      "how": "Evidence page says the wheel was stuck at linking WhatsApp and that step is now one send, with the three-move problem named."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 1280 and 390 px the page opens with the punchline box, a boxed sequence of four steps, screens of the quick start with the Open WhatsApp button, and a proven/not-proven list; no real overflow or cut-off buttons are visible."
+    "summary": "Both widths load with the one-tap flow, the Open WhatsApp button, the QR on laptop, the Settings fallback and the proven and not-proven list; the page is clean and fits."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the one-tap Open WhatsApp button is simple enough for a new tester.",
+    "asked": "Decide whether a one-tap Open WhatsApp button with the code typed is simple enough for a new tester, given the team's view that it is.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "284a3ec304d45fa3",
-    "walkedAt": "2026-11-19T21:28:56Z",
+    "walkedAt": "2026-11-19T21:29:17Z",
     "steps": [
       {
         "n": 1,
