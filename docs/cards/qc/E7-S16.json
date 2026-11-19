@@ -1,0 +1,71 @@
+{
+  "row": "E7-S16",
+  "card": "docs/cards/E7-S16.md",
+  "cardSha": "98b04482ee0ab710",
+  "inputs": {
+    "card": "98b04482ee0ab710",
+    "page": "b8a4c48744c65e44",
+    "rules": "7dd845c8b4b0e115",
+    "words": "a81a03c4d841c91f"
+  },
+  "checkedAt": "2026-11-19T21:28:10Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "What can we do to activate this guy?",
+      "where": "WhatsApp in one tap: right after sign-",
+      "status": "met",
+      "how": "Screens show Open WhatsApp button with code already typed in quick start step 1, and Settings fallback; evidence page carries the activation fix."
+    },
+    {
+      "said": "Why is the fucking wheel stuck all the fucking time?",
+      "where": "WhatsApp in one tap: right after sign-",
+      "status": "declared",
+      "how": "Card's delivered lines do not mention the stuck wheel; the evidence page does not address the wheel either, so the point is not answered."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Desktop and phone screens render cleanly with no sideways overflow; the flow is shown as a sequence of boxes and the live app screens are shown."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether one button and one send is simple enough for a new tester, given the team thinks so.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "b8a4c48744c65e44",
+    "walkedAt": "2026-11-19T21:28:10Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:8921/e7-s16/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link 'whatsapp_replied'",
+        "url": "https://cloud.zenod.dev/api/public/counts",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e7-s16/",
+      "file": "E7-S16-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:8921/e7-s16/",
+      "file": "E7-S16-1280.webp"
+    }
+  ]
+}
