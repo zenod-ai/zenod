@@ -29,14 +29,14 @@ Goal sentence: zenod.dev shows early, in moving pictures, that your words are ke
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-18T07:45Z roll-up (DM run_5b5c2d7b): E25-S3 in review, zenod.dev says it his way (a digital memory that organizes itself, WhatsApp voice notes, every agent over MCP, six live helpers) on production e86c6e34; the quality check holds its card because the helpers section is a plain list, the fix goes to that row once its worker ends ; E25-S4 fix merged f5602fcd, a new memory opens in Obsidian with 0 broken links, waits for the next promote ; E25-S1 and E25-S2 done
-Result: zenod.dev live in Jordi's 18 Nov words on production e86c6e34; the Obsidian claim is checked true
-Evidence: https://zenod.dev/ ; [E25-S3 evidence](evidence/e25-s3-2026-11-18.md) ; [gate](evidence/e25-s3-gate-2026-11-18.md) ; [E25-S4 evidence](evidence/e25-s4-2026-11-18.md)
-Waiting on: the E25-S3 helpers section drawn as a shape (quality check) ; the next promote for E25-S4
+Last attempted: 2026-11-19T08:45Z roll-up (DM run_464ce9c0): E25-S3 iteration 2 approved by Jordi 18 Nov, zenod.dev tells it with Sara's week, raw and organized files, voice note to Drive or GitHub, less text (live ada4e0f) ; E25-S4 done, a new memory opens in Obsidian with no broken link ; E25-S1, E25-S2 done
+Result: zenod.dev live in Jordi's words with his examples, approved; the Obsidian claim is checked true
+Evidence: https://zenod.dev/ ; [E25-S3 iteration 2](evidence/e25-s3-it2-2026-11-18.md) ; [E25-S4](evidence/e25-s4-2026-11-18.md)
+Waiting on: nothing in this epic; the /testers first screen has no picture (look check), outside E25-S3
 Approved work: none
-Next action: redraw the helpers section as a circle around the memory, then the E25-S3 card reaches Jordi ; promote E25-S4
+Next action: none due; new landing asks from Jordi land here
 Source revision: 1f1ebae
-Verified at: 2026-11-18T07:45Z (production e86c6e34 via /api/health; zenod.dev says "organizes itself"; rows E25-S1..S4 read)
+Verified at: 2026-11-19T08:45Z (rows E25-S1 to S4 read; zenod.dev 200)
 
 ## Non-Goals
 
