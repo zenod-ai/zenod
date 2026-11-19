@@ -52,6 +52,7 @@ ol.qs-steps { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px so
 .qs-body ol { margin: 0 0 12px; padding-left: 18px; list-style: decimal; }
 .qs-body li { margin: 3px 0; }
 .qs-body p { margin: 0 0 10px; }
+.qs-body .qs-after { margin: 12px 0 0; }
 .qs-tick {
   font-size: 13px; color: var(--muted-foreground); background: var(--qs-paper); border-left: 3px solid var(--qs-green);
   padding: 8px 12px; margin: 10px 0 12px;

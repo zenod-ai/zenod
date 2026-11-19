@@ -327,7 +327,11 @@ class FakeRemote implements ZenodPhylaxRemote {
             revision: "tg:0",
           },
         },
-        challenge: { code: "42-zenod", sharedNumber: "+34 699 000 111", expiresAt: Date.now() + 60_000 },
+        challenge: {
+          code: args.link === true ? "ZEN-7K3F9QXM" : "42-zenod",
+          sharedNumber: "+34 699 000 111",
+          expiresAt: Date.now() + 60_000,
+        },
         mutation: { operationId: args.operationId, operation: "whatsapp.challenge", outcome: "succeeded", at: Date.now() },
       } };
     }
@@ -1651,6 +1655,27 @@ describe("Zenod Phylax product adapter", () => {
     expect(channelCalls[0]!.args).toEqual(channelCalls[1]!.args);
     expect(channelCalls[0]!.args.expectedRevision).toBe("wa:0");
     expect(channelCalls[0]!.token).not.toBe(remote.tokens.get(betaTenant.tenantId));
+    adapter.close();
+  });
+  it("E7-S16: a one-tap link request asks Phylax for a code with no number and shows the link code", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "e7s16-link-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
+    const alpha = account("alpha");
+    await adapter.setEntitlement(alpha, true);
+    const tenant = adapter.customerTenant(alpha, "memory-alpha")!;
+    const result = await adapter.channels(tenant, {
+      operation: "whatsapp.challenge",
+      operationId: "link-alpha-0001",
+      body: { link: true },
+    });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ challenge: { code: "ZEN-7K3F9QXM", sharedNumber: "+34 699 000 111" } });
+    const call = remote.calls.find((entry) => entry.tool === "phylax_management_v1_channel_connect")!;
+    expect(call.args).toMatchObject({ channel: "whatsapp", link: true });
+    expect(call.args).not.toHaveProperty("identity");
     adapter.close();
   });
 });

@@ -37,7 +37,7 @@ describe("Quick start (EPIC-26 S15)", () => {
     render(<QuickStartView quick={quick([])} go={go} onHide={() => undefined} />)
     expect(screen.getByTestId("quick-start-score").textContent).toContain("0 of 5")
     expect(screen.getByText("Five things, and Zenod is yours")).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Open WhatsApp settings" }))
+    fireEvent.click(screen.getByRole("button", { name: "Rather type your number" }))
     expect(go).toHaveBeenCalledWith({ section: "settings", settings: "channels" })
   })
 

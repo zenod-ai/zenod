@@ -10,6 +10,7 @@ import {
 } from "@/lib/quick-start"
 import { readPersonas, setPersonaEnabled, type Persona } from "@/lib/personas"
 import type { DashboardPlace } from "@/views/dashboard-navigation"
+import { WhatsAppOneTap } from "@/components/whatsapp-one-tap"
 
 // EPIC-26 S15 (Jordi's E26-A8, "build as shown", mockup E26-S12): one card every new tester sees above
 // Chat, five steps that tick off by themselves from what Zenod stores, and a score. Hidden at the end or
@@ -129,17 +130,22 @@ function StepBody({ id, go, ai, setAi }: { id: QuickStartStepId; go: Go; ai: "cl
   }
   switch (id) {
     case "whatsapp":
+      // E7-S16: one tap opens WhatsApp with the code typed in; sending it links the phone.
       return (
         <>
-          <ol>
-            <li>Open <b>Settings › WhatsApp &amp; Telegram</b> and type your phone number.</li>
-            <li>From that phone, send the code it shows to Zenod’s WhatsApp number.</li>
-            <li>Send anything at all, a thought, a link, a photo.</li>
-          </ol>
+          <WhatsAppOneTap
+            fallback={
+              <ol>
+                <li>Open <b>Settings › WhatsApp &amp; Telegram</b> and type your phone number.</li>
+                <li>From that phone, send the code it shows to Zenod’s WhatsApp number.</li>
+              </ol>
+            }
+          />
+          <p className="qs-after">Then send Zenod a voice note, a thought, a link or a photo.</p>
           <div className="qs-tick">Ticks itself when your first message arrives and Zenod replies.</div>
           <div className="qs-row">
-            <button type="button" className="qs-btn" onClick={() => go({ section: "settings", settings: "channels" })}>
-              Open WhatsApp settings
+            <button type="button" className="qs-btn ghost" onClick={() => go({ section: "settings", settings: "channels" })}>
+              Rather type your number
             </button>
           </div>
         </>

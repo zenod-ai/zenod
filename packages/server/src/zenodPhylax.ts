@@ -1813,7 +1813,9 @@ export class ZenodPhylaxAdapter {
           operationId: action.operationId,
           expectedRevision: revision,
           channel,
-          ...(action.operation === "whatsapp.challenge" ? { identity: action.body.sender } : {}),
+          ...(action.operation === "whatsapp.challenge" && action.body.link === true
+            ? { link: true }
+            : action.operation === "whatsapp.challenge" ? { identity: action.body.sender } : {}),
           ...(action.operation === "whatsapp.challenge" && this.whatsappWelcome?.(binding.account_id) === "tester"
             ? { welcome: "tester" }
             : {}),

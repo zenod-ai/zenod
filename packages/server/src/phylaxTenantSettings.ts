@@ -510,6 +510,20 @@ function friendlyVerificationKeyword(): string {
   return `${number}-${animal}`;
 }
 
+/**
+ * E7-S16: a one-tap WhatsApp link carries a code that binds whichever number sends it, so the
+ * tester never types their number. With no number to pin it to, the code alone is the secret:
+ * `ZEN-` plus 8 characters from a 31-letter alphabet (about 40 bits), valid 30 minutes.
+ */
+export const WHATSAPP_LINK_CODE = /^ZEN-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/;
+const WHATSAPP_LINK_CODE_IN_TEXT = /\bZEN-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}\b/i;
+/** The identity a pending link code is attributed to before any number is known. */
+export const WHATSAPP_LINK_IDENTITY = "link";
+
+export function whatsappLinkCodeIn(text: string): string | null {
+  return text.match(WHATSAPP_LINK_CODE_IN_TEXT)?.[0]?.toUpperCase() ?? null;
+}
+
 function normalizedDownstreamUrl(value: string): string {
   const parsed = new URL(value.trim());
   if (parsed.protocol !== "https:" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
@@ -973,6 +987,32 @@ export class PhylaxTenantSettingsStore {
     return { settings: this.view(tenantId), keyword };
   }
 
+  /** E7-S16: a pending WhatsApp link code with no number yet; the first number that sends it is bound. */
+  registerLinkCode(
+    tenantId: string,
+    now: number,
+    code: string,
+    managementOperationProof?: string,
+  ): { settings: PhylaxTenantSettingsView; keyword: string } {
+    if (!WHATSAPP_LINK_CODE.test(code)) throw new Error("invalid verification keyword");
+    const current = this.get(tenantId);
+    if (current.verified && current.phoneNumber) throw new Error("WhatsApp is already connected");
+    this.put({
+      ...current,
+      phoneNumber: null,
+      verified: false,
+      numberId: "primary",
+      verificationHash: verificationDigest(code).toString("hex"),
+      verificationOperationProofHash: managementOperationProof
+        ? operationProofDigest(managementOperationProof).toString("hex")
+        : null,
+      verificationExpiresAt: now + VERIFY_TTL_MS,
+      whatsappBindingRevision: randomBytes(16).toString("hex"),
+      updatedAt: new Date(now).toISOString(),
+    });
+    return { settings: this.view(tenantId), keyword: code };
+  }
+
   /** Validate one tenant's sender without mutating its existing channel configuration. */
   assertPhoneAvailable(
     tenantId: string,
@@ -1164,9 +1204,10 @@ export class PhylaxTenantSettingsStore {
     const current = this.get(input.tenantId);
     const now = input.now ?? Date.now();
     if (input.channel === "whatsapp") {
-      const identity = normalizeWhatsAppIdentifier(input.identity);
+      const link = input.identity === WHATSAPP_LINK_IDENTITY;
+      const identity = link ? null : normalizeWhatsAppIdentifier(input.identity);
       return Boolean(
-        identity &&
+        (link || identity) &&
         !current.verified &&
         current.phoneNumber === identity &&
         current.verificationExpiresAt !== null &&
@@ -1210,11 +1251,56 @@ export class PhylaxTenantSettingsStore {
       const expected = Buffer.from(candidate.verificationHash, "hex");
       return expected.length === provided.length && timingSafeEqual(expected, provided);
     });
-    if (!entry) return null;
+    if (!entry) return this.verifyLinkCode(normalized, text, now);
     if (entry.verified) return { settings: entry, replayed: true };
     const verified = {
       ...entry,
       verified: true,
+      verificationOperationProofHash: null,
+      whatsappBindingRevision: randomBytes(16).toString("hex"),
+      updatedAt: new Date(now).toISOString(),
+    };
+    this.put(verified);
+    return { settings: verified, replayed: false };
+  }
+
+  /**
+   * E7-S16: a message carrying a pending link code binds its sender's number to that tenant.
+   * A number already held by another tenant is never moved; a second send of the code from the
+   * bound number is a replay.
+   */
+  private verifyLinkCode(
+    sender: string,
+    text: string,
+    now: number,
+  ): { settings: PhylaxTenantSettings; replayed: boolean } | null {
+    const code = whatsappLinkCodeIn(text);
+    if (!code) return null;
+    const provided = verificationDigest(code);
+    const store = this.load();
+    const entry = Object.values(store).find((candidate) => {
+      if (
+        !candidate.verificationHash ||
+        !candidate.verificationExpiresAt ||
+        candidate.verificationExpiresAt < now
+      ) return false;
+      if (candidate.phoneNumber && candidate.phoneNumber !== sender) return false;
+      const expected = Buffer.from(candidate.verificationHash, "hex");
+      return expected.length === provided.length && timingSafeEqual(expected, provided);
+    });
+    if (!entry) return null;
+    if (entry.verified) {
+      return entry.phoneNumber === sender ? { settings: entry, replayed: true } : null;
+    }
+    const held = Object.values(store).some(
+      (candidate) => candidate.tenantId !== entry.tenantId && candidate.phoneNumber === sender,
+    );
+    if (held) return null;
+    const verified: PhylaxTenantSettings = {
+      ...entry,
+      phoneNumber: sender,
+      verified: true,
+      numberId: "primary",
       verificationOperationProofHash: null,
       whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
