@@ -115,6 +115,9 @@ interface ChannelOperationRow {
 /** E26-S31: one account's WhatsApp setup as the stuck-sign-up check reads it (no number, no code). */
 export interface WhatsAppSetupRead {
   bound: boolean;
+  /** E7-S15: the binding row's own state (null: no row), so the check can tell "missing" from "Phylax did not answer". */
+  binding?: string | null;
+  bindingError?: string | null;
   state: string | null;
   attempts: number;
   lastAttemptAt: number | null;
@@ -1707,6 +1710,8 @@ export class ZenodPhylaxAdapter {
     const last = rows.at(-1);
     return {
       bound: Boolean(binding && binding.state === "active"),
+      binding: binding?.state ?? null,
+      bindingError: binding?.last_error_code ?? null,
       state: await this.whatsappState(accountId),
       attempts: rows.length,
       lastAttemptAt: last?.created_at ?? null,
@@ -1747,9 +1752,16 @@ export class ZenodPhylaxAdapter {
       body: Record<string, unknown>;
     },
   ): Promise<{ status: number; body: unknown }> {
-    const binding = this.db.prepare(
+    const readBinding = () => this.db.prepare(
       "SELECT * FROM zenod_phylax_bindings WHERE phylax_tenant_id=?",
     ).get(tenant.tenantId) as unknown as BindingRow | undefined ?? null;
+    let binding = readBinding();
+    if (binding && binding.state === "unavailable" && this.retryUnavailableNow(binding.account_id)) {
+      // E7-S15: a binding marked unavailable while Phylax was unreachable (a VPS1 disk freeze, a restart) waited for
+      // the next background refresh, so a tester asking for a WhatsApp code in that gap got a 503. Retry it once now.
+      await this.reconcileAccount(binding.account_id).catch(() => {});
+      binding = readBinding();
+    }
     if (!binding || binding.state !== "active") return this.unavailable(action);
     try {
       const token = this.token(binding);
@@ -1856,6 +1868,17 @@ export class ZenodPhylaxAdapter {
     } catch {
       return this.unavailable(action);
     }
+  }
+
+  private readonly unavailableRetriedAt = new Map<string, number>();
+
+  /** At most one on-demand retry of an unavailable binding per account every 30 s, so a down Phylax is not hammered. */
+  private retryUnavailableNow(accountId: string): boolean {
+    const now = Date.now();
+    const last = this.unavailableRetriedAt.get(accountId) ?? 0;
+    if (now - last < 30_000) return false;
+    this.unavailableRetriedAt.set(accountId, now);
+    return true;
   }
 
   private unavailable(action?: { operation: HostedChannelMutationName; operationId: string }) {
