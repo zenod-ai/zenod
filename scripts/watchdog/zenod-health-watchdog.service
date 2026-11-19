@@ -9,4 +9,5 @@ Type=oneshot
 ExecStart=%h/.local/share/zenod-watchdog/zenod-watchdog.sh
 # Never let a watchdog failure cascade; it logs to the user journal.
 Nice=10
-TimeoutStartSec=110
+# 170 s: three URL checks can take 25 s each in a host stall, plus the outage desk note (40 s cap; EPIC-24 M21)
+TimeoutStartSec=170

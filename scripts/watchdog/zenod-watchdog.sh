@@ -15,6 +15,7 @@
 #   • docker-dead  the Docker daemon is down: the whole stack is dark                 → page
 #   • crashloop-<svc>  ≥ RESTART_MAX failed tasks of the zenod-mt or phylax service in RESTART_WINDOW → page
 #   • extra URLs (ZENOD_WATCHDOG_EXTRA_URLS="key=url ...") answer 200 (used for the S5 proof)  → page
+#   • public-outage  row-1 or row-2 red also writes ONE desk note a day in Zenod's own desk/inbox (EPIC-24 M21) → wake
 #
 # Alerts go through scripts/watchdog/zenod-alert.sh (the HQ queue, dedupe, 30-min re-alert, one RECOVERED message).
 # A row key is shared with the live page, so one outage seen by both alerts once.
@@ -40,6 +41,12 @@ DISK_PAGE="${ZENOD_WATCHDOG_DISK_PAGE:-90}"
 RESTART_MAX="${ZENOD_WATCHDOG_RESTART_MAX:-3}"         # crash-loop: at least this many failed tasks ...
 RESTART_WINDOW="${ZENOD_WATCHDOG_RESTART_WINDOW:-900}" # ... within this many seconds
 export ZENOD_ALERT_SOURCE="${ZENOD_ALERT_SOURCE:-zenod watchdog}"
+# public-outage desk note (EPIC-24 M21): which keys are public pages, where the note goes
+OUTAGE_KEYS="${ZENOD_WATCHDOG_OUTAGE_KEYS:-row-1 row-2}"
+OUTAGE_DESK_ON="${ZENOD_WATCHDOG_OUTAGE_DESK:-1}"
+OUTAGE_REPO_URL="${ZENOD_WATCHDOG_OUTAGE_REPO_URL:-https://github.com/zenod-ai/zenod.git}"
+OUTAGE_CLONE="${ZENOD_WATCHDOG_OUTAGE_CLONE:-$HOME/.local/share/zenod-watchdog/desk-clone}"
+DESK_NOTE="${ZENOD_WATCHDOG_DESK_NOTE:-$HOME/github/agent_team/scripts/desk_note.py}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
@@ -103,6 +110,57 @@ if kind == "phylax":
 print("ok")' "$1" "$2"
 }
 
+# outage_delta PREV CUR HHMM -> the desk-note items to write, or nothing when the red set did not change.
+# PREV/CUR: "KEY<TAB>text" lines (red last time / now). Output: every CUR line, plus each PREV key no longer red as
+# "KEY<TAB>text, green again at HHMM".
+outage_delta() {
+  python3 -c '
+import sys
+def rows(s):
+    return dict(l.split("\t", 1) for l in s.splitlines() if "\t" in l)
+prev, cur, hhmm = rows(sys.argv[1]), rows(sys.argv[2]), sys.argv[3]
+if prev == cur:
+    sys.exit()
+for k, t in cur.items():
+    print(k + "\t" + t)
+for k, t in prev.items():
+    if k not in cur:
+        print(k + "\t" + t + ", green again at " + hhmm)' "$1" "$2" "$3"
+}
+
+# outage_desk: a public page that goes red also lands as ONE note in Zenod's own desk inbox (EPIC-24 M21). The HQ
+# alert above reaches a thread nobody is woken by (19 Nov: zenod.dev 502 was queued at 06:12:04Z, sent 06:12:39Z,
+# among ~40 other alerts that hour, and zenod-social still told us first at 07:06Z); a desk note is in the Zenod
+# Delivery Manager's next wake. One note a day (desk_note.py daily, key public-outage), written only when the set of
+# red pages changes; a page that recovers stays in the note as "green again at HH:MMZ" so a short blip is still read.
+# It writes from its own sparse clone, never a shared checkout. ZENOD_WATCHDOG_OUTAGE_DESK=0 turns it off.
+outage_desk() {
+  [ "$OUTAGE_DESK_ON" = 1 ] || return 0
+  local marker="$ZA_STATE/outage-desk.red" prev="" items out rc
+  [ -f "$marker" ] && prev="$(cat "$marker")"
+  items="$(outage_delta "$prev" "$OUTAGE_NOW" "$(date -u +%H:%MZ)")"
+  [ -n "$items" ] || return 0
+  [ -f "$DESK_NOTE" ] || { log "outage desk: no $DESK_NOTE"; return 0; }
+  if [ ! -d "$OUTAGE_CLONE/.git" ]; then
+    rm -rf "$OUTAGE_CLONE"
+    if ! { timeout 60 git clone -q --depth 20 --filter=blob:none --sparse "$OUTAGE_REPO_URL" "$OUTAGE_CLONE" &&
+           git -C "$OUTAGE_CLONE" sparse-checkout set desk &&
+           git -C "$OUTAGE_CLONE" config user.name "zenod-watchdog" &&
+           git -C "$OUTAGE_CLONE" config user.email "console@agent-team.local"; } >/dev/null 2>&1; then
+      log "outage desk: could not clone $OUTAGE_REPO_URL (retry next run)"; rm -rf "$OUTAGE_CLONE"; return 0
+    fi
+  fi
+  local args=() line
+  while IFS= read -r line; do [ -n "$line" ] && args+=(--item "$line"); done <<< "$items"
+  out="$(timeout 40 python3 "$DESK_NOTE" daily --to "$OUTAGE_CLONE" --from zenod-watchdog --reply-to zenod-ai/zenod \
+    --key public-outage --about "OUTAGE: a Zenod public page answered an error today ({open} lines), seen by the VPS1 watchdog" \
+    --intro "The VPS1 watchdog (scripts/watchdog) saw zenod.dev or cloud.zenod.dev fail; every post links there. Now: find why (sudo docker inspect --type task on zenod-mt-fxpzoo, sar -d for the data volume sdb, /var/log/vps-forensics), log the cause on EPIC-24 and tell zenod-social if it lasts. Each line says when it went red and, once it answers 200 again, when it went green." \
+    "${args[@]}" 2>&1)"; rc=$?
+  log "outage desk: rc=$rc ${out//$'\n'/ }"
+  [ "$rc" -eq 0 ] || return 0   # marker unchanged: retried on the next run
+  if [ -n "$OUTAGE_NOW" ]; then printf '%s' "$OUTAGE_NOW" > "$marker"; else rm -f "$marker"; fi
+}
+
 # --- checks -----------------------------------------------------------------------------
 # Sourced with ZENOD_WATCHDOG_LIB_ONLY=1 (the unit test) → expose the pure helpers above
 # without running any live check.
@@ -122,12 +180,17 @@ fetch() {
   done
   CODE="${CODE:-000}"; BODY="$(head -c 400000 "$tmp")"; rm -f "$tmp"
 }
+OUTAGE_NOW=""   # "KEY<TAB>text" lines of the public pages red in this run (EPIC-24 M21)
 url_check() { # url_check KEY KIND URL NAME
   fetch "$3"
   local v; v="$(printf '%s' "$BODY" | health_verdict "$2" "$CODE")"
   if [ "$v" = ok ]; then za_clear "$1" "$4 is green again: $3 answers 200"
-  else page "$1" "$4 is red: $3 $v"; fi
+  else
+    page "$1" "$4 is red: $3 $v"
+    case " $OUTAGE_KEYS " in *" $1 "*) OUTAGE_NOW="${OUTAGE_NOW}$1"$'\t'"$4: $3 $v"$'\n';; esac
+  fi
 }
+
 
 # 1) docker daemon / dead stack
 docker_up=no
@@ -183,5 +246,6 @@ if [ "$docker_up" = yes ]; then
   done
 fi
 
+outage_desk
 if [ "$problems" -eq 0 ]; then log "all healthy"; fi
 exit 0
