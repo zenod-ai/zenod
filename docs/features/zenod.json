@@ -130,6 +130,16 @@
      "draft": true
     },
     {
+     "id": "sample-memory",
+     "title": "Try a sample memory before you apply",
+     "text": "The testers page shows one person's week of voice notes as a cloud of linked thoughts. Tap a thought to read the note it came from, no sign-in needed.",
+     "rows": [
+      "E26-S35"
+     ],
+     "since": "2026-11-19",
+     "draft": true
+    },
+    {
      "id": "tester-invite-link",
      "title": "Join with one invite link",
      "text": "A tester's invite is one link with their code inside. They sign in with Google or GitHub, checkout opens with the code applied at €0 and no card, and a You're in page shows the two next steps.",
