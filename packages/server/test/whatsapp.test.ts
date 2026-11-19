@@ -53,7 +53,7 @@ class FakeSocket implements SocketLike {
   user = { id: "34600000000:1@s.whatsapp.net" };
   onWhatsApp?: SocketLike["onWhatsApp"];
   ev = {
-    on: (event: "connection.update" | "messages.upsert", listener: (...args: never[]) => void) => {
+    on: (event: "connection.update" | "messages.upsert" | "messages.update", listener: (...args: never[]) => void) => {
       this.emitter.on(event, listener);
     },
   };
@@ -1083,6 +1083,42 @@ describe("WhatsAppGateway", () => {
         outboundProviderId: "sent_1",
         outboundStatus: "sent",
       });
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps WhatsApp's delivered and read receipts for a sent message (EPIC-20 A6)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-receipt-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+    });
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+      const { sentMessageId } = await gateway.sendText("34611111111", "Morning briefing", undefined, "alpha");
+      expect(runtime.whatsappStore.outboundDeliveryReceipt("alpha", sentMessageId)).toMatchObject({ status: "sent" });
+
+      const jid = "34611111111@s.whatsapp.net";
+      // Server ack (2) is still "sent"; an inbound message's status is ignored.
+      socket.emitter.emit("messages.update", [
+        { key: { id: sentMessageId, remoteJid: jid, fromMe: true }, update: { status: 2 } },
+        { key: { id: sentMessageId, remoteJid: jid, fromMe: false }, update: { status: 4 } },
+      ]);
+      expect(runtime.whatsappStore.outboundDeliveryReceipt("alpha", sentMessageId)).toMatchObject({ status: "sent" });
+      socket.emitter.emit("messages.update", [{ key: { id: sentMessageId, remoteJid: jid, fromMe: true }, update: { status: 3 } }]);
+      expect(runtime.whatsappStore.outboundDeliveryReceipt("alpha", sentMessageId)).toMatchObject({ status: "delivered" });
+      socket.emitter.emit("messages.update", [{ key: { id: sentMessageId, remoteJid: jid, fromMe: true }, update: { status: 4 } }]);
+      expect(runtime.whatsappStore.outboundDeliveryReceipt("alpha", sentMessageId)).toMatchObject({ status: "read" });
+      expect(runtime.whatsappStore.outboundDeliveryReceipt("beta", sentMessageId)).toBeNull();
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

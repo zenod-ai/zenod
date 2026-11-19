@@ -136,7 +136,7 @@ describe("tenant-safe Phylax management MCP", () => {
     }
   });
 
-  it("limits a notify-profile token to notify and channel_status", async () => {
+  it("limits a notify-profile token to notify, channel_status and its own notify_receipt", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-notify-profile-"));
     dirs.push(dataDir);
     const tenants = new SqliteTenantStore({ dataDir });
@@ -156,6 +156,47 @@ describe("tenant-safe Phylax management MCP", () => {
 
       const status = structured(await notifier.callTool({ name: "channel_status", arguments: {} }));
       expect(status.status).toBeDefined();
+
+      // EPIC-20 A6: notify_receipt reads WhatsApp's delivered/read receipt, own messages only.
+      const store = unit.phylaxRuntime.whatsappStore;
+      const sendAs = (tenantId: string, providerMessageId: string) => {
+        const intent = store.prepareOutboundIntent({
+          sourceMessageId: `mcp-${providerMessageId}`,
+          tenantId,
+          providerMessageId,
+          chatId: "10000000000@s.whatsapp.net",
+          contactId: "10000000000@s.whatsapp.net",
+          bodyText: `secret briefing ${providerMessageId}`,
+          successStatus: "sent",
+        });
+        store.completeOutboundIntent(intent, { sentMessageId: providerMessageId });
+      };
+      sendAs("alpha", "3EBOWN0001");
+      sendAs("beta", "3EBOTHER01");
+      const receipt = async (sentMessageId: string) =>
+        notifier.callTool({ name: "notify_receipt", arguments: { sentMessageId } });
+
+      expect(structured(await receipt("3EBOWN0001"))).toMatchObject({ sentMessageId: "3EBOWN0001", status: "sent" });
+      expect(store.recordOutboundDeliveryStatus("3EBOWN0001", "delivered", Date.UTC(2026, 10, 19, 14, 47, 40))).toBe(true);
+      const delivered = await receipt("whatsapp:3EBOWN0001:sent");
+      expect(structured(delivered)).toEqual({
+        sentMessageId: "3EBOWN0001",
+        channel: "whatsapp",
+        status: "delivered",
+        at: "2026-11-19T14:47:40.000Z",
+      });
+      expect(JSON.stringify(delivered)).not.toContain("secret briefing");
+      store.recordOutboundDeliveryStatus("3EBOWN0001", "read", Date.UTC(2026, 10, 19, 15, 0, 0));
+      // A late failure or a repeated delivered never moves a read message back.
+      store.recordOutboundDeliveryStatus("3EBOWN0001", "failed");
+      store.recordOutboundDeliveryStatus("3EBOWN0001", "delivered");
+      expect(structured(await receipt("3EBOWN0001"))).toMatchObject({ status: "read", at: "2026-11-19T15:00:00.000Z" });
+
+      // Another tenant's message, even one with a receipt, reads as unknown.
+      store.recordOutboundDeliveryStatus("3EBOTHER01", "read");
+      const foreign = await receipt("3EBOTHER01");
+      expect(structured(foreign)).toEqual({ sentMessageId: "3EBOTHER01", channel: "whatsapp", status: "unknown", at: null });
+      expect(JSON.stringify(foreign)).not.toContain("secret briefing");
 
       const refused = await notifier.callTool({
         name: "send_message",
