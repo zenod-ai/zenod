@@ -32,11 +32,11 @@ Status: active
 Last attempted: 2026-11-18T21:15Z roll-up (DM run_b65011d7): S47 approved by Jordi 18 Nov, the Helpers screen shows five memory personas and one tidy switch ; S48 and S49 live and folded into S47 (Remind me covers people, New possibilities every 3 days, Make it easier built) ; S50 one card a day and no repeats live c97c5c61, proof read 19 Nov 06:30Z ; S41 approved by Jordi 18 Nov, the patterns helper stays on for him ; S46 done (fed E14-A12, approved) ; S44 done
 Result: production ed5f2fb4: five memory personas live; new testers start with Remind me on
 Evidence: [S46 proposal](http://vps3.taild81fbb.ts.net:8921/e14-s46/) · [S46 evidence](evidence/e14-s46-2026-11-18.md) · [S41 round 5](evidence/e14-s41-r5-2026-11-18.md) · [S44](evidence/e14-s44-2026-11-17.md) · [S30 verdict](http://vps3.taild81fbb.ts.net:8921/e14-s30/) · [S30 evidence](evidence/e14-s30-2026-11-17.md) · [S41 round 4](evidence/e14-s41-r4-2026-11-17.md) · [S42](evidence/e14-s42-2026-11-11.md) · [S36](evidence/e14-s36-2026-11-11.md)
-Waiting on: the date 2026-11-19 06:30Z for S50's proof on his helper runs
+Waiting on: the date 2026-11-22 02:00Z, the first night three of his five-persona helpers are due together (his own settings made them weekly on 18 Nov), for S50's proof
 Approved work: none
-Next action: S50 reads his 19 Nov helper runs (one card at most, no repeat), then closes into S47
+Next action: S50 reads the 22 Nov helper runs before that night's container is replaced (one card at most, two waiting, no repeat), then closes into S47
 Source revision: production 9deb454
-Verified at: 2026-11-18T21:15Z (production ed5f2fb4; rows S41 to S50 read)
+Verified at: 2026-11-19T07:05Z (19 Nov: no five-persona helper was due, nothing to hold back; docs/evidence/e14-s50-2026-11-18.md)
 
 ## Non-Goals
 
