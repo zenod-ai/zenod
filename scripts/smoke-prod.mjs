@@ -12,8 +12,8 @@
 // Runs on Node 18+ (the VPS3 timer host has Node 18). Result shape: docs/health/SMOKE.md.
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -113,6 +113,14 @@ export function checks() {
         if (ageMin < 30) return pass(`staging ${ctx.stagingSha.slice(0, 7)}, publish ${r.headSha.slice(0, 7)} ${Math.round(ageMin)} min old, roll pending${prod}`);
         return fail(`staging ${ctx.stagingSha.slice(0, 7)} but newest publish is ${r.headSha.slice(0, 7)} from ${Math.round(ageMin)} min ago`);
       },
+    },
+    {
+      // EPIC-24 M22: production lagging staging is normal for up to about an hour (root D28's hourly promote tick,
+      // scripts/promote-schedule/tick.py, batches, waits out quiet hours and pauses). Red only when the tick itself
+      // says it is stuck: it went silent, its gate or promote failed, or daytime ticks keep waiting on the same sha.
+      id: "cloud.promote-lag", component: "cloud", title: "Production follows staging on the hourly promote", kind: "local",
+      run: (ctx) => ctx.promoteTicks(),
+      judge: (ticks, ctx) => judgePromoteLag(ticks, ctx),
     },
     {
       id: "cloud.readiness", component: "readiness", title: "Production readiness gate", kind: "http",
@@ -260,6 +268,36 @@ export function sshRun(cmd, timeoutMs = 90000) {
   return { code: r.status ?? -1, stdout: r.stdout || "" };
 }
 
+// EPIC-24 M22: the promote tick's own log (one JSON line per hourly tick, on this VPS3 host).
+export const PROMOTE_LOG = process.env.ZENOD_PROMOTE_LOG || join(homedir(), "zenod-eval", "promote-schedule.jsonl");
+export const PROMOTE_SILENT_MIN = 90; // the tick runs hourly at :41; two missed ticks is a stall
+export const PROMOTE_FAILED = new Set(["gate-failed", "gate-failed-earlier", "promote-failed", "error"]);
+export const PROMOTE_IDLE = new Set(["quiet-hours", "paused", "nothing-new"]); // waits the schedule means to make
+export const PROMOTE_MAX_WAITS = 3; // daytime ticks that saw this staging sha and still did not promote it
+
+function promoteTicks() {
+  if (!existsSync(PROMOTE_LOG)) return [];
+  return readFileSync(PROMOTE_LOG, "utf8").trim().split("\n").slice(-200).map(json).filter(Boolean);
+}
+
+const sameSha = (a, b) => !!a && !!b && (a.startsWith(b.slice(0, 7)) || b.startsWith(a.slice(0, 7)));
+
+export function judgePromoteLag(ticks, ctx) {
+  const prod = ctx.cloudSha;
+  const staging = ctx.stagingSha;
+  if (!prod || !staging) return pass("production or staging sha unknown; their health checks report it");
+  const lag = `production ${prod.slice(0, 7)}, staging ${staging.slice(0, 7)}`;
+  if (sameSha(prod, staging)) return pass(`production ${prod.slice(0, 7)} = staging`);
+  const last = (ticks || []).at(-1);
+  if (!last?.at) return fail(`${lag}; no promote tick logged (~/zenod-eval/promote-schedule.jsonl)`);
+  const silent = (ctx.now() - Date.parse(last.at)) / 60000;
+  if (silent > PROMOTE_SILENT_MIN) return fail(`${lag}; promote tick silent for ${Math.round(silent)} min (timer zenod-promote-tick)`);
+  if (PROMOTE_FAILED.has(last.decision)) return fail(`${lag}; promote tick ${last.at.slice(11, 16)}Z: ${last.decision}`);
+  const waits = ticks.filter((t) => sameSha(t.sha, staging) && !PROMOTE_IDLE.has(t.decision)).length;
+  if (waits >= PROMOTE_MAX_WAITS) return fail(`${lag}; ${waits} daytime promote ticks on this sha without a promote (last: ${last.decision})`);
+  return pass(`${lag}; waits for the hourly promote (last tick ${last.at.slice(11, 16)}Z: ${last.decision})`);
+}
+
 function newestPublish() {
   const r = spawnSync("gh", ["run", "list", "-R", "zenod-ai/zenod", "--workflow", "publish.yml", "--branch", "main",
     "--status", "success", "-L", "1", "--json", "headSha,createdAt"], { encoding: "utf8", timeout: 60000 });
@@ -269,10 +307,10 @@ function newestPublish() {
 
 // ------------------------------------------------------------------------------------------ battery
 
-export async function runBattery({ get = httpGet, ssh = sshRun, publish = newestPublish, now = Date.now, overrides = {}, only } = {}) {
+export async function runBattery({ get = httpGet, ssh = sshRun, publish = newestPublish, ticks = promoteTicks, now = Date.now, overrides = {}, only } = {}) {
   const startedAt = new Date(now()).toISOString();
   const t0 = now();
-  const ctx = { now, newestPublish: publish };
+  const ctx = { now, newestPublish: publish, promoteTicks: ticks };
   const cache = new Map();
   const results = [];
   for (const c of checks()) {
