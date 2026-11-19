@@ -25,6 +25,10 @@ import {
 } from "./hostedChannels.js";
 import { PhylaxAllowanceLedger } from "./phylaxAllowanceLedger.js";
 import { PhylaxUsageMeter } from "./phylaxUsageMeter.js";
+import {
+  PhylaxSharedTranscriptionBudget,
+  type PhylaxSharedTranscriptionRoute,
+} from "./phylaxSharedTranscription.js";
 import { PhylaxCompatibilityMigration } from "./phylaxCompatibilityMigration.js";
 import {
   PHYLAX_MANAGEMENT_PROFILES,
@@ -178,6 +182,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     join(storage.dataDir, "phylax-allowance.sqlite"),
   );
   const usageMeter = new PhylaxUsageMeter(storage.dataDir, allowanceLedger, env);
+  const sharedTranscription = new PhylaxSharedTranscriptionBudget(storage.dataDir, env);
   const compatibilityMigration = new PhylaxCompatibilityMigration(
     storage.dataDir,
     tenantSettings,
@@ -236,6 +241,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     compatibilityMigration,
     options.fixedProductAdapter,
     (observation) => transcriptionFailureNotifier.observe(observation),
+    sharedTranscription,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ channel, sender, username, text }) {
@@ -968,6 +974,7 @@ function createTenantOrgan(
     tenantId: string;
     failure: PhylaxTranscriptionFailure;
   }) => void,
+  sharedTranscription?: PhylaxSharedTranscriptionBudget,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   const configuredVoiceJobDeadline = Number(
@@ -1047,10 +1054,11 @@ function createTenantOrgan(
           onTranscriptionFailure?.({ tenantId: input.tenantId, failure: unconfigured });
           return { transcription_failed: unconfigured };
         }
+        const shared = sharedTranscription?.route() ?? null;
         const result = await transcribeAudio(
           Buffer.from(input.bytes),
           input.fileName ?? "voice.ogg",
-          phylaxTranscriptionOptions(transcription, env, input.signal),
+          phylaxTranscriptionOptions(transcription, env, input.signal, shared),
         );
         if (result.success && result.transcript?.trim()) {
           // ZAL-A15: which provider transcribed each note (names only, never a key).
@@ -1059,7 +1067,10 @@ function createTenantOrgan(
             tenant_id: input.tenantId,
             configured: transcription.provider,
             provider: result.provider ?? null,
-            local_fallback: transcription.provider !== "local" && String(result.provider ?? "").startsWith("whisper.cpp"),
+            shared_openai: usesSharedTranscription(transcription.provider, shared),
+            local_fallback:
+              (transcription.provider !== "local" || usesSharedTranscription(transcription.provider, shared)) &&
+              String(result.provider ?? "").startsWith("whisper.cpp"),
           }));
         }
         if (!result.success || !result.transcript?.trim()) {
@@ -1153,6 +1164,17 @@ export function phylaxTranscriptionConfigurationError(transcription: {
   return null;
 }
 
+/**
+ * EPIC-20 A4: the shared OpenAI key serves tenants on local or the platform OpenRouter path; a tenant
+ * that brought its own Groq or OpenAI key keeps it.
+ */
+export function usesSharedTranscription(
+  provider: "local" | "groq" | "openai" | "openrouter",
+  shared: PhylaxSharedTranscriptionRoute | null | undefined,
+): shared is PhylaxSharedTranscriptionRoute {
+  return Boolean(shared) && (provider === "local" || provider === "openrouter");
+}
+
 export function phylaxTranscriptionOptions(
   transcription: {
     provider: "local" | "groq" | "openai" | "openrouter";
@@ -1161,6 +1183,7 @@ export function phylaxTranscriptionOptions(
   },
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
+  shared: PhylaxSharedTranscriptionRoute | null = null,
 ): Exclude<TranscribeOptions, (percent: number) => void> {
   const requestedLocalModel = transcription.provider === "local" ? transcription.model?.trim() : null;
   const configuredLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
@@ -1169,6 +1192,25 @@ export function phylaxTranscriptionOptions(
     : configuredLocalModel && isValidWhisperModel(configuredLocalModel)
       ? configuredLocalModel
       : PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL;
+  if (usesSharedTranscription(transcription.provider, shared)) {
+    // EPIC-20 A4: OpenAI first on the shared key, metered against the monthly stop; any error
+    // falls back to local whisper.cpp, never to the tenant's OpenRouter key.
+    return {
+      model: localModel,
+      groqApiKey: "",
+      openaiApiKey: shared.key,
+      openaiModel: shared.model,
+      openrouterApiKey: "",
+      longTranscriptionProvider: "openai",
+      onUsage: (report) => shared.record({
+        estimatedCostUsd: report.estimatedCostUsd ?? 0,
+        status: report.status === "succeeded" ? "succeeded" : "failed",
+      }),
+      allowLocalFallback: true,
+      signal,
+      includeTiming: true,
+    };
+  }
   const key = transcription.key ?? "";
   return {
     model: localModel,
