@@ -33,11 +33,15 @@ Status: active
 Last attempted: 2026-11-18T07:45Z roll-up (DM run_5b5c2d7b): A4 Phylax nightly job fix live d089571, the night of 19 Nov is measured ; A3 picture alerts live, waits for the console's first picture alert ; A2 draft (slow first answer after a release) ; A1 done
 Result: WhatsApp text and voice use the same brain as the chat; Phylax's growing 02:00 CET job is fixed and waits for one night's proof
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
-Waiting on: the night of 2026-11-19 01:00-03:00Z (A4) ; the console's first picture alert (A3)
+Waiting on: the night of 2026-11-19 01:00-03:00Z (A4) ; the console's first picture alert (A3); Jordi: EPIC-20-A1
 Approved work: L-6 mandate (vn_14cb0d46)
 Next action: A4 measures VPS1 load on the night of 19 Nov and tells infra-vps
 Source revision: main `468ee50` live
 Verified at: 2026-11-18T07:45Z (rows A1..A4 read; production e86c6e34)
+
+## Waiting on
+
+- [ask EPIC-20-A1: approve @Jordi since 2026-11-19] You approve: Zenod transcribes WhatsApp voice notes with the team's existing OpenAI key again, about 30 cents an hour of audio. Why: the transcription key Zenod uses ran out of budget, so every voice note now runs on our own server, slowly. - context: since 15 Nov every voice note sent to Zenod on WhatsApp gets 'over budget' from its cloud transcription key and falls back to a small local model on VPS1; a 15-minute note takes about 32 minutes and blocks the server at night (A4 made it gentler, it is still slow), and local transcripts are rougher - impact: your notes and every tester's are transcribed in seconds again and the night load on VPS1 drops; waiting keeps long notes taking half an hour each - risk: new spend on the team's OpenAI account, about 0.3 dollars per hour of voice notes (your heaviest night was about 1 hour, so roughly 5 to 10 dollars a month); rollback: one setting switches it back to local only - recommend: yes, use the OpenAI key we already have (gpt-4o-mini-transcribe, the same one the team's voice feedback uses), local stays as the fallback - why Jordi: it is new spend - options: Yes: switch to the OpenAI key · No: keep local transcription only - answered on this card - unblocks: A4 follow-up, faster WhatsApp replies for testers (E7-3) - details: http://vps3.taild81fbb.ts.net:8921/e20-a4/ — recommend: On Yes: copy the shared OPENAI_API_KEY into the Phylax app (secret copy), set Phylax transcription to OpenAI gpt-4o-mini-transcribe first, local whisper.cpp as fallback, deploy Phylax, and check the next voice note transcribes in seconds. — context: raised by Delivery Manager (run run_38411470-1fca-4e15-9104-ed6a3ebdf59e) through the console API; the console wrote this line
 
 ## Non-Goals
 
