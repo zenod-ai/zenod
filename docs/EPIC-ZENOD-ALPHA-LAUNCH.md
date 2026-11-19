@@ -126,7 +126,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | commits named under their rows | worker spine commit | A19, A20: afd2a1b (live ba6b56e) |
 | 2026-11-10 | infra-vps answered the tester-applications read rule | the one-file rule waits on their ask infra-vps/EPIC-2-A46 (one write-enabled run), then Jordi applies it as root; A13's private applications page fills once it is live | desk notes 1163a06, closed 0ed8e26e ; secret reinstall note closed 2ae6594 |
 
-| 2026-11-19 | accepted | infra-vps/EPIC-2-A58 consumed here: the Hetzner support mail about VPS1's data volume (106231047) went 19 Nov ~18:05Z after four freezes that took Zenod down; Zenod now recovers by itself (M21 watchdog note, A5 Phylax reconnect) and infra-vps follows Hetzner's answer | the disk is Hetzner's; nothing on Zenod's side stops the freezes | Delivery Manager run_4512cb93 | infra-vps docs/EPIC-2-VPS1-CONTROL.md EPIC-2-A58 | Hetzner answers or another freeze |
+| 2026-11-19 | accepted | infra-vps EPIC-2-A58 (answered, consumed) consumed here: the Hetzner support mail about VPS1's data volume (106231047) went 19 Nov ~18:05Z after four freezes that took Zenod down; Zenod now recovers by itself (M21 watchdog note, A5 Phylax reconnect) and infra-vps follows Hetzner's answer | the disk is Hetzner's; nothing on Zenod's side stops the freezes | Delivery Manager run_4512cb93 | infra-vps docs/EPIC-2-VPS1-CONTROL.md EPIC-2-A58 | Hetzner answers or another freeze |
 
 ## Spine Map
 
