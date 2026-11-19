@@ -213,6 +213,49 @@ body:has(.pp) {
 .pp-testers-terms > div { background: var(--pp-stage); padding: clamp(1.75rem, 3.5vw, 3rem); }
 .pp-testers-terms > div + div { background: var(--pp-field); color: var(--pp-field-ink); }
 .pp-testers-terms p { margin: 0 0 1rem; max-width: 30rem; }
+/* E26-S35: the public sample memory, Sara's week as a tappable cloud of thoughts. */
+.pp-sample { margin-top: clamp(2.5rem, 6vw, 4.5rem); }
+.pp-sample h2 { margin: 0 0 0.6rem; }
+.pp-sample-lead { margin: 0 0 1.25rem; max-width: 40rem; }
+.sm-stage { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: clamp(1rem, 3vw, 2.5rem); align-items: center; background: var(--pp-stage); border-radius: 6px; padding: clamp(0.75rem, 2.5vw, 2rem); }
+.sm-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.sm-l { stroke: var(--pp-ink); stroke-linecap: round; transition: stroke .25s, opacity .25s; }
+.sm-l-weak { stroke-dasharray: 3 7; }
+.sm-l-lit { stroke: var(--pp-accent); }
+.sm-w { font: 600 17px var(--pp-sans); fill: var(--pp-muted); paint-order: stroke; stroke: var(--pp-stage); stroke-width: 6px; stroke-linejoin: round; }
+.sm-n { cursor: pointer; outline: none; }
+.sm-n .sm-hit { fill: transparent; stroke: none; }
+.sm-n circle:not(.sm-hit) { fill: var(--pp-bg); stroke: var(--pp-ink); stroke-width: 1.6; transition: fill .2s; }
+.sm-n-topic circle:not(.sm-hit) { fill: var(--pp-ink); }
+.sm-n text { font: 400 19px var(--pp-sans); fill: var(--pp-ink); paint-order: stroke; stroke: var(--pp-stage); stroke-width: 5px; stroke-linejoin: round; }
+.sm-n-topic text { font: 500 23px var(--pp-serif); }
+.sm-n:hover circle:not(.sm-hit), .sm-n:focus-visible circle:not(.sm-hit) { fill: #cfe0d6; }
+.sm-n-open circle:not(.sm-hit), .sm-n-open:hover circle:not(.sm-hit) { fill: var(--pp-accent); stroke: var(--pp-accent); }
+.sm-n-open text { fill: var(--pp-accent); font-weight: 600; }
+.sm-n:focus-visible text { text-decoration: underline; }
+.sm-panel { background: var(--pp-bg); border-radius: 4px; padding: 1rem 1.15rem; min-height: 15rem; }
+.pp .sm-panel p { margin: 0; }
+.pp .sm-panel-h { font: 500 1.3rem/1.2 var(--pp-serif); padding-bottom: 0.45rem; border-bottom: 1px solid var(--pp-ink); }
+.pp .sm-from { font: 400 0.85rem var(--pp-sans); color: var(--pp-muted); margin-top: 0.6rem; }
+.sm-note { margin: 0.5rem 0 0; padding: 0.4rem 0 0.4rem 0.8rem; border-left: 2px solid var(--pp-accent); font: 400 1.02rem/1.4 var(--pp-serif); }
+.sm-note small { display: flex; align-items: center; gap: 0.4rem; font: 400 0.8rem var(--pp-sans); color: var(--pp-muted); margin-bottom: 0.15rem; }
+.sm-play { width: 0; height: 0; border-left: 0.5rem solid #54656f; border-top: 0.3rem solid transparent; border-bottom: 0.3rem solid transparent; }
+.pp .sm-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.85rem; font: 400 0.85rem var(--pp-sans); color: var(--pp-muted); }
+.sm-links > span { margin-right: 0.15rem; }
+.sm-chip { font: 500 0.82rem var(--pp-sans); color: var(--pp-ink); background: transparent; border: 1px solid var(--pp-ink); border-radius: 999px; padding: 0.2rem 0.75rem; min-height: 2.5rem; cursor: pointer; }
+.sm-chip b { font-weight: 600; color: var(--pp-accent); margin-left: 0.15rem; }
+.sm-chip:hover, .sm-chip:focus-visible { background: var(--pp-stage); }
+.pp .sm-fine { margin-top: 0.75rem; }
+.sm-fine a { text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 900px) {
+  .sm-stage { grid-template-columns: minmax(0, 1fr); }
+  .sm-panel { min-height: 0; }
+}
+@media (max-width: 640px) {
+  .sm-n text { font-size: 27px; }
+  .sm-n-topic text { font-size: 30px; }
+  .sm-w { font-size: 22px; }
+}
 .pp-testers-steps, .pp-testers-apply { margin-top: clamp(3.5rem, 8vw, 7rem); max-width: 46rem; }
 .pp-testers-steps ol { margin: 0; padding-left: 1.4rem; }
 .pp-testers-steps li { margin: 0 0 0.75rem; padding-left: 0.3rem; }
