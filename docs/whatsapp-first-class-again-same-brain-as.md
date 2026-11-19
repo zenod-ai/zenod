@@ -30,14 +30,14 @@ Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-19T16:02Z A5 incident fix live 5bda977 (Phylax WhatsApp reconnects by itself after a slow credential save; red 5 min reaches the desk inbox) ; 2026-11-18T07:45Z roll-up (DM run_5b5c2d7b): A4 Phylax nightly job fix live d089571, the night of 19 Nov is measured ; A3 picture alerts live, waits for the console's first picture alert ; A2 draft (slow first answer after a release) ; A1 done
-Result: WhatsApp text and voice use the same brain as the chat; Phylax's growing 02:00 CET job is fixed and waits for one night's proof
+Last attempted: 2026-11-19T17:03Z roll-up (DM run_048ce373): A5 done, after the 19 Nov incident (WhatsApp stuck in error 11:43Z to 14:46Z when a credential save timed out during a VPS1 disk freeze) Phylax now reconnects by itself and a red WhatsApp reaches the Zenod desk within 5 minutes, live 5bda977 ; A4 live 0596030, voice notes go to cloud transcription on the shared OpenAI key with a 10-dollar monthly stop, waits for the first real note through it ; A6 running, a delivered or read receipt for each notify ; A3 waits for its first picture alert ; A2 draft
+Result: Phylax 5bda977 healthy and WhatsApp connected; recovery from a disk hiccup is automatic; transcription back in the cloud
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
-Waiting on: the first real voice note through the shared OpenAI key, checked 2026-11-20T03:30Z (A4) ; the console's first picture alert (A3)
+Waiting on: the first real voice note through OpenAI (check 2026-11-20 03:30Z, A4) ; A6 worker
 Approved work: L-6 mandate (vn_14cb0d46)
-Next action: A4 reads Phylax's log on 2026-11-20 03:30Z for the first note through OpenAI (`shared_stt.usage`), then closes
+Next action: close A4 on the first OpenAI note; A6 ships the receipt tool and tells alpha9
 Source revision: main `468ee50` live
-Verified at: 2026-11-18T07:45Z (rows A1..A4 read; production e86c6e34)
+Verified at: 2026-11-19T17:03Z (phylax.zenod.dev /healthz ok; rows A1 to A6 read)
 
 ## Waiting on
 
