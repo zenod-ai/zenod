@@ -125,6 +125,11 @@ if [ "$(id -u)" != 0 ]; then
   check "unwritable queue: retried next run (no dedupe state)" 0 "$(ls "$ZENOD_ALERT_STATE_DIR" | grep -c row-9)"
 fi
 
+# sustained_red SINCE NOW MIN (EPIC-20 A5): WhatsApp red 5 minutes or more reaches the desk inbox
+check "red 4 min: not yet"          no  "$(sustained_red 1000 1240 300)"
+check "red exactly 5 min: yes"      yes "$(sustained_red 1000 1300 300)"
+check "red 3 hours (19 Nov): yes"   yes "$(sustained_red 1000 9000 300)"
+
 # outage_delta PREV CUR HHMM (EPIC-24 M21): items only when the red set changed; a recovered page says when
 TAB=$'\t'
 check "nothing red before or now: no note"   "" "$(outage_delta "" "" 06:00Z)"
