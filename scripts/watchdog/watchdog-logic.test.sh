@@ -125,4 +125,39 @@ if [ "$(id -u)" != 0 ]; then
   check "unwritable queue: retried next run (no dedupe state)" 0 "$(ls "$ZENOD_ALERT_STATE_DIR" | grep -c row-9)"
 fi
 
+# outage_delta PREV CUR HHMM (EPIC-24 M21): items only when the red set changed; a recovered page says when
+TAB=$'\t'
+check "nothing red before or now: no note"   "" "$(outage_delta "" "" 06:00Z)"
+check "same red set: no note"                "" "$(outage_delta "row-1${TAB}site 502" "row-1${TAB}site 502" 06:02Z)"
+check "a page goes red: its line"            "row-1${TAB}site 502" "$(outage_delta "" "row-1${TAB}site 502" 06:12Z)"
+check "it recovers: green again at"          "row-1${TAB}site 502, green again at 06:28Z" "$(outage_delta "row-1${TAB}site 502" "" 06:28Z)"
+check "one of two recovers: both lines" 2    "$(outage_delta "row-1${TAB}a${TAB}x
+row-2${TAB}b" "row-1${TAB}a${TAB}x" 07:00Z | wc -l | tr -d ' ')"
+
+# outage_desk with a stand-in desk_note.py: writes once per change, keeps the marker, retries on failure
+D="$T/desk"; mkdir -p "$D/clone/.git"
+cat > "$D/dn.py" <<'PY'
+import sys; open(sys.argv[0] + ".calls", "a").write(" ".join(a for a in sys.argv[1:] if a.startswith(("row-", "--item", "daily", "--key", "public"))) + "\n")
+sys.exit(int(open(sys.argv[0] + ".rc").read()) if __import__("os").path.exists(sys.argv[0] + ".rc") else 0)
+PY
+calls() { [ -f "$D/dn.py.calls" ] && wc -l < "$D/dn.py.calls" | tr -d ' ' || echo 0; }
+ZA_STATE="$T/za"; mkdir -p "$ZA_STATE"; OUTAGE_DESK_ON=1; OUTAGE_CLONE="$D/clone"; DESK_NOTE="$D/dn.py"
+OUTAGE_NOW=""; outage_desk >/dev/null
+check "all healthy, no marker: no desk call" 0 "$(calls)"
+OUTAGE_NOW="row-1${TAB}Marketing site zenod.dev: https://zenod.dev/ answered 502 (expected 200)"$'\n'; outage_desk >/dev/null
+check "zenod.dev 502: one desk call" 1 "$(calls)"
+check "the call is the daily public-outage note" 1 "$(grep -c 'daily .*--key public-outage' "$D/dn.py.calls")"
+check "marker holds the red page" 1 "$(grep -c '^row-1' "$ZA_STATE/outage-desk.red")"
+outage_desk >/dev/null
+check "still red, same set: no second call" 1 "$(calls)"
+echo 1 > "$D/dn.py.rc"; OUTAGE_NOW=""; outage_desk >/dev/null
+check "recovery whose note failed: called" 2 "$(calls)"
+check "failed note keeps the marker (retry)" 1 "$([ -f "$ZA_STATE/outage-desk.red" ] && echo 1 || echo 0)"
+rm -f "$D/dn.py.rc"; outage_desk >/dev/null
+check "retry succeeds: called again" 3 "$(calls)"
+check "the recovery line says green again" 1 "$(tail -1 "$D/dn.py.calls" | grep -c 'green')"
+check "recovered: marker gone" 0 "$([ -f "$ZA_STATE/outage-desk.red" ] && echo 1 || echo 0)"
+OUTAGE_DESK_ON=0; OUTAGE_NOW="row-2${TAB}cloud 502"$'\n'; outage_desk >/dev/null
+check "ZENOD_WATCHDOG_OUTAGE_DESK=0: no call" 3 "$(calls)"
+
 if [ "$fail" = 0 ]; then echo "ALL PASS"; else echo "FAILURES"; exit 1; fi
