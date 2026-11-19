@@ -45,9 +45,9 @@ Last attempted: 2026-11-19T12:08Z roll-up (run_51c2ad97): docs/EPIC-7-REAL-USER-
 Result: production zenod-mt 20cdf60 (502 from about 12:08Z: VPS1 data volume frozen again) ; a stranger can apply with only an email (E26-S34); 1 application, 1 sign-up, 0 WhatsApp links
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: testers recruited by zenod-social ; Jordi: his mark on EPIC-6, drafts E7-S13 and E7-S14, Hetzner's answer to the support mail sent 19 Nov ~18:05Z (infra-vps/EPIC-2-A58 answered)
+Waiting on: testers recruited by zenod-social ; Jordi: his mark on EPIC-6, drafts E7-S13 and E7-S14, Hetzner's answer about VPS1's data volume (infra-vps tracks it)
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: E7-S15 lets the only tester link WhatsApp; E26-S3 watches the next tester end to end
+Next action: E26-S3 watches the next tester end to end (E7-S15 done: the only tester's WhatsApp channel is active again)
 Verified at: 2026-11-19T12:08Z (production 20cdf60 down at 12:08Z; EPIC-7 and EPIC-6 Current States read)
 
 ## Waiting on
@@ -126,6 +126,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | commits named under their rows | worker spine commit | A19, A20: afd2a1b (live ba6b56e) |
 | 2026-11-10 | infra-vps answered the tester-applications read rule | the one-file rule waits on their ask infra-vps/EPIC-2-A46 (one write-enabled run), then Jordi applies it as root; A13's private applications page fills once it is live | desk notes 1163a06, closed 0ed8e26e ; secret reinstall note closed 2ae6594 |
 
+| 2026-11-19 | accepted | infra-vps/EPIC-2-A58 consumed here: the Hetzner support mail about VPS1's data volume (106231047) went 19 Nov ~18:05Z after four freezes that took Zenod down; Zenod now recovers by itself (M21 watchdog note, A5 Phylax reconnect) and infra-vps follows Hetzner's answer | the disk is Hetzner's; nothing on Zenod's side stops the freezes | Delivery Manager run_4512cb93 | infra-vps docs/EPIC-2-VPS1-CONTROL.md EPIC-2-A58 | Hetzner answers or another freeze |
 
 ## Spine Map
 
