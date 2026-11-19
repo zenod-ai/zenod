@@ -1,46 +1,46 @@
 {
   "row": "E7-S16",
   "card": "docs/cards/E7-S16.md",
-  "cardSha": "6446bb7eb203624e",
+  "cardSha": "2db881adcd88a381",
   "inputs": {
-    "card": "6446bb7eb203624e",
+    "card": "2db881adcd88a381",
     "page": "284a3ec304d45fa3",
     "rules": "7dd845c8b4b0e115",
     "words": "a81a03c4d841c91f"
   },
-  "checkedAt": "2026-11-19T21:29:17Z",
+  "checkedAt": "2026-11-19T21:29:36Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "What can we do to activate this guy?",
       "where": "WhatsApp in one tap: right after sign-",
       "status": "met",
-      "how": "Screens show Open WhatsApp with code already typed in quick start step 1, plus Settings fallback; the flow is a single send."
+      "how": "Screens show Open WhatsApp with code already typed in quick start step 1, plus a Settings fallback; evidence page says one tap then Send links the phone."
     },
     {
       "said": "Why is the fucking wheel stuck all the fucking time?",
       "where": "WhatsApp in one tap: right after sign-",
       "status": "met",
-      "how": "Evidence page says the wheel was stuck at linking WhatsApp and that step is now one send, with the three-move problem named."
+      "how": "Evidence page says the wheel was stuck at linking WhatsApp, three moves on two devices, and that step is now one send."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths load with the one-tap flow, the Open WhatsApp button, the QR on laptop, the Settings fallback and the proven and not-proven list; the page is clean and fits."
+    "summary": "The 1280 px and 390 px screens open with the punchline box and a four-box sequence, show the Open WhatsApp screens at both widths, and end with the proven and not-proven list; no real house-rule breach is visible."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether a one-tap Open WhatsApp button with the code typed is simple enough for a new tester, given the team's view that it is.",
+    "asked": "Decide whether one Open WhatsApp button and one send is simple enough for a new tester, given the card's delivered lines.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "284a3ec304d45fa3",
-    "walkedAt": "2026-11-19T21:29:17Z",
+    "walkedAt": "2026-11-19T21:29:36Z",
     "steps": [
       {
         "n": 1,
