@@ -99,7 +99,7 @@ export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
  * the agent_team console to send Jordi his alerts from the Zenod number.
  */
 export const PHYLAX_NOTIFY_PROFILE = "phylax-notify-v1";
-export const PHYLAX_NOTIFY_TOOL_NAMES = ["notify", "channel_status"] as const;
+export const PHYLAX_NOTIFY_TOOL_NAMES = ["notify", "channel_status", "notify_receipt"] as const;
 export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
 export const ZENOD_WHATSAPP_VERIFICATION_REPLY =
@@ -312,6 +312,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       toolKinds: {
         read: [
           "channel_status",
+          "notify_receipt",
           "get_recent_conversation_transcript",
           "phylax_management_v1_capabilities",
           "phylax_management_v1_channel_status",
@@ -1317,6 +1318,9 @@ function registerTenantChannelTools(
     },
     readConversationTranscript(query) {
       return runtime.whatsappStore.recentTranscript({ ...query, tenantId });
+    },
+    deliveryReceipt(sentMessageId) {
+      return runtime.whatsappStore.outboundDeliveryReceipt(tenantId, sentMessageId);
     },
   });
 }

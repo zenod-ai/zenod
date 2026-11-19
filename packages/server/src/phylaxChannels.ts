@@ -2369,6 +2369,23 @@ export interface PhylaxTenantDelivery {
   notify?(text: string, image?: PhylaxNotifyImage): Promise<PhylaxDeliveryReceipt[]>;
   /** Tenant-filtered reader backed by Phylax's authoritative transport store. */
   readConversationTranscript?: ConversationTranscriptReader;
+  /** EPIC-20 A6: tenant-scoped delivery state of one sent message; null when it is not this tenant's. */
+  deliveryReceipt?(sentMessageId: string): PhylaxNotifyReceiptState | null;
+}
+
+/** EPIC-20 A6: what notify_receipt returns; never the message text. */
+export interface PhylaxNotifyReceiptState {
+  sentMessageId: string;
+  status: "pending" | "sent" | "delivered" | "read" | "failed";
+  /** Epoch ms of the latest state. */
+  at: number;
+}
+
+/** Accept a bare id or a notify receipt line, `whatsapp:<sentMessageId>:sent`. */
+export function notifyReceiptMessageId(input: string): string {
+  const trimmed = input.trim();
+  const match = /^whatsapp:([^:\s]+)(?::[a-z_]+)?$/i.exec(trimmed);
+  return match ? match[1]! : trimmed;
 }
 
 function deliveryToolResult(receipts: PhylaxDeliveryReceipt[]) {
@@ -2452,6 +2469,32 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
       return { content: [{ type: "text" as const, text: JSON.stringify(status) }], structuredContent: { status } };
     },
   );
+  if (delivery.deliveryReceipt) {
+    server.registerTool(
+      "notify_receipt",
+      {
+        title: "Read a notify delivery receipt",
+        description: "Read whether one WhatsApp message this account sent (by the sentMessageId notify returned) is sent, delivered or read on the phone, or failed. Returns no message content; an id this account did not send reads as unknown.",
+        inputSchema: {
+          sentMessageId: z.string().min(1).max(200).describe(
+            "The sentMessageId from a notify receipt; `whatsapp:<sentMessageId>:sent` is accepted too.",
+          ),
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async ({ sentMessageId }) => {
+        const id = notifyReceiptMessageId(sentMessageId);
+        const found = delivery.deliveryReceipt!(id);
+        const receipt = found
+          ? { sentMessageId: found.sentMessageId, channel: "whatsapp" as const, status: found.status, at: new Date(found.at).toISOString() }
+          : { sentMessageId: id, channel: "whatsapp" as const, status: "unknown" as const, at: null };
+        return {
+          content: [{ type: "text" as const, text: `whatsapp:${receipt.sentMessageId}:${receipt.status}${receipt.at ? `@${receipt.at}` : ""}` }],
+          structuredContent: receipt,
+        };
+      },
+    );
+  }
   if (delivery.readConversationTranscript) {
     server.registerTool(
       "get_recent_conversation_transcript",

@@ -135,6 +135,8 @@ export interface SocketLike {
   ev: {
     on(event: "connection.update", listener: (update: Record<string, unknown>) => void): void;
     on(event: "messages.upsert", listener: (update: { messages: WAMessage[]; type: string }) => void): void;
+    /** EPIC-20 A6: WhatsApp's delivered/read receipts for messages we sent. */
+    on(event: "messages.update", listener: (updates: Array<{ key: WAMessageKey; update: { status?: number | null } }>) => void): void;
   };
   user?: { id?: string | null } | null;
   sendMessage(
@@ -1403,6 +1405,21 @@ export class WhatsAppGateway {
     return { sent: recipients.length, recipients };
   }
 
+  /** EPIC-20 A6: keep WhatsApp's delivered/read/failed receipt for each message we sent. */
+  private recordDeliveryReceipts(updates: Array<{ key: WAMessageKey; update: { status?: number | null } }>): void {
+    for (const { key, update } of Array.isArray(updates) ? updates : []) {
+      const status = whatsappDeliveryStatus(update?.status);
+      if (!key?.fromMe || !key.id || !status) continue;
+      try {
+        if (this.options.store.recordOutboundDeliveryStatus(key.id, status)) {
+          console.log(`[whatsapp] receipt ${key.id} ${status}`);
+        }
+      } catch (error) {
+        console.error("[whatsapp] failed to record delivery receipt:", error);
+      }
+    }
+  }
+
   /** Ported provider send primitive used by Phylax's tenant-scoped MCP face. */
   /** True only once the link has opened; a socket that is still connecting cannot send (ZAL-A16). */
   isConnected(): boolean {
@@ -1711,6 +1728,11 @@ export class WhatsAppGateway {
           if (this.connectionCloseInFlight === closeWork) this.connectionCloseInFlight = null;
         });
       }
+    });
+
+    socket.ev.on("messages.update", (updates) => {
+      if (this.socket !== socket || generation !== this.lifecycleGeneration) return;
+      this.recordDeliveryReceipts(updates);
     });
 
     socket.ev.on("messages.upsert", (update) => {
@@ -2479,4 +2501,15 @@ export class WhatsAppGateway {
       throw err;
     }
   }
+}
+
+/**
+ * EPIC-20 A6: Baileys WebMessageInfo.Status: 0 ERROR, 1 PENDING, 2 SERVER_ACK,
+ * 3 DELIVERY_ACK, 4 READ, 5 PLAYED. Server ack is already "sent".
+ */
+export function whatsappDeliveryStatus(status: unknown): "delivered" | "read" | "failed" | null {
+  if (status === 0) return "failed";
+  if (status === 3) return "delivered";
+  if (status === 4 || status === 5) return "read";
+  return null;
 }

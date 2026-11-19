@@ -671,6 +671,14 @@ export class WhatsAppStore {
     if (!auditColumns.some((column) => column.name === "failure_code")) {
       this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN failure_code TEXT");
     }
+    // EPIC-20 A6: WhatsApp's own delivered/read receipts for each outbound intent.
+    const intentColumns = this.db.prepare("PRAGMA table_info(whatsapp_outbound_intents)").all() as unknown as Array<{ name: string }>;
+    if (!intentColumns.some((column) => column.name === "delivery_status")) {
+      this.db.exec("ALTER TABLE whatsapp_outbound_intents ADD COLUMN delivery_status TEXT");
+    }
+    if (!intentColumns.some((column) => column.name === "delivery_status_at")) {
+      this.db.exec("ALTER TABLE whatsapp_outbound_intents ADD COLUMN delivery_status_at INTEGER");
+    }
     const voiceColumns = this.db.prepare("PRAGMA table_info(whatsapp_voice_jobs)").all() as unknown as Array<{ name: string }>;
     if (!voiceColumns.some((column) => column.name === "reply_to_message_id")) {
       this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN reply_to_message_id TEXT");
@@ -2247,6 +2255,54 @@ export class WhatsAppStore {
     return intent?.state === "sent" ? intent.sentProviderMessageId ?? intent.providerMessageId : null;
   }
 
+  /**
+   * EPIC-20 A6: record WhatsApp's receipt for one message we sent. Only moves
+   * forward (delivered, then read); a failure never overwrites delivered/read.
+   */
+  recordOutboundDeliveryStatus(sentMessageId: string, status: WhatsAppOutboundDeliveryStatus, at = Date.now()): boolean {
+    const id = sentMessageId.trim();
+    if (!id) return false;
+    const rank = OUTBOUND_DELIVERY_RANK[status];
+    return this.db.prepare(
+      `UPDATE whatsapp_outbound_intents
+       SET delivery_status = ?, delivery_status_at = ?
+       WHERE (sent_provider_message_id = ? OR provider_message_id = ?)
+         AND (CASE COALESCE(delivery_status, '')
+                WHEN 'read' THEN 3 WHEN 'delivered' THEN 2 WHEN 'failed' THEN 1 ELSE 0 END) < ?`,
+    ).run(status, at, id, id, rank).changes > 0;
+  }
+
+  /**
+   * EPIC-20 A6: the delivery state of one message this tenant sent, by its
+   * sentMessageId. Never returns the message text; another tenant's id reads as null.
+   */
+  outboundDeliveryReceipt(tenantId: string, sentMessageId: string): WhatsAppOutboundDeliveryReceipt | null {
+    const id = sentMessageId.trim();
+    const tenant = tenantId.trim();
+    if (!id || !tenant) return null;
+    const row = this.db.prepare(
+      `SELECT COALESCE(sent_provider_message_id, provider_message_id) AS sentMessageId,
+              intent_state AS state, error_text AS errorText,
+              delivery_status AS deliveryStatus, delivery_status_at AS deliveryStatusAt,
+              updated_at AS updatedAt
+       FROM whatsapp_outbound_intents
+       WHERE tenant_id = ? AND (sent_provider_message_id = ? OR provider_message_id = ?)
+       ORDER BY updated_at DESC LIMIT 1`,
+    ).get(tenant, id, id) as {
+      sentMessageId: string; state: string; errorText: string | null;
+      deliveryStatus: string | null; deliveryStatusAt: number | null; updatedAt: number;
+    } | undefined;
+    if (!row) return null;
+    if (row.deliveryStatus === "read" || row.deliveryStatus === "delivered") {
+      return { sentMessageId: row.sentMessageId, status: row.deliveryStatus, at: row.deliveryStatusAt ?? row.updatedAt };
+    }
+    if (row.deliveryStatus === "failed" || (row.state !== "sent" && row.errorText)) {
+      return { sentMessageId: row.sentMessageId, status: "failed", at: row.deliveryStatusAt ?? row.updatedAt };
+    }
+    if (row.state === "sent") return { sentMessageId: row.sentMessageId, status: "sent", at: row.updatedAt };
+    return { sentMessageId: row.sentMessageId, status: "pending", at: row.updatedAt };
+  }
+
   completeOutboundIntent(
     intent: WhatsAppOutboundIntent,
     outcome: { sentMessageId: string; raw?: unknown },
@@ -2930,4 +2986,14 @@ export class WhatsAppStore {
   close(): void {
     this.db.close();
   }
+}
+
+/** EPIC-20 A6: WhatsApp's receipt for a message we sent. */
+export type WhatsAppOutboundDeliveryStatus = "delivered" | "read" | "failed";
+const OUTBOUND_DELIVERY_RANK: Record<WhatsAppOutboundDeliveryStatus, number> = { failed: 1, delivered: 2, read: 3 };
+export interface WhatsAppOutboundDeliveryReceipt {
+  sentMessageId: string;
+  status: "pending" | "sent" | "delivered" | "read" | "failed";
+  /** Epoch ms of the latest state. */
+  at: number;
 }
