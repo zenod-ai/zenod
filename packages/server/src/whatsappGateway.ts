@@ -1411,7 +1411,9 @@ export class WhatsAppGateway {
       const status = whatsappDeliveryStatus(update?.status);
       if (!key?.fromMe || !key.id || !status) continue;
       try {
-        this.options.store.recordOutboundDeliveryStatus(key.id, status);
+        if (this.options.store.recordOutboundDeliveryStatus(key.id, status)) {
+          console.log(`[whatsapp] receipt ${key.id} ${status}`);
+        }
       } catch (error) {
         console.error("[whatsapp] failed to record delivery receipt:", error);
       }
