@@ -36,6 +36,14 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     expect(readFileSync(join(dataDir, TESTER_APPLICATIONS_FILE), "utf8")).not.toContain("203.0.113.7");
   });
 
+  it("E26-S34: keeps an application with only an email (the usage answer is optional)", async () => {
+    const { apply, kept } = setup();
+    const response = await apply({ contact: "me@example.com", website: "" });
+    expect(response.status).toBe(200);
+    expect(kept()).toEqual([{ at: "2026-11-09T05:00:00.000Z", use: "", contact: "me@example.com" }]);
+    expect((await apply({ use: "voice", contact: "you@example.com" }, "198.51.100.2")).status).toBe(200);
+  });
+
   it("answers a filled honeypot as if kept, and keeps nothing", async () => {
     const { apply, kept } = setup();
     const response = await apply({ use: "Buy cheap watches online today", contact: "bot@example.com", website: "http://spam.example" });
@@ -43,9 +51,9 @@ describe("zenod.dev/testers apply form (ZAL-A13)", () => {
     expect(kept()).toEqual([]);
   });
 
-  it("refuses an empty answer or contact", async () => {
+  it("refuses an empty contact or an over-long answer", async () => {
     const { apply, kept } = setup();
-    expect((await apply({ use: "hi", contact: "me@example.com" })).status).toBe(400);
+    expect((await apply({ use: "", contact: "" })).status).toBe(400);
     expect((await apply({ use: "Voice notes on my walks", contact: "" })).status).toBe(400);
     expect((await apply({ use: "x".repeat(2001), contact: "me@example.com" })).status).toBe(400);
     expect(kept()).toEqual([]);

@@ -214,8 +214,6 @@ function ApplyForm() {
         id="tester-use"
         name="use"
         rows={5}
-        required
-        minLength={10}
         maxLength={2000}
         placeholder="For example: voice notes on my walks, and Claude Code saving what we work out on my side project."
       />
