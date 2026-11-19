@@ -16,6 +16,7 @@
 #   • crashloop-<svc>  ≥ RESTART_MAX failed tasks of the zenod-mt or phylax service in RESTART_WINDOW → page
 #   • extra URLs (ZENOD_WATCHDOG_EXTRA_URLS="key=url ...") answer 200 (used for the S5 proof)  → page
 #   • public-outage  row-1 or row-2 red also writes ONE desk note a day in Zenod's own desk/inbox (EPIC-24 M21) → wake
+#   • sustained      row-4 (Phylax WhatsApp) red for 5 minutes or more joins that desk note (EPIC-20 A5)      → wake
 #
 # Alerts go through scripts/watchdog/zenod-alert.sh (the HQ queue, dedupe, 30-min re-alert, one RECOVERED message).
 # A row key is shared with the live page, so one outage seen by both alerts once.
@@ -43,6 +44,9 @@ RESTART_WINDOW="${ZENOD_WATCHDOG_RESTART_WINDOW:-900}" # ... within this many se
 export ZENOD_ALERT_SOURCE="${ZENOD_ALERT_SOURCE:-zenod watchdog}"
 # public-outage desk note (EPIC-24 M21): which keys are public pages, where the note goes
 OUTAGE_KEYS="${ZENOD_WATCHDOG_OUTAGE_KEYS:-row-1 row-2}"
+# EPIC-20 A5: "KEY=SECONDS" rows that join the desk note once red that long (19 Nov: Phylax WhatsApp sat in "error"
+# for three hours and only the HQ queue, which wakes nobody, heard of it). A blip shorter than that stays HQ-only.
+SUSTAINED_KEYS="${ZENOD_WATCHDOG_SUSTAINED_KEYS:-row-4=300}"
 OUTAGE_DESK_ON="${ZENOD_WATCHDOG_OUTAGE_DESK:-1}"
 OUTAGE_REPO_URL="${ZENOD_WATCHDOG_OUTAGE_REPO_URL:-https://github.com/zenod-ai/zenod.git}"
 OUTAGE_CLONE="${ZENOD_WATCHDOG_OUTAGE_CLONE:-$HOME/.local/share/zenod-watchdog/desk-clone}"
@@ -110,6 +114,11 @@ if kind == "phylax":
 print("ok")' "$1" "$2"
 }
 
+# sustained_red SINCE NOW MIN -> "yes" when a row red since epoch SINCE has been red at least MIN seconds at NOW
+sustained_red() {
+  [ $(( $2 - $1 )) -ge "$3" ] && echo yes || echo no
+}
+
 # outage_delta PREV CUR HHMM -> the desk-note items to write, or nothing when the red set did not change.
 # PREV/CUR: "KEY<TAB>text" lines (red last time / now). Output: every CUR line, plus each PREV key no longer red as
 # "KEY<TAB>text, green again at HHMM".
@@ -153,8 +162,8 @@ outage_desk() {
   local args=() line
   while IFS= read -r line; do [ -n "$line" ] && args+=(--item "$line"); done <<< "$items"
   out="$(timeout 40 python3 "$DESK_NOTE" daily --to "$OUTAGE_CLONE" --from zenod-watchdog --reply-to zenod-ai/zenod \
-    --key public-outage --about "OUTAGE: a Zenod public page answered an error today ({open} lines), seen by the VPS1 watchdog" \
-    --intro "The VPS1 watchdog (scripts/watchdog) saw zenod.dev or cloud.zenod.dev fail; every post links there. Now: find why (sudo docker inspect --type task on zenod-mt-fxpzoo, sar -d for the data volume sdb, /var/log/vps-forensics), log the cause on EPIC-24 and tell zenod-social if it lasts. Each line says when it went red and, once it answers 200 again, when it went green." \
+    --key public-outage --about "OUTAGE: a Zenod public page or WhatsApp failed today ({open} lines), seen by the VPS1 watchdog" \
+    --intro "The VPS1 watchdog (scripts/watchdog) saw zenod.dev or cloud.zenod.dev fail (every post links there), or Phylax's WhatsApp stay down 5 minutes or more (testers and Jordi reach Zenod there; since EPIC-20 A5 it should reconnect by itself, so a WhatsApp line means it did not: read phylax.zenod.dev/api/health channels.whatsapp.receivePath and the [whatsapp][health] log lines, then restart Phylax on the same image per docs/DEPLOYMENTS.md, never resetting the session). Now: find why (sudo docker inspect --type task on zenod-mt-fxpzoo, sar -d for the data volume sdb, /var/log/vps-forensics), log the cause on EPIC-24 and tell zenod-social if it lasts. Each line says when it went red and, once it answers 200 again, when it went green." \
     "${args[@]}" 2>&1)"; rc=$?
   log "outage desk: rc=$rc ${out//$'\n'/ }"
   [ "$rc" -eq 0 ] || return 0   # marker unchanged: retried on the next run
@@ -184,10 +193,19 @@ OUTAGE_NOW=""   # "KEY<TAB>text" lines of the public pages red in this run (EPIC
 url_check() { # url_check KEY KIND URL NAME
   fetch "$3"
   local v; v="$(printf '%s' "$BODY" | health_verdict "$2" "$CODE")"
-  if [ "$v" = ok ]; then za_clear "$1" "$4 is green again: $3 answers 200"
+  local since_file="$ZA_STATE/red-since.$1" min="" kv since
+  for kv in $SUSTAINED_KEYS; do [ "${kv%%=*}" = "$1" ] && min="${kv#*=}"; done
+  if [ "$v" = ok ]; then za_clear "$1" "$4 is green again: $3 answers 200"; rm -f "$since_file"
   else
     page "$1" "$4 is red: $3 $v"
     case " $OUTAGE_KEYS " in *" $1 "*) OUTAGE_NOW="${OUTAGE_NOW}$1"$'\t'"$4: $3 $v"$'\n';; esac
+    if [ -n "$min" ]; then
+      [ -s "$since_file" ] || { mkdir -p "$ZA_STATE"; echo "$NOW" > "$since_file"; }
+      since="$(cat "$since_file")"
+      if [ "$(sustained_red "$since" "$NOW" "$min")" = yes ]; then
+        OUTAGE_NOW="${OUTAGE_NOW}$1"$'\t'"$4: red since $(date -u -d "@$since" +%H:%MZ), $3 $v"$'\n'
+      fi
+    fi
   fi
 }
 

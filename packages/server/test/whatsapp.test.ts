@@ -560,6 +560,123 @@ describe("WhatsApp lifecycle", () => {
     }
   });
 
+  // EPIC-20 A5, incident 19 Nov: the VPS1 data volume froze, the close flush timed out at 2 s, the close
+  // handler threw before scheduleReconnect and WhatsApp sat in "error" for three hours until a manual restart.
+  it("reconnects with backoff when a closed socket's credential flush hangs (19 Nov disk freeze)", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-flush-hang-"));
+    const runtime = new Runtime(dir);
+    const frozen = new FakeSocket();
+    let releaseDisk!: () => void;
+    const diskBack = new Promise<void>((resolve) => {
+      releaseDisk = resolve;
+    });
+    frozen.flushCredentials = vi.fn(() => diskBack); // the save is stuck behind the frozen volume
+    const fresh = new FakeSocket();
+    const sockets = [frozen, fresh];
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => sockets[created++]!,
+      lifecycle: { reconnectDelayMs: 1_000, credentialRetryFlushMs: 5_000, maxReconnectDelayMs: 8_000 },
+    });
+    const logs = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      frozen.emitter.emit("connection.update", { connection: "open" });
+      frozen.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 408 } } },
+      });
+      await vi.advanceTimersByTimeAsync(2_000); // the 2 s flush times out
+      // Before the fix: state "error", no timer, nextRetryAt null, stuck for good.
+      expect(gateway.status().state).toBe("disconnected");
+      expect(gateway.status().receivePath).toMatchObject({ phase: "retry_wait", restartable: true });
+      expect(gateway.status().receivePath.nextRetryAt).toBeTypeOf("number");
+
+      // Each attempt waits for the stuck save (5 s) and backs off; no new socket reads stale credentials meanwhile.
+      await vi.advanceTimersByTimeAsync(1_000 + 5_000 + 2_000 + 5_000);
+      expect(created).toBe(1);
+      expect(gateway.status().state).toBe("disconnected");
+      const scheduled = logs.mock.calls
+        .filter((call) => String(call[1]).includes("reconnect_scheduled"))
+        .map((call) => JSON.parse(String(call[1])) as { delayMs: number });
+      expect(scheduled.map((event) => event.delayMs)).toEqual([1_000, 2_000, 4_000]);
+
+      releaseDisk(); // the volume comes back: the save finishes, the next attempt reconnects
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(created).toBe(2);
+      fresh.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().state).toBe("connected");
+      expect(gateway.status().receivePath.status).toBe("ready");
+      const events = logs.mock.calls.map((call) => String(call[1]));
+      expect(events.some((event) => event.includes("credential_flush_slow"))).toBe(true);
+      expect(events.some((event) => event.includes("credential_flush_recovered"))).toBe(true);
+      expect(events.some((event) => event.includes("reconnect_succeeded"))).toBe(true);
+      expect(errors.mock.calls.some((call) => String(call[0]).includes("close handler failed"))).toBe(false);
+      await gateway.close();
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reconnects after a closed socket's credential save fails outright", async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-flush-fail-"));
+    const runtime = new Runtime(dir);
+    const broken = new FakeSocket();
+    broken.flushCredentials = vi.fn(async () => {
+      throw new Error("EIO: i/o error, fsync");
+    });
+    const fresh = new FakeSocket();
+    const sockets = [broken, fresh];
+    let created = 0;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => sockets[created++]!,
+      lifecycle: { reconnectDelayMs: 1_000 },
+    });
+    const logs = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      runtime.settings.setWhatsAppSettings({ enabled: true });
+      await gateway.start();
+      broken.emitter.emit("connection.update", { connection: "open" });
+      broken.emitter.emit("connection.update", {
+        connection: "close",
+        lastDisconnect: { error: { output: { statusCode: 428 } } },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(gateway.status().state).toBe("disconnected");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(created).toBe(2);
+      fresh.emitter.emit("connection.update", { connection: "open" });
+      expect(gateway.status().state).toBe("connected");
+      expect(logs.mock.calls.some((call) => String(call[1]).includes("credential_flush_failed"))).toBe(true);
+      await gateway.close();
+    } finally {
+      logs.mockRestore();
+      errors.mockRestore();
+      vi.useRealTimers();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps terminal authentication failure loud without marking it restartable", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-terminal-auth-"));
     const runtime = new Runtime(dir);

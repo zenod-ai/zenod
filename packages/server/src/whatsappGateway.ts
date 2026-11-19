@@ -380,6 +380,21 @@ function skipReasonForBaileysMessage(message: WAMessage): string {
 const WHATSAPP_CREDS_FILE = "creds.json";
 const WHATSAPP_CREDS_BACKUP_FILE = "creds.last-known-good.json";
 const WHATSAPP_CREDENTIAL_FLUSH_MS = 2_000;
+/**
+ * EPIC-20 A5: before a reconnect, a credential save that outlived the 2 s close flush gets this much longer per
+ * attempt (a slow or frozen data volume). It is an async wait on the save queue, so the event loop never blocks.
+ */
+const WHATSAPP_CREDENTIAL_RETRY_FLUSH_MS = 15_000;
+/** EPIC-20 A5: consecutive failed reconnects back off from the base delay up to this ceiling. */
+const WHATSAPP_RECONNECT_MAX_DELAY_MS = 60_000;
+
+/** A credential flush that has not finished in time: the save may still be writing, so it is not a failure yet. */
+export class WhatsAppCredentialFlushTimeout extends Error {
+  constructor(timeoutMs: number) {
+    super(`WhatsApp credential flush exceeded ${timeoutMs}ms`);
+    this.name = "WhatsAppCredentialFlushTimeout";
+  }
+}
 const WHATSAPP_SHUTDOWN_DRAIN_MS = 4_000;
 const WHATSAPP_STARTUP_TIMEOUT_MS = 15_000;
 const WHATSAPP_HANDSHAKE_TIMEOUT_MS = 30_000;
@@ -654,6 +669,14 @@ export class WhatsAppGateway {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private handshakeTimer: NodeJS.Timeout | null = null;
   private reconnectInFlight = false;
+  /** EPIC-20 A5: consecutive reconnect attempts since the last open connection (drives the backoff). */
+  private reconnectFailures = 0;
+  /**
+   * EPIC-20 A5: a closed socket whose last credential save was still writing when its flush timed out. The next
+   * reconnect waits for that save to settle first, so a late write of older credentials can never land on top
+   * of the new socket's, and the stored session stays intact.
+   */
+  private credentialBacklog: SocketLike | null = null;
   private lifecycleGeneration = 0;
   private startInFlight: Promise<void> | null = null;
   private connectionCloseInFlight: Promise<void> | null = null;
@@ -711,6 +734,9 @@ export class WhatsAppGateway {
         startupTimeoutMs?: number;
         handshakeTimeoutMs?: number;
         reconnectDelayMs?: number;
+        credentialFlushMs?: number;
+        credentialRetryFlushMs?: number;
+        maxReconnectDelayMs?: number;
       };
     },
   ) {}
@@ -917,6 +943,7 @@ export class WhatsAppGateway {
 
   async disconnect(options: { keepEnabled?: boolean } = {}): Promise<void> {
     this.clearReconnectTimer();
+    this.reconnectFailures = 0;
     this.clearHandshakeTimer();
     this.lifecycleGeneration += 1;
     if (!options.keepEnabled) this.options.settings.setWhatsAppSettings({ enabled: false });
@@ -993,6 +1020,15 @@ export class WhatsAppGateway {
         await this.flushSocketCredentials(socket);
       } catch (error) {
         failures.push(error);
+      }
+      const backlog = this.credentialBacklog;
+      this.credentialBacklog = null;
+      if (backlog && backlog !== socket) {
+        try {
+          await this.flushSocketCredentials(backlog);
+        } catch (error) {
+          failures.push(error);
+        }
       }
       failures.push(...this.lifecycleFailures.splice(0));
       if (failures.length > 0) throw new AggregateError(failures, "WhatsApp shutdown failed");
@@ -1090,17 +1126,17 @@ export class WhatsAppGateway {
     });
   }
 
-  private async flushSocketCredentials(socket: SocketLike | null): Promise<void> {
+  private async flushSocketCredentials(
+    socket: SocketLike | null,
+    timeoutMs = this.options.lifecycle?.credentialFlushMs ?? WHATSAPP_CREDENTIAL_FLUSH_MS,
+  ): Promise<void> {
     if (!socket?.flushCredentials) return;
     let timer: NodeJS.Timeout | null = null;
     try {
       await Promise.race([
         socket.flushCredentials(),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(`WhatsApp credential flush exceeded ${WHATSAPP_CREDENTIAL_FLUSH_MS}ms`)),
-            WHATSAPP_CREDENTIAL_FLUSH_MS,
-          );
+          timer = setTimeout(() => reject(new WhatsAppCredentialFlushTimeout(timeoutMs)), timeoutMs);
         }),
       ]);
     } catch (err) {
@@ -1112,27 +1148,97 @@ export class WhatsAppGateway {
     }
   }
 
-  private scheduleReconnect(reason: string, delayMs: number): void {
+  /**
+   * EPIC-20 A5: retire a closed socket's credentials without ever throwing. 19 Nov: the VPS1 data volume froze,
+   * this flush timed out at 2 s, the close handler threw before scheduleReconnect and WhatsApp sat in "error"
+   * for three hours until a manual restart. Now a save still writing becomes the backlog the reconnect waits
+   * for; a save that failed outright has already put the last good copy back on disk. Nothing is deleted.
+   */
+  private async retireSocketCredentials(socket: SocketLike | null): Promise<void> {
+    if (!socket) return;
+    try {
+      await this.flushSocketCredentials(socket);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (error instanceof WhatsAppCredentialFlushTimeout) {
+        this.credentialBacklog = socket;
+        this.logHealthEvent("credential_flush_slow", { error: message });
+      } else {
+        this.logHealthEvent("credential_flush_failed", { error: message });
+      }
+    }
+  }
+
+  private reconnectDelay(baseDelayMs: number): number {
+    const ceiling = this.options.lifecycle?.maxReconnectDelayMs ?? WHATSAPP_RECONNECT_MAX_DELAY_MS;
+    return Math.min(baseDelayMs * 2 ** Math.min(this.reconnectFailures, 16), Math.max(ceiling, baseDelayMs));
+  }
+
+  private scheduleReconnect(reason: string, baseDelayMs: number): void {
     if (this.terminalClosing || !this.options.settings.whatsappSettings().enabled || this.reconnectTimer) return;
+    const delayMs = this.reconnectDelay(baseDelayMs);
     this.lastError = reason;
     this.state = "disconnected";
     this.nextRetryAt = Date.now() + delayMs;
     this.transition("retry_wait");
     this.reconnectInFlight = true;
-    this.logHealthEvent("reconnect_scheduled", { reason, delayMs });
+    this.logHealthEvent("reconnect_scheduled", { reason, delayMs, attempt: this.reconnectFailures + 1 });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.nextRetryAt = null;
-      this.logHealthEvent("reconnect_attempt");
-      void this.start().catch((err: unknown) => {
-        this.state = "error";
-        this.lastError = err instanceof Error ? err.message : String(err);
-        this.reconnectInFlight = false;
-        this.notifyStatusChange();
-        this.logHealthEvent("reconnect_failed", { error: this.lastError });
-        console.error("[whatsapp] reconnect failed:", err);
-      });
+      void this.attemptReconnect(baseDelayMs);
     }, delayMs);
+  }
+
+  private async attemptReconnect(baseDelayMs: number): Promise<void> {
+    const generation = this.lifecycleGeneration;
+    this.reconnectFailures += 1;
+    const stale = () =>
+      this.terminalClosing
+      || generation !== this.lifecycleGeneration
+      || this.socket !== null
+      || this.reconnectTimer !== null
+      || !this.options.settings.whatsappSettings().enabled;
+    const backlog = this.credentialBacklog;
+    if (backlog) {
+      try {
+        await this.flushSocketCredentials(
+          backlog,
+          this.options.lifecycle?.credentialRetryFlushMs ?? WHATSAPP_CREDENTIAL_RETRY_FLUSH_MS,
+        );
+        if (this.credentialBacklog === backlog) this.credentialBacklog = null;
+        this.logHealthEvent("credential_flush_recovered");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (stale()) return;
+        if (error instanceof WhatsAppCredentialFlushTimeout) {
+          // Still writing: keep the session safe, keep retrying with backoff, never sit in "error".
+          this.logHealthEvent("credential_flush_pending", { error: message });
+          this.scheduleReconnect("WhatsApp is waiting for a slow credential save before reconnecting", baseDelayMs);
+          return;
+        }
+        // Settled with an error: nothing is writing any more and the last good copy is on disk.
+        if (this.credentialBacklog === backlog) this.credentialBacklog = null;
+        this.logHealthEvent("credential_flush_failed", { error: message });
+      }
+      if (stale()) return;
+    }
+    this.logHealthEvent("reconnect_attempt", { attempt: this.reconnectFailures });
+    try {
+      await this.start();
+    } catch (err: unknown) {
+      this.lastError = err instanceof Error ? err.message : String(err);
+      this.logHealthEvent("reconnect_failed", { error: this.lastError });
+      console.error("[whatsapp] reconnect failed:", err);
+      // start() schedules its own retry for a failed factory; make sure one is always pending (EPIC-20 A5).
+      if (this.lifecyclePhase === "terminal" || this.terminalClosing) {
+        this.state = "error";
+        this.reconnectInFlight = false;
+      } else {
+        this.scheduleReconnect(this.lastError, baseDelayMs);
+      }
+      this.notifyStatusChange();
+    }
   }
 
   /** A failed send/presence call that means the socket is closed underneath us. */
@@ -1175,7 +1281,7 @@ export class WhatsAppGateway {
       this.state = "disconnected";
       this.lastError = "WhatsApp requested a restart after pairing. Saving session before reconnecting…";
       this.transition("retry_wait");
-      await this.flushSocketCredentials(socket);
+      await this.retireSocketCredentials(socket);
       this.scheduleReconnect("WhatsApp requested a restart after pairing. Reconnecting…", 1_500);
       return;
     }
@@ -1196,8 +1302,8 @@ export class WhatsAppGateway {
     this.state = "disconnected";
     this.lastError = statusCode ? `WhatsApp disconnected (${statusCode})` : "WhatsApp disconnected";
     this.transition("retry_wait");
-    await this.flushSocketCredentials(socket);
-    this.scheduleReconnect(this.lastError, 2_000);
+    await this.retireSocketCredentials(socket);
+    this.scheduleReconnect(this.lastError, this.options.lifecycle?.reconnectDelayMs ?? 2_000);
   }
 
   private rememberIgnored(reason: string): void {
@@ -1556,6 +1662,7 @@ export class WhatsAppGateway {
 
       if (update.connection === "open") {
         const wasReconnecting = this.reconnectInFlight;
+        this.reconnectFailures = 0;
         this.clearHandshakeTimer(socket);
         this.clearReconnectTimer();
         this.qr = null;
@@ -1590,11 +1697,16 @@ export class WhatsAppGateway {
         const closeWork = this.handleConnectionClose(closingSocket ?? socket, statusCode);
         this.connectionCloseInFlight = closeWork;
         void closeWork.catch((err: unknown) => {
-          this.state = "error";
           this.lastError = err instanceof Error ? err.message : String(err);
           this.lifecycleFailures.push(err);
-          this.notifyStatusChange();
           console.error("[whatsapp] close handler failed:", err);
+          // EPIC-20 A5: an unexpected close-handler failure still reconnects; only a terminal state stays down.
+          if (this.lifecyclePhase === "terminal" || this.terminalClosing) {
+            this.state = "error";
+          } else {
+            this.scheduleReconnect(this.lastError, this.options.lifecycle?.reconnectDelayMs ?? 2_000);
+          }
+          this.notifyStatusChange();
         }).finally(() => {
           if (this.connectionCloseInFlight === closeWork) this.connectionCloseInFlight = null;
         });
