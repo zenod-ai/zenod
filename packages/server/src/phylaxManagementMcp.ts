@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   executeHostedChannelMutation,
   hostedChannelChallengeCode,
+  hostedChannelLinkCode,
   hostedChannelView,
   normalizeHostedPhone,
   normalizeHostedTelegram,
@@ -17,6 +18,7 @@ import {
 } from "./phylaxAllowanceLedger.js";
 import type { PhylaxPortedRuntime } from "./phylaxPortedRuntime.js";
 import {
+  WHATSAPP_LINK_IDENTITY,
   type PhylaxCommercialOwner,
   type PhylaxTenantSettingsStore,
 } from "./phylaxTenantSettings.js";
@@ -393,6 +395,9 @@ function registerChannelMutationTools(
         // E26-S26: the owner arms its tester welcome as the verification reply (WhatsApp only);
         // a code asked without it disarms any earlier arm.
         welcome: z.enum(["tester"]).optional(),
+        // E7-S16: WhatsApp only. A code with no number: the number that sends it is bound, so the
+        // customer opens a wa.me link with the code typed in and never types their number.
+        link: z.literal(true).optional(),
       },
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -403,20 +408,27 @@ function registerChannelMutationTools(
         return errorResult("binding_required", error instanceof Error ? error.message : "Binding is unavailable.");
       }
       const operation = (input.channel === "whatsapp" ? "whatsapp.challenge" : "telegram.connect") as HostedChannelMutationName;
-      const rawIdentity = input.identity
-        ?? (input.channel === "whatsapp" ? dependencies.settings.get(tenantId).phoneNumber : null);
-      const identity = !rawIdentity
+      const link = input.channel === "whatsapp" && input.link === true;
+      const rawIdentity = link
         ? null
-        : input.channel === "whatsapp"
-          ? normalizeHostedPhone(rawIdentity)
-          : normalizeHostedTelegram(rawIdentity);
+        : input.identity
+          ?? (input.channel === "whatsapp" ? dependencies.settings.get(tenantId).phoneNumber : null);
+      const identity = link
+        ? WHATSAPP_LINK_IDENTITY
+        : !rawIdentity
+          ? null
+          : input.channel === "whatsapp"
+            ? normalizeHostedPhone(rawIdentity)
+            : normalizeHostedTelegram(rawIdentity);
       if (!identity) return errorResult("invalid_request", "Channel identity is invalid.");
-      const code = hostedChannelChallengeCode(
-        dependencies.challengeSecret,
-        tenantId,
-        input.operationId,
-        identity,
-      );
+      const code = link
+        ? hostedChannelLinkCode(dependencies.challengeSecret, tenantId, input.operationId)
+        : hostedChannelChallengeCode(
+            dependencies.challengeSecret,
+            tenantId,
+            input.operationId,
+            identity,
+          );
       const operationProof = phylaxManagementConnectOperationProof({
         secret: dependencies.challengeSecret,
         tenantId,
@@ -492,17 +504,19 @@ function registerChannelMutationTools(
               if (current.verified && current.phoneNumber) {
                 return mutationFailure(input.operationId, operation, "binding_conflict", "Disconnect the current sender first.");
               }
-              dependencies.settings.assertPhoneAvailable(tenantId, identity);
+              if (!link) dependencies.settings.assertPhoneAvailable(tenantId, identity);
               const sharedNumber = dependencies.runtime.whatsapp.sharedNumber();
               if (!sharedNumber) return mutationFailure(input.operationId, operation, "channels_unavailable", "WhatsApp transport is unavailable.");
-              const registration = dependencies.settings.registerPhone(
-                tenantId,
-                identity,
-                "primary",
-                at,
-                code,
-                operationProof,
-              );
+              const registration = link
+                ? dependencies.settings.registerLinkCode(tenantId, at, code, operationProof)
+                : dependencies.settings.registerPhone(
+                    tenantId,
+                    identity,
+                    "primary",
+                    at,
+                    code,
+                    operationProof,
+                  );
               dependencies.welcome?.set(tenantId, owner === "zenod" && input.welcome === "tester" ? "tester" : null, at);
               return {
                 status: 200,

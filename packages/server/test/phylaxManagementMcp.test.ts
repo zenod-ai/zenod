@@ -533,4 +533,45 @@ describe("tenant-safe Phylax management MCP", () => {
       await unit.close();
     }
   });
+  it("E7-S16: issues a one-tap WhatsApp link code with no number and binds the number that sends it", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-management-wa-link-"));
+    dirs.push(dataDir);
+    const tenants = new SqliteTenantStore({ dataDir });
+    tenants.provisionTenant({ tenant: { id: "alpha" } });
+    const token = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.phylax);
+    const { unit, base } = await startUnit(dataDir, tenants);
+    vi.spyOn(unit.phylaxRuntime.whatsapp, "sharedNumber").mockReturnValue("+34 699 000 111");
+    const client = await clientFor(base, token);
+    try {
+      await client.callTool({
+        name: "phylax_management_v1_ensure_binding",
+        arguments: {
+          operationId: "ensure-native-03",
+          expectedRevision: "0",
+          externalTenantId: "native-alpha",
+          downstreamUrl: "https://memory.example/mcp/alpha",
+          downstreamToken: "native-secret",
+        },
+      });
+      const args = { operationId: "wa-link-0001", expectedRevision: "0", channel: "whatsapp", link: true };
+      const linked = await client.callTool({ name: "phylax_management_v1_channel_connect", arguments: args });
+      expect(linked.isError).not.toBe(true);
+      const body = structured(linked);
+      expect(body.challenge.code).toMatch(/^ZEN-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+      expect(body.challenge.sharedNumber).toBe("+34 699 000 111");
+      expect(body.channels.whatsapp).toMatchObject({ state: "awaiting_code", senderHint: null });
+      const replay = await client.callTool({ name: "phylax_management_v1_channel_connect", arguments: args });
+      expect(structured(replay)).toEqual(body);
+      expect(unit.phylaxTenantSettings.get("alpha").phoneNumber).toBeNull();
+
+      expect(
+        unit.phylaxTenantSettings.verifyInbound("34611222333@s.whatsapp.net", `Link my WhatsApp to Zenod: ${body.challenge.code}`),
+      ).toMatchObject({ tenantId: "alpha", phoneNumber: "34611222333", verified: true });
+      const status = await client.callTool({ name: "phylax_management_v1_channel_status", arguments: {} });
+      expect(structured(status).channels.whatsapp).toMatchObject({ senderHint: expect.stringContaining("333") });
+    } finally {
+      await client.close();
+      await unit.close();
+    }
+  });
 });

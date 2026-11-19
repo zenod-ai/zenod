@@ -90,7 +90,7 @@ describe("Hosted Zenod channels", () => {
       )
     ).not.toBeNull()
     expect(screen.getByText("Linked identity @jordi.")).not.toBeNull()
-    fireEvent.change(screen.getByLabelText("Your WhatsApp sender number"), {
+    fireEvent.change(screen.getByLabelText("Or type your WhatsApp number"), {
       target: { value: "+34 611 111 111" },
     })
     fireEvent.click(
@@ -323,7 +323,7 @@ describe("Hosted Zenod channels", () => {
     expect(await screen.findByText("Your code ran out")).not.toBeNull()
     expect(container.textContent).not.toMatch(/Verified sender/)
     expect(container.textContent).toMatch(/The code ran out at \d{1,2}:\d{2}/)
-    expect(screen.queryByLabelText("Your WhatsApp sender number")).toBeNull()
+    expect(screen.queryByLabelText("Or type your WhatsApp number")).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Get a new code" }))
     expect(await screen.findByText("17-heron")).not.toBeNull()
     expect(mocks.api).toHaveBeenCalledWith("/api/channels/whatsapp/challenge", {
@@ -348,7 +348,7 @@ describe("Hosted Zenod channels", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Use a different number" })
     )
-    expect(screen.getByLabelText("Your WhatsApp sender number")).not.toBeNull()
+    expect(screen.getByLabelText("Or type your WhatsApp number")).not.toBeNull()
     expect(
       screen.getByRole("button", { name: "Create one-time code" })
     ).not.toBeNull()
@@ -368,7 +368,7 @@ describe("Hosted Zenod channels", () => {
     expect(
       await screen.findByText("Your sender is still connected")
     ).not.toBeNull()
-    expect(screen.queryByLabelText("Your WhatsApp sender number")).toBeNull()
+    expect(screen.queryByLabelText("Or type your WhatsApp number")).toBeNull()
     expect(
       screen.queryByRole("button", { name: "Create one-time code" })
     ).toBeNull()
@@ -479,7 +479,7 @@ describe("Hosted Zenod channels", () => {
       }
     )
     render(<HostedChannelsPanel />)
-    const input = await screen.findByLabelText("Your WhatsApp sender number")
+    const input = await screen.findByLabelText("Or type your WhatsApp number")
     fireEvent.change(input, { target: { value: "+34 611 111 111" } })
     fireEvent.click(
       screen.getByRole("button", { name: "Create one-time code" })
@@ -603,7 +603,7 @@ describe("Hosted Zenod channels", () => {
       )
       render(<HostedChannelsPanel />)
       fireEvent.change(
-        await screen.findByLabelText("Your WhatsApp sender number"),
+        await screen.findByLabelText("Or type your WhatsApp number"),
         { target: { value: "+34 611 111 111" } }
       )
       fireEvent.click(

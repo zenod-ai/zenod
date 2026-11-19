@@ -1399,4 +1399,109 @@ describe("Hosted Zenod channel adapter", () => {
       await unit.close();
     }
   });
+  it("E7-S16: a one-tap link code binds the number that sends it, with no number typed first", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "hosted-whatsapp-link-"));
+    dirs.push(dataDir);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+      },
+    });
+    fakeConnectedWhatsApp(unit.phylaxRuntime);
+    try {
+      const challenge = async (tenantId: string, operationId: string, extra: Record<string, unknown>) => {
+        const response = await unit.app.request(
+          `/internal/zenod/channels/${tenantId}/whatsapp/challenge`,
+          {
+            method: "POST",
+            headers: authorization(),
+            body: JSON.stringify({
+              operationId,
+              downstreamUrl: "https://cloud.zenod.dev/mcp",
+              downstreamToken: "memory-token",
+              ...extra,
+            }),
+          },
+        );
+        return { status: response.status, body: await response.json() };
+      };
+      const linked = await challenge("tenant-link", "whatsapp-link-1", { link: true });
+      expect(linked.status).toBe(200);
+      const code = linked.body.challenge.code as string;
+      expect(code).toMatch(/^ZEN-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+      expect(linked.body.challenge.sharedNumber).toBe("+34 699 000 111");
+      expect(linked.body.channels.whatsapp).toMatchObject({ state: "awaiting_code", senderHint: null });
+      // The same request again shows the same code (a retried tap).
+      expect((await challenge("tenant-link", "whatsapp-link-1", { link: true })).body.challenge.code).toBe(code);
+
+      // Another tenant holds +34 644 444 444: its sender can never be moved by a link code.
+      const held = await challenge("tenant-held", "whatsapp-held-1", { sender: "+34 644 444 444" });
+      unit.phylaxTenantSettings.verifyInbound("34644444444@s.whatsapp.net", held.body.challenge.code as string);
+
+      const handler = (
+        unit.phylaxRuntime.whatsapp as unknown as {
+          options: { portedInboundHandler: WhatsAppPortedInboundHandler };
+        }
+      ).options.portedInboundHandler;
+      const receive = vi.spyOn(unit.phylaxRuntime.organ, "receive");
+      const send = (sender: string, text: string, messageId: string) =>
+        handler({
+          event: {
+            messageId,
+            chatId: sender,
+            senderId: sender,
+            senderName: "",
+            chatName: "",
+            isGroup: false,
+            timestamp: Date.now(),
+            body: text,
+            hasMedia: false,
+            mediaType: null,
+            mimeType: null,
+            fileName: null,
+          },
+          text,
+          timing: { lifecycleStartedAt: Date.now(), mediaDownloadMs: null },
+          progress: async () => {},
+        });
+      const message = `Link my WhatsApp to Zenod: ${code}`;
+      expect(unit.phylaxTenantSettings.verifyInbound("34644444444@s.whatsapp.net", message)).toBeNull();
+      expect(unit.phylaxTenantSettings.verifyInbound("34655555555@s.whatsapp.net", "Link my WhatsApp to Zenod: ZEN-AAAAAAAA")).toBeNull();
+
+      const reply = await send("34633333333@s.whatsapp.net", message, "wa-link-1");
+      expect(reply.replyText).toBe(ZENOD_WHATSAPP_VERIFICATION_REPLY);
+      expect(receive).not.toHaveBeenCalled();
+      expect(unit.phylaxTenantSettings.get("tenant-link")).toMatchObject({ phoneNumber: "34633333333", verified: true });
+      expect(unit.phylaxTenantSettings.resolve("whatsapp", "34633333333@s.whatsapp.net")).toMatchObject({ tenantId: "tenant-link" });
+      // The same message again (a double tap on send) is a replay, not a second binding.
+      await expect(send("34633333333@s.whatsapp.net", message, "wa-link-2")).resolves.toMatchObject({
+        replyText: ZENOD_WHATSAPP_VERIFICATION_REPLY,
+      });
+      // The same code from another phone after linking binds nothing.
+      expect(unit.phylaxTenantSettings.verifyInbound("34666666666@s.whatsapp.net", message)).toBeNull();
+      expect(unit.phylaxTenantSettings.get("tenant-held").phoneNumber).toBe("34644444444");
+      expect(
+        unit.hostedChannelAudit.recent("tenant-link").filter((entry) => entry.operation === "whatsapp.verify"),
+      ).toHaveLength(1);
+
+      // A link code runs out after 30 minutes like a typed one.
+      const later = await challenge("tenant-later", "whatsapp-link-later", { link: true });
+      const laterCode = later.body.challenge.code as string;
+      expect(
+        unit.phylaxTenantSettings.verifyInbound(
+          "34677777777@s.whatsapp.net",
+          laterCode,
+          Date.now() + 31 * 60_000,
+        ),
+      ).toBeNull();
+      expect(
+        unit.phylaxTenantSettings.verifyInbound("34677777777@s.whatsapp.net", laterCode.toLowerCase()),
+      ).toMatchObject({ tenantId: "tenant-later", phoneNumber: "34677777777", verified: true });
+    } finally {
+      await unit.close();
+    }
+  });
 });

@@ -59,6 +59,7 @@ import {
   ChannelControlCard,
   type ChannelState,
 } from "@/components/channel-experience"
+import { WhatsAppOneTap } from "@/components/whatsapp-one-tap"
 import {
   clearHostedChannelOperation,
   clearHostedWhatsAppRecovery,
@@ -781,9 +782,14 @@ export function HostedWhatsAppConnect({
     Boolean(status?.senderHint) &&
     expiresAt !== null &&
     expiresAt <= now
-  const awaiting = status?.state === "awaiting_code" && !expired
+  // E7-S16: a one-tap link code waits with no number; the typed-number steps are for a typed number only.
+  const linkPending =
+    status?.state === "awaiting_code" && !status.senderHint
+  const awaiting =
+    status?.state === "awaiting_code" && !expired && !linkPending
   const showNumberField =
     !preservedBinding && !awaiting && (!expired || otherNumber)
+  const showOneTap = Boolean(status) && !preservedBinding && !awaiting
   const controlState: ChannelState = !status
     ? "loading"
     : status.state === "verified"
@@ -828,6 +834,7 @@ export function HostedWhatsAppConnect({
           {showNumberField && (
             <Button
               type="button"
+              variant="outline"
               onClick={() => void createChallenge()}
               disabled={!sender.trim() || busy !== null}
             >
@@ -1012,10 +1019,18 @@ export function HostedWhatsAppConnect({
         />
       )}
 
+      {showOneTap && (
+        <WhatsAppOneTap
+          channels={initial}
+          onChanged={publish}
+          autoStart={false}
+        />
+      )}
+
       {showNumberField && (
         <Field>
           <FieldLabel htmlFor="hosted-whatsapp-sender">
-            Your WhatsApp sender number
+            Or type your WhatsApp number
           </FieldLabel>
           <Input
             id="hosted-whatsapp-sender"

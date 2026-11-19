@@ -13,6 +13,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { PhylaxPortedRuntime } from "./phylaxPortedRuntime.js";
 import {
   defaultPhylaxTurnBindings,
+  WHATSAPP_LINK_CODE,
+  WHATSAPP_LINK_IDENTITY,
   type PhylaxTenantSettingsStore,
 } from "./phylaxTenantSettings.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
@@ -594,6 +596,23 @@ export function hostedChannelChallengeCode(
   return `${10 + ((digest[0] ?? 0) % 90)}-${CHALLENGE_ANIMALS[(digest[1] ?? 0) % CHALLENGE_ANIMALS.length] ?? "otter"}`;
 }
 
+const LINK_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+/** E7-S16: the code a one-tap WhatsApp link carries; derived so a retried request shows the same code. */
+export function hostedChannelLinkCode(
+  secret: string,
+  tenantId: string,
+  operationId: string,
+): string {
+  const digest = createHmac("sha256", secret)
+    .update(`whatsapp-link-v1\n${tenantId}\n${operationId}`)
+    .digest();
+  let code = "";
+  for (let index = 0; index < 8; index += 1) {
+    code += LINK_CODE_ALPHABET[(digest[index] ?? 0) % LINK_CODE_ALPHABET.length];
+  }
+  return `ZEN-${code}`;
+}
+
 export function hostedChannelView(
   tenantId: string,
   settingsStore: PhylaxTenantSettingsStore,
@@ -613,8 +632,8 @@ export function hostedChannelView(
     transcript.find(
       (entry) => entry.direction === "outbound" && entry.status === "sent",
     )?.at ?? null;
+  // E7-S16: a pending link code has no number yet and is still awaiting its message.
   const awaiting = Boolean(
-    settings.phoneNumber &&
     !settings.verified &&
     settings.verificationExpiresAt &&
     settings.verificationExpiresAt > now,
@@ -946,9 +965,12 @@ export function mountPhylaxHostedChannelRoutes(
       const body = await parse(c);
       const operationId = safeOperationId(body.operationId);
       const operation = "whatsapp.challenge" as const;
-      const sender =
-        normalizeHostedPhone(body.sender) ??
-        (tenantId ? input.settings.get(tenantId).phoneNumber : null);
+      // E7-S16: a link code needs no number; the number that sends it is bound.
+      const link = body.link === true;
+      const sender = link
+        ? WHATSAPP_LINK_IDENTITY
+        : normalizeHostedPhone(body.sender) ??
+          (tenantId ? input.settings.get(tenantId).phoneNumber : null);
       if (
         !tenantId ||
         !operationId ||
@@ -968,12 +990,18 @@ export function mountPhylaxHostedChannelRoutes(
           400,
         );
       }
-      const code = hostedChannelChallengeCode(
-        input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
-        tenantId,
-        operationId,
-        sender,
-      );
+      const code = link
+        ? hostedChannelLinkCode(
+            input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
+            tenantId,
+            operationId,
+          )
+        : hostedChannelChallengeCode(
+            input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
+            tenantId,
+            operationId,
+            sender,
+          );
       const result = await executeHostedChannelMutation(
         input.audit,
         {
@@ -1003,7 +1031,7 @@ export function mountPhylaxHostedChannelRoutes(
                 ),
               };
             }
-            input.settings.assertPhoneAvailable(tenantId, sender);
+            if (!link) input.settings.assertPhoneAvailable(tenantId, sender);
             const sharedNumber = input.runtime.whatsapp.sharedNumber();
             if (!sharedNumber) throw new Error("transport unavailable");
             input.settings.update(tenantId, {
@@ -1012,13 +1040,15 @@ export function mountPhylaxHostedChannelRoutes(
               voiceDefault: "capture",
               turnBindings: defaultPhylaxTurnBindings(),
             });
-            const registration = input.settings.registerPhone(
-              tenantId,
-              sender,
-              "primary",
-              at,
-              code,
-            );
+            const registration = link
+              ? input.settings.registerLinkCode(tenantId, at, code)
+              : input.settings.registerPhone(
+                  tenantId,
+                  sender,
+                  "primary",
+                  at,
+                  code,
+                );
             const mutation: HostedChannelMutationOutcome = {
               operationId,
               operation,
@@ -1614,7 +1644,7 @@ export function projectHostedChannelAction(
     if (
       !challenge ||
       typeof challenge.code !== "string" ||
-      !/^\d{2}-[a-z]{2,24}$/.test(challenge.code) ||
+      !(/^\d{2}-[a-z]{2,24}$/.test(challenge.code) || WHATSAPP_LINK_CODE.test(challenge.code)) ||
       typeof challenge.sharedNumber !== "string" ||
       !/^\+?[\d ()-]{8,32}$/.test(challenge.sharedNumber) ||
       typeof challenge.expiresAt !== "number" ||
@@ -1867,7 +1897,10 @@ export function mountHostedChannelsCustomerRoutes(
           400,
         );
       const body: Record<string, unknown> = { operationId };
-      if (operation === "whatsapp.challenge") body.sender = raw.sender;
+      if (operation === "whatsapp.challenge") {
+        body.sender = raw.sender;
+        if (raw.link === true) body.link = true;
+      }
       if (operation === "telegram.connect") body.identity = raw.identity;
       const response = input.transport
         ? projectBackendResponse(
