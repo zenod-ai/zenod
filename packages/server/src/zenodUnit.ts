@@ -77,6 +77,7 @@ import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
+import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts } from "./testerProgress.js";
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
 import { mountTesterSignupWelcomeRoutes, parseSignupWelcomeMode, TesterSignupWelcome } from "./testerSignupWelcome.js";
@@ -1213,6 +1214,20 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   };
   const app = new Hono<{ Bindings: HttpBindings }>();
   app.use("*", cloudflareHttpsRedirect());
+  // E7-S17: when each signed-in person last used the app (one small write per person every 5 minutes), for the daily
+  // tester picture's "logged in in the last 24 h". Customer API calls only; it never blocks or fails a request.
+  const testerLastSeen = new TesterLastSeen(storage.dataDir);
+  app.use("/api/*", async (c, next) => {
+    try {
+      if (!c.req.path.startsWith("/api/ops/") && !c.req.path.startsWith("/api/public/") && c.req.path !== "/api/health") {
+        const session = readCustomerSession(c, env);
+        if (session) testerLastSeen.touch(session.user_id);
+      }
+    } catch {
+      // never break a request for the record
+    }
+    await next();
+  });
   app.use("*", async (c, next) => {
     await next();
     c.header("X-Content-Type-Options", "nosniff");
@@ -1485,6 +1500,14 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       mountTesterWhatsAppSetupRoute(app, {
         isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
         ...testerSetups,
+      });
+      // E7-S17: the facts behind the daily tester picture (vault, WhatsApp, notes, memories, last seen), masked.
+      mountTesterProgressRoute(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        ...testerSetups,
+        counts: (tenantId, sinceMs) => tenantJobCounts(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
+        seenAt: (userId) => testerLastSeen.seenAt(userId),
+        seenSince: () => testerLastSeen.since(),
       });
       // E7-S9: each tester's own voice feedback link, made on the team console by a vps3 timer and kept here; the app
       // shows it as one "Tell us what you think" entry to testers only.

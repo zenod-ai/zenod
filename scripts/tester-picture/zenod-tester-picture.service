@@ -1,0 +1,11 @@
+[Unit]
+Description=Zenod daily tester picture: where each tester is stuck, ready before Jordi's 06:00 briefing (EPIC-7 E7-S17)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The script as on origin/main (like zenod-tester-stuck); the VPS1 ops call is the one the thank-you timer uses.
+ExecStart=/bin/bash -c 'R=/var/lib/vps3-scratch/t3agent/github/zenod; L=%h/.local/lib/zenod-tester-picture; mkdir -p $L/tester-picture $L/tester-thanks && git -C $R fetch -q origin main && git -C $R show origin/main:scripts/tester-picture/picture.py > $L/tester-picture/picture.py && git -C $R show origin/main:scripts/tester-thanks/send.py > $L/tester-thanks/send.py && for i in 1 2 3; do python3 $L/tester-picture/picture.py && exit 0; sleep 60; done; exit 1'
+TimeoutStartSec=10min
