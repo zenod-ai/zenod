@@ -263,6 +263,11 @@ export function checks() {
 // vaultRecovery.ts); both end with ` tenant=<id>` since M25, older builds carry none.
 export const VAULT_FAIL_MIN = 30; // a failure streak this long is red
 export const VAULT_RETRY_GAP_MIN = 12; // quick-index retries every 5 min; a longer gap ends a streak
+// Known test leftovers: the two July EPIC-3.2 test tenants (dead, on an archived test vault) log UNRESOLVED after every boot and
+// would turn the alarm red for no tester's problem. Listed as excluded, named on the page, never hidden, until ask E24-A4
+// removes them; then delete this constant and its test. Any other tenant still turns the check red.
+export const VAULT_EXCLUDED_TENANTS = ["jordiepic32test-5oqq39", "jordiepic32clean-ml7rz0"]; // ask E24-A4
+export const VAULT_EXCLUDED_NOTE = `${VAULT_EXCLUDED_TENANTS.length} test tenants excluded until E24-A4 (${VAULT_EXCLUDED_TENANTS.join(", ")})`;
 export const VAULT_LOG_CMD = [
   "T=$(sudo -n docker service ps -q --no-trunc zenod-mt-fxpzoo | head -1)",
   "C=$(sudo -n docker inspect --type task --format '{{.ServiceID}}|{{.Status.ContainerStatus.ContainerID}}|{{.Status.ContainerStatus.ExitCode}}|{{.Status.State}}|{{.DesiredState}}|{{.Status.Timestamp}}' $T | cut -d'|' -f2)",
@@ -297,8 +302,9 @@ export function judgeVaultRecovery(r, nowMs) {
     }
   }
   const reds = [];
+  const excluded = new Set(VAULT_EXCLUDED_TENANTS);
   for (const [key, at] of unresolved) {
-    if ((settled.get(key) || 0) > at) continue;
+    if (excluded.has(key) || (settled.get(key) || 0) > at) continue;
     reds.push(`vault recovery UNRESOLVED since ${hhmm(at)}${key === "?" ? "" : ` (tenant ${key})`}`);
   }
   for (const [k, times] of failures) {
@@ -309,9 +315,12 @@ export function judgeVaultRecovery(r, nowMs) {
     for (let i = times.length - 2; i >= 0 && times[i + 1] - times[i] <= VAULT_RETRY_GAP_MIN * 60000; i--) start = times[i];
     if (nowMs - start < VAULT_FAIL_MIN * 60000) continue;
     const [tenant, what] = k.split("|");
+    if (excluded.has(tenant)) continue;
     reds.push(`quick-index failing ${Math.round((latest - start) / 60000)} min since ${hhmm(start)}${tenant === "?" ? "" : ` (tenant ${tenant})`}: ${what}`);
   }
-  return reds.length ? fail(reds.join("; ").slice(0, 300)) : pass("no UNRESOLVED vault recovery, no quick-index failure streak");
+  return reds.length
+    ? fail(`${reds.join("; ").slice(0, 250)}; ${VAULT_EXCLUDED_NOTE}`)
+    : pass(`no UNRESOLVED vault recovery, no quick-index failure streak; ${VAULT_EXCLUDED_NOTE}`);
 }
 
 // ------------------------------------------------------------------------------------------ transports
