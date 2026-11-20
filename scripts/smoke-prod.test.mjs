@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { judgePromoteLag, judgeVaultRecovery, runBattery, SCHEMA, store, URLS, VAULT_LOG_CMD } from "./smoke-prod.mjs";
+import { judgePromoteLag, judgeVaultRecovery, runBattery, SCHEMA, store, URLS, VAULT_EXCLUDED_TENANTS, VAULT_LOG_CMD } from "./smoke-prod.mjs";
 
 const NOW = Date.parse("2026-11-03T16:00:00Z");
 
@@ -212,4 +212,31 @@ test("vault recovery reads the log with the exact read-only docker forms the VPS
   assert.match(VAULT_LOG_CMD, /docker inspect --type task --format '\{\{\.ServiceID\}\}\|\{\{\.Status\.ContainerStatus\.ContainerID\}\}/);
   assert.match(VAULT_LOG_CMD, /docker logs --since \$\(date -u [^)]*\) --until \$\(date -u [^)]*\) --timestamps \$C/);
   assert.doesNotMatch(VAULT_LOG_CMD, /docker (exec|rm|restart|stop|kill)/);
+});
+
+// EPIC-24 M25 (ask E24-A4): the two July test tenants are listed as excluded on the page; every other tenant still goes red.
+test("vault recovery: the two July test tenants are excluded and named in the detail, never red", () => {
+  assert.deepEqual(VAULT_EXCLUDED_TENANTS, ["jordiepic32test-5oqq39", "jordiepic32clean-ml7rz0"]);
+  const lines = VAULT_EXCLUDED_TENANTS.flatMap((t) => [
+    `2026-11-20T00:00:00.1Z [vault-recovery] UNRESOLVED: filing still interrupted: {"headPublished":false} tenant=${t}`,
+    ...fails("2026-11-19T22:00:00Z", 30, ` tenant=${t}`).slice(-9)]); // failing 40 min, still failing
+  const r = judgeVaultRecovery(vlog(lines), Date.parse("2026-11-20T00:35:30Z"));
+  assert.equal(r.ok, true);
+  assert.match(r.reason, /2 test tenants excluded until E24-A4/);
+  assert.match(r.reason, /jordiepic32test-5oqq39/);
+});
+
+test("vault recovery: a third tenant still goes red next to the excluded two, and the page text keeps the exclusion", () => {
+  const t = "user-usr_7a96c40c";
+  const r = judgeVaultRecovery(vlog(
+    `2026-11-20T00:00:00.1Z [vault-recovery] UNRESOLVED: filing still interrupted: {} tenant=jordiepic32test-5oqq39`,
+    `2026-11-20T00:01:00.1Z [vault-recovery] UNRESOLVED: filing still interrupted: {} tenant=${t}`,
+    fails("2026-11-20T00:00:00Z", 7, ` tenant=${t}`)), VNOW);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, new RegExp(`tenant ${t}`));
+  assert.doesNotMatch(r.reason, /\(tenant jordiepic32test/);
+  assert.match(r.reason, /2 test tenants excluded until E24-A4/);
+  // a tenant whose id only resembles an excluded one is not excluded; neither is an untagged line
+  assert.equal(judgeVaultRecovery(vlog("2026-11-20T00:00:00.1Z [vault-recovery] UNRESOLVED: x tenant=jordiepic32test-zzzzzz"), VNOW).ok, false);
+  assert.equal(judgeVaultRecovery(vlog("2026-11-20T00:00:00.1Z [vault-recovery] UNRESOLVED: x"), VNOW).ok, false);
 });
