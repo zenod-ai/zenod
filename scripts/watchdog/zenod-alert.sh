@@ -11,6 +11,11 @@
 #   • a KEY is red while any caller still sees it red (EPIC-6 S4): the watchdog's own green check does not recover a
 #     row the page still has red (e.g. from a failed smoke check), and vice versa; a caller that has not said red for
 #     ZA_CLAIM_SECS (30 min) no longer holds the KEY, so a caller that stopped running cannot keep it red forever;
+#   • a short blip does not page (EPIC-24 M24): for the public-page keys (ZA_HOLD_KEYS, default row-1 and row-2) the
+#     first red sighting is only noted ("HOLD"); the alert goes out when the key is still red at a sighting at least
+#     ZA_HOLD_SECS (120 s) later, i.e. at the second watchdog run or the second page probe. A key that turns green in
+#     between is forgotten and never alerted. 19 Nov: zenod.dev stalled 40 s twice (one slow MCP call held the
+#     single-threaded app) and paged each time, once with a 15-min "red" tail from the page's own claim;
 #   • names, counts and timestamps only, never a secret; one line, at most MAX_CHARS characters.
 #
 #   zenod-alert.sh alert KEY warn|page TEXT     # queue [WARN]/[ALERT] unless deduped
@@ -30,6 +35,10 @@ ZA_REALERT="${ZENOD_ALERT_REALERT_SECS:-1800}"
 ZA_MAX_CHARS="${ZENOD_ALERT_MAX_CHARS:-600}"
 ZA_SOURCE="${ZENOD_ALERT_SOURCE:-zenod}"      # shown in the message, e.g. "zenod watchdog" or "zenod health page"
 ZA_CLAIM="${ZENOD_ALERT_CLAIM_SECS:-1800}"
+ZA_HOLD_KEYS="${ZENOD_ALERT_HOLD_KEYS:-row-1 row-2}"   # keys whose FIRST red sighting does not page yet (M24)
+ZA_HOLD_SECS="${ZENOD_ALERT_HOLD_SECS:-120}"           # ... until it is still red this many seconds later (0 = off)
+ZA_HOLD_STALE="${ZENOD_ALERT_HOLD_STALE_SECS:-900}"    # a held sighting nobody repeated for this long starts over
+ZA_HELD=no                                             # set by za_alert: yes when the last call only held the alert
 
 # Every line also goes to $ZA_STATE/alert.log (both callers), which the live page reads for its watchdog row.
 za_log() {
@@ -64,6 +73,17 @@ za_me() { za_key "$ZA_SOURCE"; }
 za_srcs_add() { case ",$1," in *",$2,"*) echo "$1";; *) echo "${1:+$1,}$2";; esac; }
 za_srcs_del() { printf '%s' ",$1," | sed "s/,$2,/,/g; s/^,//; s/,\$//"; }
 
+# za_hold_decide NOW FIRST LAST HOLD STALE -> "hold" | "go" (pure, unit-tested). FIRST/LAST: when this key was first and
+# last seen red while held, 0 when not held yet. Hold on the first sighting; go once the red has been seen again at
+# least HOLD seconds after FIRST; a sighting chain broken for STALE seconds starts over.
+za_hold_decide() {
+  local now="$1" first="$2" last="$3" hold="$4" stale="$5"
+  [ "$hold" -gt 0 ] 2>/dev/null || { echo go; return; }
+  [ "$first" -gt 0 ] 2>/dev/null || { echo hold; return; }
+  [ "$((now - last))" -le "$stale" ] || { echo hold; return; }
+  if [ "$((now - first))" -ge "$hold" ]; then echo go; else echo hold; fi
+}
+
 # za_queue KIND TEXT -> writes one queue file atomically, prints its id; non-zero if it could not
 za_queue() {
   local kind="$1" text="$2" now id tmp
@@ -85,6 +105,19 @@ za_alert() {
   [ -f "$ZA_STATE/alert.$key" ] && read -r first last srcs seen < "$ZA_STATE/alert.$key" 2>/dev/null
   first="${first:-0}"; last="${last:-$first}"
   srcs="$(za_srcs_add "$srcs" "$(za_me)")"
+  ZA_HELD=no
+  if [ "$sev" = page ] && [ "$first" -le 0 ] && case " $ZA_HOLD_KEYS " in *" $1 "*) true;; *) false;; esac; then
+    local pf="$ZA_STATE/pending.$key" pfirst=0 plast=0
+    [ -f "$pf" ] && read -r pfirst plast < "$pf" 2>/dev/null
+    if [ "$(za_hold_decide "$now" "${pfirst:-0}" "${plast:-0}" "$ZA_HOLD_SECS" "$ZA_HOLD_STALE")" = hold ]; then
+      ZA_HELD=yes
+      if [ "$(( now - ${plast:-0} ))" -gt "$ZA_HOLD_STALE" ] 2>/dev/null || [ "${pfirst:-0}" -le 0 ]; then pfirst="$now"; fi
+      echo "$pfirst $now" > "$pf"
+      za_log "HOLD[$key] first red sighting, alert only if still red at the next one (${ZA_HOLD_SECS}s+): $text"
+      return 0
+    fi
+    rm -f "$pf"
+  fi
   if [ "$(za_due "$now" "$last" "$ZA_REALERT")" != yes ]; then
     echo "$first $last $srcs $now" > "$ZA_STATE/alert.$key"
     return 0
@@ -107,6 +140,7 @@ za_alert() {
 za_clear() {
   local key text first=0 last=0 srcs="" seen="" rest id
   key="$(za_key "$1")"; text="$(za_clean "$2")"
+  rm -f "$ZA_STATE/pending.$key"   # a held first sighting that turned green is forgotten: it never alerted
   [ -f "$ZA_STATE/alert.$key" ] || return 0
   read -r first last srcs seen < "$ZA_STATE/alert.$key" 2>/dev/null
   rest="$(za_srcs_del "$srcs" "$(za_me)")"
