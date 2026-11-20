@@ -16,7 +16,7 @@ export interface VaultRepoOptions {
   workdir: string;
   /** "owner/name" on GitHub. Ignored when remoteUrl is given. */
   repo?: string;
-  /** GitHub PAT; embedded in the remote URL. */
+  /** GitHub PAT; sent through the git process environment, never in the remote URL. */
   token?: string;
   /**
    * Short-lived credential source (e.g. GitHub App installation tokens).
@@ -29,8 +29,46 @@ export interface VaultRepoOptions {
   authorEmail?: string;
 }
 
-function remoteUrlFor(repo: string, token: string): string {
-  return `https://x-access-token:${token}@github.com/${repo}.git`;
+/** The plain remote: never a key in it (a URL lands in argv, `ps` and .git/config). */
+function plainUrlFor(repo: string): string {
+  return `https://github.com/${repo}.git`;
+}
+
+/**
+ * M29 (infra-vps E2-F7): git signs in to github.com with this grant for one command through the environment only,
+ * never an argument and never written to .git/config (same shape as agent_team's worldGithub gitEnvFor).
+ */
+export function gitAuthEnv(token: string): Record<string, string> {
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+  };
+}
+
+/**
+ * simple-git refuses a spawn environment that carries editor, pager, askpass, ssh or config-path variables. A
+ * non-interactive https vault clone needs none of them, so they are left out; the rest of the environment passes.
+ */
+const UNSAFE_ENV = /^(editor|pager|prefix|ssh_askpass|git_(askpass|config(_global|_system|_count|_key_\d+|_value_\d+)?|editor|exec_path|external_diff|pager|proxy_command|template_dir|sequence_editor|ssh|ssh_command))$/i;
+
+function inheritedEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !UNSAFE_ENV.test(k)) env[k] = v;
+  return env;
+}
+
+/** A git handle whose environment carries `token` (or none), the one allowance being the config env count we set. */
+function gitIn(baseDir: string | undefined, token: string | undefined): SimpleGit {
+  const git = simpleGit({ ...(baseDir ? { baseDir } : {}), unsafe: { allowUnsafeConfigEnvCount: true } });
+  git.env(token ? { ...inheritedEnv(), ...gitAuthEnv(token) } : inheritedEnv());
+  return git;
+}
+
+/** The same URL with any user:password@ removed; undefined when it carried none. */
+export function stripUrlCredentials(url: string): string | undefined {
+  const m = /^(https?:\/\/)[^/@\s]+@(.*)$/i.exec(url.trim());
+  return m ? `${m[1]}${m[2]}` : undefined;
 }
 
 const PUSH_RETRIES = 3;
@@ -68,15 +106,8 @@ export class VaultRepo implements VaultRepository {
   ) {}
 
   static async open(options: VaultRepoOptions): Promise<VaultRepo> {
-    const remoteUrl =
-      options.remoteUrl ??
-      (options.repo
-        ? options.tokenProvider
-          ? remoteUrlFor(options.repo, await options.tokenProvider())
-          : options.token
-            ? remoteUrlFor(options.repo, options.token)
-            : `https://github.com/${options.repo}.git`
-        : undefined);
+    const remoteUrl = options.remoteUrl ?? (options.repo ? plainUrlFor(options.repo) : undefined);
+    const token = options.repo && !options.remoteUrl ? (options.tokenProvider ? await options.tokenProvider() : options.token) : undefined;
 
     const isClone = await access(join(options.workdir, ".git"))
       .then(() => true)
@@ -84,26 +115,29 @@ export class VaultRepo implements VaultRepository {
 
     if (!isClone) {
       if (!remoteUrl) throw new Error("no existing clone and no repo/remoteUrl to clone from");
-      await simpleGit().clone(remoteUrl, options.workdir);
+      await gitIn(undefined, token).clone(remoteUrl, options.workdir);
     }
 
-    const git = simpleGit(options.workdir);
+    const git = gitIn(options.workdir, token);
     await retryConfigLock(() => git.addConfig("user.name", options.authorName ?? "zenod-bot"));
     await retryConfigLock(() => git.addConfig("user.email", options.authorEmail ?? "bot@zenod.dev"));
     if (remoteUrl && isClone) {
-      // keep the remote in sync with current settings (e.g. rotated token)
-      await retryConfigLock(() => git.remote(["set-url", "origin", remoteUrl]));
+      // keep the remote in sync with the repo; an origin an older build wrote with a key in it goes back to the plain URL
+      const current = (await git.raw(["config", "--get", "remote.origin.url"]).catch(() => ""));
+      if (current.trim() !== remoteUrl) await retryConfigLock(() => git.remote(["set-url", "origin", remoteUrl]));
+    } else if (isClone) {
+      const current = (await git.raw(["config", "--get", "remote.origin.url"]).catch(() => ""));
+      const clean = stripUrlCredentials(current);
+      if (clean) await retryConfigLock(() => git.remote(["set-url", "origin", clean]));
     }
     const branch = (await git.raw(["symbolic-ref", "--short", "HEAD"])).trim();
     return new VaultRepo(options.workdir, git, branch, options.repo, options.tokenProvider);
   }
 
-  /** Refresh the remote URL with a fresh short-lived token before remote ops. */
+  /** Refresh the short-lived token in the git environment before remote ops (the remote URL stays plain). */
   private async ensureFreshRemote(): Promise<void> {
     if (!this.tokenProvider || !this.repo) return;
-    const token = await this.tokenProvider();
-    const repo = this.repo;
-    await retryConfigLock(() => this.git.remote(["set-url", "origin", remoteUrlFor(repo, token)]));
+    this.git.env({ ...inheritedEnv(), ...gitAuthEnv(await this.tokenProvider()) });
   }
 
   async pull(): Promise<void> {
