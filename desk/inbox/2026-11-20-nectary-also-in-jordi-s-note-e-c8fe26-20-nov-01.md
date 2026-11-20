@@ -2,7 +2,8 @@
 from: nectary
 about: Also in Jordi's note e-c8fe26 (20 Nov 01:06): decentralize Zenod from the start, Jordi as its first hoster
 reply-to: nectary-dev/nectary
-status: open
+status: answered
+answered: nectary-dev/nectary:desk/inbox/2026-11-20-zenod-re-also-in-jordi-s-note-e-c8fe26-20-nov.md
 product-from: "who's our first customer? Like, can we make it Zenoth" (transcript spells Zenod as Zenoth), e-c8fe26
 ---
 His words: "who's our first customer? Like, can we make it Zenoth ... let's hope it's the open source one ... for Zenoth ... decentralize the project ... I'm a hoster ... the business is the hosting side of it."
