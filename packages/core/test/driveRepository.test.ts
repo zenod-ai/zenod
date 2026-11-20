@@ -1169,6 +1169,10 @@ describe("DriveVaultRepository", { timeout: 20_000 }, () => {
         expect(revision.id === drive.files.get(journalFile.id)!.headRevisionId || revision.keepForever).toBe(true);
       }
       expect((await reopened.currentRevision()).id).toBeTruthy();
+      // The archived marker still carries its operation id: a later open must not take the archive for a second journal folder.
+      const again = await temp("marker-resolved-again");
+      await open(drive, again);
+      expect(await readFile(join(again, "Notes/Kept.md"), "utf8")).toBe("kept note\n");
     });
 
     it("keeps the vault blocked when the journal still has work to replay", async () => {

@@ -567,7 +567,8 @@ export class DriveVaultRepository implements VaultRepository {
     const parents = new Set<string>();
     for (const folder of await this.options.client.listFiles({ folderId: this.controlFolderId, foldersOnly: true, pageSize: 1000, allPages: true })) {
       const files = await this.options.client.listFiles({ folderId: folder.id, pageSize: 1000, allPages: true });
-      if (files.some((file) => file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-"))) parents.add(folder.id);
+      // A resolved journal-conflict marker (M25) keeps its operation id in the archive folder; it is not a journal.
+      if (files.some((file) => file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-") && !file.appProperties[OPERATION_PROPERTY].startsWith("journal-conflict-"))) parents.add(folder.id);
     }
     if (parents.size > 1) throw new Error("Drive vault has multiple transaction journal folders");
     return [...parents][0] ?? null;
