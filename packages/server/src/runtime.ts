@@ -711,6 +711,12 @@ export class Runtime {
     const token = this.settings.get("github_token");
     const hasApp = this.settings.hasGithubApp();
     if (!repoName || (!token && !hasApp)) throw new NotConfiguredError();
+    // M29 (infra-vps E2-F7): say which credential this tenant pushes its vault with, by mode and a short hash only
+    // (never the value), so a key that must be revoked can be matched to the tenants still holding it.
+    console.log(
+      `[vault-auth] tenant=${this.tenantId} repo=${repoName} mode=${hasApp ? "app" : "pat"}` +
+        (!hasApp && token ? ` pat_sha256=${createHash("sha256").update(token).digest("hex").slice(0, 12)}` : ""),
+    );
     const repo = await VaultRepo.open({
       workdir: this.workdir,
       repo: repoName,
