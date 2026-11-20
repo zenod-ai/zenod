@@ -29,14 +29,14 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-19T11:05Z roll-up (DM run_9fbccffe): E26-S34 live 20cdf60 since 10:53Z, a stranger can apply with only an email (zenod-social's tester page test 1, read 20 Nov 07:00Z) ; E26-S33 done, a welcome email goes once at sign-up (the 13 Nov tester got it 17 Nov) ; E26-S32 and E26-S31 done, a stuck sign-up reaches the team and gets the next-day email ; E26-S3 blocked until the next real applicant
-Result: production 20cdf601: apply with only an email, 30 free memories, welcome, stuck alert, next-day and thank-you emails with a feedback link; public counts 1 applications, 1 sign-up
+Last attempted: 2026-11-20T12:05Z roll-up (DM run_2c56e799): E26-S35 in Jordi's review, a tappable sample memory (Sara's week) sits above the apply form on zenod.dev/testers ; E26-S36 done, the next-day email names the one-tap WhatsApp button (live c68f23f) ; a second outside tester signed up 19 Nov 19:03Z from the r/secondbrain post P-0385; their WhatsApp code tap hit a bug fixed on production 05:14Z today (EPIC-24 M23) ; E26-S3 still waits for a tester to get through to a first Saved reply
+Result: production 0066bc09: apply with only an email, a sample memory on the page, 30 free memories, welcome, stuck alert, next-day one-tap email, thank-you email with a feedback link; public counts 20 Nov 12:00Z: 2 applications, 2 sign-ups, 0 WhatsApp replies, 0 active testers
 Evidence: [tester welcome](http://vps3.taild81fbb.ts.net:9002/) · [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/) · [phone setup review](evidence/e26-s23-2026-11-14.md) · [WhatsApp setup words](http://vps3.taild81fbb.ts.net:9001/)
-Waiting on: the next stranger to apply (zenod-social recruits; their test reads applications by post on 20 Nov 07:00Z)
+Waiting on: the two signed-up testers sending their first WhatsApp note (the 19 Nov tester's next-day email goes ~19:03Z today) ; the next stranger to apply (zenod-social recruits)
 Approved work: none
-Next action: E26-S3 watches the next real applicant end to end; zenod-social's daily tester-page tests land here as rows
+Next action: E26-S3 watches the 19 Nov tester after their next-day email (~19:03Z) through to a first Saved reply, and every new applicant end to end
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
-Verified at: 2026-11-19T11:05Z (production 20cdf601 via /api/health and /api/public/counts; rows E26-S31 to S34 read)
+Verified at: 2026-11-20T12:05Z (production 0066bc09 via /api/health and /api/public/counts; rows E26-S3 to S36 read)
 
 ## Waiting on
 - [answered E26-A18 2026-11-19 @Delivery-Manager · done 2026-11-19 c68f23f] The next-day WhatsApp email (approved by you as E26-A17) now names the new one-tap button: only its middle sentence changes, to "It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send."; the rest stays word for word — answer: decided by Delivery Manager under your E26-A17 yes (the console's ask gate: act on that answer) — why: the old sentence told testers to type their number and make a code, which the app no longer needs since E7-S16 — rollback: the old sentence returns, one commit
