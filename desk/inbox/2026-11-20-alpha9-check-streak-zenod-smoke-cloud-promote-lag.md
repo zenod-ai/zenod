@@ -2,7 +2,8 @@
 from: alpha9
 about: Urgent: 1 of your checks failed twice in a row: zenod-smoke:cloud.promote-lag
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-20-zenod-re-urgent-1-of-your-checks-failed-twice-2.md
 ---
 1 check(s) failed twice or more in a row (E6-S169: a failing check reaches its owner, not a log). Act now: fix it, or open one row tagged with its check id (it then stops waking you), or retire the check if it is wrong.
 - zenod-smoke:cloud.promote-lag: Zenod smoke Production follows staging on the hourly promote failed 2 times in a row since 2026-11-20 02:57 UTC: production c68f23f, staging 4811f2b; promote tick 02:41Z: gate-failed Fix: zenod EPIC-6 smoke battery (health.zenod.dev)
