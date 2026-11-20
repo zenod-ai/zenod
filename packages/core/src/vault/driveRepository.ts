@@ -2133,8 +2133,49 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
+  /**
+   * M25: a preserved journal edit blocked recovery for ever, with no way to resolve it. When the
+   * journal it names has nothing left to replay (committed or failed, so no write can come of the
+   * edit) and its current body still passes the full identity and intent validation, the marker is
+   * moved into the vault's own archive folder, never deleted, and recovery goes on. Every revision
+   * of the journal is kept forever first, so the external edit stays recoverable from Drive. A
+   * journal with pending work, a body that fails validation or any step that errors leaves the marker
+   * where it is and the vault blocked as before.
+   */
+  private async archiveSettledJournalConflict(marker: DriveVaultFile, transactionId: string, remote: DriveVaultFile[]): Promise<boolean> {
+    const tag = `[vault-recovery] journal conflict ${transactionId}`;
+    try {
+      const matches = remote.filter((candidate) => candidate.appProperties?.[OPERATION_PROPERTY] === `journal-${transactionId}`);
+      if (matches.length !== 1) return false;
+      const file = matches[0]!;
+      const journal = await this.options.client.download(file.id)
+        .then((data) => JSON.parse(data.toString("utf8")) as DriveJournal)
+        .catch(() => null);
+      if (!journal || journal.transactionId !== transactionId) return false;
+      if (journal.state !== "committed" && journal.state !== "failed") {
+        console.warn(`${tag} left in place: journal state ${journal.state} still has work to replay tenant=${this.options.tenantId}`);
+        return false;
+      }
+      if (journal.bootstrap === true) await this.validateBootstrapJournal(file, journal);
+      else await this.validateExecutableJournal(file, journal);
+      for (const revision of await this.options.client.listRevisions(file.id)) {
+        if (revision.id !== file.headRevisionId) await this.options.client.keepRevision(file.id, revision.id);
+      }
+      await this.options.client.moveFile(
+        marker.id, this.deletedFolderId,
+        { ...(marker.version ? { expectedVersion: marker.version } : {}), ...(marker.modifiedTime ? { expectedModifiedTime: marker.modifiedTime } : {}) },
+        `${marker.appProperties![OPERATION_PROPERTY]}-resolved-${marker.name}`,
+      );
+      console.warn(`${tag} archived: journal ${journal.state} and valid, external edit kept in its Drive revisions, marker moved to ${CONTROL_FOLDER}/deleted tenant=${this.options.tenantId}`);
+      return true;
+    } catch (error) {
+      console.warn(`${tag} left in place: ${(error as Error).message.slice(0, 160)} tenant=${this.options.tenantId}`);
+      return false;
+    }
+  }
+
   private async recoverTransactions(guard?: VaultPublicationGuard): Promise<void> {
-    const remote = await this.options.client.listFiles({ folderId: this.transactionsFolderId, pageSize: 1000, allPages: true });
+    let remote = await this.options.client.listFiles({ folderId: this.transactionsFolderId, pageSize: 1000, allPages: true });
     for (const file of remote.filter((candidate) => candidate.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-"))) {
       const marker = await this.options.client.download(file.id).then((data) => JSON.parse(data.toString("utf8")) as {
         schemaVersion?: unknown; kind?: unknown; transactionId?: unknown; tenantId?: unknown; vaultBindingId?: unknown;
@@ -2144,6 +2185,10 @@ export class DriveVaultRepository implements VaultRepository {
         || marker.tenantId !== this.options.tenantId || marker.vaultBindingId !== this.options.vaultBindingId
         || file.name !== `${transactionId}.conflict.json` || file.parents?.length !== 1 || file.parents[0] !== this.transactionsFolderId) {
         throw new Error("Drive journal conflict marker validation failed");
+      }
+      if (await this.archiveSettledJournalConflict(file, transactionId, remote)) {
+        remote = remote.filter((candidate) => candidate.id !== file.id);
+        continue;
       }
       throw new VaultPublicationError({
         code: "conflict", message: `Drive transaction journal ${transactionId} has a preserved external edit`,
