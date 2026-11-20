@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { judgePromoteLag, runBattery, SCHEMA, store, URLS } from "./smoke-prod.mjs";
+import { judgePromoteLag, judgeVaultRecovery, runBattery, SCHEMA, store, URLS, VAULT_LOG_CMD } from "./smoke-prod.mjs";
 
 const NOW = Date.parse("2026-11-03T16:00:00Z");
 
@@ -31,6 +31,7 @@ function healthySsh(cmd) {
   if (cmd.includes("readiness-watch")) {
     return { code: 0, stdout: `2026-11-03T16:17:00+00:00 h zenod-readiness-watch[1]: [keeper] watch ready=True issues=[] proofs=[{"id": "backup_restore", "expiresAt": "2026-12-02T08:06:42Z", "daysLeft": 28.6}]\n` };
   }
+  if (cmd.includes("docker logs")) return { code: 0, stdout: "READ-OK\n" };
   if (cmd.includes("tester-watch")) return { code: 0, stdout: "OK 1 tester(s), no alerts\n" };
   if (cmd.includes("deploy-poller")) return { code: 0, stdout: "2026-11-03T16:58:00+00:00 h python3[1]: deploy-poller zenod-staging: noop up to date\n" };
   if (cmd.includes("zenod-health-watchdog")) return { code: 0, stdout: "user=inactive root=active\n" };
@@ -157,4 +158,58 @@ test("deploy poller: a zenod-staging line is green, no line in 10 min is red", a
   r = await runBattery({ ...base, only: ["deploy.poller"], ssh: (cmd) => (cmd.includes("deploy-poller") ? { code: 0, stdout: "" } : healthySsh(cmd)) });
   assert.equal(r.checks[0].ok, false);
   assert.match(r.checks[0].reason, /no deploy-poller run in 10 min/);
+});
+
+// EPIC-24 M25: a stuck tenant vault (the 19 Nov 22:56Z case) shows red on the page.
+const VNOW = Date.parse("2026-11-20T00:35:30Z");
+const J = "Drive transaction journal 9172c14c-3faa-46de-945a-b143917eb03c has a preserved external edit";
+const fails = (from, count, suffix = "") => Array.from({ length: count }, (_, i) =>
+  `${new Date(Date.parse(from) + i * 300000).toISOString().slice(0, 19)}.123456789Z [quick-index] update failed: ${J}${suffix}`);
+const vlog = (...lines) => ({ code: 0, stdout: `${lines.flat().join("\n")}\nREAD-OK\n` });
+
+test("vault recovery: the 19 Nov case (failing every 5 min since 23:02Z, UNRESOLVED at 23:27Z) is red with both causes", () => {
+  const r = judgeVaultRecovery(vlog(fails("2026-11-19T23:02:30Z", 19),
+    '2026-11-19T23:27:24.004Z [vault-recovery] UNRESOLVED: filing still interrupted: {"interrupted":true}'), VNOW);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /vault recovery UNRESOLVED since 23:27Z/);
+  assert.match(r.reason, /quick-index failing 90 min since 23:02Z: Drive transaction journal 9172c14c/);
+});
+
+test("vault recovery: a short failure streak, a finished streak and a clean log stay green", () => {
+  assert.equal(judgeVaultRecovery(vlog(fails("2026-11-20T00:15:00Z", 5)), VNOW).ok, true); // 20 min
+  assert.equal(judgeVaultRecovery(vlog(fails("2026-11-19T22:00:00Z", 12)), VNOW).ok, true); // ended at 22:55Z, hours ago
+  assert.equal(judgeVaultRecovery(vlog([]), VNOW).ok, true);
+  // a gap longer than 12 min ends the streak: two short bursts are not one long failure
+  assert.equal(judgeVaultRecovery(vlog(fails("2026-11-19T23:50:00Z", 3), fails("2026-11-20T00:25:00Z", 3)), VNOW).ok, true);
+});
+
+test("vault recovery: the streak turns red at 30 min and is tied to its tenant once the log names it", () => {
+  assert.equal(judgeVaultRecovery(vlog(fails("2026-11-20T00:05:00Z", 7, " tenant=user-usr_450335af")), VNOW).ok, false);
+  const r = judgeVaultRecovery(vlog(fails("2026-11-20T00:05:00Z", 7, " tenant=user-usr_450335af")), VNOW);
+  assert.match(r.reason, /\(tenant user-usr_450335af\)/);
+  assert.equal(judgeVaultRecovery(vlog(fails("2026-11-20T00:10:00Z", 6, " tenant=user-usr_450335af")), VNOW).ok, true); // 25 min so far
+});
+
+test("vault recovery: UNRESOLVED clears when that tenant recovers, not when another one does", () => {
+  const un = (t) => `2026-11-20T00:00:00.1Z [vault-recovery] UNRESOLVED: filing still interrupted: {} tenant=${t}`;
+  const ok = (t) => `2026-11-20T00:20:00.1Z [vault-recovery] recovered; writes unblocked: {"requeued":0} tenant=${t}`;
+  assert.equal(judgeVaultRecovery(vlog(un("a"), ok("a")), VNOW).ok, true);
+  const r = judgeVaultRecovery(vlog(un("a"), ok("b")), VNOW);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /tenant a/);
+});
+
+test("vault recovery: an unreadable production log is red, never a silent pass", async () => {
+  assert.equal(judgeVaultRecovery({ code: 255, stdout: "" }, VNOW).ok, false);
+  assert.match(judgeVaultRecovery({ code: 0, stdout: "CONTAINER-UNKNOWN\n" }, VNOW).reason, /no running zenod-mt container/);
+  const r = await runBattery({ ...base, only: ["cloud.vault-recovery"], ssh: (cmd) => (cmd.includes("docker logs") ? vlog(fails("2026-11-03T15:00:00Z", 13)) : healthySsh(cmd)) });
+  assert.equal(r.checks[0].ok, false);
+  assert.equal(r.components.cloud.ok, false);
+});
+
+test("vault recovery reads the log with the exact read-only docker forms the VPS1 sudo rules allow", () => {
+  assert.match(VAULT_LOG_CMD, /sudo -n docker service ps -q --no-trunc zenod-mt-fxpzoo/);
+  assert.match(VAULT_LOG_CMD, /docker inspect --type task --format '\{\{\.ServiceID\}\}\|\{\{\.Status\.ContainerStatus\.ContainerID\}\}/);
+  assert.match(VAULT_LOG_CMD, /docker logs --since \$\(date -u [^)]*\) --until \$\(date -u [^)]*\) --timestamps \$C/);
+  assert.doesNotMatch(VAULT_LOG_CMD, /docker (exec|rm|restart|stop|kill)/);
 });

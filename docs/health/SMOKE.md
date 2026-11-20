@@ -29,6 +29,7 @@ Dokploy, no env (root L-5). `scripts/exec-smoke.mjs` writes to prod and stays ou
 | cloud.health | cloud | `/api/health` 200, status ok (sha, p99 reported) |
 | cloud.deployed-sha | cloud | staging sha = newest successful `publish.yml` run on main (30 min grace for a roll; root D28: production moves only on a promote) |
 | cloud.promote-lag | cloud | production = staging, or the hourly promote tick (`~/zenod-eval/promote-schedule.jsonl`, EPIC-24 M12) is waiting as designed; red when the tick is silent > 90 min, its last run failed (gate-failed, promote-failed, error), or 3 daytime ticks saw this staging sha without promoting it (EPIC-24 M22) |
+| cloud.vault-recovery | cloud | production's running `zenod-mt` container log (24 h, read-only `docker logs`, same narrow sudo forms as M24) has no `[vault-recovery] UNRESOLVED` without a later `recovered`/`vault clean` for that tenant, and no `[quick-index] update failed` streak of 30 min or more still failing in the last 12 min (EPIC-24 M25; lines carry ` tenant=<id>` from the build after `98bec770`) |
 | mcp.unauthorized | cloud | `cloud.zenod.dev/mcp` 401 with `WWW-Authenticate … resource_metadata=` |
 | mcp.resource-metadata | cloud | `/.well-known/oauth-protected-resource` names `…/mcp` and an auth server |
 | mcp.auth-metadata | cloud | `/.well-known/oauth-authorization-server` has issuer, authorize and token endpoints |

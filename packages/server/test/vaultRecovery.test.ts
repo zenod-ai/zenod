@@ -55,6 +55,8 @@ it.each(["before-page", "before-push"] as const)("self-heals an interrupted fili
     expect((await repo.currentPublishedRevision()).id).toBe(await repo.headSha());
     expect(lines.some(line => line.startsWith("[vault-recovery] interrupted filing found:") && line.includes(captured.evidenceRef))).toBe(true);
     expect(lines.some(line => line.startsWith("[vault-recovery] recovered; writes unblocked"))).toBe(true);
+    // EPIC-24 M25: every vault-recovery line ends with its tenant, so the health page can pair UNRESOLVED with "recovered".
+    expect(lines.filter(line => line.startsWith("[vault-recovery]")).every(line => line.endsWith(" tenant=tenant-a"))).toBe(true);
     expect(lines.join("\n")).not.toContain("a brand new note");
   } finally { await queue.close(); jobs.close(); state.close(); }
 }, 90_000);

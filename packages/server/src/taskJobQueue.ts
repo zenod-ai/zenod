@@ -204,7 +204,8 @@ export class TaskJobQueue {
       enqueue: (kind, input, key) => this.enqueue(kind, input, key),
       kick: () => this.requestDrains(),
       isClosed: () => this.closed,
-    }).then(() => undefined, (error) => console.error(`[vault-recovery] ${failureLabel}:`, error instanceof Error ? error.message : error));
+      tenant: this.store.tenant,
+    }).then(() => undefined, (error) => console.error(`[vault-recovery] ${failureLabel}:`, error instanceof Error ? error.message : error, `tenant=${this.store.tenant}`));
     this.recovery = active;
     void active.finally(() => { if (this.recovery === active) this.recovery = null; });
   }

@@ -11,6 +11,8 @@ export interface VaultRecoveryDeps {
   /** How often to re-inspect while the recovery job runs, and when to give up (default 2 s / 30 min). */
   pollMs?: number;
   timeoutMs?: number;
+  /** Named at the end of every log line so a stuck vault can be tied to its tenant (EPIC-24 M25; the health page pairs UNRESOLVED with "recovered" by it). */
+  tenant?: string;
 }
 
 export type VaultRecoveryOutcome =
@@ -19,7 +21,8 @@ export type VaultRecoveryOutcome =
   | { status: "recovered"; requeued: number }
   | { status: "unresolved"; state: InterruptedFilingState; requeued: number };
 
-const log = (message: string, detail: unknown) => console.warn(`[vault-recovery] ${message}: ${JSON.stringify(detail)}`);
+const logFor = (tenant?: string) => (message: string, detail: unknown) =>
+  console.warn(`[vault-recovery] ${message}: ${JSON.stringify(detail)}${tenant ? ` tenant=${tenant}` : ""}`);
 
 /**
  * Self-healing for `filing_recovery_pending`. Nobody can inspect the tenant volume, so this diagnoses
@@ -29,6 +32,7 @@ const log = (message: string, detail: unknown) => console.warn(`[vault-recovery]
  * jobs the guard had failed. Nothing unpublished is discarded.
  */
 export async function recoverInterruptedFiling(deps: VaultRecoveryDeps): Promise<VaultRecoveryOutcome> {
+  const log = logFor(deps.tenant);
   const engine = await deps.getEngine();
   if (!engine.inspectInterruptedFiling) return { status: "unsupported" };
   let state = await engine.inspectInterruptedFiling();

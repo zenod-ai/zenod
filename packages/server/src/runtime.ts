@@ -1015,7 +1015,7 @@ export class Runtime {
       // EPIC-14 S4: personas wake in the same off-peak window, on the same clock.
       void this.wakePersonas().catch((error: unknown) => console.error("[persona] schedule check failed:", error));
       // EPIC-14 S28: the quick index catches new filings and runs its nightly pass on the same clock.
-      void this.refreshQuickIndex().catch((error: unknown) => console.error("[quick-index] update failed:", error instanceof Error ? error.message : error));
+      void this.refreshQuickIndex().catch((error: unknown) => console.error(`[quick-index] update failed: ${error instanceof Error ? error.message : error} tenant=${this.tenantId}`));
     }, intervalMs);
     this.treeSweepTimer.unref();
   }

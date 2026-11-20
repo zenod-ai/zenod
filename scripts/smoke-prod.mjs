@@ -184,6 +184,14 @@ export function checks() {
       },
     },
     {
+      // EPIC-24 M25: a tenant's Drive vault stuck on a preserved journal edit logged "[quick-index] update failed" every
+      // 5 min and "[vault-recovery] UNRESOLVED" for hours (19 Nov 22:56Z on) and nothing on the page went red. Reads the
+      // running zenod-mt container's log the read-only way (docker logs of the one container id, the narrow sudo rules).
+      id: "cloud.vault-recovery", component: "cloud", title: "No tenant vault stuck in recovery or failing to index", kind: "remote",
+      cmd: VAULT_LOG_CMD,
+      judge: (r, ctx) => judgeVaultRecovery(r, ctx.now()),
+    },
+    {
       id: "readiness.proofs", component: "readiness", title: "Readiness keeper proofs in date", kind: "remote",
       cmd: "sudo -n journalctl -u zenod-readiness-watch --since -3h -o short-iso --no-pager | grep 'watch ready=' | tail -1",
       judge: (r, ctx) => {
@@ -248,6 +256,62 @@ export function checks() {
       judge: (r) => (r.status === 200 ? pass("200") : fail(`${r.status || r.error}, expected 200`)),
     },
   ];
+}
+
+
+// EPIC-24 M25: tenant vaults stuck in recovery. The log lines come from packages/server (runtime.ts quick-index every 5 min,
+// vaultRecovery.ts); both end with ` tenant=<id>` since M25, older builds carry none.
+export const VAULT_FAIL_MIN = 30; // a failure streak this long is red
+export const VAULT_RETRY_GAP_MIN = 12; // quick-index retries every 5 min; a longer gap ends a streak
+export const VAULT_LOG_CMD = [
+  "T=$(sudo -n docker service ps -q --no-trunc zenod-mt-fxpzoo | head -1)",
+  "C=$(sudo -n docker inspect --type task --format '{{.ServiceID}}|{{.Status.ContainerStatus.ContainerID}}|{{.Status.ContainerStatus.ExitCode}}|{{.Status.State}}|{{.DesiredState}}|{{.Status.Timestamp}}' $T | cut -d'|' -f2)",
+  '[ -n "$C" ] || { echo CONTAINER-UNKNOWN; exit 0; }',
+  "sudo -n docker logs --since $(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ) --until $(date -u +%Y-%m-%dT%H:%M:%SZ) --timestamps $C 2>&1 | grep -E '\\[vault-recovery\\]|\\[quick-index\\] update failed' | cut -c1-600",
+  "echo READ-OK",
+].join("; ");
+
+export function judgeVaultRecovery(r, nowMs) {
+  const out = r.stdout || "";
+  if (!/^READ-OK$/m.test(out)) return fail(/CONTAINER-UNKNOWN/.test(out) ? "no running zenod-mt container found" : `production log unreadable${r.code ? `, ssh exit ${r.code}` : ""}`);
+  const hhmm = (ms) => new Date(ms).toISOString().slice(11, 16) + "Z";
+  const failures = new Map(); // key -> [ms]
+  const unresolved = new Map(); // key -> ms of the latest UNRESOLVED
+  const settled = new Map(); // key -> ms of the latest recovered/clean line
+  for (const line of out.split("\n")) {
+    const m = /^(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/.exec(line);
+    if (!m) continue;
+    const at = Date.parse(m[1].replace(/(\.\d{3})\d+Z$/, "$1Z")); // docker stamps 9 fraction digits
+    if (!Number.isFinite(at)) continue;
+    const text = m[2];
+    const tenant = (/ tenant=(\S+)\s*$/.exec(text) || [])[1] || "";
+    const key = tenant || "?";
+    if (text.startsWith("[quick-index] update failed:")) {
+      const what = text.slice("[quick-index] update failed:".length).replace(/ tenant=\S+\s*$/, "").trim().slice(0, 100);
+      const k = `${key}|${what}`;
+      (failures.get(k) || failures.set(k, []).get(k)).push(at);
+    } else if (text.startsWith("[vault-recovery] UNRESOLVED")) {
+      unresolved.set(key, Math.max(unresolved.get(key) || 0, at));
+    } else if (/^\[vault-recovery\] (recovered; writes unblocked|vault clean)/.test(text)) {
+      settled.set(key, Math.max(settled.get(key) || 0, at));
+    }
+  }
+  const reds = [];
+  for (const [key, at] of unresolved) {
+    if ((settled.get(key) || 0) > at) continue;
+    reds.push(`vault recovery UNRESOLVED since ${hhmm(at)}${key === "?" ? "" : ` (tenant ${key})`}`);
+  }
+  for (const [k, times] of failures) {
+    times.sort((a, b) => a - b);
+    const latest = times.at(-1);
+    if (nowMs - latest > VAULT_RETRY_GAP_MIN * 60000) continue;
+    let start = latest;
+    for (let i = times.length - 2; i >= 0 && times[i + 1] - times[i] <= VAULT_RETRY_GAP_MIN * 60000; i--) start = times[i];
+    if (nowMs - start < VAULT_FAIL_MIN * 60000) continue;
+    const [tenant, what] = k.split("|");
+    reds.push(`quick-index failing ${Math.round((latest - start) / 60000)} min since ${hhmm(start)}${tenant === "?" ? "" : ` (tenant ${tenant})`}: ${what}`);
+  }
+  return reds.length ? fail(reds.join("; ").slice(0, 300)) : pass("no UNRESOLVED vault recovery, no quick-index failure streak");
 }
 
 // ------------------------------------------------------------------------------------------ transports
