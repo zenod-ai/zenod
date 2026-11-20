@@ -1,0 +1,9 @@
+[Unit]
+Description=Zenod daily tester picture, 05:30 Mexico City (11:30 UTC), 30 minutes before the 06:00 briefing (EPIC-7 E7-S17)
+
+[Timer]
+OnCalendar=*-*-* 11:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
