@@ -58,6 +58,24 @@ describe("EventLoopMonitor", () => {
     }
   });
 
+  it("warns on one long block even when p99 and utilization look fine (19 Nov: a 41 s block in a 60 s window)", async () => {
+    const warnings: Record<string, unknown>[] = [];
+    const m = new EventLoopMonitor({
+      p99WarnMs: 10_000, utilizationWarn: 2, maxWarnMs: 150, warn: (e) => warnings.push(e),
+    }).start();
+    try {
+      await tick(30);
+      busy(300);
+      await tick(40);
+      m.rollWindow();
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({ event: "event_loop.lag", max_threshold_ms: 150 });
+      expect(Number(warnings[0]!.max_ms)).toBeGreaterThanOrEqual(150);
+    } finally {
+      m.stop();
+    }
+  });
+
   it("does not warn when under thresholds", async () => {
     const warnings: unknown[] = [];
     const m = new EventLoopMonitor({ p99WarnMs: 10_000, utilizationWarn: 2, warn: (e) => warnings.push(e) }).start();
@@ -77,6 +95,7 @@ describe("EventLoopMonitor", () => {
         EVENT_LOOP_UTILIZATION_WARN: "0.5",
         EVENT_LOOP_WINDOW_MS: "bad",
       }),
-    ).toEqual({ windowMs: 60_000, p99WarnMs: 500, utilizationWarn: 0.5 });
+    ).toEqual({ windowMs: 60_000, p99WarnMs: 500, maxWarnMs: 5_000, utilizationWarn: 0.5 });
+    expect(eventLoopOptionsFromEnv({ EVENT_LOOP_MAX_WARN_MS: "2000" }).maxWarnMs).toBe(2_000);
   });
 });

@@ -974,6 +974,8 @@ async function requestBody(c: Context): Promise<unknown> {
 
 export interface McpRequestLog {
   methods: string[];
+  /** Names of the tools a tools/call asked for (not their arguments): a slow call says which tool held the loop (EPIC-24 M24). */
+  tools?: string[];
   client_name?: string;
   client_version?: string;
 }
@@ -996,6 +998,10 @@ function summarizeMcpBody(body: unknown): McpRequestLog | undefined {
     const { method, params } = message as { method?: unknown; params?: unknown };
     const name = logText(method, 64);
     if (name) log.methods.push(name);
+    if (method === "tools/call" && params && typeof params === "object") {
+      const tool = logText((params as { name?: unknown }).name, 64);
+      if (tool && (log.tools ??= []).length < 20) log.tools.push(tool);
+    }
     if (method === "initialize" && params && typeof params === "object") {
       const info = (params as { clientInfo?: unknown }).clientInfo;
       if (info && typeof info === "object") {

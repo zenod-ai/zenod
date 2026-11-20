@@ -156,6 +156,8 @@ describe("chassis logging", () => {
     expect(toolRequestLog).toMatchObject({
       tenant_id: "tenant-one",
       http: { method: "POST", path: "/mcp/:token", status_code: 200 },
+      // EPIC-24 M24: the request line names the tool (never its arguments), so a slow call says which one held the loop.
+      mcp: { methods: ["tools/call"], tools: ["log_probe"] },
     });
     expect(called.headers.get("x-request-id")).toBe(toolLog?.request_id);
     expect(JSON.stringify(toolLog)).toContain("[Redacted]");

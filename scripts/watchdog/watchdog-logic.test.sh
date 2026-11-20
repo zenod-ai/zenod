@@ -56,6 +56,7 @@ check "30 min later: re-alert"     yes "$(za_due 2800 1000 1800)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export ZENOD_ALERT_QUEUE="$T/base/alerts.pending" ZENOD_ALERT_STATE_DIR="$T/state" ZENOD_ALERT_SOURCE="zenod test"
 A="$HERE/zenod-alert.sh"
+export ZENOD_ALERT_HOLD_SECS=0   # the cases below test dedupe and recovery; the hold-down has its own block further down
 q() { ls "$ZENOD_ALERT_QUEUE" 2>/dev/null | wc -l | tr -d ' '; }
 ZENOD_ALERT_NOW=1000 bash "$A" alert row-2 page "Cloud app is red: answered 502" >/dev/null
 check "first red queues one alert" 1 "$(q)"
@@ -113,6 +114,47 @@ check "a caller silent for 30 min no longer holds the key" 2 "$(ls "$ZENOD_ALERT
 printf '7000 7000\n' > "$ZENOD_ALERT_STATE_DIR/alert.row-7"
 ZENOD_ALERT_NOW=9100 bash "$A" clear row-7 "Deploy path is green again" >/dev/null
 check "a state file from before S4 recovers on the first clear" 3 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+rm -f "$ZENOD_ALERT_QUEUE"/*
+
+# EPIC-24 M24: a short blip does not page. za_hold_decide NOW FIRST LAST HOLD STALE
+check "hold: off (0) goes at once"          go   "$(za_hold_decide 1000 0 0 0 900)"
+check "hold: first sighting is held"        hold "$(za_hold_decide 1000 0 0 120 900)"
+check "hold: second sighting 40 s later"    hold "$(za_hold_decide 1040 1000 1000 120 900)"
+check "hold: second sighting 150 s later"   go   "$(za_hold_decide 1150 1000 1000 120 900)"
+check "hold: chain broken for 20 min restarts" hold "$(za_hold_decide 2300 1000 1000 120 900)"
+unset ZENOD_ALERT_HOLD_SECS
+rm -f "$ZENOD_ALERT_QUEUE"/*; rm -f "$ZENOD_ALERT_STATE_DIR"/alert.* "$ZENOD_ALERT_STATE_DIR"/pending.*
+# the 19 Nov 23:11Z case: one red run, green on the next: nothing queued, nothing to recover
+ZENOD_ALERT_NOW=20000 bash "$A" alert row-1 page "Marketing site zenod.dev is red: answered 000" >/dev/null
+check "blip: first red run queues nothing" 0 "$(q)"
+check "blip: the held sighting is logged"  1 "$(grep -c 'HOLD\[row-1\]' "$ZENOD_ALERT_STATE_DIR/alert.log")"
+ZENOD_ALERT_NOW=20150 bash "$A" clear row-1 "Marketing site zenod.dev is green again" >/dev/null
+check "blip: green next run queues no RECOVERED" 0 "$(q)"
+check "blip: no pending state is left" 0 "$(ls "$ZENOD_ALERT_STATE_DIR" | grep -c 'pending.row-1')"
+ZENOD_ALERT_NOW=20300 bash "$A" alert row-1 page "Marketing site zenod.dev is red: answered 000" >/dev/null
+check "a later blip starts fresh (still held)" 0 "$(q)"
+ZENOD_ALERT_NOW=20450 bash "$A" alert row-1 page "Marketing site zenod.dev is red: answered 000" >/dev/null
+check "a real outage: still red at the second run, one alert" 1 "$(q)"
+check "real outage: the alert is the normal one" 1 "$(grep -c '^\[ALERT\] zenod test: Marketing site zenod.dev is red' "$ZENOD_ALERT_QUEUE"/*.msg)"
+ZENOD_ALERT_NOW=20600 bash "$A" alert row-1 page "Marketing site zenod.dev is red: answered 000" >/dev/null
+check "real outage: third run is deduped" 1 "$(q)"
+ZENOD_ALERT_NOW=20700 bash "$A" clear row-1 "Marketing site zenod.dev is green again" >/dev/null
+check "real outage: one RECOVERED" 1 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+rm -f "$ZENOD_ALERT_QUEUE"/*
+# keys outside the hold set (Phylax row-4, the ingress tunnel row-11, docker-dead) still page at the first sighting
+ZENOD_ALERT_NOW=21000 bash "$A" alert row-11 page "Ingress tunnel is red" >/dev/null
+check "row-11 is not held" 1 "$(q)"
+ZENOD_ALERT_NOW=21010 bash "$A" clear row-11 "Ingress tunnel is green again" >/dev/null
+rm -f "$ZENOD_ALERT_QUEUE"/*
+# the page probe (5 min cadence) goes through the same hold: a smoke red seen once never alerts, seen twice does
+red='[{"key":"row-1","name":"Marketing site zenod.dev","colour":"red","signal":"smoke check failed: Home page answers: TimeoutError"}]'
+echo "$red" | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=30000 bash "$A" rows >/dev/null
+echo "${red/\"red\"/\"green\"}" | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=30300 bash "$A" rows >/dev/null
+check "page smoke blip (21:41Z case): nothing queued" 0 "$(q)"
+echo "$red" | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=31000 bash "$A" rows >/dev/null
+echo "$red" | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=31300 bash "$A" rows >/dev/null
+check "page smoke red twice, 5 min apart: one alert" 1 "$(q)"
+echo "${red/\"red\"/\"green\"}" | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=31600 bash "$A" rows >/dev/null
 rm -f "$ZENOD_ALERT_QUEUE"/*
 
 # an unwritable queue reports delivery=no and keeps nothing as sent

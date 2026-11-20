@@ -15,6 +15,7 @@
 #   • docker-dead  the Docker daemon is down: the whole stack is dark                 → page
 #   • crashloop-<svc>  ≥ RESTART_MAX failed tasks of the zenod-mt or phylax service in RESTART_WINDOW → page
 #   • extra URLs (ZENOD_WATCHDOG_EXTRA_URLS="key=url ...") answer 200 (used for the S5 proof)  → page
+#   • a blip does not page (EPIC-24 M24): row-1 and row-2 alert on the second red run, not the first (zenod-alert.sh)
 #   • public-outage  row-1 or row-2 red also writes ONE desk note a day in Zenod's own desk/inbox (EPIC-24 M21) → wake
 #   • sustained      row-4 (Phylax WhatsApp) red for 5 minutes or more joins that desk note (EPIC-20 A5)      → wake
 #
@@ -198,7 +199,11 @@ url_check() { # url_check KEY KIND URL NAME
   if [ "$v" = ok ]; then za_clear "$1" "$4 is green again: $3 answers 200"; rm -f "$since_file"
   else
     page "$1" "$4 is red: $3 $v"
-    case " $OUTAGE_KEYS " in *" $1 "*) OUTAGE_NOW="${OUTAGE_NOW}$1"$'\t'"$4: $3 $v"$'\n';; esac
+    # EPIC-24 M24: a first red sighting is held back by za_alert (ZA_HELD=yes) and stays out of the desk note too, so a
+    # 40 s stall wakes nobody; the second red run (about 2.5 min later) pages and writes the note.
+    if [ "$ZA_HELD" != yes ]; then
+      case " $OUTAGE_KEYS " in *" $1 "*) OUTAGE_NOW="${OUTAGE_NOW}$1"$'\t'"$4: $3 $v"$'\n';; esac
+    fi
     if [ -n "$min" ]; then
       [ -s "$since_file" ] || { mkdir -p "$ZA_STATE"; echo "$NOW" > "$since_file"; }
       since="$(cat "$since_file")"

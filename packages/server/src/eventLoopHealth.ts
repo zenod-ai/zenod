@@ -16,6 +16,8 @@ export interface EventLoopMonitorOptions {
   windowMs?: number;
   resolutionMs?: number;
   p99WarnMs?: number;
+  /** One block this long in a window warns even when p99 and utilization look fine (EPIC-24 M24: a 41 s block in a 60 s window of 20 ms samples). */
+  maxWarnMs?: number;
   utilizationWarn?: number;
   /** Minimum gap between warnings. */
   warnIntervalMs?: number;
@@ -37,6 +39,7 @@ export function eventLoopOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): E
   return {
     windowMs: envNumber(env, "EVENT_LOOP_WINDOW_MS", 60_000),
     p99WarnMs: envNumber(env, "EVENT_LOOP_P99_WARN_MS", 200),
+    maxWarnMs: envNumber(env, "EVENT_LOOP_MAX_WARN_MS", 5_000),
     utilizationWarn: envNumber(env, "EVENT_LOOP_UTILIZATION_WARN", 0.8),
   };
 }
@@ -45,6 +48,7 @@ export class EventLoopMonitor {
   private readonly histogram: IntervalHistogram;
   private readonly windowMs: number;
   private readonly p99WarnMs: number;
+  private readonly maxWarnMs: number;
   private readonly utilizationWarn: number;
   private readonly warnIntervalMs: number;
   private readonly warn: (entry: Record<string, unknown>) => void;
@@ -58,6 +62,7 @@ export class EventLoopMonitor {
   constructor(options: EventLoopMonitorOptions = {}) {
     this.windowMs = options.windowMs ?? 60_000;
     this.p99WarnMs = options.p99WarnMs ?? 200;
+    this.maxWarnMs = options.maxWarnMs ?? 5_000;
     this.utilizationWarn = options.utilizationWarn ?? 0.8;
     this.warnIntervalMs = options.warnIntervalMs ?? 60_000;
     this.warn = options.warn ?? ((entry) => console.warn(JSON.stringify(entry)));
@@ -113,7 +118,7 @@ export class EventLoopMonitor {
   }
 
   private maybeWarn(s: EventLoopHealth): void {
-    if (s.p99Ms <= this.p99WarnMs && s.utilization <= this.utilizationWarn) return;
+    if (s.p99Ms <= this.p99WarnMs && s.utilization <= this.utilizationWarn && s.maxMs < this.maxWarnMs) return;
     const t = this.now();
     if (t - this.lastWarnAt < this.warnIntervalMs) return;
     this.lastWarnAt = t;
@@ -126,6 +131,7 @@ export class EventLoopMonitor {
       utilization: s.utilization,
       window_ms: s.windowMs,
       p99_threshold_ms: this.p99WarnMs,
+      max_threshold_ms: this.maxWarnMs,
       utilization_threshold: this.utilizationWarn,
     });
   }
