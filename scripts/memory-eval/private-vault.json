@@ -1,0 +1,4 @@
+{
+  "rev": "36494d0",
+  "note": "Vault revision (obsidian-brain, 7 hex) the promote gate scores the real-note question set on. The vault grows every day and new notes on a topic push an unchanged right page down the top 5 (EPIC-24 M27, rq18), so scoring the head made the gate measure the vault, not the build: production's own c68f23f scored 91.2% at 36494d0 and 89.5% at fb83fc9. Move the pin deliberately: run run.mjs --dataset private on the candidate revision and commit the new rev only when it scores at or above floor.json (nightly.sh keeps scoring the live head and records the drift in ~/zenod-eval/history/private.jsonl). ZENOD_VAULT_REV=head makes the gate score the head instead."
+}

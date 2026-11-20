@@ -13,7 +13,8 @@
 #   1. staging is healthy and reports the sha (healthz, /api/health sha, the app page and its script,
 #      /api/settings refuses without a token, and the staging test tenant's health with its token);
 #   2. the standard question set (memory test suite, EPIC-15 Q2) built at that sha is at or above
-#      scripts/memory-eval/floor.json on the demo vault and, when present on this host, on the real-note set.
+#      scripts/memory-eval/floor.json on the demo vault and, when present on this host, on the real-note set
+#      (on the vault revision scripts/memory-eval/private-vault.json pins, so the gate measures the build, not the day's new notes).
 # Then `deploy-poller --promote zenod-mt --sha <sha>` on VPS1 re-pins production, waits for its health and
 # rolls back by itself if the new image never turns healthy. Each promote is one line in
 # ~/zenod-eval/promotions.jsonl (sha, previous sha, the gate's numbers, times).
@@ -111,7 +112,18 @@ gate=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["record"]; pr
 VAULT_CLONE=${ZENOD_VAULT_CLONE:-/var/lib/vps3-scratch/t3agent/github/obsidian-brain}
 if [ -f "$EVAL/real-questions.jsonl" ] && [ -d "$VAULT_CLONE/.git" ]; then
   git -C "$VAULT_CLONE" fetch -q origin
-  rev=$(git -C "$VAULT_CLONE" rev-parse --short=7 origin/main)
+  # The set is scored on the vault revision scripts/memory-eval/private-vault.json pins (EPIC-24 M27): the vault
+  # grows every day, and a new note on a topic can push an unchanged right page out of the top 5, so the head
+  # measures the vault rather than the build. nightly.sh still scores the head. ZENOD_VAULT_REV=head: score the head.
+  pin=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("rev",""))' "$suite/private-vault.json" 2>/dev/null || true)
+  [ "${ZENOD_VAULT_REV:-}" = head ] && pin=""
+  if [ -n "$pin" ] && git -C "$VAULT_CLONE" cat-file -e "$pin^{commit}" 2>/dev/null; then
+    rev=$(git -C "$VAULT_CLONE" rev-parse --short=7 "$pin")
+    echo "gate: real-note set on vault $rev (pinned, scripts/memory-eval/private-vault.json)"
+  else
+    rev=$(git -C "$VAULT_CLONE" rev-parse --short=7 origin/main)
+    echo "gate: real-note set on the vault head $rev (no usable pin)"
+  fi
   # Copy into a temporary dir and rename it into place, so a copy cut short never stands as that revision.
   if [ ! -d "$EVAL/vaults/$rev" ]; then
     rm -rf "$EVAL/vaults/.$rev.partial" && mkdir -p "$EVAL/vaults/.$rev.partial"
