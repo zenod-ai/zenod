@@ -1138,6 +1138,57 @@ describe("DriveVaultRepository", { timeout: 20_000 }, () => {
     await expect(open(drive, await temp(`journal-race-restart-${phase}`))).rejects.toMatchObject({ failure: { code: "conflict" } });
   });
 
+  describe("M25: a preserved journal edit no longer blocks the vault for ever", () => {
+    async function publishedWithMarker() {
+      const drive = new FakeDrive();
+      const workdir = await temp("marker");
+      const repo = await open(drive, workdir);
+      await writeVaultFile(workdir, "Notes/Kept.md", "kept note\n");
+      await repo.commitAndPublish("a note before the marker");
+      const journalFile = [...drive.files.values()].find((file) => /^[0-9a-f-]{36}\.json$/.test(file.name)
+        && JSON.parse(file.data.toString("utf8")).bootstrap !== true)!;
+      const transactionId = journalFile.name.replace(/\.json$/, "");
+      const folderId = journalFile.parents![0]!;
+      const marker = await drive.uploadFile(`${transactionId}.conflict.json`, "application/json", Buffer.from(JSON.stringify({
+        schemaVersion: 1, kind: "journal_conflict", transactionId, tenantId: "tenant-binding-one", vaultBindingId: "binding-one", revisions: [],
+      })), folderId, { appProperties: { zenodOperationId: `journal-conflict-${transactionId}` } });
+      return { drive, journalFile, marker, transactionId };
+    }
+
+    it("archives the marker of a committed, valid journal, keeps every revision and the notes, and deletes nothing", async () => {
+      const { drive, journalFile, marker } = await publishedWithMarker();
+      const filesBefore = [...drive.files.keys()].sort();
+      const fresh = await temp("marker-resolved");
+      const reopened = await open(drive, fresh);
+      expect(await readFile(join(fresh, "Notes/Kept.md"), "utf8")).toBe("kept note\n");
+      expect([...drive.files.keys()].sort()).toEqual(filesBefore);
+      const archive = [...drive.files.values()].find((file) => file.name === "deleted")!;
+      expect(drive.files.get(marker.id)!.parents).toEqual([archive.id]);
+      expect(drive.files.get(marker.id)!.name).toContain("resolved");
+      for (const revision of drive.revisions.get(journalFile.id) ?? []) {
+        expect(revision.id === drive.files.get(journalFile.id)!.headRevisionId || revision.keepForever).toBe(true);
+      }
+      expect((await reopened.currentRevision()).id).toBeTruthy();
+    });
+
+    it("keeps the vault blocked when the journal still has work to replay", async () => {
+      const { drive, journalFile } = await publishedWithMarker();
+      const journal = JSON.parse(journalFile.data.toString("utf8"));
+      journal.state = "applying";
+      drive.externalWrite(journalFile.id, Buffer.from(JSON.stringify(journal, null, 2)));
+      await expect(open(drive, await temp("marker-pending"))).rejects.toMatchObject({ failure: { code: "conflict" } });
+    });
+
+    it("keeps the vault blocked when the journal body no longer validates", async () => {
+      const { drive, journalFile, marker } = await publishedWithMarker();
+      const journal = JSON.parse(journalFile.data.toString("utf8"));
+      journal.targetCommitSha = "0".repeat(40);
+      drive.externalWrite(journalFile.id, Buffer.from(JSON.stringify(journal, null, 2)));
+      await expect(open(drive, await temp("marker-invalid"))).rejects.toMatchObject({ failure: { code: "conflict" } });
+      expect(drive.files.get(marker.id)!.parents).toEqual(marker.parents);
+    });
+  });
+
   it("recovers idempotently after failures before and after every publication mutation", async () => {
     for (const phase of ["before", "after"] as const) {
       let reachedEnd = false;
