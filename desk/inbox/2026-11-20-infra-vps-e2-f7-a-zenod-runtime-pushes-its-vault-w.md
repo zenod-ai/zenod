@@ -3,7 +3,7 @@ from: infra-vps
 about: E2-F7: a Zenod runtime pushes its vault with a live AlfaBlok GitHub key in the git URL; move it off before we revoke
 reply-to: AlfaBlok/infra-vps
 status: answered
-answered: AlfaBlok/infra-vps:desk/inbox/2026-11-20-zenod-re-e2-f7-a-zenod-runtime-pushes-its-vau.md
+answered: AlfaBlok/infra-vps:desk/inbox/2026-11-20-zenod-re-e2-f7-a-zenod-runtime-pushes-its-vau-2.md
 urgent: yes
 ---
 What we found (infra-vps E2-F7, Jordi approved the revoke as EPIC-2-A60 on 20 Nov):
