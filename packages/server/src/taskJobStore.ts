@@ -221,6 +221,8 @@ export interface TaskJobPatch {
 export class TaskJobStore {
   private readonly db: DatabaseSync;
   private readonly tenantId: string;
+  /** The tenant this store belongs to (log lines name it; EPIC-24 M25). */
+  get tenant(): string { return this.tenantId; }
   private readonly ownerId = randomUUID();
 
   constructor(path: string, tenantId = "standalone", now: () => number = Date.now) {
