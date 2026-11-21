@@ -101,7 +101,13 @@ function SampleNotes({ open, onOpen }: { open: string; onOpen: (id: string) => v
   );
 }
 
-export function SampleMemory() {
+// E26-S37: the same component sits on /testers (the way on is the apply form below it) and on the
+// zenod.dev home page (the way on is /testers). Only the closing link differs.
+export function SampleMemory({
+  wayOn = { href: "#apply", label: "Apply to test it with your voice notes" },
+}: {
+  wayOn?: { href: string; label: string };
+}) {
   const [open, setOpen] = React.useState(SAMPLE_START);
   return (
     <section className="pp-sample" aria-labelledby="sample-title" data-testid="sample-memory">
@@ -119,7 +125,7 @@ export function SampleMemory() {
       <p className="pp-fine sm-fine">
         A sample with demo content. Your own memory is private to you and kept
         in your Google Drive or GitHub.{" "}
-        <a href="#apply">Apply to test it with your voice notes</a>
+        <a href={wayOn.href}>{wayOn.label}</a>
       </p>
     </section>
   );
