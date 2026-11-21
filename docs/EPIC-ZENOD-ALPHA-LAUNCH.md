@@ -41,14 +41,14 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 Status: active
 Phase: tester door open on production; launch work runs in EPIC-7 (testers), EPIC-23 and EPIC-26 (first tester and invites); A0 done 2026-10-25
 Last verified: 2026-11-19
-Last attempted: 2026-11-20T13:05Z roll-up (DM run_cf3ec4e5): docs/EPIC-7-REAL-USER-TEST.md (active): 2 sign-ups, 0 first notes yet; the one-tap WhatsApp start is in Jordi's review (E7-S16) and the second tester's code-tap bug is fixed on production ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): Outcome written, waits only for his mark
-Result: production zenod-mt 0066bc09 healthy, health checks 20 of 20 green (EPIC-24 made the alarms accurate on 20 Nov); 2 applications, 2 sign-ups, 0 WhatsApp replies
+Last attempted: 2026-11-21T14:05Z roll-up (DM run_cf16becf): docs/EPIC-7-REAL-USER-TEST.md (active): 3 sign-ups, 0 first notes; the one-tap start approved; two emails wait on Jordi's yes (E7-A28, E7-A29) ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): waits only for his mark
+Result: production zenod-mt 6b619b9c healthy; 3 applications, 3 sign-ups, 0 WhatsApp replies; releases stopped since 02:04Z (GitHub sign-in)
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: the two testers' first WhatsApp notes ; testers recruited by zenod-social ; Jordi: his mark on EPIC-6, his verdict on E7-S16, drafts E7-S13 and E7-S14 ; Hetzner about VPS1's data volume (infra-vps)
+Waiting on: Jordi: infra-vps/EPIC-2-A61, E7-A28, E7-A29, his mark on EPIC-6 ; the three testers' first WhatsApp notes ; testers recruited by zenod-social
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: E26-S3 watches the 19 Nov tester after their next-day email (~19:03Z) through to a first Saved reply
-Verified at: 2026-11-20T13:05Z (production 0066bc09; EPIC-7 and EPIC-6 Current States read)
+Next action: E26-S3 watches the 21 Nov tester to a first Saved reply ; after EPIC-2-A61 the waiting commits push and E26-S37 is promoted
+Verified at: 2026-11-21T14:05Z (production 6b619b9c; EPIC-7 and EPIC-6 Current States read)
 
 ## Waiting on
 
