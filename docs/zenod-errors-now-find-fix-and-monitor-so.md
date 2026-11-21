@@ -33,11 +33,11 @@ Status: active
 Last attempted: 2026-11-20T22:15Z M29 (run_82277c5d): no GitHub key in any vault git argument or .git/config, live 6b619b9c; the leaked gho_ key is held only by the two archived-repo July test tenants (M28 deletes them), infra-vps told it may revoke ; 2026-11-20T05:20Z M27 (run_b2bf9ed0): the promote gate failed 4811f2b on the vault's growth, not the build (production's own c68f23f scores 91.2% then 89.5% on two vault revisions); gate now scores the real-note set on a pinned vault (#1716), staging 57104c2 passed 91.2% and was promoted 05:14Z; M23 done live 57104c2; M25 left to the Delivery Manager ; M7 search speed still waits on VPS1 load ; M14, M16 to M19 drafts
 Result: production 57104c2 (M23 WhatsApp fix and M25 tenant log line live); the promote gate measures the build, not the vault's daily growth; the live vault scores 89.5% on production code (recall of an English question against Spanish notes), watched in the nightly history
 Evidence: [M1](evidence/e24-m1-2026-11-10.md) · [M3](evidence/e24-m3-2026-11-10.md) · [M7](evidence/e24-m7-2026-11-10.md) · [M12](evidence/e24-m12-2026-11-11.md) · [M13](evidence/e24-m13-2026-11-11.md) · [M15](evidence/e24-m15-2026-11-13.md) · [M22](evidence/e24-m22-2026-11-19.md) · [M24](evidence/e24-m24-2026-11-20.md) · [M25](evidence/e24-m25-2026-11-20.md) · [M27](evidence/e24-m27-2026-11-20.md) · [M29](evidence/e24-m29-2026-11-20.md)
-Waiting on: Hetzner about VPS1's data volume (infra-vps) ; Jordi: drafts M14, M16 to M19, M28
+Waiting on: infra-vps E2-M4 (renew the GitHub sign-ins on VPS3 and VPS1: revoking the leaked key at 02:03Z ended the whole GitHub CLI authorization, so pushes from VPS3, the deploy poller and the promote are down since 02:04Z; production 6b619b9c keeps running) ; Hetzner about VPS1's data volume (infra-vps) ; Jordi: drafts M14, M16 to M19, M28
 Approved work: none
 Next action: none due: M23 to M27 done, the alarms are accurate; M26 (proposed) moves memory search off the main thread ; recheck M7 when VPS1 is calm ; M28 when a root operator is on VPS1
 Source revision: production d9ebdd6, staging e0b6d80 and later
-Verified at: 2026-11-20T11:05Z (production 0066bc09; smoke battery 20 of 20 green 10:24Z; M25 evidence read)
+Verified at: 2026-11-21T03:10Z (production 6b619b9c healthy; gh on VPS3 invalid; poller 401 since 02:12Z)
 
 ## Waiting on
 
