@@ -215,6 +215,8 @@ body:has(.pp) {
 .pp-testers-terms p { margin: 0 0 1rem; max-width: 30rem; }
 /* E26-S35: the public sample memory, Sara's week as a tappable cloud of thoughts. */
 .pp-sample { margin-top: clamp(2.5rem, 6vw, 4.5rem); }
+.pp-home-sample { max-width: var(--pp-max); margin: 0 auto; padding: 0 var(--pp-edge); }
+.pp-home-sample .pp-sample { margin-top: 0; }
 .pp-sample h2 { margin: 0 0 0.6rem; }
 .pp-sample-lead { margin: 0 0 1.25rem; max-width: 40rem; }
 .sm-stage { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: clamp(1rem, 3vw, 2.5rem); align-items: center; background: var(--pp-stage); border-radius: 6px; padding: clamp(0.75rem, 2.5vw, 2rem); }

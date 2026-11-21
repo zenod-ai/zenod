@@ -31,6 +31,7 @@ import {
   SIGN_IN_PATH,
 } from "@/lib/customer";
 import { FiveMoves } from "@/components/five-moves";
+import { SampleMemory } from "@/components/sample-memory";
 import { startScenes } from "@/lib/scenes";
 
 const GITHUB_URL = "https://github.com/zenod-ai/zenod";
@@ -312,6 +313,11 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             </figcaption>
           </figure>
         </section>
+
+        {/* E26-S37: Zenod at work in the first screens (the same sample as /testers), one way on to apply. */}
+        <div className="pp-home-sample">
+          <SampleMemory wayOn={{ href: "/testers", label: "Become a tester and try it with your voice notes" }} />
+        </div>
 
         <FiveMoves />
 

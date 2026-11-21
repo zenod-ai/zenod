@@ -190,6 +190,22 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(testers).toContain("<summary>Menu</summary>");
   });
 
+  it("shows the same sample memory on the home page after the hero, with one way on to /testers (E26-S37)", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { PaperLanding } = await import("./src/components/paper-landing");
+    vi.stubGlobal("window", { location: { pathname: "/" } });
+    const home = renderToStaticMarkup(createElement(PaperLanding, { customer: { signedIn: false, busyTier: null, error: null, paidSignupReady: true, subscribe: vi.fn() } })).replace(/<!-- -->/g, "").replace(/\s+/g, " ");
+    const sample = home.indexOf('data-testid="sample-memory"');
+    expect(sample).toBeGreaterThan(home.indexOf("pp-hero"));
+    expect(sample).toBeLessThan(home.indexOf('id="how"') > 0 ? home.indexOf('id="how"') : home.indexOf("pp-plans-sec"));
+    expect(home).toContain("Sara’s week, as Zenod keeps it.");
+    expect((home.match(/data-testid="sample-memory"/g) ?? []).length).toBe(1);
+    // the home page's way on is /testers, never the testers page's own #apply anchor
+    expect(home).toContain('href="/testers">Become a tester and try it with your voice notes');
+    const section = home.slice(sample, home.indexOf("</section>", sample));
+    expect(section).not.toMatch(/garden|Westcombe/i);
+  });
+
   it("shows a read-only sample memory, Sara's week, above the promises and the form (E26-S35)", () => {
     const testers = render("/testers").replace(/<!-- -->/g, "").replace(/\s+/g, " ");
     const sample = testers.indexOf('data-testid="sample-memory"');
