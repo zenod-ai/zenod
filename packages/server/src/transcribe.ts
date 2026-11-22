@@ -9,6 +9,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { LlmUsageReport } from "zenod";
 
+import {
+  centralCooldownResult,
+  centralFallbackAlarm,
+  centralSttConfig,
+  centralSttCoolingDown,
+  centralSttModelFor,
+  noteCentralSttResult,
+  transcribeWithCentral,
+} from "./centralTranscription.js";
 import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
 
 /**
@@ -1265,13 +1274,33 @@ async function runTranscription(
             : "local"
       : configuredLongProvider;
   const fakeTranscript = (process.env.NODE_ENV === "test" || process.env.VITEST) && process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT;
+  // EPIC-20 A7: the team's central free service first; any error or 60 s of silence falls through to today's cascade.
+  let centralDuration: number | null | undefined;
+  const central = fakeTranscript ? null : centralSttConfig();
+  if (central) {
+    centralDuration = (typeof options === "function" ? undefined : options.durationSeconds)
+      ?? (await probeAudioDurationSeconds(data, filename, signal));
+    const centralModel = centralSttModelFor(centralDuration, central);
+    if (!centralModel) {
+      console.log(`[transcribe] central skipped: ${Math.round(centralDuration ?? 0)}s audio would not finish in ${Math.round(central.timeoutMs / 1000)}s`);
+    } else {
+      const startedAt = Date.now();
+      const attempt = centralSttCoolingDown()
+        ? centralCooldownResult()
+        : await transcribeWithCentral(central, { data, filename, model: centralModel, language: LANGUAGE, ...(signal ? { signal } : {}) });
+      if (!signal?.aborted) noteCentralSttResult(central, attempt);
+      if (attempt.success || signal?.aborted) return attempt;
+      centralFallbackAlarm(attempt, centralModel, centralDuration);
+      console.warn(`[transcribe] central failed after ${Math.round((Date.now() - startedAt) / 1000)}s (${attempt.providerCode}), using the next provider`);
+    }
+  }
   const needsDuration = Boolean(groqApiKey || (longProvider === "openrouter" && openrouterApiKey) || (longProvider === "openai" && openaiApiKey));
   const durationSeconds =
     typeof options === "function" || fakeTranscript || !needsDuration
       ? typeof options === "function"
-        ? undefined
-        : options.durationSeconds
-      : options.durationSeconds ?? (await probeAudioDurationSeconds(data, filename, signal));
+        ? centralDuration ?? undefined
+        : options.durationSeconds ?? centralDuration ?? undefined
+      : options.durationSeconds ?? centralDuration ?? (await probeAudioDurationSeconds(data, filename, signal));
   const onUsage = typeof options === "function" ? undefined : options.onUsage;
   const meterOpts = { ...(onUsage ? { onUsage } : {}), durationSeconds: durationSeconds ?? null, ...(signal ? { signal } : {}) };
   const isLongAudio = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > LONG_AUDIO_SECONDS;

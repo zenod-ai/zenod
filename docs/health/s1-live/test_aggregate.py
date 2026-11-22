@@ -78,7 +78,7 @@ class StatusRules(unittest.TestCase):
         s = status(raw())
         self.assertEqual(s.pop("agent_runner"), "grey")
         self.assertEqual(set(s.values()), {"green"}, s)
-        self.assertEqual(len(A.components(raw())), 20)   # 12 parts + 6 EPIC-24 M2 alert rows + E26-S8 AI credit + E26-S5 testers
+        self.assertEqual(len(A.components(raw())), 21)   # 12 parts + 6 EPIC-24 M2 alert rows + E26-S8 AI credit + E26-S5 testers + E20-A7 central transcription
 
     def test_cloud_down_is_red(self):
         d = raw(); d["cloud"] = {"status": 503, "secs": 1, "json": {}}
@@ -511,6 +511,27 @@ class AlertRows(unittest.TestCase):
             old = self.doc([("2026-11-03T11:44:00Z", kind, "x_failed")])
             self.assertEqual(old[cid]["status"], "green", cid)
             self.assertIn("1 in 24 h", old[cid]["signal"])
+
+    def test_central_transcription_fallbacks_are_counted(self):
+        """E20-A7: one fallback is amber (the note was still written out), five in 15 min is red, Phylax's count too."""
+        d = self.doc()
+        self.assertEqual(d["alert_transcription"]["status"], "green")
+        one = self.doc([("2026-11-03T11:57:00Z", "transcribe", "central_fallback")])
+        self.assertEqual(one["alert_transcription"]["status"], "amber")
+        self.assertIn("1 voice notes", one["alert_transcription"]["problem"])
+        self.assertEqual(one["alert_transcription"]["signal_value"]["day"], 1)
+        old = self.doc([("2026-11-03T11:40:00Z", "transcribe", "central_fallback")])
+        self.assertEqual(old["alert_transcription"]["status"], "green")
+        self.assertIn("1 in 24 h", old["alert_transcription"]["signal"])
+        many = self.doc([("2026-11-03T11:5%d:00Z" % i, "transcribe", "central_fallback") for i in range(5)])
+        self.assertEqual(many["alert_transcription"]["status"], "red")
+        r = raw()
+        r["vps1"]["zenod_log"]["ops"] = []
+        r["vps1"]["phylax_log"]["ops"] = [["2026-11-03T11:58:00Z", "transcribe", "central_fallback"]]
+        self.assertEqual({c["id"]: c for c in A.components(r)}["alert_transcription"]["status"], "amber")
+        # the other alert rows never react to it
+        others = [k for k, c in one.items() if k.startswith("alert_") and k != "alert_transcription" and c["status"] == "red"]
+        self.assertEqual(others, [])
 
     def test_a_drill_says_so(self):
         d = self.doc([("2026-11-03T11:58:00Z", "signin", "drill_staged")])

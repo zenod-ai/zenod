@@ -78,6 +78,18 @@ with reason `drill_staged`, the row turns red with `[drill: staged fault]`, the 
 clears and sends one RECOVERED 15 min later. Tests: `AlertRows` in `test_aggregate.py`, `Folds` in `test_probe.py`,
 `packages/server/test/opsAlerts.test.ts`, `apps/web/src/lib/client-errors.test.ts`.
 
+## E20-A7: row 21, central transcription fallbacks
+
+Voice notes (WhatsApp through Phylax, chat channels, the web mic) are written out first by the team's free
+transcription service on vps3 (agent_team E42-S153). When it is slow (60 s) or fails, the note goes to the paid
+provider as before and the server writes one `[ops-alert] transcribe central_fallback reason=<timeout|network|http_5xx|http_4xx|empty|bad_reply|cooldown> model=<m> [status=<n>] [secs=<audio>]`
+line (`packages/server/src/centralTranscription.ts`), in the zenod-mt or the phylax log. Row 21 counts them: green with none in
+the last 15 min, **amber** with one or more (nobody is hurt, the note was still written out, but it cost money), **red** at 5 or
+more (the service looks down and every note pays again). The row shows the 24 h count. After a timeout, a network error or a
+5xx the server skips the service for 2 minutes (`ZENOD_CENTRAL_STT_COOLDOWN_MS`), each skipped note still writes one line with
+reason `cooldown`. Tests: `AlertRows` in `test_aggregate.py`, `Folds` in `test_probe.py`,
+`packages/server/test/centralTranscription.test.ts`. Drill: `python3 probe.py --drill transcribe`.
+
 ## E26-S8: row 19, AI credit (DeepSeek and OpenRouter)
 
 Background work (filing, desk, helpers) runs on DeepSeek's prepaid balance; chat and voice run on OpenRouter. When
@@ -113,7 +125,7 @@ never sampled, so it does not bend the daily spend. Tests: `Credit` in `test_agg
 
 Component ids: `site`, `cloud`, `database`, `phylax`, `agent_runner`, `memory_index`, `deploy`, `watchdog`,
 `readiness`, `tester_watch`, `ingress`, `host`, and the EPIC-24 M2 alert rows `alert_saves`, `alert_replies`,
-`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`, `credit` (row 19) and `alert_testers` (row 20).
+`alert_answers`, `alert_signins`, `alert_app`, `alert_helpers`, `credit` (row 19), `alert_testers` (row 20) and `alert_transcription` (row 21).
 
 **Last errors survive redeploys.** Docker stdout resets when a container is redeployed, so `last_error`,
 `errors` and `last_activity` come from a history file on VPS3 (`~/.local/state/zenod-health/history.json`,

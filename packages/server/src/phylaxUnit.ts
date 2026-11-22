@@ -1068,7 +1068,9 @@ function createTenantOrgan(
             tenant_id: input.tenantId,
             configured: transcription.provider,
             provider: result.provider ?? null,
-            shared_openai: usesSharedTranscription(transcription.provider, shared),
+            central: String(result.provider ?? "").startsWith("central"),
+            shared_openai:
+              usesSharedTranscription(transcription.provider, shared) && !String(result.provider ?? "").startsWith("central"),
             local_fallback:
               (transcription.provider !== "local" || usesSharedTranscription(transcription.provider, shared)) &&
               String(result.provider ?? "").startsWith("whisper.cpp"),
