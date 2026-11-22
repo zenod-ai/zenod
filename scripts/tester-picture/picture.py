@@ -330,12 +330,19 @@ def dot(on, label):
             f'{TICK if on else ""}</span>')
 
 
-def table_rows(pic, limit=None):
+def mask_email(text):
+    """ab…@domain: the first two characters of the address, like the tester mails' log lines."""
+    user, at, domain = (text or "").partition("@")
+    return f"{user[:2]}…@{domain}" if at else text
+
+
+def table_rows(pic, limit=None, masked=False):
     shown = pic["testers"][:limit] if limit else pic["testers"]
     rows = ""
     for t in shown:
+        who = mask_email(t["label"]) if masked and t.get("email") else t["label"]
         cells = "".join(f'<td data-label="{html.escape(title)}">{dot(t["cells"][cid], title)}</td>' for cid, title in COLUMNS)
-        rows += (f'<tr><th scope="row" class="who"><span class="em">{html.escape(t["label"])}</span>'
+        rows += (f'<tr><th scope="row" class="who"><span class="em">{html.escape(who)}</span>'
                  f'<small>{html.escape(t.get("since") or "")}</small></th>{cells}</tr>')
     return rows, len(pic["testers"]) - len(shown)
 
@@ -383,6 +390,8 @@ th.who small{{display:block;margin-top:3px;font-size:15px;font-weight:400;color:
             "</body></html>")
 
 
+CARD_NOTE = " The emails are shortened on this copy because its screenshot goes into a public repository; the main page shows them in full."
+
 PAGE_CSS = """
 .tt-wrap{overflow-x:auto}
 .tt{width:100%;border-collapse:collapse;margin:.25rem 0}
@@ -406,9 +415,11 @@ PAGE_CSS = """
 """
 
 
-def render_page(pic, png_name="tester-table.png"):
-    """The calm page for the page host, on the shared page shell (agent_team page_shell.py): headline, the table, one phone line."""
-    rows, more = table_rows(pic)
+def render_page(pic, png_name="tester-table.png", masked=False):
+    """The calm page for the page host, on the shared page shell (agent_team page_shell.py): headline, the table, one phone line.
+    masked=True is the card copy (card.html): the emails shortened, because the card check's screenshot is committed to this
+    public repo; the full emails are on the main page only."""
+    rows, more = table_rows(pic, masked=masked)
     if not pic["testers"]:
         rows = '<tr><th scope="row" class="who" colspan="8">No tester has signed up yet</th></tr>'
     day = pic["day_mexico_city"]
@@ -416,7 +427,7 @@ def render_page(pic, png_name="tester-table.png"):
             f'<div class="tt-wrap"><table class="tt"><thead>{table_head()}</thead><tbody>{rows}</tbody></table></div>'
             f'<p class="tt-phone"><b>{html.escape(pic["phone_line"])}</b></p>'
             f'<p class="tt-foot">{html.escape(pic["key_line"])}</p>'
-            f'<p class="tt-foot">{footer_text(pic)} Green means done, grey means not yet. Rebuilt every day at 05:30 Mexico City; '
+            f'<p class="tt-foot">{footer_text(pic)}{CARD_NOTE if masked else ""} Green means done, grey means not yet. Rebuilt every day at 05:30 Mexico City; '
             f'<a href="{png_name}">today\'s picture</a>.</p>')
     return (f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>Zenod tester table</title><link rel="stylesheet" href="/_shell/shell.css"></head>\n<body data-page-shell>\n<main class="ps-page">\n'
@@ -463,6 +474,7 @@ def write_page(pic, page_dir: pathlib.Path, png_path=None):
         tmp = page_dir / "index.html.tmp"
         tmp.write_text(render_page(pic), encoding="utf-8")
         tmp.replace(page_dir / "index.html")
+        (page_dir / "card.html").write_text(render_page(pic, masked=True), encoding="utf-8")
         (page_dir / "tester-table.json").write_text(json.dumps(pic, indent=2) + "\n", encoding="utf-8")
         return page_dir / "index.html"
     except OSError as e:
