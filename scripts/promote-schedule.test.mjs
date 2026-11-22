@@ -58,6 +58,24 @@ test('quiet hours skip, unless a fix is waiting', () => {
   assert.equal(run(setup({ prodStatus: 'degraded' }), NIGHT, '--dry-run').decision, 'would-run');
 });
 
+test('VPS1 busy window 04:00-09:00Z skips, unless a fix is waiting (EPIC-24 M33)', () => {
+  // 08:30Z is 09:30 in Madrid: past its quiet hours, inside VPS1's busy window.
+  const BUSY = '2026-11-11T08:30:00Z';
+  const R = { rolledAt: '2026-11-11T02:00:00Z' }; // staging has held the sha long enough
+  const setupR = (o = {}) => setup({ ...R, ...o });
+  assert.equal(run(setupR(), BUSY).decision, 'vps1-busy');
+  assert.equal(run(setupR(), '2026-11-11T04:00:00Z').decision, 'quiet-hours', 'quiet hours still win where both apply');
+  assert.equal(run(setupR(), '2026-11-11T09:00:00Z', '--dry-run').decision, 'would-run', 'the window ends at 09:00Z');
+  const s = setupR({ flag: true, promoteWrites: { at: BUSY, action: 'promote', sha: B } });
+  const r = run(s, BUSY);
+  assert.equal(r.decision, 'promoted');
+  assert.equal(r.fix_waiting, 'promote-now flag');
+  assert.equal(run(setupR({ prodStatus: 'degraded' }), BUSY, '--dry-run').decision, 'would-run');
+  const o = setupR(); o.env.ZENOD_TICK_BUSY_FROM = '10'; o.env.ZENOD_TICK_BUSY_TO = '12';
+  assert.equal(run(o, BUSY, '--dry-run').decision, 'would-run', 'the window can be moved by env');
+  assert.equal(run(o, '2026-11-11T11:00:00Z').decision, 'vps1-busy');
+});
+
 test('infra-vps pause stops it', () => {
   assert.equal(run(setup({ paused: true }), DAY).decision, 'paused');
   assert.equal(run(setup({ paused: true }), DAY, '--dry-run', '--assume-unpaused').decision, 'would-run');
