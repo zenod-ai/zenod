@@ -2,7 +2,8 @@
 from: alpha9
 about: Alert: ask zenod:docs/tester-invite-three-clear-promises-first.md#34 is held back from Jordi's inbox
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: every check it named passes again (07:38Z, check_streak.py)
 product-from: the held ask's own words: docs/tester-invite-three-clear-promises-first.md#34
 ---
 1 ask(s) to Jordi are held back from his inbox by the ask gate (E48-S154: every hold wakes its owner). Act now: fix each as its reason says, or answer or drop the ask line. Past 2 hours it reaches him anyway, marked not checked or unclear.
