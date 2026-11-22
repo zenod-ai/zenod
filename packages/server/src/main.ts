@@ -15,6 +15,7 @@ import { createRingUnit } from "./ringUnit.js";
 import { createHeraldUnit } from "./heraldUnit.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
 import { resolveServerMode } from "./serverMode.js";
+import { probeCentralStt } from "./centralTranscription.js";
 import { startEventLoopWatchdog, watchdogOptionsFromEnv } from "./eventLoopWatchdog.js";
 
 const port = Number(process.env.PORT ?? 8080);
@@ -103,6 +104,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   );
 });
 
+void probeCentralStt();
 outlastProxyKeepAlive(server);
 
 const shutdown = createGracefulShutdown({

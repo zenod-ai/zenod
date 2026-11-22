@@ -88,8 +88,9 @@ export function centralSttModelFor(durationSeconds: number | null | undefined, c
 
 export type CentralSttFailureWord = "cooldown" | "timeout" | "network" | "http_4xx" | "http_5xx" | "empty" | "bad_reply";
 
-function failure(reason: CentralSttFailureWord, error: string, httpStatus?: number): TranscriptionEnvelope {
+function failure(reason: CentralSttFailureWord, error: string, httpStatus?: number, cause?: string): TranscriptionEnvelope & { cause?: string } {
   return {
+    ...(cause ? { cause } : {}),
     success: false,
     provider: "central",
     error,
@@ -97,6 +98,13 @@ function failure(reason: CentralSttFailureWord, error: string, httpStatus?: numb
     ...(httpStatus !== undefined ? { httpStatus } : {}),
     providerCode: reason,
   };
+}
+
+/** A fixed-word code for why a request never got an answer (ENOTFOUND, ECONNREFUSED, EHOSTUNREACH, ...). */
+export function networkCauseCode(err: unknown): string {
+  const e = err as { code?: unknown; cause?: { code?: unknown; name?: unknown }; name?: unknown } | null;
+  const raw = e?.cause?.code ?? e?.code ?? e?.cause?.name ?? e?.name ?? "unknown";
+  return /^[A-Z0-9_]{3,40}$/.test(String(raw)) ? String(raw) : "other";
 }
 
 export interface CentralSttCall {
@@ -142,7 +150,8 @@ export async function transcribeWithCentral(cfg: CentralSttConfig, call: Central
   } catch (err) {
     if (call.signal?.aborted) return failure("network", "transcription was cancelled");
     if (timeout.aborted) return failure("timeout", `central transcription did not answer within ${Math.round(cfg.timeoutMs / 1000)} s`);
-    return failure("network", `central transcription unreachable: ${(err as Error).name}`);
+    const cause = networkCauseCode(err);
+    return failure("network", `central transcription unreachable: ${cause}`, undefined, cause);
   }
 }
 
@@ -155,8 +164,33 @@ export function centralCooldownResult(): TranscriptionEnvelope {
 export function centralFallbackAlarm(result: TranscriptionEnvelope, model: string, durationSeconds: number | null | undefined): void {
   opsAlert("transcribe", "central_fallback", {
     reason: result.providerCode ?? "error",
+    cause: (result as { cause?: string }).cause,
     model,
     ...(result.httpStatus !== undefined ? { status: result.httpStatus } : {}),
     ...(durationSeconds ? { secs: Math.round(durationSeconds) } : {}),
   });
+}
+
+/**
+ * One reachability check at boot (GET /health on the same host), logged as `[central-stt] reachable` or
+ * `[central-stt] unreachable cause=<code>`, so each container (zenod-mt, Phylax) says whether it can reach vps3
+ * over the tailnet without waiting for a voice note. Never throws.
+ */
+export async function probeCentralStt(cfg: CentralSttConfig | null = centralSttConfig(), fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  if (!cfg) return false;
+  let healthUrl: string;
+  try {
+    healthUrl = new URL("/health", cfg.url).toString();
+  } catch {
+    return false;
+  }
+  try {
+    const response = await fetchImpl(healthUrl, { signal: AbortSignal.timeout(5_000) });
+    const ok = response.ok;
+    console.log(ok ? "[central-stt] reachable" : `[central-stt] unreachable status=${response.status}`);
+    return ok;
+  } catch (err) {
+    console.warn(`[central-stt] unreachable cause=${networkCauseCode(err)}`);
+    return false;
+  }
 }
