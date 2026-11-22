@@ -1,0 +1,103 @@
+{
+  "row": "E7-S27",
+  "card": "docs/cards/E7-S27.md",
+  "cardSha": "373ba44070bb9f91",
+  "inputs": {
+    "card": "373ba44070bb9f91",
+    "page": "8fb6304a7444413e",
+    "rules": "7dd845c8b4b0e115",
+    "words": "053e05835c1c0c25"
+  },
+  "checkedAt": "2026-11-22T19:42:14Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "when the guys put a phone number ... we send a code to that phone number ... are we monitoring that in the testers scorecard, whether this ... handshake ... was successfully filled in, so ... the connection is complete?",
+      "where": "vn_40b9ff8f",
+      "status": "missed",
+      "how": "Page shows WhatsApp linked and a phone-number line, but no WhatsApp code confirmed or storage set up column per tester."
+    },
+    {
+      "said": "Hi, it's Zenod",
+      "where": "vn_40b9ff8f",
+      "status": "elsewhere",
+      "how": "Greeting wording for the WhatsApp message belongs to message content, not this tester table."
+    },
+    {
+      "said": "Hi, it's Jordi",
+      "where": "vn_40b9ff8f",
+      "status": "elsewhere",
+      "how": "Sign-off wording for the WhatsApp message belongs to message content, not this tester table."
+    },
+    {
+      "said": "Go ahead and switch it on ... after the connection is complete, if they haven't said anything after ... 48 hours ... send a message to say, 'Hey, I just to remind you I'm here. Feel free to send me any thoughts ... that you want to store.' But also we cannot have this live without them having set up their storage ... I approve it in the context in the way I'm explaining it.",
+      "where": "vn_bd12b21e",
+      "status": "elsewhere",
+      "how": "The 48-hour reminder and storage gate are product behaviour, not a scorecard column on this page."
+    },
+    {
+      "said": "each tester having a color. Is it green or not green?\\",
+      "where": "vn_40b9ff8f",
+      "status": "met",
+      "how": "Each tester row shows green or grey dots per setup step, matching his green-or-not request."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "At 390 px the table becomes stacked per-tester lists that fit without sideways scroll; at 1280 px it is a clean table with the punchline box first, one accent colour and grey for pending steps."
+  },
+  "pass": false,
+  "held": [
+    "not what he asked: \"when the guys put a phone number ... we send a code to that phone number ... are\": Page shows WhatsApp linked and a phone-number line, but no WhatsApp code confirmed or storage set up column per tester."
+  ],
+  "reader": {
+    "asked": "Decide whether the daily tester table, with one row per tester and green or grey dots per setup step, is the table Jordi wanted, by choosing Yes or Change it.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "8fb6304a7444413e",
+    "walkedAt": "2026-11-22T19:42:14Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9008/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'today's picture'",
+        "url": "http://vps3.taild81fbb.ts.net:9008/tester-table.png",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9008/",
+      "file": "E7-S27-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9008/",
+      "file": "E7-S27-1280.webp"
+    }
+  ]
+}
