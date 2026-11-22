@@ -37,10 +37,10 @@ describe("EPIC-20 A7: central transcription settings", () => {
   it("uses turbo for short notes, small for longer ones, and skips what could not finish in 60 s", () => {
     const cfg = centralSttConfig({})!;
     expect(centralSttModelFor(8, cfg)).toBe("large-v3-turbo");
-    expect(centralSttModelFor(45, cfg)).toBe("large-v3-turbo");
-    expect(centralSttModelFor(46, cfg)).toBe("small");
-    expect(centralSttModelFor(120, cfg)).toBe("small");
-    expect(centralSttModelFor(121, cfg)).toBeNull();
+    expect(centralSttModelFor(30, cfg)).toBe("large-v3-turbo");
+    expect(centralSttModelFor(31, cfg)).toBe("small");
+    expect(centralSttModelFor(90, cfg)).toBe("small");
+    expect(centralSttModelFor(91, cfg)).toBeNull();
     expect(centralSttModelFor(null, cfg)).toBe("large-v3-turbo");
     expect(centralSttModelFor(900, { ...cfg, model: "small" })).toBe("small");
   });
@@ -178,20 +178,20 @@ describe.skipIf(!hasFfmpeg)("EPIC-20 A7: transcribeAudio tries the central servi
     }));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const result = await transcribeAudio(tone(150), "voice.ogg", paid);
+    const result = await transcribeAudio(tone(120), "voice.ogg", paid);
     expect(result).toMatchObject({ success: true, provider: "openai gpt-4o-mini-transcribe" });
     expect(urls).toEqual([OPENAI]);
     expect(alarms(warn)).toEqual([]);
   }, 30_000);
 
-  it("a 100 s note uses the small model on the central service", async () => {
+  it("a 60 s note uses the small model on the central service", async () => {
     process.env.ZENOD_CENTRAL_STT_URL = CENTRAL;
     const models: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       models.push(String((init?.body as FormData).get("model")));
-      return new Response(JSON.stringify({ text: "hola nota de cien segundos" }), { status: 200 });
+      return new Response(JSON.stringify({ text: "hola nota de un minuto" }), { status: 200 });
     }));
-    const result = await transcribeAudio(tone(100), "voice.ogg", paid);
+    const result = await transcribeAudio(tone(60), "voice.ogg", paid);
     expect(result).toMatchObject({ success: true, provider: "central faster-whisper small" });
     expect(models).toEqual(["small"]);
   }, 30_000);
