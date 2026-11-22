@@ -1,14 +1,14 @@
 {
   "row": "E7-S27",
   "card": "docs/cards/E7-S27.md",
-  "cardSha": "373ba44070bb9f91",
+  "cardSha": "8a29475606ca8910",
   "inputs": {
-    "card": "373ba44070bb9f91",
-    "page": "8fb6304a7444413e",
+    "card": "8a29475606ca8910",
+    "page": "e017e7b7d9dfca9c",
     "rules": "7dd845c8b4b0e115",
     "words": "053e05835c1c0c25"
   },
-  "checkedAt": "2026-11-22T19:42:14Z",
+  "checkedAt": "2026-11-22T19:54:40Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -46,21 +46,21 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 px the table becomes stacked per-tester lists that fit without sideways scroll; at 1280 px it is a clean table with the punchline box first, one accent colour and grey for pending steps."
+    "summary": "Laptop and phone screens show the tester table with green or grey dots, punchline box first, no sideways page scroll, and the card's buttons are not visible in the screenshots."
   },
   "pass": false,
   "held": [
     "not what he asked: \"when the guys put a phone number ... we send a code to that phone number ... are\": Page shows WhatsApp linked and a phone-number line, but no WhatsApp code confirmed or storage set up column per tester."
   ],
   "reader": {
-    "asked": "Decide whether the daily tester table, with one row per tester and green or grey dots per setup step, is the table Jordi wanted, by choosing Yes or Change it.",
+    "asked": "Decide whether the daily green-or-grey tester table is the table he wanted, answering Yes or Change it.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "8fb6304a7444413e",
-    "walkedAt": "2026-11-22T19:42:14Z",
+    "page": "e017e7b7d9dfca9c",
+    "walkedAt": "2026-11-22T19:54:40Z",
     "steps": [
       {
         "n": 1,
