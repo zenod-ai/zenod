@@ -1,14 +1,14 @@
 {
   "row": "E26-S38",
   "card": "docs/cards/E26-S38.md",
-  "cardSha": "d6f2aabac8036719",
+  "cardSha": "083bd652fb889df1",
   "inputs": {
-    "card": "d6f2aabac8036719",
+    "card": "083bd652fb889df1",
     "page": "a4c704221e935fa9",
     "rules": "7dd845c8b4b0e115",
     "words": "8f19c8b1b93c8435"
   },
-  "checkedAt": "2026-11-22T12:54:17Z",
+  "checkedAt": "2026-11-22T12:58:16Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,26 +17,26 @@
       "key": "vn_254c366f",
       "when": "newest",
       "status": "met",
-      "how": "Only Sara's week shows on the testers page at 390 and 1280 px; no Whose week switch, Dan or Priya."
+      "how": "Testers page at 390 and 1280 px shows only Sara's week; no Whose week switch, Dan or Priya."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show one Sara's week sample with a flat layout, no sideways overflow, and the apply form intact."
+    "summary": "Both widths show one Sara's week example on the testers page with the apply form below; no sideways overflow and the layout reads cleanly."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether one example, Sara's week, is all he wanted, by pressing Yes or No.",
+    "asked": "Decide whether one example, Sara's week, is all he wanted, answering yes or no.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
     "page": "a4c704221e935fa9",
-    "walkedAt": "2026-11-22T12:54:17Z",
+    "walkedAt": "2026-11-22T12:58:16Z",
     "steps": [
       {
         "n": 1,
