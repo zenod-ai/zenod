@@ -4,18 +4,18 @@
   "cardSha": "8a29475606ca8910",
   "inputs": {
     "card": "8a29475606ca8910",
-    "page": "e017e7b7d9dfca9c",
+    "page": "02ed7698fb75fed7",
     "rules": "7dd845c8b4b0e115",
     "words": "053e05835c1c0c25"
   },
-  "checkedAt": "2026-11-22T19:54:40Z",
+  "checkedAt": "2026-11-22T20:10:53Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "when the guys put a phone number ... we send a code to that phone number ... are we monitoring that in the testers scorecard, whether this ... handshake ... was successfully filled in, so ... the connection is complete?",
       "where": "vn_40b9ff8f",
-      "status": "missed",
-      "how": "Page shows WhatsApp linked and a phone-number line, but no WhatsApp code confirmed or storage set up column per tester."
+      "status": "met",
+      "how": "Evidence page now has a WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns, so each handshake and storage step is visible."
     },
     {
       "said": "Hi, it's Zenod",
@@ -46,21 +46,19 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Laptop and phone screens show the tester table with green or grey dots, punchline box first, no sideways page scroll, and the card's buttons are not visible in the screenshots."
+    "summary": "At 390 px the table becomes stacked per-tester lists with no sideways overflow, and at 1280 px it is a clean grid; the punchline box comes first and the look is one quiet green-and-grey style."
   },
-  "pass": false,
-  "held": [
-    "not what he asked: \"when the guys put a phone number ... we send a code to that phone number ... are\": Page shows WhatsApp linked and a phone-number line, but no WhatsApp code confirmed or storage set up column per tester."
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether the daily green-or-grey tester table is the table he wanted, answering Yes or Change it.",
+    "asked": "Decide whether the daily green-or-grey tester table, one row per tester with seven setup steps, is the table he wanted.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "e017e7b7d9dfca9c",
-    "walkedAt": "2026-11-22T19:54:40Z",
+    "page": "02ed7698fb75fed7",
+    "walkedAt": "2026-11-22T20:10:53Z",
     "steps": [
       {
         "n": 1,
