@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { expect, it } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
-import { funnelCounts, sourceCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantSpendBetween, tenantWhatsAppSaves, type CountSources } from "../src/publicCounts.js";
+import { COUNT_DEFINITIONS, funnelCounts, sourceCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantSpendBetween, tenantWhatsAppSaves, WhatsAppLinkCache, type CountSources } from "../src/publicCounts.js";
 import type { TesterRecord } from "../src/testerFlow.js";
 
 // EPIC-26 S7: the funnel as counts only, readable by anyone.
@@ -56,6 +56,7 @@ it("counts applications, accepted, signed up, active testers and paying customer
     whatsapp_replied: 0,
     feedback_recorded: 0,
     over_cap: 0,
+    whatsapp_linked: 0,
     test_applications: 0,
     test_signups: 0,
   });
@@ -164,6 +165,44 @@ it("over_cap looks at the month before when the week crosses a month end (E7-S24
   }), now).over_cap;
   expect(counts(10)).toBe(1); // November spent 13 (5 and 8 inside the week of 25 Nov to 2 Dec) over a cap of 10
   expect(counts(14)).toBe(0); // November 13 and December 2 are each under 14: a month never carries over
+});
+
+it("counts testers with a verified WhatsApp link, one per person, our own tests and payers left out (E7-S25)", () => {
+  const base = sources();
+  const linked = new Set(["t1", "t2", "t7", "payer", "t-twin"]);
+  const counts = funnelCounts(sources({
+    accounts: () => [
+      ...base.accounts(),
+      account("t7", { stripe_email: "operations+t7r3@alpha9.io", fully_discounted: true, free_until: "2026-12-11T00:00:00Z" }),
+      // a second account on the same tenant as t1 is the same person
+      account("twin", { tenant_id: "t-t1", fully_discounted: true, free_until: "2026-12-01T00:00:00Z" }),
+    ],
+    whatsappLinked: (accountId) => linked.has(accountId) || accountId === "twin",
+    isTest: (contact) => contact.endsWith("@alpha9.io"),
+  }), NOW);
+  expect(counts.whatsapp_linked).toBe(2); // t1 (with its twin) and t2; not t7 (a test), not the payer
+  expect(funnelCounts(base, NOW).whatsapp_linked).toBe(0); // no reading: 0
+  expect(COUNT_DEFINITIONS.whatsapp_linked).toMatch(/verified/);
+});
+
+it("WhatsAppLinkCache reads each account's state, keeps the old answer when a reading fails and sees an unlink (E7-S25)", async () => {
+  const states: Record<string, string | null | Error> = { a: "verified", b: "none", c: "degraded", d: null };
+  const cache = new WhatsAppLinkCache(
+    () => ["a", "b", "c", "d", "e"],
+    async (id) => {
+      const state = states[id];
+      if (state instanceof Error) throw state;
+      return state ?? null;
+    },
+    (state) => ["verified", "degraded", "paused"].includes(state),
+  );
+  expect(cache.has("a")).toBe(false); // nothing read yet
+  await cache.refresh();
+  expect([cache.has("a"), cache.has("b"), cache.has("c"), cache.has("d"), cache.has("e")]).toEqual([true, false, true, false, false]);
+  states.a = new Error("phylax down"); // unreachable now: the earlier answer stays
+  states.c = "none"; // really unlinked: it goes
+  await cache.refresh();
+  expect([cache.has("a"), cache.has("c")]).toEqual([true, false]);
 });
 
 it("reads a tenant's spend between two times from its usage.sqlite, failed calls and other providers handled, 0 without one (E7-S24)", () => {
@@ -293,6 +332,8 @@ it("keeps one line per day, answers the endpoint publicly and leaks no email", a
   const body = await response.json() as Record<string, unknown> & { history: Array<{ date: string }> };
   expect(body).toMatchObject({ schema: "zenod-counts/v1", date: "2026-11-11", applications: 3, accepted: 2, paying_customers: 1, whatsapp_replied: 0 });
   expect((body.definitions as Record<string, string>).whatsapp_replied).toMatch(/WhatsApp/);
+  expect(body).toHaveProperty("whatsapp_linked");
+  expect((body.definitions as Record<string, string>).whatsapp_linked).toMatch(/verified/);
   expect(body.history.every((day) => "whatsapp_replied" in day)).toBe(true);
   expect(body).toMatchObject({ over_cap: 0 });
   expect((body.definitions as Record<string, string>).over_cap).toMatch(/above their monthly cap.*last 7 days.*our own test accounts left out/);

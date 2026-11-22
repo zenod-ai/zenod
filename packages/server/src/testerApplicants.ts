@@ -112,6 +112,9 @@ export interface ApplicantSources {
 
 const LINKED = new Set(["verified", "degraded", "paused"]);
 
+/** Whether a WhatsApp state is a verified link (also when degraded or paused). */
+export const isWhatsAppLinked = (state: string): boolean => LINKED.has(state);
+
 /** E26-S25: an account's verified sign-in emails (lower case), read once per call from the identity records. */
 export function signInEmailsByUser(
   identities: () => Array<{ user_id: string; email: string | null; email_verified: boolean }>,
