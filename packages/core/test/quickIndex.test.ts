@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { oneLine, quickIndexBase, sayableAlias } from "../src/vault/quickIndex.js";
+import { oneLine, quickIndexBase, quickIndexBaseCached, sayableAlias } from "../src/vault/quickIndex.js";
 
 // EPIC-14 S28: the quick index's model-free part, built from the tree, page frontmatter and the Log.
 const FILES: Record<string, string> = {
@@ -71,5 +71,65 @@ describe("quick index base (E14-S28)", () => {
     const files = { ...FILES };
     delete files["Tree.md"];
     expect(await quickIndexBase(await vault(files))).toBeNull();
+  });
+});
+
+// EPIC-24 M34: the 5-minute clock asked for the whole base each tick; an unchanged vault now answers from memory.
+describe("quick index base, cached by vault state (EPIC-24 M34)", () => {
+  async function settled(files: Record<string, string>): Promise<string> {
+    const dir = await vault(files);
+    const old = new Date(Date.now() - 60_000);
+    const walk = async (rel: string): Promise<void> => {
+      for (const entry of await readdir(join(dir, rel), { withFileTypes: true })) {
+        const path = join(rel, entry.name);
+        if (entry.isDirectory()) await walk(path); else await utimes(join(dir, path), old, old);
+      }
+    };
+    await walk(".");
+    return dir;
+  }
+  const NOW = Date.parse("2026-11-09T12:00:00Z");
+
+  it("returns the same base while no Markdown file changed, and what a fresh build returns", async () => {
+    const dir = await settled(FILES);
+    const first = await quickIndexBaseCached(dir, NOW);
+    const second = await quickIndexBaseCached(dir, NOW + 5 * 60_000);
+    expect(second).toBe(first);
+    expect(first).toEqual(await quickIndexBase(dir, NOW));
+  });
+
+  it("rebuilds when a file is added or changed, and when the week window moves", async () => {
+    const dir = await settled(FILES);
+    const first = (await quickIndexBaseCached(dir, NOW))!;
+    expect(first.places.find((p) => p.path === "Areas/Family.md")!.memories).toBe(0);
+    // A new filing cites the page: the base must see it.
+    const family = join(dir, "Areas/Family.md");
+    await writeFile(family, `---\ntitle: Family\nparent: "[[Tree]]"\nmemory: long-term\nupdated: 2026-09-01\n---\nCited now [[2026-11-07#^e-dddddd]].\n`);
+    const old = new Date(Date.now() - 60_000);
+    await utimes(family, old, old);
+    const second = (await quickIndexBaseCached(dir, NOW))!;
+    expect(second).not.toBe(first);
+    expect(second.places.find((p) => p.path === "Areas/Family.md")!.memories).toBe(1);
+    // Same files, a later week: the this-week counts move, so it is built again.
+    const third = (await quickIndexBaseCached(dir, NOW + 3 * 86_400_000))!;
+    expect(third).not.toBe(second);
+    expect(third.weekFrom).toBe("2026-11-06");
+  });
+
+  it("never trusts a file changed in the last 100 ms", async () => {
+    const dir = await vault(FILES); // freshly written: racy
+    const first = await quickIndexBaseCached(dir, NOW);
+    const second = await quickIndexBaseCached(dir, NOW);
+    expect(second).not.toBe(first);
+    expect(second).toEqual(first);
+  });
+
+  it("is null without a tree and does not keep a failed answer", async () => {
+    const dir = await settled({ "Notes/Loose.md": "no tree here\n" });
+    expect(await quickIndexBaseCached(dir, NOW)).toBeNull();
+    await writeFile(join(dir, "Tree.md"), FILES["Tree.md"]!);
+    const old = new Date(Date.now() - 60_000);
+    await utimes(join(dir, "Tree.md"), old, old);
+    expect(await quickIndexBaseCached(dir, NOW)).not.toBeNull();
   });
 });

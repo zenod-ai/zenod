@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parseNote } from "./frontmatter.js";
 import { basenameOf } from "./files.js";
 import { CITATION_RE } from "./pages.js";
 import { readLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
 import { buildTreeIndex, MAX_TREE_DEPTH, type MemoryKind } from "./tree.js";
 import { pageCaptureDate } from "./treeOutline.js";
+import { vaultFingerprint } from "./lineage.js";
 
 /**
  * The quick index's model-free part (EPIC-14 S28): one entry per place in the memory tree with
@@ -87,11 +88,46 @@ function frontmatterList(value: unknown): string[] {
   return [...new Set(list.filter((item): item is string => typeof item === "string").map((item) => item.replace(/\s+/g, " ").trim()).filter(Boolean))];
 }
 
+const MAX_CACHED_BASES = 8;
+const baseCache = new Map<string, { fingerprint: string; weekFrom: string; base: Promise<QuickIndexBase | null> }>();
+
+/**
+ * `quickIndexBase`, rebuilt only when a Markdown file was added, removed or changed, or the week window moved
+ * (EPIC-24 M34). The base reads and parses every page and every Log file (about 2.3 s of CPU on a 2,400-file vault),
+ * and the 5-minute clock of every tenant asked for it whether or not anything had been filed: a Zenod with nobody
+ * saving burned a core in 15-second bursts. The base depends only on those files and, through `now`, on the first
+ * day of the week, so a hit returns the very same object a fresh build would. A file changed in the last 100 ms is
+ * never trusted (the same racy rule as the memory tree); a failed build is not kept.
+ */
+export async function quickIndexBaseCached(vaultPath: string, now: number = Date.now()): Promise<QuickIndexBase | null> {
+  const key = resolve(vaultPath);
+  const weekFrom = weekFromOf(now);
+  const { hash, racy } = await vaultFingerprint(vaultPath);
+  const cached = baseCache.get(key);
+  if (cached && !racy && cached.fingerprint === hash && cached.weekFrom === weekFrom) {
+    baseCache.delete(key); baseCache.set(key, cached);
+    return cached.base;
+  }
+  const base = quickIndexBase(vaultPath, now);
+  baseCache.delete(key);
+  if (!racy) {
+    const entry = { fingerprint: hash, weekFrom, base };
+    baseCache.set(key, entry);
+    if (baseCache.size > MAX_CACHED_BASES) baseCache.delete(baseCache.keys().next().value!);
+    base.catch(() => { if (baseCache.get(key) === entry) baseCache.delete(key); });
+  }
+  return base;
+}
+
+function weekFromOf(now: number): string {
+  return new Date(now - (QUICK_INDEX_WEEK_DAYS - 1) * 86_400_000).toISOString().slice(0, 10);
+}
+
 /** Null when the vault has no Tree.md yet. */
 export async function quickIndexBase(vaultPath: string, now: number = Date.now()): Promise<QuickIndexBase | null> {
   const index = await buildTreeIndex(vaultPath);
   if (!index.tree) return null;
-  const weekFrom = new Date(now - (QUICK_INDEX_WEEK_DAYS - 1) * 86_400_000).toISOString().slice(0, 10);
+  const weekFrom = weekFromOf(now);
   const captures = await readLogCaptures(vaultPath);
   const isAgentCapture = (key: string) => captures.get(key)?.origin === "agent";
 

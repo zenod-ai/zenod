@@ -75,7 +75,7 @@ function evidenceRefs(body: string): string[] {
  * (page bodies for evidence and citers) depend only on these files (E24-M7). `racy` (as in Git's
  * index): a file changed so close to now that a same-size rewrite could keep its coarse mtime.
  */
-async function vaultFingerprint(vaultPath: string): Promise<{ hash: string; racy: boolean }> {
+export async function vaultFingerprint(vaultPath: string): Promise<{ hash: string; racy: boolean }> {
   const takenAt = Date.now();
   const files = await listMarkdownFiles(vaultPath);
   const infos = await Promise.all(files.map((path) => stat(join(vaultPath, path)).catch(() => null)));
