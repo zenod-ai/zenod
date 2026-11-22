@@ -1011,9 +1011,10 @@ export function buildMcpServer(
         ? query ? `No note paths match '${query}'.` : ""
         // Tree lineage stays in structured output only (E9-5j, root L-6): the text is as before EPIC-9.
         : hits.map((hit) => `${hit.path} (score ${hit.score}, ${hit.matchPercent}% match) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}\n  app: ${hit.appPath}`).join("\n");
-      if (timed?.ms != null && rankedHits.length) {
+      // M34 r3: a slow search is named even when it found nothing (a search that waited 40 s printed no line at all).
+      if (timed?.ms != null && (rankedHits.length || timed.ms >= 1000)) {
         // E24-M7: `tool` is the whole call so far (vault sync, index, tree places, entries).
-        console.info(`[memory-search] ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB${timed.index.refreshMs != null ? `, refresh ${timed.index.refreshMs} ms` : ""})` : ""}, tool ${Math.round(performance.now() - started)} ms`);
+        console.info(`[memory-search] ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB${timed.index.refreshMs != null ? `, refresh ${timed.index.refreshMs} ms` : ""}${timed.index.queryMs != null ? `, sync query ${timed.index.queryMs} ms` : ""})` : ""}, tool ${Math.round(performance.now() - started)} ms`);
       }
       const entryText = entries.length === 0
         ? structuralQuery ? "No memory entries match the structural filters." : ""

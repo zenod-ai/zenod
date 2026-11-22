@@ -83,7 +83,7 @@ import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
 import { duePersonas, helpersBuilding, nextPersonaWakeAt, withAskRevision, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import { putAwayProjectSuggestions } from "./helperScope.js";
-import { correctReading, QuickIndexStore, quickIndexTickLine, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
+import { correctReading, cpuMark, cpuSince, QuickIndexStore, quickIndexTickLine, quickIndexView, firstTickDelayMs, updateQuickIndex, type CpuMark, type QuickIndexModel, type QuickIndexTickResult, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
 import { readAs, shownReadings, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
@@ -1008,23 +1008,38 @@ export class Runtime {
   /**
    * Start this tenant's weekly sweep clock (idempotent). It lives on the runtime,
    * which exists whenever the tenant is active on any surface (WhatsApp, MCP,
-   * console), not only when the web API is open. The first check is one interval
-   * after start, so a boot never sweeps immediately.
+   * console), not only when the web API is open. The first check comes at a point of
+   * the first interval that is this tenant's own (at least a minute after start, so a
+   * boot never sweeps immediately; EPIC-24 M34), then every interval.
    */
   startTreeSweepSchedule(intervalMs = 5 * 60_000): void {
     if (this.treeSweepTimer || this.agent.vaultless === true) return;
-    this.treeSweepTimer = setInterval(() => {
+    const tick = () => {
+      // EPIC-24 M34 round 3: the CPU window opens before the first check, so the tick line covers the whole callback.
+      const since = cpuMark();
       try {
         this.maybeEnqueueTreeSweep();
       } catch (error) {
         console.error("[tree-sweep] schedule check failed:", error);
       }
-      // EPIC-14 S4: personas wake in the same off-peak window, on the same clock.
+      // EPIC-14 S4: personas wake in the same off-peak window, on the same clock. The check itself is synchronous
+      // work (the helper schedule read from the store): its time is part of the tick line.
+      const personasStarted = performance.now();
       void this.wakePersonas().catch((error: unknown) => console.error("[persona] schedule check failed:", error));
+      const personasMs = Math.round(performance.now() - personasStarted);
       // EPIC-14 S28: the quick index catches new filings and runs its nightly pass on the same clock.
-      void this.refreshQuickIndex().catch((error: unknown) => console.error(`[quick-index] update failed: ${error instanceof Error ? error.message : error} tenant=${this.tenantId}`));
-    }, intervalMs);
-    this.treeSweepTimer.unref();
+      void this.refreshQuickIndex(Date.now(), { since, personasMs }).catch((error: unknown) => console.error(`[quick-index] update failed: ${error instanceof Error ? error.message : error} tenant=${this.tenantId}`));
+    };
+    // EPIC-24 M34 round 3: every tenant of one process used to tick at the same instant (seven runtimes, seven
+    // pulls and index checks in one burst). The first tick of each lands at its own point within the first
+    // interval, taken from its id (never at boot: at least a minute in), then every interval as before.
+    const first = setTimeout(() => {
+      tick();
+      this.treeSweepTimer = setInterval(tick, intervalMs);
+      this.treeSweepTimer.unref();
+    }, firstTickDelayMs(this.tenantId, intervalMs));
+    first.unref();
+    this.treeSweepTimer = first;
   }
 
   private personaWake: Promise<PersonaRun[]> | null = null;
@@ -1139,33 +1154,48 @@ export class Runtime {
    * single-flight per tenant. Vault agents only; without the DeepSeek route it is still built,
    * with the names it already has. Logs counts and cost only, never a place or a name.
    */
-  refreshQuickIndex(now: number = Date.now()): Promise<QuickIndexUpdate | null> {
+  refreshQuickIndex(now: number = Date.now(), tick: { since?: CpuMark; personasMs?: number } = {}): Promise<QuickIndexUpdate | null> {
     if (this.quickIndexRun) return this.quickIndexRun;
-    if (this.agent.vaultless === true || !this.settings.vaultConfigured()) return Promise.resolve(null);
+    const since = tick.since ?? cpuMark();
+    const tickStarted = performance.now();
+    const phases: QuickIndexPhases = {};
+    let updateMs = 0;
+    // EPIC-24 M34: where the tick's time went, one line per tenant per tick whatever the outcome (no names, no
+    // text), so a tenant that has nothing to index is no longer silent while it spends CPU.
+    const logTick = (result: QuickIndexTickResult) => console.log(quickIndexTickLine(this.tenantId, phases, updateMs, Math.round(performance.now() - tickStarted), {
+      result, cpu: cpuSince(since), ...(tick.personasMs !== undefined ? { personasMs: tick.personasMs } : {}),
+    }));
+    if (this.agent.vaultless === true || !this.settings.vaultConfigured()) {
+      logTick("no-vault");
+      return Promise.resolve(null);
+    }
     const active = (async () => {
-      const tickStarted = performance.now();
-      const phases: QuickIndexPhases = {};
-      const engine = await this.getEngine();
-      const base = engine.quickIndexBase ? await engine.quickIndexBase(phases) : null;
-      if (!base) return null;
-      const store = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir));
-      const updateStarted = performance.now();
-      const { state, update } = await updateQuickIndex(base, store.read(), {
-        model: this.quickIndexModel(),
-        blocked: () => this.featureBlock("filing") !== null,
-        now,
-      });
-      store.write(state);
-      const updateMs = Math.round(performance.now() - updateStarted);
-      // S29: the tick keeps what chat reads warm, so a message never waits on reading the vault.
-      const view = quickIndexView(base, state, now);
-      this.readAsCache = { at: now, index: { places: view.places, corrections: state.corrections } };
-      // EPIC-24 M34: where the tick's wall time went, one line per tenant per tick (no names, no text), so the next measure is exact.
-      console.log(quickIndexTickLine(this.tenantId, phases, updateMs, Math.round(performance.now() - tickStarted)));
-      if (update.pass || update.calls) {
-        console.log(`[quick-index] tenant=${this.tenantId} ${update.pass ?? "summary"}: calls=${update.calls} names+${update.names} usd=${update.costUsd.toFixed(5)} places=${view.totals.places} named=${view.totals.named} names=${view.totals.names} week=${view.totals.thisWeek} today_usd=${view.cost.todayUsd.toFixed(5)}`);
+      let result: QuickIndexTickResult = "error";
+      try {
+        const engine = await this.getEngine();
+        const base = engine.quickIndexBase ? await engine.quickIndexBase(phases) : null;
+        if (!base) { result = "no-tree"; return null; }
+        const store = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir));
+        const updateStarted = performance.now();
+        const { state, update } = await updateQuickIndex(base, store.read(), {
+          model: this.quickIndexModel(),
+          blocked: () => this.featureBlock("filing") !== null,
+          now,
+        });
+        store.write(state);
+        updateMs = Math.round(performance.now() - updateStarted);
+        // S29: the tick keeps what chat reads warm, so a message never waits on reading the vault.
+        const view = quickIndexView(base, state, now);
+        this.readAsCache = { at: now, index: { places: view.places, corrections: state.corrections } };
+        result = "ok";
+        logTick(result);
+        if (update.pass || update.calls) {
+          console.log(`[quick-index] tenant=${this.tenantId} ${update.pass ?? "summary"}: calls=${update.calls} names+${update.names} usd=${update.costUsd.toFixed(5)} places=${view.totals.places} named=${view.totals.named} names=${view.totals.names} week=${view.totals.thisWeek} today_usd=${view.cost.todayUsd.toFixed(5)}`);
+        }
+        return update;
+      } finally {
+        if (result !== "ok") logTick(result);
       }
-      return update;
     })();
     this.quickIndexRun = active;
     void active.catch(() => {}).finally(() => { if (this.quickIndexRun === active) this.quickIndexRun = null; });

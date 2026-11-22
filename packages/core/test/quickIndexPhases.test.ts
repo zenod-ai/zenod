@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
@@ -56,5 +56,57 @@ describe("quickIndexBase reports its phases (M34)", { timeout: 30_000 }, () => {
     expect(third.pull).toMatchObject({ kind: "fetched" });
     expect(next).not.toBe(base);
     expect(next!.places.some((place) => place.path === "Projects/Boat repair/Rudder.md")).toBe(true);
+  });
+});
+
+describe("a vault with no tree is not pulled every tick (M34 round 3)", { timeout: 30_000 }, () => {
+  it("looks once, skips for an hour, then looks again and finds a tree that arrived on the remote", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-quick-notree-")); dirs.push(dir);
+    const bare = join(dir, "origin.git");
+    await simpleGit().init(["--bare", "--initial-branch=main", bare]);
+    const seed = join(dir, "seed");
+    await simpleGit().clone(bare, seed);
+    await writeFile(join(seed, "README.md"), "# A vault with no tree yet\n");
+    const git = simpleGit(seed);
+    await git.addConfig("user.name", "seed").addConfig("user.email", "seed@test");
+    await git.add(["-A"]); await git.commit("seed"); await git.push("origin", "main");
+    const repo = await VaultRepo.open({ workdir: join(dir, "data", "vault"), remoteUrl: bare });
+    let clock = Date.parse("2026-11-22T12:00:00Z");
+    const engine = createEngine({ repo, llm: {} as BrainLlm, state: new SqliteStateStore(":memory:"), readSyncTtlMs: 0, now: () => new Date(clock) });
+    const pulls = vi.spyOn(repo, "pullForFiling");
+
+    const first: QuickIndexPhases = {};
+    expect(await engine.quickIndexBase!(first)).toBeNull();
+    expect(first.skipped).toBeUndefined();
+    expect(first.pull).toBeDefined();
+    expect(pulls).toHaveBeenCalledTimes(1);
+
+    // Every following tick inside the hour: nothing pulled, nothing listed, a named skip.
+    for (let i = 0; i < 11; i++) {
+      clock += 5 * 60_000;
+      const idle: QuickIndexPhases = {};
+      expect(await engine.quickIndexBase!(idle)).toBeNull();
+      expect(idle).toMatchObject({ skipped: "no-tree", pullMs: 0 });
+      expect(idle.pull).toBeUndefined();
+    }
+    expect(pulls).toHaveBeenCalledTimes(1);
+
+    // A tree lands on the remote (another device's sweep). After the hour the next tick pulls it and indexes.
+    await cp(TREE_FIXTURE, seed, { recursive: true, force: true });
+    await git.add(["-A"]); await git.commit("tree arrives"); await git.push("origin", "main");
+    clock += 5 * 60_000;
+    const later: QuickIndexPhases = {};
+    const base = await engine.quickIndexBase!(later);
+    expect(pulls).toHaveBeenCalledTimes(2);
+    expect(later.skipped).toBeUndefined();
+    expect(base).not.toBeNull();
+    expect(base!.places.length).toBeGreaterThan(0);
+
+    // With a tree on disk the tick is never skipped, and it still pulls (the TTL here is 0).
+    clock += 5 * 60_000;
+    const withTree: QuickIndexPhases = {};
+    expect(await engine.quickIndexBase!(withTree)).not.toBeNull();
+    expect(withTree.skipped).toBeUndefined();
+    expect(pulls).toHaveBeenCalledTimes(3);
   });
 });

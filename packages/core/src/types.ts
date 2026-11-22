@@ -613,7 +613,7 @@ export interface BrainEngine {
   /** Deterministic search, no LLM: the tier-0 BM25 index (E9-5a), else the two-pass scan. */
   search(query: string): Promise<Hit[]>;
   /** search() plus which tier answered and its server-side time (index refresh included, vault pull excluded). */
-  searchTimed?(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs?: number } }>;
+  searchTimed?(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs?: number; queryMs?: number } }>;
   /** Open the tier-0 index, bring it up to date and build its caches and the tree, ahead of the first search (E24-M7). */
   warmMemorySearch?(): Promise<{ ms: number; rows: number } | null>;
   /**
