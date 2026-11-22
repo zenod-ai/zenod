@@ -3,7 +3,7 @@
 **E7-S27 (Jordi, vn_40b9ff8f, 22 Nov): "rows, and each row is a tester, and each column is like a sign up, Google Drive set up,
 GitHub set up, one memory created, one voice note sent ... each tester having a color ... welcome WhatsApp sent."** The picture
 is now exactly that table: one row per tester (sign-up date and the last 4 of the account key, never an email), seven columns
-(signed up, Google Drive, GitHub, WhatsApp linked, one memory, one voice note, welcome WhatsApp sent), each cell green or grey,
+(signed up, Google Drive set up, GitHub set up, WhatsApp code confirmed, one memory saved, one voice note sent, welcome WhatsApp sent), each cell green or grey,
 one headline, and one line on whether we hold their phone numbers (only Phylax holds a linked tester's number; nothing here shows
 it). The same run rebuilds a calm page on the page host, `http://vps3.taild81fbb.ts.net:9008/` (`zenod-tester-table-page.service`,
 `page_server.py`, folder `/var/lib/vps3-scratch/t3agent/pages/e7-s27`, `PAGE_DIR` in picture.py). Grey also covers a cell the

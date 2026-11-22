@@ -97,7 +97,7 @@ class Model(unittest.TestCase):
         self.assertEqual(t["steps"], {"vault": None, "whatsapp": False, "message": False, "memory": False})
         self.assertEqual(p["unread_steps"], ["vault"])
         self.assertIsNone(p["logged_in_24h"])
-        self.assertIn("Google Drive", p["caveat"])
+        self.assertIn("Google Drive set up", p["caveat"])
         self.assertEqual(p["punchline"], "1 tester: 0 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
         self.assertEqual(p["unread_cells"], ["drive", "github", "voice", "welcome"])
 
@@ -108,7 +108,7 @@ class Table(unittest.TestCase):
     def test_seven_columns_in_his_order(self):
         p = build(tester("aaaa1111"))
         self.assertEqual([c["title"] for c in p["columns"]], [
-            "Signed up", "Google Drive", "GitHub", "WhatsApp linked", "One memory", "One voice note", "Welcome WhatsApp sent"])
+            "Signed up", "Google Drive set up", "GitHub set up", "WhatsApp code confirmed", "One memory saved", "One voice note sent", "Welcome WhatsApp sent"])
 
     def test_cells_are_green_or_grey_per_provider(self):
         drive = tester("aaaa1111", vault={"set": True, "provider": "google_drive", "status": "ready"})
@@ -128,7 +128,7 @@ class Table(unittest.TestCase):
         p = build(tester("aaaa1111"))  # no voiceNotes / welcomeSentAt in the payload
         self.assertEqual(p["unread_cells"], ["voice", "welcome"])
         self.assertFalse(p["testers"][0]["cells"]["voice"])
-        self.assertIn("One voice note", p["caveat"])
+        self.assertIn("One voice note sent", p["caveat"])
         self.assertIn("grey", p["caveat"])
         ready = build(tester("aaaa1111", voiceNotes=0, welcomeSentAt=None))
         self.assertEqual(ready["unread_cells"], [])
@@ -169,7 +169,7 @@ class Table(unittest.TestCase):
         self.assertEqual(page.count('class="dot on"'), 3)   # two signed up + one drive
         self.assertEqual(page.count('class="dot off"'), 11)  # 14 cells, 3 green
         self.assertNotIn("@", page.replace("@media", ""))
-        for word in ("Google Drive", "GitHub", "WhatsApp linked", "One memory", "One voice note", "Welcome WhatsApp sent"):
+        for word in ("Google Drive set up", "GitHub set up", "WhatsApp code confirmed", "One memory saved", "One voice note sent", "Welcome WhatsApp sent"):
             self.assertIn(word, page)
         house = picture.load_house()
         self.assertIn(p["punchline"], picture.render_html(p, house))

@@ -66,11 +66,11 @@ PAGE_URL = os.environ.get("TESTER_TABLE_PAGE_URL", "http://vps3.taild81fbb.ts.ne
 # E7-S27: Jordi's seven columns, in his order. A cell is green or grey, nothing else.
 COLUMNS = [
     ("signup", "Signed up"),
-    ("drive", "Google Drive"),
-    ("github", "GitHub"),
-    ("whatsapp", "WhatsApp linked"),
-    ("memory", "One memory"),
-    ("voice", "One voice note"),
+    ("drive", "Google Drive set up"),
+    ("github", "GitHub set up"),
+    ("whatsapp", "WhatsApp code confirmed"),
+    ("memory", "One memory saved"),
+    ("voice", "One voice note sent"),
     ("welcome", "Welcome WhatsApp sent"),
 ]
 
@@ -274,8 +274,8 @@ def headline(n, counts, applied):
 
 # E7-S27 (Jordi, vn_40b9ff8f: "we send a code to that phone number ... are we monitoring ... whether this handshake was
 # successfully filled in, so the connection is complete?"): what a green cell means for the two steps that need a handshake.
-KEY_LINE = ("Green WhatsApp linked means the handshake finished: the tester gave their number, got a code, sent it back from the "
-            "phone and Zenod confirmed it. Green Google Drive or GitHub means their storage is set up and ready.")
+KEY_LINE = ("Green WhatsApp code confirmed means the handshake finished: the tester gave their number, got a code, sent it back from the "
+            "phone and Zenod confirmed it. Green Google Drive or GitHub set up means their storage is ready.")
 
 
 def phone_line(n, linked):
