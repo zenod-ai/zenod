@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""The daily Zenod tester picture (EPIC-7 E7-S17).
+"""The daily Zenod tester picture (EPIC-7 E7-S17) and, since E7-S27, Jordi's tester table.
+
+E7-S27 (Jordi, vn_40b9ff8f, 22 Nov): "do we have like a table of testers? ... rows, and each row is a tester, and each
+column is like a sign up, Google Drive set up, GitHub set up, one memory created, one voice note sent ... each tester
+having a color. Is it green or not green? ... welcome WhatsApp sent, maybe that's another column." The picture below is now
+exactly that table: one row per tester (the sign-up date and the last 4 of the account key), seven columns, each cell green
+or grey, one headline, and one line on whether we hold their phone numbers. The same facts also go out as a calm page on
+the page host (see PAGE_DIR) rebuilt on every run.
 
 Jordi, vn_b73d7c41 (20 Nov 22:38Z): "how many testers do we have? How many testers logged in? How many testers are fully
 set up, meaning that they have set up their GitHub, they have set up their WhatsApp, that they send at least one message
@@ -43,7 +50,7 @@ from zoneinfo import ZoneInfo
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tester-thanks"))
 
-ROW = "E7-S17"
+ROW = "E7-S27"
 OWNER = "Zenod Delivery Manager"
 MX = ZoneInfo("America/Mexico_City")
 OUT = pathlib.Path(os.environ.get("TESTER_PICTURE_OUT", "~/.local/state/zenod-tester-picture")).expanduser()
@@ -52,6 +59,20 @@ OPS_HOST = os.environ.get("TESTER_PICTURE_OPS_HOST", "hetzner_vps_1")
 HOUSE_DIAGRAM = pathlib.Path(os.environ.get(
     "HOUSE_DIAGRAM", "~/github/agent_team/skills/house-diagram-style/scripts/house_diagram.py")).expanduser()
 DAY = dt.timedelta(hours=24)
+# E7-S27: the page host folder (served by zenod-tester-table-page.service) and the address Jordi opens.
+PAGE_DIR = pathlib.Path(os.environ.get("TESTER_TABLE_PAGE_DIR", "/var/lib/vps3-scratch/t3agent/pages/e7-s27"))
+PAGE_URL = os.environ.get("TESTER_TABLE_PAGE_URL", "http://vps3.taild81fbb.ts.net:9008/")
+
+# E7-S27: Jordi's seven columns, in his order. A cell is green or grey, nothing else.
+COLUMNS = [
+    ("signup", "Signed up"),
+    ("drive", "Google Drive"),
+    ("github", "GitHub"),
+    ("whatsapp", "WhatsApp linked"),
+    ("memory", "One memory"),
+    ("voice", "One voice note"),
+    ("welcome", "Welcome WhatsApp sent"),
+]
 
 # The four steps, in Jordi's order (vn_b73d7c41). id, short column title, what stuck here means.
 STEPS = [
@@ -118,6 +139,8 @@ def rows_from_progress(progress):
             "whatsapp": bool(t["whatsapp"]["linked"]), "whatsapp_text": t["whatsapp"].get("text"),
             "our_bug": bool(t["whatsapp"].get("ourBug")) and not t["whatsapp"]["linked"],
             "message": t.get("whatsappNotes", 0) > 0, "memory": t.get("memoriesSaved", 0) > 0,
+            "voice": (t["voiceNotes"] > 0) if "voiceNotes" in t else None,
+            "welcome": (bool(t["welcomeSentAt"])) if "welcomeSentAt" in t else None,
             "notes_24h": t.get("whatsappNotes24h", 0), "saves_24h": t.get("memoriesSaved24h", 0),
             "last_seen_at": t.get("lastSeenAt"), "seen_record_since": progress.get("lastSeenSince"),
             "_since": since,
@@ -144,6 +167,7 @@ def rows_from_fallback(setup, watch):
             "our_bug": bool(t.get("ourBug")) and t.get("step") != "linked",
             # no note can be sent over WhatsApp before it is linked; once linked, the notes are not readable here
             "message": None if t.get("step") == "linked" else False, "memory": has_capture,
+            "voice": None, "welcome": None,
             "notes_24h": None, "saves_24h": None,
             "last_seen_at": None, "seen_record_since": None, "_since": None,
         })
@@ -175,8 +199,10 @@ def build(rows, counts, now, source):
             nxt = NEXT_OUR_BUG if (stuck == "whatsapp" and r.get("our_bug")) else NEXT[stuck]
         else:
             where, nxt = "a step cannot be read yet: " + ", ".join(unknown), "read it once the new release is live"
+        cells, unread_cells = table_cells(r)
         testers.append({
             "tester": "…" + str(r["key"])[-4:], "signed_up_at": r.get("signed_up_at"),
+            "label": row_label(r), "cells": cells, "unread_cells": unread_cells,
             "logged_in_24h": logged_in, "last_seen_at": r.get("last_seen_at"),
             "steps": steps, "fully_set_up": fully,
             "stuck_at": stuck, "stuck_text": where, "detail": r.get("whatsapp_text") if stuck == "whatsapp" else None, "owner": None if fully else OWNER, "next": nxt,
@@ -194,9 +220,11 @@ def build(rows, counts, now, source):
         if t["stuck_at"]:
             stuck_by[t["stuck_at"]] = stuck_by.get(t["stuck_at"], 0) + 1
     unread = sorted({s for t in testers for s, ok in t["steps"].items() if ok is None})
+    unread_cells = [cid for cid, _ in COLUMNS if any(cid in t["unread_cells"] for t in testers)]
+    column_counts = {cid: sum(1 for t in testers if t["cells"][cid]) for cid, _ in COLUMNS}
     c = counts or {}
     return {
-        "schema": "zenod-tester-picture/v1", "row": ROW, "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "schema": "zenod-tester-picture/v2", "row": ROW, "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "day_mexico_city": now.astimezone(MX).strftime("%Y-%m-%d"), "source": source,
         "applied": c.get("applications"), "signed_up": n, "logged_in_24h": seen_n if seen_known else None,
         "fully_set_up": fully_n,
@@ -204,30 +232,52 @@ def build(rows, counts, now, source):
         "notes_24h": sum(t["notes_24h"] or 0 for t in testers) if source == "progress" else None,
         "saves_24h": sum(t["saves_24h"] or 0 for t in testers) if source == "progress" else None,
         "stuck_by_step": stuck_by, "unread_steps": unread, "owner": OWNER,
-        "punchline": punchline(n, fully_n, stuck_by, unread, c.get("applications")),
-        "caveat": (f"{', '.join(unread)} cannot be read from production until the next release"
-                   if unread else None),
+        "columns": [{"id": cid, "title": title} for cid, title in COLUMNS],
+        "column_counts": column_counts, "unread_cells": unread_cells,
+        "punchline": headline(n, column_counts, c.get("applications")),
+        "phone_line": phone_line(n, column_counts["whatsapp"]),
+        "page_url": PAGE_URL,
+        "caveat": (f"{', '.join(label for cid, label in COLUMNS if cid in unread_cells)} cannot be read from production "
+                   "until its next release, so those cells show grey" if unread_cells else None),
         "testers": testers,
     }
 
 
-def punchline(n, fully, stuck_by, unread, applied):
+def table_cells(r):
+    """Jordi's seven cells for one tester: True is green, anything else is grey. Returns (cells, ids not readable yet)."""
+    vault, provider = r.get("vault"), r.get("vault_provider")
+    drive = None if vault is None else bool(vault and provider == "google_drive")
+    github = None if vault is None else bool(vault and provider in ("github", "legacy"))
+    raw = {"signup": True, "drive": drive, "github": github, "whatsapp": r.get("whatsapp"), "memory": r.get("memory"),
+           "voice": r.get("voice"), "welcome": r.get("welcome")}
+    return {k: v is True for k, v in raw.items()}, [k for k, v in raw.items() if v is None]
+
+
+def row_label(r):
+    """The sign-up date and the last 4 of the account key: never an email or a name."""
+    when = parse_time(r.get("signed_up_at"))
+    day = when.astimezone(MX).strftime("%-d %b") if when else "date unknown"
+    return f"{day} · …{str(r['key'])[-4:]}"
+
+
+def headline(n, counts, applied):
+    """One line for the table: how many testers, and how many are green in the four columns that matter most."""
     if n == 0:
         who = f"{applied} applied, " if applied else ""
-        return f"No tester has signed up yet: {who}0 fully set up"
-    names = {"vault": "the vault", "whatsapp": "WhatsApp", "message": "their first note", "memory": "their first memory"}
-    plural = "tester" if n == 1 else "testers"
-    head = f"{n} {plural}, {fully} fully set up"
-    if fully == n:
-        return head + ": all four steps done"
-    parts = []
-    for step, count in stuck_by.items():
-        label = names[step]
-        if len(stuck_by) == 1 and count == n:
-            parts.append(("both" if count == 2 else "all" if count > 2 else "") + (" " if count > 1 else "") + f"stuck at {label}")
-        else:
-            parts.append(f"{count} at {label}")
-    return head + ": " + ", ".join(p.strip() for p in parts)
+        return f"No tester has signed up yet: {who}nothing to set up"
+    vault = counts["drive"] + counts["github"]
+    tail = f"{vault} set up a vault, {counts['whatsapp']} linked WhatsApp, {counts['memory']} saved a memory, {counts['voice']} sent a voice note"
+    if all(counts[c] == n for c in ("whatsapp", "memory", "voice")) and vault == n:
+        return f"{n} {'tester' if n == 1 else 'testers'}, all set up"
+    return f"{n} {'tester' if n == 1 else 'testers'}: {tail}"
+
+
+def phone_line(n, linked):
+    """His question 'did they give the phone number? can we even see it?', answered in one plain line."""
+    if n == 0 or linked == 0:
+        return "Phone numbers: none yet, no tester has linked WhatsApp; a linked number sits only in Phylax and this page never shows it."
+    return (f"Phone numbers: Phylax holds the number of the {linked} of {n} testers who linked WhatsApp "
+            "and this page never shows it; the rest have no number with Phylax.")
 
 
 # ------------------------------------------------------------------ the picture
@@ -239,77 +289,106 @@ def load_house():
     return mod
 
 
-TICK = '<svg viewBox="0 0 24 24" width="30" height="30"><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="{c}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-CROSS = '<svg viewBox="0 0 24 24" width="28" height="28"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="{c}" stroke-width="3.2" stroke-linecap="round"/></svg>'
-UNKNOWN = '<span class="unk">?</span>'
+GREEN, GREY = "#1f4d3a", "#ddd6c6"
+TICK = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#f6f2e9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
-def short(text, n):
-    return text if len(text) <= n else text[: n - 1].rstrip() + "…"
+def dot(on, label):
+    """One cell: a green disc with a tick, or a plain grey disc. Nothing else."""
+    return (f'<span class="dot {"on" if on else "off"}" role="img" aria-label="{html.escape(label)}: {"yes" if on else "not yet"}">'
+            f'{TICK if on else ""}</span>')
+
+
+def table_rows(pic, limit=None):
+    shown = pic["testers"][:limit] if limit else pic["testers"]
+    rows = ""
+    for t in shown:
+        cells = "".join(f'<td data-label="{html.escape(title)}">{dot(t["cells"][cid], title)}</td>' for cid, title in COLUMNS)
+        rows += f'<tr><th scope="row" class="who">{html.escape(t["label"])}</th>{cells}</tr>'
+    return rows, len(pic["testers"]) - len(shown)
+
+
+def table_head():
+    return "<tr><th>Tester</th>" + "".join(f"<th>{html.escape(title)}</th>" for _, title in COLUMNS) + "</tr>"
+
+
+def footer_text(pic):
+    caveat = f" Grey can also mean not readable yet: {html.escape(', '.join(t for c, t in COLUMNS if c in pic['unread_cells']))}." if pic.get("unread_cells") else ""
+    return (f"Read {pic['generated_at'][:16].replace('T', ' ')}Z from production. Each tester is the sign-up date and the last 4 of the "
+            f"account key: no email, number or note text.{caveat}")
 
 
 def render_html(pic, house):
     s = house.STYLES["paper"]
     faces = "".join(house.font_face(f, w, s["font_files"]) for f, w in {(s["display"][0], s["display"][1]), (s["body"][0], s["body"][1]), (s["text"][0], s["text"][1])})
     serif, sans = s["display"][0], s["text"][0]
-    ok, bad = s["tones"]["accent"][1], "#8a4b1c"
-
-    def cell(v):
-        return TICK.format(c=ok) if v is True else CROSS.format(c=bad) if v is False else UNKNOWN
-
-    def seen(t):
-        v = t["logged_in_24h"]
-        return cell(v)
-
-    max_rows = 6
-    shown = pic["testers"][:max_rows]
-    more = len(pic["testers"]) - len(shown)
-    head = "".join(f"<th>{html.escape(t)}</th>" for _, t, _ in STEPS)
-    body = ""
-    for t in shown:
-        steps = "".join(f"<td>{cell(t['steps'][i])}</td>" for i, _, _ in STEPS)
-        nxt = ("Fully set up" if t["fully_set_up"] else html.escape(short(t["stuck_text"] or "", 62)))
-        who = "" if t["fully_set_up"] else f'<div class="own">{html.escape(t["owner"])}: {html.escape(short(t["next"], 74))}</div>'
-        body += f'<tr><td class="who">{html.escape(t["tester"])}</td><td>{seen(t)}</td>{steps}<td class="stk"><b>{nxt}</b>{who}</td></tr>'
+    rows, more = table_rows(pic, 8)
     if more > 0:
-        body += f'<tr><td class="who" colspan="8">+{more} more in the JSON</td></tr>'
-    if not shown:
-        body += '<tr><td colspan="8" class="who">No tester has signed up yet</td></tr>'
-    def count(v):
-        return "?" if v is None else str(v)
-    tiles = [
-        ("Signed up", count(pic["signed_up"]), f'{pic["applied"]} applied' if pic.get("applied") is not None else ""),
-        ("Logged in, 24 h", count(pic["logged_in_24h"]), "last sign-in record"),
-        ("Fully set up", f'{pic["fully_set_up"]} of {pic["signed_up"]}', "all four steps"),
-        ("Last 24 h", "?" if pic["notes_24h"] is None else f'{pic["notes_24h"]} notes, {pic["saves_24h"]} saved', "WhatsApp notes, memories saved"),
-    ]
-    tile_html = "".join(f'<div class="tile"><div class="tl">{a}</div><div class="tv">{html.escape(b)}</div><div class="ts">{html.escape(c)}</div></div>' for a, b, c in tiles)
+        rows += f'<tr><th scope="row" class="who" colspan="8">+{more} more on the page</th></tr>'
+    if not pic["testers"]:
+        rows = '<tr><th scope="row" class="who" colspan="8">No tester has signed up yet</th></tr>'
     day = dt.datetime.strptime(pic["day_mexico_city"], "%Y-%m-%d").strftime("%a %-d %b")
-    caveat = f' <b>Not readable yet: {html.escape(", ".join(pic["unread_steps"]))}.</b>' if pic.get("unread_steps") else ""
     css = f"""{faces}
 *{{box-sizing:border-box;margin:0}}
 body{{width:1600px;height:900px;background:{s['bg']};color:{s['ink']};font-family:'{sans}',system-ui,sans-serif;overflow:hidden}}
-.c{{padding:56px 80px 0}}
+.c{{padding:52px 80px 0}}
 .k{{font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:{s['muted']};font-weight:600}}
-h1{{font-family:'{serif}',Georgia,serif;font-weight:{s['display'][1]};font-size:58px;letter-spacing:-.015em;line-height:1.08;margin:12px 0 26px;max-width:1380px}}
-.tiles{{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:26px}}
-.tile{{border:1.6px solid {s['ink']};border-radius:6px;padding:14px 20px;background:{s['tones']['default'][0]}}}
-.tile:nth-child(3){{background:{s['tones']['accent'][0]};border-color:{ok}}}
-.tl{{font-size:18px;color:{s['muted']};font-weight:600}}.tv{{font-family:'{serif}',Georgia,serif;font-size:40px;margin:2px 0}}.ts{{font-size:16px;color:{s['muted']}}}
-table{{width:100%;border-collapse:collapse;font-size:20px}}
-th{{text-align:center;font-weight:600;font-size:17px;color:{s['muted']};padding:6px 6px 10px;border-bottom:1.6px solid {s['ink']}}}
-th:first-child,th:last-child{{text-align:left}}
-td{{text-align:center;padding:16px 6px;border-bottom:1px solid {s['tones']['muted'][1]};vertical-align:middle}}
-td.who{{text-align:left;font-weight:600;white-space:nowrap}}td.stk{{text-align:left;width:520px;line-height:1.25}}
-.own{{font-size:16px;color:{s['muted']};margin-top:3px;font-weight:400}}
-.unk{{font-size:26px;color:{s['muted']};font-weight:600}}
-.f{{position:absolute;left:80px;right:80px;bottom:30px;font-size:16px;color:{s['muted']};display:flex;justify-content:space-between;gap:40px}}.f b{{color:#8a4b1c}}"""
+h1{{font-family:'{serif}',Georgia,serif;font-weight:{s['display'][1]};font-size:46px;letter-spacing:-.01em;line-height:1.12;margin:12px 0 34px;max-width:1440px;text-wrap:balance}}
+table{{width:100%;border-collapse:collapse}}
+th{{text-align:center;font-weight:600;font-size:18px;color:{s['muted']};padding:6px 6px 12px;border-bottom:1.6px solid {s['ink']};line-height:1.2}}
+th:first-child{{text-align:left}}
+td,th.who{{padding:17px 6px;border-bottom:1px solid {s['tones']['muted'][1]};vertical-align:middle;text-align:center}}
+th.who{{text-align:left;font-weight:600;font-size:22px;color:{s['ink']};white-space:nowrap}}
+.dot{{display:inline-flex;width:42px;height:42px;border-radius:50%;align-items:center;justify-content:center}}
+.dot.on{{background:{GREEN}}}.dot.off{{background:{GREY}}}
+.ph{{margin-top:22px;font-size:21px;color:{s['ink']};max-width:1440px;line-height:1.35}}
+.f{{position:absolute;left:80px;right:80px;bottom:28px;font-size:16px;color:{s['muted']};display:flex;justify-content:space-between;gap:40px}}.f span:last-child{{white-space:nowrap}}"""
     return (f'<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(pic["punchline"])}</title><style>{css}</style></head><body>'
             f'<div class="c"><div class="k">Zenod testers · {day}</div><h1>{html.escape(pic["punchline"])}</h1>'
-            f'<div class="tiles">{tile_html}</div>'
-            f'<table><tr><th>Tester</th><th>Logged in</th>{head}<th>Stuck at, who moves them, what next</th></tr>{body}</table></div>'
-            f'<div class="f"><span>Read {pic["generated_at"][:16].replace("T", " ")}Z from production. Testers by the last 4 of their id: no email, number or note text.{caveat}</span><span>zenod · E7-S17</span></div>'
+            f'<table>{table_head()}{rows}</table><p class="ph">{html.escape(pic["phone_line"])}</p></div>'
+            f'<div class="f"><span>{footer_text(pic)}</span><span>zenod · {ROW}</span></div>'
             "</body></html>")
+
+
+PAGE_CSS = """
+.tt-wrap{overflow-x:auto}
+.tt{width:100%;border-collapse:collapse;margin:.25rem 0}
+.tt th{font:600 .82rem/1.25 var(--sans);color:var(--muted);text-align:center;padding:.4rem .35rem .7rem;border-bottom:1.5px solid var(--ink)}
+.tt th:first-child{text-align:left}
+.tt td,.tt th.who{padding:.7rem .35rem;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.tt th.who{text-align:left;font:600 1rem/1.3 var(--sans);color:var(--ink);white-space:nowrap}
+.dot{display:inline-flex;width:1.7rem;height:1.7rem;border-radius:50%;align-items:center;justify-content:center}
+.dot.on{background:var(--accent)}.dot.off{background:var(--stage-2)}
+.tt-phone{margin:1.1rem 0 0;font-size:1rem;line-height:1.5}
+.tt-foot{margin:1rem 0 0;font-size:.85rem;color:var(--muted)}
+@media (max-width:640px){
+  .tt thead{display:none}
+  .tt,.tt tbody,.tt tr{display:block}
+  .tt tr{border-bottom:1px solid var(--line);padding:.9rem 0}
+  .tt th.who{display:block;border:0;padding:0 0 .6rem}
+  .tt td{display:flex;justify-content:space-between;align-items:center;border:0;padding:.25rem 0;text-align:left}
+  .tt td::before{content:attr(data-label);font:500 .95rem/1.2 var(--sans);color:var(--ink)}
+}
+"""
+
+
+def render_page(pic, png_name="tester-table.png"):
+    """The calm page for the page host, on the shared page shell (agent_team page_shell.py): headline, the table, one phone line."""
+    rows, more = table_rows(pic)
+    if not pic["testers"]:
+        rows = '<tr><th scope="row" class="who" colspan="8">No tester has signed up yet</th></tr>'
+    day = pic["day_mexico_city"]
+    body = (f'<style>{PAGE_CSS}</style>'
+            f'<div class="tt-wrap"><table class="tt"><thead>{table_head()}</thead><tbody>{rows}</tbody></table></div>'
+            f'<p class="tt-phone"><b>{html.escape(pic["phone_line"])}</b></p>'
+            f'<p class="tt-foot">{footer_text(pic)} Green means done, grey means not yet. Rebuilt every day at 05:30 Mexico City; '
+            f'<a href="{png_name}">today\'s picture</a>.</p>')
+    return (f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<title>Zenod tester table</title><link rel="stylesheet" href="/_shell/shell.css"></head>\n<body data-page-shell>\n<main class="ps-page">\n'
+            f'<header class="ps-head"><p class="ps-kicker">{ROW} · {day}</p><h1>Zenod tester table</h1></header>\n'
+            f'<p class="ps-punch">{html.escape(pic["punchline"])}</p>\n'
+            f'<figure class="ps-diagram">{body}</figure>\n'
+            f'<p class="ps-foot">{ROW} keeps this page · one shared page shell (E75-S5)</p>\n</main>\n</body></html>\n')
 
 
 def render_png(pic, png: pathlib.Path):
@@ -340,6 +419,22 @@ def write(pic, out: pathlib.Path, png=render_png):
     return jpath, ppath if png_ok else None
 
 
+def write_page(pic, page_dir: pathlib.Path, png_path=None):
+    """The page host folder: index.html on the shared shell, and today's picture beside it. Never raises: the JSON and PNG matter more."""
+    try:
+        page_dir.mkdir(parents=True, exist_ok=True)
+        if png_path and pathlib.Path(png_path).exists():
+            shutil.copyfile(png_path, page_dir / "tester-table.png")
+        tmp = page_dir / "index.html.tmp"
+        tmp.write_text(render_page(pic), encoding="utf-8")
+        tmp.replace(page_dir / "index.html")
+        (page_dir / "tester-table.json").write_text(json.dumps(pic, indent=2) + "\n", encoding="utf-8")
+        return page_dir / "index.html"
+    except OSError as e:
+        print(f"page not written: {str(e)[:200]}", file=sys.stderr)
+        return None
+
+
 def strip_private(pic):
     return {**pic, "testers": [{k: v for k, v in t.items() if not k.startswith("_")} for t in pic["testers"]]}
 
@@ -360,8 +455,10 @@ def run(dry_run=False, now=None, sources=None, png=render_png):
         print(json.dumps(pic, indent=2))
         return 0
     jpath, ppath = write(pic, OUT, png)
+    page = write_page(pic, PAGE_DIR, ppath)
     print(pic["punchline"])
-    print(f"{jpath}\n{ppath or 'no picture'}")
+    print(pic["phone_line"])
+    print(f"{jpath}\n{ppath or 'no picture'}\n{page or 'no page'}")
     return 0
 
 

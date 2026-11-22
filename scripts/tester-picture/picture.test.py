@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the daily tester picture (E7-S17): python3 scripts/tester-picture/picture.test.py"""
+"""Tests for the daily tester picture (E7-S17) and Jordi's tester table (E7-S27): python3 scripts/tester-picture/picture.test.py"""
 import datetime as dt
 import json
 import pathlib
@@ -34,11 +34,11 @@ def build(*testers, **kw):
 class Model(unittest.TestCase):
     def test_two_stuck_at_whatsapp(self):
         p = build(tester("aaaa1111"), tester("bbbb2222"))
-        self.assertEqual(p["punchline"], "2 testers, 0 fully set up: both stuck at the vault")
+        self.assertEqual(p["punchline"], "2 testers: 0 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
         # vault is the first step in his order; with a vault the stuck step is WhatsApp
         ok = {"set": True, "provider": "github", "status": "ready"}
         p = build(tester("aaaa1111", vault=ok), tester("bbbb2222", vault=ok))
-        self.assertEqual(p["punchline"], "2 testers, 0 fully set up: both stuck at WhatsApp")
+        self.assertEqual(p["punchline"], "2 testers: 2 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
         self.assertEqual(p["signed_up"], 2)
         self.assertEqual(p["applied"], 3)
         self.assertEqual(p["testers"][0]["stuck_at"], "whatsapp")
@@ -55,12 +55,12 @@ class Model(unittest.TestCase):
         self.assertEqual(p["testers"][0]["stuck_at"], "memory")
         self.assertTrue(p["testers"][1]["fully_set_up"])
         self.assertEqual(p["testers"][1]["next"], "none: keep watching their use")
-        self.assertEqual(p["punchline"], "2 testers, 1 fully set up: 1 at their first memory")
+        self.assertEqual(p["punchline"], "2 testers: 2 set up a vault, 2 linked WhatsApp, 1 saved a memory, 0 sent a voice note")
 
     def test_mixed_stuck_steps(self):
         ok = {"set": True, "provider": "github", "status": "ready"}
         p = build(tester("aaaa1111"), tester("bbbb2222", vault=ok))
-        self.assertEqual(p["punchline"], "2 testers, 0 fully set up: 1 at the vault, 1 at WhatsApp")
+        self.assertEqual(p["stuck_by_step"], {"vault": 1, "whatsapp": 1})
 
     def test_logged_in_window_and_unknown(self):
         recent = tester("aaaa1111", lastSeenAt="2026-11-21T01:00:00Z")
@@ -83,7 +83,7 @@ class Model(unittest.TestCase):
 
     def test_no_testers_and_privacy(self):
         p = build()
-        self.assertEqual(p["punchline"], "No tester has signed up yet: 3 applied, 0 fully set up")
+        self.assertEqual(p["punchline"], "No tester has signed up yet: 3 applied, nothing to set up")
         text = json.dumps(build(tester("aaaa1111", whatsapp={"linked": False, "step": "x", "text": "code issued", "ourBug": False})))
         self.assertNotIn("@", text)
         self.assertNotIn("_since", text)
@@ -97,8 +97,100 @@ class Model(unittest.TestCase):
         self.assertEqual(t["steps"], {"vault": None, "whatsapp": False, "message": False, "memory": False})
         self.assertEqual(p["unread_steps"], ["vault"])
         self.assertIsNone(p["logged_in_24h"])
-        self.assertIn("vault", p["caveat"])
-        self.assertEqual(p["punchline"], "1 tester, 0 fully set up: stuck at WhatsApp")
+        self.assertIn("Google Drive", p["caveat"])
+        self.assertEqual(p["punchline"], "1 tester: 0 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
+        self.assertEqual(p["unread_cells"], ["drive", "github", "voice", "welcome"])
+
+
+class Table(unittest.TestCase):
+    """E7-S27: Jordi's seven columns, green or grey, one row per tester, no email or number."""
+
+    def test_seven_columns_in_his_order(self):
+        p = build(tester("aaaa1111"))
+        self.assertEqual([c["title"] for c in p["columns"]], [
+            "Signed up", "Google Drive", "GitHub", "WhatsApp linked", "One memory", "One voice note", "Welcome WhatsApp sent"])
+
+    def test_cells_are_green_or_grey_per_provider(self):
+        drive = tester("aaaa1111", vault={"set": True, "provider": "google_drive", "status": "ready"})
+        gh = tester("bbbb2222", vault={"set": True, "provider": "github", "status": "ready"},
+                    whatsapp={"linked": True, "step": "linked", "text": "ok", "ourBug": False},
+                    memoriesSaved=3, voiceNotes=1, welcomeSentAt="2026-11-21T06:05:00Z")
+        none = tester("cccc3333", voiceNotes=0, welcomeSentAt=None)
+        p = build(drive, gh, none)
+        by = {t["tester"]: t["cells"] for t in p["testers"]}
+        self.assertEqual(by["…1111"], {"signup": True, "drive": True, "github": False, "whatsapp": False, "memory": False, "voice": False, "welcome": False})
+        self.assertEqual(by["…2222"], {"signup": True, "drive": False, "github": True, "whatsapp": True, "memory": True, "voice": True, "welcome": True})
+        self.assertEqual(by["…3333"], {"signup": True, "drive": False, "github": False, "whatsapp": False, "memory": False, "voice": False, "welcome": False})
+        for t in p["testers"]:
+            self.assertTrue(all(v is True or v is False for v in t["cells"].values()))  # never a third state
+
+    def test_cells_the_running_release_cannot_read_are_grey_and_named(self):
+        p = build(tester("aaaa1111"))  # no voiceNotes / welcomeSentAt in the payload
+        self.assertEqual(p["unread_cells"], ["voice", "welcome"])
+        self.assertFalse(p["testers"][0]["cells"]["voice"])
+        self.assertIn("One voice note", p["caveat"])
+        self.assertIn("grey", p["caveat"])
+        ready = build(tester("aaaa1111", voiceNotes=0, welcomeSentAt=None))
+        self.assertEqual(ready["unread_cells"], [])
+        self.assertIsNone(ready["caveat"])
+
+    def test_row_label_is_date_and_last_four_only(self):
+        p = build(tester("usr_aaaa9477", signedUpAt="2026-11-13T20:35:31.939Z"))
+        self.assertEqual(p["testers"][0]["label"], "13 Nov · …9477")
+
+    def test_rows_in_sign_up_order_when_equally_set_up(self):
+        a = tester("aaaa1111", signedUpAt="2026-11-20T10:00:00Z")
+        b = tester("bbbb2222", signedUpAt="2026-11-13T10:00:00Z")
+        self.assertEqual([t["tester"] for t in build(a, b)["testers"]], ["…2222", "…1111"])
+
+    def test_headline_when_everyone_is_set_up(self):
+        ok = {"set": True, "provider": "github", "status": "ready"}
+        done = tester("aaaa1111", vault=ok, whatsapp={"linked": True, "step": "linked", "text": "ok", "ourBug": False},
+                      memoriesSaved=1, voiceNotes=1, welcomeSentAt="2026-11-21T06:05:00Z", whatsappNotes=1)
+        self.assertEqual(build(done)["punchline"], "1 tester, all set up")
+
+    def test_phone_line_answers_his_question_and_never_holds_a_number(self):
+        self.assertIn("none yet", picture.phone_line(2, 0))
+        line = picture.phone_line(3, 1)
+        self.assertIn("1 of 3", line)
+        self.assertIn("Phylax", line)
+        self.assertIn("never shows", line)
+        self.assertNotRegex(line, r"\+?\d{7,}")
+        self.assertEqual(build(tester("aaaa1111"))["phone_line"], picture.phone_line(1, 0))
+
+    def test_page_and_png_html_carry_the_table_and_nothing_private(self):
+        ok = {"set": True, "provider": "google_drive", "status": "ready"}
+        p = build(tester("aaaa9477", vault=ok, voiceNotes=0, welcomeSentAt=None), tester("bbbb2222", voiceNotes=0, welcomeSentAt=None))
+        page = picture.render_page(p)
+        self.assertIn("data-page-shell", page)
+        self.assertIn(p["punchline"], page)
+        self.assertIn("Phone numbers:", page)
+        self.assertEqual(page.count('<tr><th scope="row" class="who">'), 2)
+        self.assertEqual(page.count('class="dot on"'), 3)   # two signed up + one drive
+        self.assertEqual(page.count('class="dot off"'), 11)  # 14 cells, 3 green
+        self.assertNotIn("@", page.replace("@media", ""))
+        for word in ("Google Drive", "GitHub", "WhatsApp linked", "One memory", "One voice note", "Welcome WhatsApp sent"):
+            self.assertIn(word, page)
+        house = picture.load_house()
+        self.assertIn(p["punchline"], picture.render_html(p, house))
+
+    def test_empty_table(self):
+        p = build()
+        page = picture.render_page(p)
+        self.assertIn("No tester has signed up yet", page)
+
+    def test_write_page_makes_index_png_and_json_and_survives_a_bad_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            png = pathlib.Path(d) / "x.png"
+            png.write_bytes(b"PNG")
+            pic = build(tester("aaaa1111"))
+            out = picture.write_page(pic, pathlib.Path(d) / "page", png)
+            self.assertTrue(out.exists())
+            self.assertEqual((pathlib.Path(d) / "page" / "tester-table.png").read_bytes(), b"PNG")
+            self.assertEqual(json.loads((pathlib.Path(d) / "page" / "tester-table.json").read_text())["schema"], "zenod-tester-picture/v2")
+            blocker = pathlib.Path(d) / "file"
+            blocker.write_text("x")
+            self.assertIsNone(picture.write_page(pic, blocker / "sub", png))
 
 
 class Files(unittest.TestCase):
@@ -125,9 +217,11 @@ class Files(unittest.TestCase):
     def test_run_reads_progress_then_falls_back_then_fails(self):
         with tempfile.TemporaryDirectory() as d:
             picture.OUT = pathlib.Path(d)
+            picture.PAGE_DIR = pathlib.Path(d) / "page"
             ok = lambda: (progress(tester("aaaa1111")), None, None, {"applications": 1})  # noqa: E731
             self.assertEqual(picture.run(now=NOW, sources=ok, png=lambda p, path: path.write_bytes(b"x")), 0)
             self.assertTrue((pathlib.Path(d) / "latest.json").exists())
+            self.assertTrue((pathlib.Path(d) / "page" / "index.html").exists())
             self.assertEqual(picture.run(now=NOW, sources=lambda: (None, None, None, None)), 2)
 
     def test_read_sources_falls_back_when_progress_is_not_live(self):

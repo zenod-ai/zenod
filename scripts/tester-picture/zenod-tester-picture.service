@@ -1,5 +1,5 @@
 [Unit]
-Description=Zenod daily tester picture: where each tester is stuck, ready before Jordi's 06:00 briefing (EPIC-7 E7-S17)
+Description=Zenod daily tester table: one row per tester, green or grey per setup step, ready before Jordi's 06:00 briefing (EPIC-7 E7-S17, E7-S27)
 After=network-online.target
 
 [Service]

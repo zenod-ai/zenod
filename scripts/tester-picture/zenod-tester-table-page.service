@@ -1,0 +1,10 @@
+[Unit]
+Description=Zenod tester table page, tailnet only :9008 (serves /var/lib/vps3-scratch/t3agent/pages/e7-s27, rebuilt daily by zenod-tester-picture) (EPIC-7 E7-S27)
+
+[Service]
+ExecStart=/usr/bin/python3 /home/t3agent/github/agent_team/scripts/page_server.py --serve /var/lib/vps3-scratch/t3agent/pages/e7-s27 --port 9008 --bind 100.86.141.63
+ExecStartPre=/bin/mkdir -p /var/lib/vps3-scratch/t3agent/pages/e7-s27
+Restart=always
+
+[Install]
+WantedBy=default.target
