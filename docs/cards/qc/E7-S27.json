@@ -1,14 +1,14 @@
 {
   "row": "E7-S27",
   "card": "docs/cards/E7-S27.md",
-  "cardSha": "5f5bd70aa0fc9039",
+  "cardSha": "fd55e9fa815251fc",
   "inputs": {
-    "card": "5f5bd70aa0fc9039",
+    "card": "fd55e9fa815251fc",
     "page": "bc7087f1fc2c3c78",
     "rules": "7dd845c8b4b0e115",
     "words": "0f08260a1b8f4e4d"
   },
-  "checkedAt": "2026-11-22T21:10:27Z",
+  "checkedAt": "2026-11-22T21:11:11Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,56 +17,56 @@
       "key": "vn_c2e56f5c",
       "when": "newest",
       "status": "declared",
-      "how": "Full emails show on the root page at both widths; the evidence page shows shortened emails. The objective tracker and daily briefing are declared as still waiting."
+      "how": "Emails now show per tester on root page and evidence page; the card declares the objective tracker and daily briefing as waiting on the team."
     },
     {
       "said": "when the guys put a phone number ... we send a code to that phone number ... are we monitoring that in the testers scorecard, whether this ... handshake ... was successfully filled in, so ... the connection is complete?",
       "where": "vn_40b9ff8f",
       "status": "met",
-      "how": "The table has a WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns, each green or grey."
+      "how": "Table has WhatsApp code confirmed plus Google Drive and GitHub storage columns per tester, green or grey."
     },
     {
       "said": "Hi, it's Zenod",
       "where": "vn_40b9ff8f",
       "status": "elsewhere",
-      "how": "Greeting wording for the WhatsApp message belongs to message content, not this tester table."
+      "how": "Greeting wording belongs to WhatsApp message content, not this table."
     },
     {
       "said": "Hi, it's Jordi",
       "where": "vn_40b9ff8f",
       "status": "elsewhere",
-      "how": "Sign-off wording for the WhatsApp message belongs to message content, not this tester table."
+      "how": "Sign-off wording belongs to WhatsApp message content, not this table."
     },
     {
       "said": "Go ahead and switch it on ... after the connection is complete, if they haven't said anything after ... 48 hours ... send a message to say, 'Hey, I just to remind you I'm here. Feel free to send me any thoughts ... that you want to store.' But also we cannot have this live without them having set up their storage ... I approve it in the context in the way I'm explaining it.",
       "where": "vn_bd12b21e",
       "status": "elsewhere",
-      "how": "The 48-hour reminder and storage gate are product behaviour, not a scorecard column on this page."
+      "how": "48-hour reminder and storage gate are product behaviour, not a scorecard column."
     },
     {
       "said": "can we just have a fucking email, bro? ... I cannot even see the tester ... a tracker inside the objective ... part of the daily briefing",
       "where": "vn_c2e56f5c",
       "status": "declared",
-      "how": "Each tester is shown by sign-in email with sign-up date. The objective tracker and daily briefing are declared as waiting on the team."
+      "how": "Root page shows each tester by full sign-in email with sign-up date; tracker and briefing declared as waiting on the team."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both pages open with the title, punchline box and table at 390 and 1280 px; nothing is cut off and the page does not scroll sideways."
+    "summary": "Both pages render at both widths with no sideways scroll; the table, punchline and notes are readable, and the root page shows full emails while the evidence page shortens them."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Does he approve the tester table showing each tester by email, with the tracker and daily briefing left open for the team to place.",
+    "asked": "Decide whether the email-based tester table is right, leaving the objective tracker and daily briefing open for the team to place later.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "bc7087f1fc2c3c78",
-    "walkedAt": "2026-11-22T21:10:27Z",
+    "walkedAt": "2026-11-22T21:11:11Z",
     "steps": [
       {
         "n": 1,
