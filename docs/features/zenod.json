@@ -132,9 +132,10 @@
     {
      "id": "sample-memory",
      "title": "Try a sample memory before you apply",
-     "text": "The testers page shows one person's week of voice notes as a cloud of linked thoughts. Tap a thought to read the note it came from, no sign-in needed.",
+     "text": "The home page and the testers page show one person's week of voice notes as a cloud of linked thoughts. Tap a thought to read the note it came from, no sign-in needed.",
      "rows": [
-      "E26-S35"
+      "E26-S35",
+      "E26-S37"
      ],
      "since": "2026-11-19",
      "draft": true
