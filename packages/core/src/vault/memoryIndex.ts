@@ -156,6 +156,11 @@ export interface MemoryIndexOptions {
   aliases?: readonly (readonly string[])[];
   now?: () => number;
   /**
+   * EPIC-24 M35: how long a write or warm-up section may run before it hands the event loop back (default 20 ms).
+   * Tests set 0 (hand back at every step) or Infinity (never: the old single block).
+   */
+  sliceMs?: number;
+  /**
    * The person's time zone (E12-S38): "today" and "yesterday" are their days, and a day's notes are
    * the ones captured between its local midnights. Unknown (null) reads days in UTC.
    */
@@ -186,6 +191,20 @@ const PRIME_AGAIN_AFTER_MS = 15_000;
 const PRIME_CHUNK_BYTES = 1_048_576;
 /** A synchronous section holding the loop this long is named in the log (counts only). */
 const BLOCKED_WARN_MS = 1_000;
+/**
+ * EPIC-24 M35: the index write, the cache warm-up and a search used to run as one synchronous section each
+ * (1-3 s on the shared VPS1, 5 s freezes with the receipts scan; the healthcheck timed out and Swarm killed the
+ * task three times on 22 Nov). They now run in slices: after about WRITE_SLICE_MS of work the section hands the
+ * loop back (one macrotask) and goes on. A search waits for a write to finish and a write waits for the searches
+ * in progress, so no search reads a half-written index and results are exactly what the single block gave.
+ */
+const WRITE_SLICE_MS = 20;
+
+/** Hand the event loop back for one macrotask (timers, sockets and the healthcheck run before we continue). */
+const pause = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+/** One running section's clock: `t` is when the loop was last handed back to it. */
+interface Slice { label: string; t: number }
 
 export const CLOUD_DEFAULT_JOINS = 4;
 /** The best word matches the ranked list's paths start from, and the least a seed must match (E18-W1). */
@@ -485,6 +504,11 @@ export class MemoryIndex {
   primeRuns = 0;
   private primedAt = Number.NEGATIVE_INFINITY;
   private priming: Promise<void> | null = null;
+  /** M35: searches and warm-ups reading the index now; a write waits until there are none. */
+  private readers = 0;
+  private readersIdle: Array<() => void> = [];
+  /** M35: set while a sync writes (its transaction is open across yields); readers wait for it. */
+  private writing: Promise<void> | null = null;
   private eagerTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private lastCheck = Number.NEGATIVE_INFINITY;
@@ -504,9 +528,11 @@ export class MemoryIndex {
   private aliasGroups: readonly (readonly string[])[];
   readonly tenantId: string;
   private readonly now: () => number;
+  private readonly sliceMs: number;
 
   private constructor(private readonly options: MemoryIndexOptions) {
     this.now = options.now ?? Date.now;
+    this.sliceMs = options.sliceMs ?? WRITE_SLICE_MS;
     if (options.path !== ":memory:") mkdirSync(dirname(options.path), { recursive: true });
     this.db = new DatabaseSync(options.path);
     // synchronous = NORMAL: the index is derived from the vault and rebuilt from it, so a commit need not wait for
@@ -571,16 +597,50 @@ export class MemoryIndex {
   }
 
   /** Build the per-version caches a search reads (privacy, graph, links, spoken words) ahead of it. */
-  warm(): void {
+  async warm(): Promise<void> {
     if (this.closed) return;
-    const started = performance.now();
-    this.privacy();
-    this.memoryGraph();
-    this.weightedLinks();
-    this.spokenVocabulary();
-    this.noteBlocked("warm", started);
+    // M35: each build is its own slice (the loop is handed back between them), never all four in one block.
+    await this.reading(async () => {
+      const slice: Slice = { label: "warm", t: performance.now() };
+      for (const build of [() => this.privacy(), () => this.memoryGraph(), () => this.weightedLinks(), () => this.spokenVocabulary()]) {
+        if (this.closed) return;
+        build();
+        await this.yieldSlice(slice);
+      }
+    });
+    if (this.closed) return;
     // search_memory reads the tree for each hit's place: build it now too (cached per vault state).
     void loadMemoryTree(this.options.vaultPath).catch(() => {});
+  }
+
+  /** Name the slice that just ran if it held the loop long, hand the loop back, and start the next slice. */
+  private async yieldSlice(slice: Slice): Promise<void> {
+    this.noteBlocked(slice.label, slice.t);
+    await pause();
+    slice.t = performance.now();
+  }
+
+  /** Yield only when the slice has run long enough to matter (a loop of small steps). */
+  private async yieldIfLong(slice: Slice): Promise<void> {
+    if (performance.now() - slice.t >= this.sliceMs) await this.yieldSlice(slice);
+  }
+
+  /**
+   * Run a read of the index that hands the loop back between statements. A write never starts while one runs and
+   * one waits for a write in progress. Never await `fresh()` or a refresh inside `fn` (the write would wait for it).
+   */
+  private async reading<T>(fn: () => Promise<T>): Promise<T> {
+    while (this.writing) await this.writing;
+    this.readers++;
+    try {
+      return await fn();
+    } finally {
+      if (--this.readers === 0) for (const wake of this.readersIdle.splice(0)) wake();
+    }
+  }
+
+  private async untilNoReaders(): Promise<void> {
+    while (this.readers > 0) await new Promise<void>((resolve) => this.readersIdle.push(resolve));
   }
 
   close(): void {
@@ -707,20 +767,27 @@ export class MemoryIndex {
 
   private async searchHits(query: string, limit: number, agentLogs = 0): Promise<MemoryIndexHit[]> {
     await this.fresh();
-    const started = performance.now();
-    try { return this.queryHits(query, limit, agentLogs); } finally { this.lastQueryMs = this.noteBlocked("search", started); }
+    return this.reading(async () => {
+      const started = performance.now();
+      const slice: Slice = { label: "search", t: started };
+      try { return await this.queryHits(query, limit, agentLogs, slice); } finally {
+        this.noteBlocked("search", slice.t);
+        this.lastQueryMs = Math.round(performance.now() - started);
+      }
+    });
   }
 
-  /** The synchronous part of a search: every SQLite read after the index is fresh. */
-  private queryHits(query: string, limit: number, agentLogs: number): MemoryIndexHit[] {
+  /** A search's SQLite reads after the index is fresh, the loop handed back between statements (M35). */
+  private async queryHits(query: string, limit: number, agentLogs: number, slice: Slice): Promise<MemoryIndexHit[]> {
     // "What was in my last voice note?" is answered by time and the graph, not by its words (E12-S3c).
     const intent = recentIntent(query, this.now(), this.options.timeZone?.());
     if (intent) {
-      const recent = this.recentSearch(intent, limit);
+      const recent = await this.recentSearch(intent, limit, slice);
       if (recent.length > 0) return recent;
     }
     const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.queryVariants(query));
     if (!match) return [];
+    await this.yieldSlice(slice);
     const rows = this.db.prepare(`
       SELECT rowid, kind, path, title, filed, lineage, meta, bm25(docs, ${BM25_WEIGHTS}) AS rank
       FROM docs WHERE docs MATCH ? ORDER BY rank LIMIT ?
@@ -738,7 +805,8 @@ export class MemoryIndex {
     }
     if (picked.length === 0) return [];
     const words = matchWords(match);
-    const coverage = this.coverageOf(terms, picked.map((row) => row.rowid));
+    await this.yieldSlice(slice);
+    const coverage = await this.coverageOf(terms, picked.map((row) => row.rowid), "{title aliases summary body}", slice);
     // A page that only matches on its tree path (or on nothing a person wrote) is not an answer:
     // drop it, and drop hits holding under a quarter of what the best one does. Never drop to empty.
     const best = Math.max(0, ...picked.map((row) => coverage.get(row.rowid) ?? 0));
@@ -760,10 +828,12 @@ export class MemoryIndex {
       treePath: row.lineage,
       ...(row.filed ? { filedOn: row.filed } : {}),
     }));
+    await this.yieldSlice(slice);
     const walked = this.withGraphNeighbours(hits, limit, aboutAgents);
-    const ranked = generic ? walked : this.withAskedNotes(walked, query, limit);
+    await this.yieldSlice(slice);
+    const ranked = generic ? walked : await this.withAskedNotes(walked, query, limit, slice);
     if (aboutAgents || agentLogs <= 0) return ranked;
-    return [...ranked, ...this.hiddenLogHits(rows, ranked, terms, words, best, topScore, agentLogs)];
+    return [...ranked, ...await this.hiddenLogHits(rows, ranked, terms, words, best, topScore, agentLogs, slice)];
   }
 
   /**
@@ -771,15 +841,15 @@ export class MemoryIndex {
    * report). Only those holding at least as much of the question as the cut-off for the person's
    * own hits, at most `max`, each below the person's hits.
    */
-  private hiddenLogHits(
+  private async hiddenLogHits(
     rows: ReadonlyArray<{ rowid: number; kind: MemoryIndexHitKind; path: string; filed: string; lineage: string; meta: string; rank: number; title: string }>,
-    shown: readonly MemoryIndexHit[], terms: readonly string[], words: readonly string[], best: number, topScore: number, max: number,
-  ): MemoryIndexHit[] {
+    shown: readonly MemoryIndexHit[], terms: readonly string[], words: readonly string[], best: number, topScore: number, max: number, slice: Slice,
+  ): Promise<MemoryIndexHit[]> {
     const seen = new Set(shown.map((hit) => hit.path));
     const hidden = rows.filter((row) => row.kind === "log" && row.meta.startsWith("agent") && !seen.has(row.path))
       .map((row) => ({ ...row, rank: row.rank * factorOf(row) })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
     if (hidden.length === 0) return [];
-    const coverage = this.coverageOf(terms, hidden.map((row) => row.rowid));
+    const coverage = await this.coverageOf(terms, hidden.map((row) => row.rowid), "{title aliases summary body}", slice);
     const kept = hidden.filter((row) => (coverage.get(row.rowid) ?? 0) > 0 && (coverage.get(row.rowid) ?? 0) >= best * MIN_SHARE_OF_BEST).slice(0, max);
     if (kept.length === 0) return [];
     const texts = new Map((this.db.prepare(`SELECT rowid, summary, body FROM docs WHERE rowid IN (${kept.map(() => "?").join(", ")})`)
@@ -801,9 +871,9 @@ export class MemoryIndex {
    * (asked notes) reads the best hit's percent times that share, and is placed by it: a note holding
    * the whole question sits next to the best hit. At most two join or move up.
    */
-  private withAskedNotes(hits: MemoryIndexHit[], query: string, limit: number): MemoryIndexHit[] {
+  private async withAskedNotes(hits: MemoryIndexHit[], query: string, limit: number, slice: Slice): Promise<MemoryIndexHit[]> {
     if (hits.length === 0) return hits;
-    const asked = this.askedNotesNow(query, 2).filter((note) => note.share >= ASKED_NOTE_LIFT);
+    const asked = (await this.askedNotesNow(query, 2, slice)).filter((note) => note.share >= ASKED_NOTE_LIFT);
     if (asked.length === 0) return hits;
     const top = hits[0]!.matchPercent;
     const out = [...hits];
@@ -960,18 +1030,21 @@ export class MemoryIndex {
    * resolved like the graph's, strengths by memoryWeights.ts. Runs inside the sync's transaction, so
    * a search never sees a filing's rows without its links.
    */
-  private rebuildLinks(): void {
+  private async rebuildLinks(slice: Slice): Promise<void> {
     const pages = this.db.prepare("SELECT path, title FROM docs WHERE kind = 'page'").all() as Array<{ path: string; title: string }>;
     const notes = new Set((this.db.prepare("SELECT path FROM docs WHERE kind = 'log'").all() as Array<{ path: string }>).map((row) => row.path));
     const zids = new Map((this.db.prepare("SELECT file, zid FROM zids").all() as Array<{ file: string; zid: string }>).map((row) => [row.file, row.zid]));
+    await this.yieldWrite(slice);
     const resolver = MemoryGraph.build(pages.map((page) => ({ path: page.path, title: page.title, summary: "", treePath: "" })), [], { hasTree: false });
     const pageOf = (target: string) => {
       const path = resolver.resolve(target);
       return path && path !== TREE_PATH ? path : null;
     };
     const ties: NodeTie[] = [];
+    await this.yieldWrite(slice);
     const edges = this.db.prepare("SELECT src, kind, target, weight FROM edges ORDER BY rowid").all() as Array<{ src: string; kind: NodeTie["kind"]; target: string; weight: number | null }>;
     for (const edge of edges) {
+      await this.yieldWrite(slice);
       if (edge.src === TREE_PATH) continue; // Tree.md ties every root to one hub: no meaning as a link
       if (edge.kind === "cites") {
         if (resolver.has(edge.src) && notes.has(edge.target)) ties.push({ from: edge.src, to: edge.target, kind: "cites" });
@@ -989,7 +1062,9 @@ export class MemoryIndex {
       const date = LOG_ENTRY_DATE_RE.exec(note)?.[1];
       return date ? Date.parse(`${date}T12:00:00Z`) : null;
     };
+    await this.yieldWrite(slice);
     const links = buildWeightedLinks(ties, { now: this.now(), noteTime });
+    await this.yieldWrite(slice);
     const ids = new Map<string, string>();
     const used = new Set<string>();
     for (const path of [...pages.map((row) => row.path), ...notes].sort()) {
@@ -1003,12 +1078,16 @@ export class MemoryIndex {
     }
     this.db.exec("DELETE FROM nodes; DELETE FROM links;");
     const insertNode = this.db.prepare("INSERT INTO nodes (id, path) VALUES (?, ?)");
-    for (const [path, id] of ids) insertNode.run(id, path);
+    for (const [path, id] of ids) {
+      insertNode.run(id, path);
+      await this.yieldWrite(slice);
+    }
     const insertLink = this.db.prepare("INSERT INTO links (src, dst, strength, reasons) VALUES (?, ?, ?, ?)");
     for (const link of links) {
       const src = ids.get(link.src);
       const dst = ids.get(link.dst);
       if (src && dst) insertLink.run(src, dst, link.strength, link.reasons);
+      await this.yieldWrite(slice);
     }
   }
 
@@ -1059,7 +1138,7 @@ export class MemoryIndex {
    * page → parent link for a parent. Equal strengths keep the page that holds more of the note
    * first. Empty when no note fits, so the word search answers.
    */
-  private recentSearch(intent: RecentIntent, limit: number): MemoryIndexHit[] {
+  private async recentSearch(intent: RecentIntent, limit: number, slice: Slice): Promise<MemoryIndexHit[]> {
     const rows = this.db.prepare("SELECT rowid, path, title, file, meta, summary, body, lineage, filed FROM docs WHERE kind = 'log'").all() as Array<{
       rowid: number; path: string; title: string; file: string; meta: string; summary: string; body: string; lineage: string; filed: string;
     }>;
@@ -1082,7 +1161,7 @@ export class MemoryIndex {
     if (intent.topic) {
       const { match, terms, generic } = buildMatchTerms(intent.topic, this.aliasGroups);
       if (match && !generic) {
-        const coverage = this.coverageOf(terms, pool.map((row) => row.rowid));
+        const coverage = await this.coverageOf(terms, pool.map((row) => row.rowid), "{title aliases summary body}", slice);
         const best = Math.max(0, ...coverage.values());
         if (best === 0) return [];
         pool = pool.filter((row) => (coverage.get(row.rowid) ?? 0) >= best * 0.5);
@@ -1105,7 +1184,8 @@ export class MemoryIndex {
     // The latest note halves each older one; in a period every note counts, so they fall gently.
     const decay = period ? 0.95 : 0.5;
     const held = new Map<string, number>();
-    pool.slice(0, limit).forEach((note, k) => {
+    for (const [k, note] of pool.slice(0, limit).entries()) {
+      await this.yieldIfLong(slice);
       const notePercent = percentOf((fit.get(note.rowid) ?? 0) * decay ** k);
       const links = this.connectionsOf(note.path);
       hits.push({
@@ -1117,11 +1197,11 @@ export class MemoryIndex {
       });
       // The pages it was filed into follow the latest note only: older notes stay one line each.
       // A period lists its notes alone: the period is the answer, not one note's topics.
-      if (k > 0 || period) return;
+      if (k > 0 || period) continue;
       const said = contentWords(note.body);
       // A question with a topic ("what did I say about explainer videos today") keeps only the
       // note's pages that are about it: the others were filed from other parts of the note.
-      const onTopic = topicTerms.length ? this.pagesMatching(topicTerms, links.pages.map((link) => link.path)) : null;
+      const onTopic = topicTerms.length ? await this.pagesMatching(topicTerms, links.pages.map((link) => link.path), slice) : null;
       for (const link of links.pages) {
         if (onTopic && !onTopic.has(link.path)) continue;
         const page = this.db.prepare("SELECT title, summary, body, lineage FROM docs WHERE path = ? AND kind IN ('page', 'root') ORDER BY kind = 'page' DESC LIMIT 1")
@@ -1137,7 +1217,7 @@ export class MemoryIndex {
           relation: link.relation, via: note.path, pathStrength: link.weight,
         });
       }
-    });
+    }
     // Highest first; equal strengths: the page holding more of the note, then the order above.
     return hits.map((hit, i) => ({ hit, i }))
       .sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || (held.get(b.hit.path) ?? 0) - (held.get(a.hit.path) ?? 0) || a.i - b.i)
@@ -1152,6 +1232,10 @@ export class MemoryIndex {
    */
   async ownNotes(query: string, limit = 6): Promise<string[]> {
     await this.fresh();
+    return this.reading(() => this.ownNotesNow(query, limit, { label: "search", t: performance.now() }));
+  }
+
+  private async ownNotesNow(query: string, limit: number, slice: Slice): Promise<string[]> {
     const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.queryVariants(query));
     if (!match || generic) return [];
     const rows = this.db.prepare(`
@@ -1159,7 +1243,9 @@ export class MemoryIndex {
       WHERE docs MATCH ? AND kind = 'log' AND meta LIKE 'user%' ORDER BY rank LIMIT 80
     `).all(match) as Array<{ rowid: number; path: string; rank: number }>;
     if (rows.length === 0) return [];
-    const coverage = this.coverageOf(terms, rows.map((row) => row.rowid));
+    await this.yieldSlice(slice);
+    const coverage = await this.coverageOf(terms, rows.map((row) => row.rowid), "{title aliases summary body}", slice);
+    this.noteBlocked(slice.label, slice.t);
     const best = Math.max(0, ...coverage.values());
     if (best === 0) return [];
     return rows
@@ -1177,10 +1263,15 @@ export class MemoryIndex {
    */
   async askedNotes(query: string, limit = 2): Promise<Array<{ path: string; share: number }>> {
     await this.fresh();
-    return this.askedNotesNow(query, limit).map(({ path, share }) => ({ path, share }));
+    return this.reading(async () => {
+      const slice: Slice = { label: "search", t: performance.now() };
+      const notes = await this.askedNotesNow(query, limit, slice);
+      this.noteBlocked(slice.label, slice.t);
+      return notes.map(({ path, share }) => ({ path, share }));
+    });
   }
 
-  private askedNotesNow(query: string, limit: number): Array<{ path: string; share: number; words: string[] }> {
+  private async askedNotesNow(query: string, limit: number, slice: Slice): Promise<Array<{ path: string; share: number; words: string[] }>> {
     const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.queryVariants(query));
     if (!match || generic || terms.length === 0) return [];
     // Which of the person's notes hold each question word anywhere; a passage never holds more of the
@@ -1188,10 +1279,12 @@ export class MemoryIndex {
     const total = (this.db.prepare("SELECT count(*) AS n FROM docs").get() as { n: number }).n;
     const countOf = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ?");
     const ownWith = this.db.prepare("SELECT rowid FROM docs WHERE docs MATCH ? AND kind = 'log' AND meta LIKE 'user%'");
-    const clauses = terms.map((term) => {
+    const clauses: Array<{ alternatives: ReturnType<typeof clauseAlternatives>; weight: number; rows: Set<number> }> = [];
+    for (const term of terms) {
       const scoped = `{title aliases summary body} : ${term}`;
-      return { alternatives: clauseAlternatives(term), weight: idfOf(total, (countOf.get(scoped) as { n: number }).n), rows: new Set((ownWith.all(scoped) as Array<{ rowid: number }>).map((row) => row.rowid)) };
-    });
+      clauses.push({ alternatives: clauseAlternatives(term), weight: idfOf(total, (countOf.get(scoped) as { n: number }).n), rows: new Set((ownWith.all(scoped) as Array<{ rowid: number }>).map((row) => row.rowid)) });
+      await this.yieldSlice(slice);
+    }
     const weightSum = clauses.reduce((sum, clause) => sum + clause.weight, 0);
     if (weightSum <= 0) return [];
     const whole = new Map<number, number>();
@@ -1202,8 +1295,10 @@ export class MemoryIndex {
     // BM25 among them breaks ties (how often and how densely the note says it).
     // FTS5 does not hold a MATCH query to a rowid list: the candidates are kept here.
     const candidates = new Set(ids);
+    await this.yieldSlice(slice);
     const rows = (this.db.prepare(`SELECT rowid, path FROM docs WHERE docs MATCH ? AND kind = 'log' AND meta LIKE 'user%' ORDER BY bm25(docs, ${BM25_WEIGHTS})`)
       .all(match) as Array<{ rowid: number; path: string }>).filter((row) => candidates.has(row.rowid));
+    await this.yieldSlice(slice);
     if (rows.length === 0) return [];
     if (this.noteWordsCache?.version !== this.version) this.noteWordsCache = { version: this.version, words: new Map() };
     const cache = this.noteWordsCache.words;
@@ -1216,7 +1311,9 @@ export class MemoryIndex {
       }
       return words;
     };
-    const scored = rows.map((row, order) => {
+    const scored: Array<{ path: string; share: number; order: number }> = [];
+    for (const [order, row] of rows.entries()) {
+      await this.yieldIfLong(slice);
       const words = wordsOf(row.rowid);
       // Where each question word is said, then the ~90-word passage holding the most of them.
       const at = clauses.map((clause) => wordPositions(words, clause.alternatives));
@@ -1227,11 +1324,12 @@ export class MemoryIndex {
         share = Math.max(share, held / weightSum);
         if (share >= 1) break;
       }
-      return { path: row.path, share: Math.round(share * 1000) / 1000, order };
-    }).filter((note) => note.share > 0);
+      scored.push({ path: row.path, share: Math.round(share * 1000) / 1000, order });
+    }
+    const scoredNotes = scored.filter((note) => note.share > 0);
     const words = matchWords(match);
     // Equal shares: BM25 decides (how often and how densely the note says it).
-    return scored.sort((a, b) => b.share - a.share || a.order - b.order)
+    return scoredNotes.sort((a, b) => b.share - a.share || a.order - b.order)
       .slice(0, limit).map(({ path, share }) => ({ path, share, words }));
   }
 
@@ -1294,10 +1392,10 @@ export class MemoryIndex {
   }
 
   /** Of `paths`, the pages whose words or tree place hold at least half the topic (rarity-weighted). */
-  private pagesMatching(terms: readonly string[], paths: readonly string[]): Set<string> {
+  private async pagesMatching(terms: readonly string[], paths: readonly string[], slice: Slice): Promise<Set<string>> {
     if (paths.length === 0) return new Set();
     const rows = this.db.prepare(`SELECT rowid, path FROM docs WHERE kind IN ('page', 'root') AND path IN (${paths.map(() => "?").join(", ")})`).all(...paths) as Array<{ rowid: number; path: string }>;
-    const coverage = this.coverageOf(terms, rows.map((row) => row.rowid), "{title aliases lineage summary body}");
+    const coverage = await this.coverageOf(terms, rows.map((row) => row.rowid), "{title aliases lineage summary body}", slice);
     return new Set(rows.filter((row) => (coverage.get(row.rowid) ?? 0) >= 0.5).map((row) => row.path));
   }
 
@@ -1343,25 +1441,36 @@ export class MemoryIndex {
     const out = new Map<string, number>();
     if (paths.length === 0) return out;
     await this.fresh();
-    const intent = recentIntent(query, this.now(), this.options.timeZone?.());
-    if (intent) {
-      for (const hit of this.recentSearch(intent, MAX_HITS)) {
-        for (const path of paths) if (!out.has(path) && (hit.path === path || hit.path.split("#")[0] === path)) out.set(path, hit.matchPercent);
+    // M35: the statements run in slices under the read gate; the search below takes its own turn, so it stays outside.
+    const read = await this.reading(async () => {
+      const slice: Slice = { label: "search", t: performance.now() };
+      try {
+        const intent = recentIntent(query, this.now(), this.options.timeZone?.());
+        if (intent) {
+          for (const hit of await this.recentSearch(intent, MAX_HITS, slice)) {
+            for (const path of paths) if (!out.has(path) && (hit.path === path || hit.path.split("#")[0] === path)) out.set(path, hit.matchPercent);
+          }
+        }
+        const rest = paths.filter((path) => !out.has(path));
+        if (rest.length === 0) return null;
+        const rows = this.db.prepare(`SELECT rowid, path, file FROM docs WHERE path IN (${rest.map(() => "?").join(", ")}) OR (kind = 'log' AND file IN (${rest.map(() => "?").join(", ")}))`)
+          .all(...rest, ...rest) as Array<{ rowid: number; path: string; file: string }>;
+        if (rows.length === 0) return null;
+        const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
+        const coverage = match ? await this.coverageOf(terms, rows.map((row) => row.rowid), "{title aliases summary body}", slice) : new Map<number, number>();
+        const scores = new Map<number, number>();
+        if (match) {
+          const matched = this.db.prepare(`SELECT rowid, kind, meta, bm25(docs, ${BM25_WEIGHTS}) AS rank FROM docs WHERE docs MATCH ? AND rowid IN (${rows.map(() => "?").join(", ")})`)
+            .all(match, ...rows.map((row) => row.rowid)) as Array<{ rowid: number; kind: MemoryIndexHitKind; meta: string; rank: number }>;
+          for (const row of matched) scores.set(row.rowid, -row.rank * factorOf(row));
+        }
+        return { rest, rows, generic, coverage, scores };
+      } finally {
+        this.noteBlocked(slice.label, slice.t);
       }
-    }
-    const rest = paths.filter((path) => !out.has(path));
-    if (rest.length === 0) return out;
-    const rows = this.db.prepare(`SELECT rowid, path, file FROM docs WHERE path IN (${rest.map(() => "?").join(", ")}) OR (kind = 'log' AND file IN (${rest.map(() => "?").join(", ")}))`)
-      .all(...rest, ...rest) as Array<{ rowid: number; path: string; file: string }>;
-    if (rows.length === 0) return out;
-    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
-    const coverage = match ? this.coverageOf(terms, rows.map((row) => row.rowid)) : new Map<number, number>();
-    const scores = new Map<number, number>();
-    if (match) {
-      const matched = this.db.prepare(`SELECT rowid, kind, meta, bm25(docs, ${BM25_WEIGHTS}) AS rank FROM docs WHERE docs MATCH ? AND rowid IN (${rows.map(() => "?").join(", ")})`)
-        .all(match, ...rows.map((row) => row.rowid)) as Array<{ rowid: number; kind: MemoryIndexHitKind; meta: string; rank: number }>;
-      for (const row of matched) scores.set(row.rowid, -row.rank * factorOf(row));
-    }
+    });
+    if (!read) return out;
+    const { rest, rows, generic, coverage, scores } = read;
     const topScore = Math.max(0, ...(await this.search(query, 1)).map((hit) => hit.score), ...scores.values());
     for (const path of rest) {
       const own = rows.filter((row) => row.path === path || row.file === path);
@@ -1485,7 +1594,7 @@ export class MemoryIndex {
   }
 
   /** Rarity-weighted share (0..1) of the query's words each row contains, by the same FTS5 matching as the search. */
-  private coverageOf(terms: readonly string[], rowids: readonly number[], columns = "{title aliases summary body}"): Map<number, number> {
+  private async coverageOf(terms: readonly string[], rowids: readonly number[], columns: string, slice: Slice): Promise<Map<number, number>> {
     const out = new Map<number, number>(rowids.map((rowid) => [rowid, 0]));
     if (terms.length === 0 || rowids.length === 0) return out;
     const total = (this.db.prepare("SELECT count(*) AS n FROM docs").get() as { n: number }).n;
@@ -1499,6 +1608,8 @@ export class MemoryIndex {
       const weight = idfOf(total, df);
       weightSum += weight;
       for (const row of among.all(scoped, ...rowids) as Array<{ rowid: number }>) out.set(row.rowid, out.get(row.rowid)! + weight);
+      // M35: each word is two full-text statements (0.1-0.2 s each on a big vault): the loop is handed back between words.
+      await this.yieldSlice(slice);
     }
     if (weightSum > 0) for (const [rowid, sum] of out) out.set(rowid, sum / weightSum);
     return out;
@@ -1543,17 +1654,32 @@ export class MemoryIndex {
     const deleteEdges = this.db.prepare("DELETE FROM edges WHERE file = ?");
     const upsertZid = this.db.prepare("INSERT INTO zids (file, zid) VALUES (?, ?) ON CONFLICT(file) DO UPDATE SET zid = excluded.zid");
     const deleteZid = this.db.prepare("DELETE FROM zids WHERE file = ?");
-    const resolved = await Promise.all(parsed.map(async (file) => ({
-      ...file,
-      rows: await Promise.all(file.rows.map(async (row) => ({ ...row, ...(await lineage(row)) }))),
-    })));
-    const stale = full ? [] : await this.relineage(lineage, new Set(changed.map((file) => file.path)));
+    // M35: the lineage of every row is resolved in slices (microtask-only awaits never let the loop run).
+    const lineageSlice: Slice = { label: "write", t: performance.now() };
+    const resolved: Array<(typeof parsed)[number] & { rows: Array<RowDraft & { lineage: string; filed: string }> }> = [];
+    for (const file of parsed) {
+      resolved.push({ ...file, rows: await Promise.all(file.rows.map(async (row) => ({ ...row, ...(await lineage(row)) }))) });
+      await this.yieldIfLong(lineageSlice);
+    }
+    const stale = full ? [] : await this.relineage(lineage, new Set(changed.map((file) => file.path)), lineageSlice);
+    this.noteBlocked("write", lineageSlice.t);
 
-    const writeStarted = performance.now();
-    this.db.exec("BEGIN IMMEDIATE");
+    // M35: the write waits for the searches in progress and holds `writing` until it is committed, so a search
+    // never reads the half-written index: the loop is handed back between slices of the one transaction.
+    for (;;) { await this.untilNoReaders(); if (this.readers === 0) break; }
+    if (this.closed) throw new Error("memory index closed");
+    let writeDone: () => void = () => {};
+    this.writing = new Promise<void>((resolve) => { writeDone = resolve; });
+    const slice: Slice = { label: "write", t: performance.now() };
+    let began = false;
     try {
+      this.db.exec("BEGIN IMMEDIATE");
+      began = true;
       if (full) this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges; DELETE FROM zids;");
-      for (const path of removed) { deleteRows.run(path); deleteEdges.run(path); deleteZid.run(path); deleteFile.run(path); }
+      for (const path of removed) {
+        deleteRows.run(path); deleteEdges.run(path); deleteZid.run(path); deleteFile.run(path);
+        await this.yieldWrite(slice);
+      }
       for (const file of resolved) {
         deleteRows.run(file.path);
         deleteEdges.run(file.path);
@@ -1562,30 +1688,46 @@ export class MemoryIndex {
         for (const edge of file.edges) insertEdge.run(file.path, edge.from, edge.kind, edge.target, edge.weight ?? null);
         if (file.zid) upsertZid.run(file.path, file.zid);
         upsertFile.run(file.path, file.mtimeMs, file.size);
+        await this.yieldWrite(slice);
       }
       const update = this.db.prepare("UPDATE docs SET lineage = ?, filed = ? WHERE rowid = ?");
-      for (const row of stale) update.run(row.lineage, row.filed, row.rowid);
+      for (const row of stale) {
+        update.run(row.lineage, row.filed, row.rowid);
+        await this.yieldWrite(slice);
+      }
       // Every filing changes the vault: the weighted links are derived again in the same commit (E18-W1).
-      this.rebuildLinks();
+      await this.rebuildLinks(slice);
       this.db.exec("COMMIT");
+      began = false;
     } catch (error) {
-      this.db.exec("ROLLBACK");
+      // A close in the middle of the write already dropped the connection (and with it the open transaction).
+      if (began && !this.closed) this.db.exec("ROLLBACK");
       throw error;
     } finally {
-      this.noteBlocked("write", writeStarted);
+      this.noteBlocked("write", slice.t);
+      this.writing = null;
+      writeDone();
     }
     this.version++;
     return { changed: changed.length, removed: removed.length };
   }
 
+  /** A slice of the write that ran long hands the loop back; a close while it waited ends the write. */
+  private async yieldWrite(slice: Slice): Promise<void> {
+    if (performance.now() - slice.t < this.sliceMs) return;
+    await this.yieldSlice(slice);
+    if (this.closed) throw new Error("memory index closed");
+  }
+
   /** Rows outside the changed files whose lineage moved (a parent renamed, a page re-parented). */
-  private async relineage(lineage: LineageResolver, skip: Set<string>): Promise<Array<{ rowid: number; lineage: string; filed: string }>> {
+  private async relineage(lineage: LineageResolver, skip: Set<string>, slice: Slice): Promise<Array<{ rowid: number; lineage: string; filed: string }>> {
     const rows = this.db.prepare("SELECT rowid, kind, path, file, lineage, filed FROM docs").all() as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; file: string; lineage: string; filed: string }>;
     const out: Array<{ rowid: number; lineage: string; filed: string }> = [];
     for (const row of rows) {
       if (skip.has(row.file)) continue;
       const next = await lineage(row);
       if (next.lineage !== row.lineage || next.filed !== row.filed) out.push({ rowid: row.rowid, ...next });
+      await this.yieldIfLong(slice);
     }
     return out;
   }

@@ -484,3 +484,127 @@ describe("the index file is read ahead off the main thread (EPIC-24 M34 round 3)
     } finally { warn.mockRestore(); }
   });
 });
+
+// EPIC-24 M35: production zenod-mt was killed as unhealthy three times on 22 Nov. The saved crash log shows
+// "[memory-index] sync section held the loop 1.0-2.9 s" in the index write, the cache warm-up and the search, one
+// after the other, while the healthcheck timed out. These sections now hand the loop back between slices.
+describe("the index write, the warm-up and a search hand the loop back (EPIC-24 M35)", { timeout: 40_000 }, () => {
+  type Internals = { writing: Promise<void> | null; readers: number; yieldSlice(slice: unknown): Promise<void>; version: number };
+  const internals = (index: MemoryIndex) => index as unknown as Internals;
+  const kingfisher = (n: number, word = "kingfisher") => Object.fromEntries(Array.from({ length: n }, (_, i) => [
+    `Notes/${word} ${i}.md`, `---\ntitle: ${word} ${i}\n---\nThe ${word} number ${i} is filed on this page with a few more words about the yard.\n`,
+  ]));
+  const sliceCalls = (index: MemoryIndex): { calls: number } => {
+    const state = { calls: 0 };
+    const target = index as unknown as { yieldSlice(slice: unknown): Promise<void> };
+    const original = target.yieldSlice.bind(index);
+    target.yieldSlice = (slice) => { state.calls++; return original(slice); };
+    return state;
+  };
+  async function loopTurns<T>(work: () => Promise<T>): Promise<{ value: T; turns: number }> {
+    let turns = 0;
+    let on = true;
+    const tick = () => { if (on) { turns++; setImmediate(tick); } };
+    setImmediate(tick);
+    try { return { value: await work(), turns }; } finally { on = false; }
+  }
+
+  it("writes the index in slices: the loop runs between files, and a huge slice keeps the old single block", async () => {
+    const vault = await vaultFrom(kingfisher(40), TREE_FIXTURE);
+    const sliced = MemoryIndex.open({ path: join(dirname(vault), "sliced.sqlite"), vaultPath: vault, tenantId: "t-sliced", sliceMs: 0 });
+    open.push(sliced);
+    const slicedState = sliceCalls(sliced);
+    const { turns } = await loopTurns(() => sliced.refresh());
+    expect(slicedState.calls).toBeGreaterThanOrEqual(40);
+    expect(turns).toBeGreaterThanOrEqual(40);
+    const block = MemoryIndex.open({ path: join(dirname(vault), "block.sqlite"), vaultPath: vault, tenantId: "t-block", sliceMs: Number.POSITIVE_INFINITY });
+    open.push(block);
+    const blockState = sliceCalls(block);
+    await block.refresh();
+    expect(blockState.calls).toBe(0);
+  });
+
+  it("gives the same rows, links and search results as the single block", async () => {
+    const files = { ...kingfisher(25), ...kingfisher(25, "otter"), "Notes/Links.md": "---\ntitle: Links\n---\nSee [[kingfisher 3]] and [[otter 4]] about the yard.\n" };
+    const vault = await vaultFrom(files, TREE_FIXTURE);
+    const sliced = MemoryIndex.open({ path: join(dirname(vault), "a.sqlite"), vaultPath: vault, tenantId: "t-a", sliceMs: 0 });
+    const block = MemoryIndex.open({ path: join(dirname(vault), "b.sqlite"), vaultPath: vault, tenantId: "t-b", sliceMs: Number.POSITIVE_INFINITY });
+    open.push(sliced, block);
+    await Promise.all([sliced.refresh(), block.refresh()]);
+    expect(sliced.dump()).toBe(block.dump());
+    for (const query of ["kingfisher yard", "otter 4", "Porto quotes", "boat repair", "what did I say about the kingfisher yard"]) {
+      expect(await sliced.search(query), query).toEqual(await block.search(query));
+      expect(await sliced.cloud({ query }), query).toEqual(await block.cloud({ query }));
+      expect(await sliced.ownNotes(query), query).toEqual(await block.ownNotes(query));
+      expect(await sliced.askedNotes(query), query).toEqual(await block.askedNotes(query));
+    }
+  });
+
+  it("a search made during a write waits for it and never reads a half-written index", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = MemoryIndex.open({ path: join(dirname(vault), "idx.sqlite"), vaultPath: vault, tenantId: "t-w", sliceMs: 0 });
+    open.push(index);
+    await index.refresh();
+    expect(await index.search("kingfisher")).toHaveLength(0);
+    for (const [path, content] of Object.entries(kingfisher(40))) {
+      await mkdir(dirname(join(vault, path)), { recursive: true });
+      await writeFile(join(vault, path), content);
+    }
+    index.markDirty();
+    const refreshing = index.refresh();
+    // Wait until the write is open (its transaction stays open across the loop turns), then search.
+    while (!internals(index).writing) await new Promise((resolve) => setImmediate(resolve));
+    let seen: { writing: Promise<void> | null; hits: number } | null = null;
+    const searching = index.search("kingfisher").then((hits) => { seen = { writing: internals(index).writing, hits: hits.length }; });
+    await Promise.all([refreshing, searching]);
+    expect(seen).toEqual({ writing: null, hits: expect.any(Number) });
+    // All forty pages were in the index when the search read it (the search returns the first twenty).
+    expect(seen!.hits).toBeGreaterThanOrEqual(20);
+  });
+
+  it("a write waits for a search in progress: the two never overlap", async () => {
+    const vault = await vaultFrom(kingfisher(30), TREE_FIXTURE);
+    const index = MemoryIndex.open({ path: join(dirname(vault), "idx.sqlite"), vaultPath: vault, tenantId: "t-o", sliceMs: 0 });
+    open.push(index);
+    await index.refresh();
+    let overlap = false;
+    let on = true;
+    const watch = () => { if (on) { if (internals(index).readers > 0 && internals(index).writing) overlap = true; setImmediate(watch); } };
+    setImmediate(watch);
+    try {
+      for (let round = 0; round < 6; round++) {
+        await writeFile(join(vault, "Notes/kingfisher 0.md"), `---\ntitle: kingfisher 0\n---\nRound ${round} of the kingfisher yard notes.\n`);
+        index.markDirty();
+        await Promise.all([index.refresh(), index.search("kingfisher yard"), index.ownNotes("kingfisher yard"), index.warm()]);
+      }
+    } finally { on = false; }
+    expect(overlap).toBe(false);
+  });
+
+  it("a close in the middle of a write ends it cleanly and the index opens again", async () => {
+    const vault = await vaultFrom(kingfisher(40), TREE_FIXTURE);
+    const path = join(dirname(vault), "idx.sqlite");
+    const index = MemoryIndex.open({ path, vaultPath: vault, tenantId: "t-c", sliceMs: 0 });
+    const refreshing = index.refresh();
+    const outcome = refreshing.then(() => "done", (error: unknown) => (error instanceof Error ? error.message : String(error)));
+    while (!internals(index).writing) await new Promise((resolve) => setImmediate(resolve));
+    index.close();
+    const result = await outcome;
+    expect(result).not.toBe("done");
+    expect(internals(index).writing).toBeNull();
+    const again = MemoryIndex.open({ path, vaultPath: vault, tenantId: "t-c" });
+    open.push(again);
+    expect((await again.search("kingfisher")).length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("warms the caches one build at a time, the loop running between them", async () => {
+    const vault = await vaultFrom(kingfisher(10), TREE_FIXTURE);
+    const index = MemoryIndex.open({ path: join(dirname(vault), "idx.sqlite"), vaultPath: vault, tenantId: "t-m", sliceMs: 0 });
+    open.push(index);
+    await index.refresh();
+    const state = sliceCalls(index);
+    const { turns } = await loopTurns(() => index.warm());
+    expect(state.calls).toBe(4);
+    expect(turns).toBeGreaterThanOrEqual(4);
+  });
+});

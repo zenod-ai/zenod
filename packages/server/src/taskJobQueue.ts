@@ -60,6 +60,29 @@ export interface TaskJobDeskHooks {
  */
 export type TaskJobChannelBrain = (job: TaskJob, engine: BrainEngine) => Promise<Reply>;
 
+/**
+ * EPIC-24 M35: every queue in this process, so the shutdown (one SIGTERM for all tenants' runtimes) can stop them
+ * taking jobs the moment it starts and hand their running filing jobs back before Swarm's grace runs out.
+ */
+const liveQueues = new Set<TaskJobQueue>();
+
+/** SIGTERM: no queue claims another job (a job already queued stays in the database for the replacement). */
+export function stopTakingJobs(): void {
+  for (const queue of liveQueues) queue.stopTakingJobs();
+}
+
+/** Shortly before the stop grace ends: every running filing job goes back to its queue. Returns how many. */
+export function handBackRunningJobs(): number {
+  let handed = 0;
+  for (const queue of liveQueues) handed += queue.handBackRunningJobs();
+  return handed;
+}
+
+/** How long a closing queue still waits for its drains after the hand-back (a slow AI call must not hold it). */
+const AFTER_HAND_BACK_WAIT_MS = 1_000;
+/** The replacement looks for queued jobs this often (a job handed back by a process that is stopping, EPIC-24 M35). */
+const PICKUP_POLL_MS = 60_000;
+
 export class TaskJobQueue {
   private deskHooks: TaskJobDeskHooks | null = null;
   private channelBrain: TaskJobChannelBrain | null = null;
@@ -67,6 +90,14 @@ export class TaskJobQueue {
   private activeDurableDrain: Promise<void> | null = null;
   private leaseTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  /** M35: set at SIGTERM; no new job is claimed, jobs already running finish or are handed back. */
+  private draining = false;
+  private readonly running = new Map<string, TaskJob>();
+  /** M35: jobs this process handed back; whatever they do from then on (a late result, a lost claim) is silent. */
+  private readonly handed = new Set<string>();
+  private handedBack: Promise<void>;
+  private markHandedBack: () => void = () => {};
+  private pickupPoll: ReturnType<typeof setInterval> | null = null;
   private recovery: Promise<void> | null = null;
   private lastRecoveryAt = 0;
   private startCheck: ReturnType<typeof setTimeout> | null = null;
@@ -87,7 +118,30 @@ export class TaskJobQueue {
     private readonly aiAllowanceBlock?: (feature: UsageFeature) => { message: string; resetsAt: string } | null,
     /** agent_team E42-S22: told (best effort, never awaited) when a capture is durably stored; see subscribers.ts. */
     private readonly onEntryStored?: EntryStoredListener,
-  ) {}
+  ) {
+    this.handedBack = new Promise<void>((resolve) => { this.markHandedBack = resolve; });
+    liveQueues.add(this);
+  }
+
+  /** M35: take no new job from now on; the queued ones wait in the database for the replacement process. */
+  stopTakingJobs(): void {
+    this.draining = true;
+  }
+
+  /**
+   * M35: give back the filing jobs still running here (see TaskJobStore.handBack) and stop waiting for them. Called
+   * once the shutdown has given them most of Swarm's grace; the replacement runs them again. Returns the count.
+   */
+  handBackRunningJobs(): number {
+    this.draining = true;
+    let handed = 0;
+    for (const job of [...this.running.values()]) {
+      try { if (this.store.handBack(job)) { handed++; this.handed.add(job.id); } } catch { /* the store is closing: the restart recovers it */ }
+    }
+    this.markHandedBack();
+    if (handed > 0) console.warn(`[task-job] shutdown: handed back ${handed} running filing job(s) to the queue, they run again after the restart tenant=${this.store.tenant}`);
+    return handed;
+  }
 
   setDeskHooks(hooks: TaskJobDeskHooks | null): void {
     this.deskHooks = hooks;
@@ -166,7 +220,9 @@ export class TaskJobQueue {
    */
   resumeAtStart(delayMs = 30_000): void {
     this.resume();
-    if (this.closed || this.startCheck) return;
+    if (this.closed) return;
+    this.startPickupPoll();
+    if (this.startCheck) return;
     this.startCheck = setTimeout(() => {
       this.startCheck = null;
       this.requestVaultRecovery("start check skipped");
@@ -216,9 +272,16 @@ export class TaskJobQueue {
   }
 
   private requestDrains(): void {
-    if (this.closed) return;
+    if (this.closed || this.draining) return;
     this.requestChatDrain();
     this.requestDurableDrain();
+  }
+
+  /** M35: a replacement process finds a job another process handed back (or a lease that expired) within a minute. */
+  private startPickupPoll(): void {
+    if (this.pickupPoll || this.closed) return;
+    this.pickupPoll = setInterval(() => { if (!this.closed && !this.draining) this.requestDrains(); }, PICKUP_POLL_MS);
+    this.pickupPoll.unref?.();
   }
 
   private requestChatDrain(): void {
@@ -287,7 +350,7 @@ export class TaskJobQueue {
       let job: TaskJob | null;
       // EPIC-24 M3: a closing process takes no new job. Shutdown hard-exits after 8.5 s, so a filing started
       // now would be cut off half-written and block the replacement's queue (it is recovered, but not lost).
-      while (!this.closed && (job = this.store.claimNextQueued(Date.now(), kinds))) {
+      while (!this.closed && !this.draining && (job = this.store.claimNextQueued(Date.now(), kinds))) {
         const claimed = job;
         await withFeature(featureForJob(claimed.kind), () => this.process(claimed));
       }
@@ -302,6 +365,7 @@ export class TaskJobQueue {
       Math.max(1_000, Math.floor(TASK_JOB_LEASE_MS / 3)),
     );
     leaseHeartbeat.unref?.();
+    this.running.set(job.id, job);
     try {
       let completed = false;
       // The tree sweep calls no model, so the AI allowance does not stop it. A store is never stopped
@@ -412,6 +476,11 @@ export class TaskJobQueue {
       if (completed) console.log(`[task-job] ${job.id} ${this.store.get(job.id)?.status ?? "updated"}: ${job.kind}`);
       else console.warn(`[task-job] ${job.id} result ignored after claim ownership changed`);
     } catch (err) {
+      // M35: a job handed back at shutdown belongs to the replacement now; its late error is not a failure here.
+      if (this.handed.has(job.id)) {
+        console.warn(`[task-job] ${job.id} stopped after the shutdown handed it back (${job.kind}); it runs again after the restart`);
+        return;
+      }
       if (job.kind === "chat" && isLlmAllowanceExceededError(err)) {
         // The allowance ran out mid-turn: answer with the reason instead of a generic failure.
         const reply: Reply = { text: err.message, sources: [] };
@@ -432,6 +501,7 @@ export class TaskJobQueue {
       }
     } finally {
       clearInterval(leaseHeartbeat);
+      this.running.delete(job.id);
     }
   }
 
@@ -509,6 +579,10 @@ export class TaskJobQueue {
 
   async close(): Promise<void> {
     this.closed = true;
+    if (this.pickupPoll) {
+      clearInterval(this.pickupPoll);
+      this.pickupPoll = null;
+    }
     if (this.stuckCheck) {
       clearInterval(this.stuckCheck);
       this.stuckCheck = null;
@@ -521,7 +595,16 @@ export class TaskJobQueue {
       clearTimeout(this.leaseTimer);
       this.leaseTimer = null;
     }
-    await Promise.all([this.activeChatDrain, this.activeDurableDrain]);
+    // A running job is waited for (an answer or a filing that finishes inside the grace costs nothing). Once the
+    // shutdown handed the filing jobs back they are not ours any more: a slow AI call may not hold the close.
+    const drains = Promise.all([this.activeChatDrain, this.activeDurableDrain]);
+    let waitTimer: ReturnType<typeof setTimeout> | undefined;
+    const afterHandBack = this.handedBack.then(() => new Promise<void>((resolve) => { waitTimer = setTimeout(resolve, AFTER_HAND_BACK_WAIT_MS); }));
+    // Still listed while it waits: the shutdown's hand-back (after this close started) must reach it.
+    try { await Promise.race([drains, afterHandBack]); } finally {
+      if (waitTimer) clearTimeout(waitTimer);
+      liveQueues.delete(this);
+    }
   }
 }
 
