@@ -1,14 +1,14 @@
 {
   "row": "E26-S38",
   "card": "docs/cards/E26-S38.md",
-  "cardSha": "083bd652fb889df1",
+  "cardSha": "fc35f43f92c3b36d",
   "inputs": {
-    "card": "083bd652fb889df1",
+    "card": "fc35f43f92c3b36d",
     "page": "a4c704221e935fa9",
     "rules": "7dd845c8b4b0e115",
     "words": "8f19c8b1b93c8435"
   },
-  "checkedAt": "2026-11-22T12:58:16Z",
+  "checkedAt": "2026-11-22T13:01:50Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -24,7 +24,7 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show one Sara's week example on the testers page with the apply form below; no sideways overflow and the layout reads cleanly."
+    "summary": "At both widths only Sara's week shows, with a diagram, a detail panel and no sideways scroll; the phone view leads with a paragraph before the example."
   },
   "pass": true,
   "held": [],
@@ -36,7 +36,7 @@
     "dead": null,
     "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
     "page": "a4c704221e935fa9",
-    "walkedAt": "2026-11-22T12:58:16Z",
+    "walkedAt": "2026-11-22T13:01:50Z",
     "steps": [
       {
         "n": 1,
