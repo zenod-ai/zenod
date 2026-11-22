@@ -1,5 +1,5 @@
 // EPIC-26 E26-S32 (Jordi's "APPROVED" on ask E26-A17, 2026-11-16): one email from Jordi, once per tester ever, the
-// day after sign-up when WhatsApp is still not linked, with the exact approved words. Zenod only decides who gets
+// day after sign-up when WhatsApp is still not linked, with the exact approved words (E7-A29 changed them on 2026-11-22). Zenod only decides who gets
 // it and keeps who got it; the mail goes from Jordi's mailbox through the team's Gmail connection, sent by the
 // same vps3 timer as the thank-you (scripts/tester-thanks/send.py), which reads the queue here and reports each send.
 //
@@ -36,20 +36,34 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-/** The approved email (E26-A17), word for word; its middle sentence names the one-tap button (E26-A18, E26-S36). */
+/**
+ * The approved next-day email (E7-A29, Jordi 2026-11-22, replacing the E26-A17 words): the Open WhatsApp button opens
+ * cloud.zenod.dev, where the one-time code is made, so the text also names the address for a plain-text reader.
+ */
+export const NUDGE_SUBJECT = "Your first Zenod note is one tap away";
+export const NUDGE_BUTTON_LABEL = "Open WhatsApp";
+export const NUDGE_BUTTON_URL = "https://cloud.zenod.dev";
+
 export function testerWhatsAppNudgeMail(to: string, firstName: string | null): ZenodMail {
   const hi = firstName ? `Hi ${firstName},` : "Hi,";
-  const paragraphs = [
+  const before = [
     hi,
-    "You signed up for Zenod yesterday but your WhatsApp isn't linked yet, so Zenod can't hear your voice notes. It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send.",
-    "If anything on that page goes wrong, just reply to this email and tell me what you see. I read every reply.",
+    "You signed up for Zenod yesterday. One tap and it starts hearing your voice notes: open cloud.zenod.dev on your phone, tap Open WhatsApp, press send.",
+  ];
+  const after = [
+    "If it asks where to keep your notes, pick Google Drive or GitHub. It is your own folder.",
+    "Stuck? Reply and tell me what you see. I read every reply.",
     "Jordi",
   ];
+  const paragraph = (p: string) => `<p>${escapeHtml(p)}</p>`;
+  const button = `<p><a href="${NUDGE_BUTTON_URL}" style="display:inline-block;background:#1f4d36;color:#ffffff;text-decoration:none;padding:.7rem 1.4rem;border-radius:6px;font:600 16px Arial,sans-serif">${NUDGE_BUTTON_LABEL}</a></p>`;
   const html = `<!doctype html><html><body style="margin:0;background:#f6f2e9;color:#18211c;font:17px/1.6 Georgia,serif">
 <div style="max-width:32rem;margin:0 auto;padding:2rem 1.25rem">
-${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
+${before.map(paragraph).join("\n")}
+${button}
+${after.map(paragraph).join("\n")}
 </div></body></html>`;
-  return { to, subject: "Your Zenod WhatsApp link", text: paragraphs.join("\n\n"), html };
+  return { to, subject: NUDGE_SUBJECT, text: [...before, ...after].join("\n\n"), html };
 }
 
 interface SentRecord {

@@ -39,10 +39,13 @@ function setup(accounts: CustomerAccount[], reads: Record<string, WhatsAppSetupR
 }
 
 describe("the approved email", () => {
-  it("is word for word Jordi's E26-A17 text (middle sentence per E26-A18)", () => {
+  it("is word for word Jordi's E7-A29 text, with an Open WhatsApp button to cloud.zenod.dev", () => {
     const mail = testerWhatsAppNudgeMail("ana@x.io", "Ana");
-    expect(mail.subject).toBe("Your Zenod WhatsApp link");
-    expect(mail.text.replace(/\n\n/g, " ")).toBe("Hi Ana, You signed up for Zenod yesterday but your WhatsApp isn't linked yet, so Zenod can't hear your voice notes. It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send. If anything on that page goes wrong, just reply to this email and tell me what you see. I read every reply. Jordi");
+    expect(mail.subject).toBe("Your first Zenod note is one tap away");
+    expect(mail.text.replace(/\n\n/g, " ")).toBe("Hi Ana, You signed up for Zenod yesterday. One tap and it starts hearing your voice notes: open cloud.zenod.dev on your phone, tap Open WhatsApp, press send. If it asks where to keep your notes, pick Google Drive or GitHub. It is your own folder. Stuck? Reply and tell me what you see. I read every reply. Jordi");
+    expect(mail.html).toContain('<a href="https://cloud.zenod.dev"');
+    expect(mail.html).toContain(">Open WhatsApp</a>");
+    expect(mail.html.indexOf("Open WhatsApp</a>")).toBeLessThan(mail.html.indexOf("If it asks where"));
     expect(testerWhatsAppNudgeMail("b@x.io", null).text.startsWith("Hi,\n\n")).toBe(true);
   });
 });
@@ -63,7 +66,7 @@ describe("who gets it", () => {
     });
     const body = await (await call("/api/ops/testers/whatsapp-nudge/queue")).json() as { mails: Array<Record<string, string>> };
     expect(body.mails.map((m) => m.id)).toEqual(["nudge-acct-ana"]);
-    expect(body.mails[0]).toMatchObject({ to: "ana@x.io", subject: "Your Zenod WhatsApp link", account: "a***@x*** …-ana" });
+    expect(body.mails[0]).toMatchObject({ to: "ana@x.io", subject: "Your first Zenod note is one tap away", account: "a***@x*** …-ana" });
     expect(body.mails[0]?.text.startsWith("Hi Ana,")).toBe(true);
   });
 
