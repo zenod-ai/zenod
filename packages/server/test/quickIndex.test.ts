@@ -8,6 +8,7 @@ import {
   emptyQuickIndexState,
   QUICK_INDEX_DAY_CAP_USD,
   QuickIndexStore,
+  quickIndexTickLine,
   quickIndexView,
   updateQuickIndex,
   type QuickIndexModel,
@@ -141,5 +142,18 @@ describe("quick index store", () => {
     expect(store.read()).toEqual(emptyQuickIndexState());
     store.write({ ...emptyQuickIndexState(), firstBuiltAt: "x" });
     expect(store.read().firstBuiltAt).toBe("x");
+  });
+});
+
+describe("quick-index tick log line (EPIC-24 M34)", () => {
+  it("names each phase in ms and carries no place or text", () => {
+    const idle = quickIndexTickLine("t-1", { pull: { kind: "skipped", headMs: 40, fetchMs: 0, mergeMs: 0, totalMs: 41 }, pullMs: 44, statMs: 52, rebuildMs: 0, rebuilt: false }, 3, 101);
+    expect(idle).toBe("[quick-index] tick tenant=t-1 pull=44ms(skipped) head=40 fetch=0 merge=0 stat=52ms rebuild=0ms(cached) update=3ms total=101ms");
+    const moved = quickIndexTickLine("t-1", { pull: { kind: "fetched", headMs: 40, fetchMs: 900, mergeMs: 30, totalMs: 975 }, pullMs: 980, statMs: 60, rebuildMs: 2300, rebuilt: true }, 5, 3400);
+    expect(moved).toContain("pull=980ms(fetched) head=40 fetch=900 merge=30");
+    expect(moved).toContain("rebuild=2300ms(rebuilt)");
+    // Inside the freshness window or behind a write there are no pull steps; a vaultless engine reports none.
+    expect(quickIndexTickLine("t-1", { pull: { kind: "recent" }, pullMs: 0, statMs: 50, rebuildMs: 0, rebuilt: false }, 2, 60)).toContain("pull=0ms(recent) stat=50ms");
+    expect(quickIndexTickLine("t-1", {}, 0, 1)).toContain("pull=0ms(none)");
   });
 });

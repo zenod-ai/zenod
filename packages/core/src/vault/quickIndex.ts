@@ -7,6 +7,7 @@ import { readLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
 import { buildTreeIndex, MAX_TREE_DEPTH, type MemoryKind } from "./tree.js";
 import { pageCaptureDate } from "./treeOutline.js";
 import { vaultFingerprint } from "./lineage.js";
+import type { VaultPullTiming } from "./repository.js";
 
 /**
  * The quick index's model-free part (EPIC-14 S28): one entry per place in the memory tree with
@@ -99,15 +100,19 @@ const baseCache = new Map<string, { fingerprint: string; weekFrom: string; base:
  * day of the week, so a hit returns the very same object a fresh build would. A file changed in the last 100 ms is
  * never trusted (the same racy rule as the memory tree); a failed build is not kept.
  */
-export async function quickIndexBaseCached(vaultPath: string, now: number = Date.now()): Promise<QuickIndexBase | null> {
+export async function quickIndexBaseCached(vaultPath: string, now: number = Date.now(), phases?: QuickIndexPhases): Promise<QuickIndexBase | null> {
   const key = resolve(vaultPath);
   const weekFrom = weekFromOf(now);
+  const statStarted = performance.now();
   const { hash, racy } = await vaultFingerprint(vaultPath);
+  if (phases) phases.statMs = Math.round(performance.now() - statStarted);
   const cached = baseCache.get(key);
   if (cached && !racy && cached.fingerprint === hash && cached.weekFrom === weekFrom) {
     baseCache.delete(key); baseCache.set(key, cached);
+    if (phases) { phases.rebuildMs = 0; phases.rebuilt = false; }
     return cached.base;
   }
+  const rebuildStarted = performance.now();
   const base = quickIndexBase(vaultPath, now);
   baseCache.delete(key);
   if (!racy) {
@@ -116,7 +121,21 @@ export async function quickIndexBaseCached(vaultPath: string, now: number = Date
     if (baseCache.size > MAX_CACHED_BASES) baseCache.delete(baseCache.keys().next().value!);
     base.catch(() => { if (baseCache.get(key) === entry) baseCache.delete(key); });
   }
-  return base;
+  if (!phases) return base;
+  try { return await base; } finally { phases.rebuildMs = Math.round(performance.now() - rebuildStarted); phases.rebuilt = true; }
+}
+
+/**
+ * EPIC-24 M34: where one quick-index tick spent its wall time, in ms (filled in by the engine and the cache): `pull`
+ * (the vault sync before a read, null when it was inside its freshness window or skipped by a busy write), `statMs`
+ * (the fingerprint of every Markdown file), `rebuildMs` (the base rebuild, 0 on a cache hit). No file name, no text.
+ */
+export interface QuickIndexPhases {
+  pull?: VaultPullTiming | { kind: "recent" | "busy" } | undefined;
+  pullMs?: number;
+  statMs?: number;
+  rebuildMs?: number;
+  rebuilt?: boolean;
 }
 
 function weekFromOf(now: number): string {

@@ -9,6 +9,7 @@ import {
   type VaultRepository,
   type VaultRevision,
   type VaultPublicationGuard,
+  type VaultPullTiming,
 } from "../vault/repository.js";
 
 export interface VaultRepoOptions {
@@ -177,9 +178,54 @@ export class VaultRepo implements VaultRepository {
     return (await this.containedIn(head, (await this.currentPublishedRevision()).id)) ? "published" : "diverged";
   }
 
+  /** EPIC-24 M34: what the last `pullForFiling` did, and the ms each step took. */
+  lastPull?: VaultPullTiming | undefined;
+
+  /**
+   * The remote's head sha for this branch, one cheap ref listing (no objects move). Null when the remote
+   * cannot say (error, no such branch): the caller then takes the full fetch path, which reports it as before.
+   */
+  private async remoteHeadSha(): Promise<string | null> {
+    try {
+      await this.ensureFreshRemote();
+      const out = await this.git.listRemote(["origin", `refs/heads/${this.branch}`]);
+      const line = out.split("\n").map((l) => l.trim()).find((l) => l.endsWith(`\trefs/heads/${this.branch}`));
+      const sha = line?.split(/\s+/)[0];
+      return sha && /^[0-9a-f]{40,64}$/.test(sha) ? sha : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Bring the clone up to the remote head without rebasing. M34: when the remote head is the commit this
+   * clone already fetched, the fetch is skipped (it would change nothing), so an idle tenant's tick asks the
+   * remote one cheap question instead of running a fetch. A remote that moved, an error, or no tracking ref
+   * takes the full path below, exactly as before.
+   */
   async pullForFiling(): Promise<void> {
-    await this.currentPublishedRevision();
-    await this.git.merge(["--ff-only", `refs/remotes/origin/${this.branch}`]);
+    const started = performance.now();
+    const ms = () => Math.round(performance.now() - started);
+    const tracking = `refs/remotes/origin/${this.branch}`;
+    const remote = await this.remoteHeadSha();
+    const headMs = ms();
+    const held = remote ? (await this.git.revparse(["--verify", "-q", tracking]).catch(() => "")).trim() : "";
+    let fetchMs = 0;
+    let kind: "skipped" | "fetched" = "skipped";
+    if (!remote || remote !== held) {
+      kind = "fetched";
+      const fetchStarted = performance.now();
+      await this.currentPublishedRevision();
+      fetchMs = Math.round(performance.now() - fetchStarted);
+    }
+    const mergeStarted = performance.now();
+    let mergeMs = 0;
+    // The working tree is already at the tracking commit when HEAD is it: nothing to merge.
+    if (kind === "fetched" || (await this.headSha()) !== held) {
+      await this.git.merge(["--ff-only", tracking]);
+      mergeMs = Math.round(performance.now() - mergeStarted);
+    }
+    this.lastPull = { kind, headMs, fetchMs, mergeMs, totalMs: ms() };
   }
 
   async headSha(): Promise<string> {
