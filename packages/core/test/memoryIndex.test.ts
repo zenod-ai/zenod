@@ -401,3 +401,86 @@ describe("parallel searches share one index refresh (EPIC-24 M34)", { timeout: 2
     expect((await index.search("Porto quotes"))[0]).toMatchObject({ path: QUOTES });
   });
 });
+
+describe("the index file is read ahead off the main thread (EPIC-24 M34 round 3)", { timeout: 30_000 }, () => {
+  const growIndex = (index: MemoryIndex, megabytes: number) => {
+    const db = (index as unknown as { db: { exec(sql: string): void } }).db;
+    db.exec("CREATE TABLE IF NOT EXISTS pad (x BLOB)");
+    for (let i = 0; i < megabytes; i++) db.exec("INSERT INTO pad VALUES (randomblob(1000000))");
+  };
+
+  it("keeps the event loop serving while the file is read ahead, and never throws on a missing file", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    let clock = Date.parse("2026-11-22T12:00:00Z");
+    const index = MemoryIndex.open({ path: join(dirname(vault), "memory-index.sqlite"), vaultPath: vault, tenantId: "tenant-a", now: () => clock });
+    open.push(index);
+    await index.refresh();
+    growIndex(index, 24);
+    clock += 60_000;
+    const before = index.primeRuns;
+    const run = index.primeFileCache();
+    expect(index.primeRuns).toBe(before + 1);
+    let served = 0;
+    let reading = true;
+    const spin = () => { served++; if (reading) setImmediate(spin); };
+    setImmediate(spin);
+    await run;
+    reading = false;
+    // A 24 MB file read in 1 MB chunks yields to the loop between chunks (a synchronous read would serve nothing).
+    expect(served).toBeGreaterThan(0);
+    expect(index.lastPrimeMs).toBeGreaterThanOrEqual(0);
+    // A path that is gone (no WAL, no file) is skipped quietly.
+    const gone = indexFor(vault, join(dirname(vault), "other-index.sqlite"), "tenant-b");
+    (gone as unknown as { options: { path: string } }).options.path = join(dirname(vault), "nowhere", "x.sqlite");
+    await expect(gone.primeFileCache()).resolves.toBeUndefined();
+  });
+
+  it("reads ahead once per window however many searches come, and again after the window", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    let clock = Date.parse("2026-11-22T12:00:00Z");
+    const index = MemoryIndex.open({ path: join(dirname(vault), "memory-index.sqlite"), vaultPath: vault, tenantId: "tenant-a", now: () => clock });
+    open.push(index);
+    const burst = await Promise.all(Array.from({ length: 20 }, () => index.search("Porto quotes")));
+    expect(index.primeRuns).toBe(1);
+    for (const hits of burst) expect(hits[0]).toMatchObject({ path: QUOTES });
+    clock += 5_000;
+    await index.search("Porto quotes");
+    expect(index.primeRuns).toBe(1);
+    clock += 20_000;
+    expect((await index.search("Porto quotes"))[0]).toMatchObject({ path: QUOTES });
+    expect(index.primeRuns).toBe(2);
+  });
+
+  it("never reads ahead for an in-memory index, and results are the same with and without it", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const memory = MemoryIndex.open({ path: ":memory:", vaultPath: vault, tenantId: "tenant-a" });
+    open.push(memory);
+    const onDisk = indexFor(vault, join(dirname(vault), "memory-index.sqlite"));
+    const [a, b] = await Promise.all([memory.search("Porto quotes"), onDisk.search("Porto quotes")]);
+    expect(memory.primeRuns).toBe(0);
+    expect(onDisk.primeRuns).toBe(1);
+    expect(a.map((hit) => [hit.path, hit.score])).toEqual(b.map((hit) => [hit.path, hit.score]));
+  });
+
+  it("is derived data: committing does not wait for the disk (synchronous = NORMAL), and a search reports its query time", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = indexFor(vault, join(dirname(vault), "memory-index.sqlite"));
+    await index.search("Porto quotes");
+    const db = (index as unknown as { db: { prepare(sql: string): { get(): { synchronous: number } } } }).db;
+    expect(db.prepare("PRAGMA synchronous").get().synchronous).toBe(1);
+    expect(index.lastQueryMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("names a synchronous section that held the loop for a second or more, with counts only", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = indexFor(vault, join(dirname(vault), "memory-index.sqlite"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const noteBlocked = (index as unknown as { noteBlocked(label: string, started: number): number }).noteBlocked.bind(index);
+      noteBlocked("search", performance.now() - 1500);
+      noteBlocked("write", performance.now());
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toMatch(/held the loop 1[5-9]\d\d ms in search tenant=tenant-a/);
+    } finally { warn.mockRestore(); }
+  });
+});

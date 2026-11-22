@@ -136,6 +136,8 @@ export interface QuickIndexPhases {
   statMs?: number;
   rebuildMs?: number;
   rebuilt?: boolean;
+  /** `no-tree`: the vault has no Tree.md, so there is nothing to index: no pull, no scan (round 3). */
+  skipped?: "no-tree";
 }
 
 function weekFromOf(now: number): string {

@@ -142,10 +142,16 @@ export class QuickIndexStore {
     }
   }
 
+  /** What this store last put on disk: an idle tick that changes nothing writes nothing (EPIC-24 M34 round 3). */
+  private lastBody: string | null = null;
+
   write(state: QuickIndexState): void {
+    const body = JSON.stringify(state);
+    if (body === this.lastBody) return;
     const tmp = `${this.path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(state), { mode: 0o600 });
+    writeFileSync(tmp, body, { mode: 0o600 });
     renameSync(tmp, this.path);
+    this.lastBody = body;
   }
 }
 
@@ -467,15 +473,68 @@ export function quickIndexView(base: QuickIndexBase, state: QuickIndexState, now
 }
 
 /**
- * EPIC-24 M34: the per-tenant tick's phases in ms, one log line (counts and timings only, never a name or text):
- * `pull` (the vault sync: `recent` inside its freshness window, `busy` behind a write, `skipped` when the remote
- * head was already held, `fetched` when it moved; `head`, `fetch`, `merge` are its steps), `stat` (the fingerprint of
- * every Markdown file), `rebuild` (the base rebuild, 0 on a cache hit), `update` (the model-free update and the file
- * write), `total` (the tick's wall time).
+ * EPIC-24 M34: CPU this Node process has used so far, in ms: `selfMs` (every thread of the process, garbage
+ * collection included) and `childMs` (processes it started and reaped, the `git` calls of a pull). Read from
+ * `process.cpuUsage()` and `/proc/self/stat` (cutime, cstime); where /proc is missing `childMs` is 0.
  */
-export function quickIndexTickLine(tenantId: string, phases: QuickIndexPhases, updateMs: number, totalMs: number): string {
+export interface CpuMark { selfMs: number; childMs: number }
+
+const CLOCK_TICKS_PER_SECOND = 100;
+
+export function cpuMark(): CpuMark {
+  const usage = process.cpuUsage();
+  let childMs = 0;
+  try {
+    const stat = readFileSync("/proc/self/stat", "utf8");
+    // Fields after the parenthesised name: state is field 3, cutime 16, cstime 17.
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    childMs = ((Number(fields[13]) || 0) + (Number(fields[14]) || 0)) * (1000 / CLOCK_TICKS_PER_SECOND);
+  } catch { /* not Linux */ }
+  return { selfMs: (usage.user + usage.system) / 1000, childMs };
+}
+
+/** CPU used since `since`, whole ms. Process-wide: work of other tenants that overlaps the window is in it. */
+export function cpuSince(since: CpuMark, now: CpuMark = cpuMark()): CpuMark {
+  return { selfMs: Math.round(now.selfMs - since.selfMs), childMs: Math.round(now.childMs - since.childMs) };
+}
+
+/**
+ * When a tenant's clock first fires, after boot: at least a minute (a boot never ticks at once) and under one
+ * interval, at a point taken from its id: stable for a tenant, different between tenants, so seven runtimes do
+ * not tick in one burst and each tick's CPU is mostly its own tenant's.
+ */
+export function firstTickDelayMs(tenantId: string, intervalMs: number, minMs = 60_000): number {
+  const floor = Math.min(minMs, Math.floor(intervalMs / 2));
+  let hash = 2166136261;
+  for (let i = 0; i < tenantId.length; i++) hash = Math.imul(hash ^ tenantId.charCodeAt(i), 16777619) >>> 0;
+  return floor + Math.floor((hash / 4294967296) * (intervalMs - floor));
+}
+
+/** How a tick ended, for the log: `ok` (index refreshed), `no-tree` (nothing to index yet), `no-vault`, `error`. */
+export type QuickIndexTickResult = "ok" | "no-tree" | "no-vault" | "error";
+
+/**
+ * EPIC-24 M34: the per-tenant tick's phases in ms, one log line per tenant per tick, whatever the outcome (counts
+ * and timings only, never a name or text): `pull` (the vault sync: `recent` inside its freshness window, `busy`
+ * behind a write, `skipped` when the remote head was already held, `fetched` when it moved; `head`, `fetch`,
+ * `merge` are its steps), `stat` (the fingerprint of every Markdown file), `rebuild` (the base rebuild, 0 on a
+ * cache hit), `update` (the model-free update and the file write), `total` (the tick's wall time). With `extra`
+ * (round 3): `result`, `cpu` (this process's CPU over the tick, all threads), `child` (CPU of the git calls it
+ * waited for) and `personas` (the helper schedule check, ms). Tenants start their clocks spread over the interval
+ * so ticks seldom overlap and `cpu` is mostly the tenant's own.
+ */
+export function quickIndexTickLine(
+  tenantId: string,
+  phases: QuickIndexPhases,
+  updateMs: number,
+  totalMs: number,
+  extra?: { result: QuickIndexTickResult; cpu: CpuMark; personasMs?: number },
+): string {
   const pull = phases.pull;
   const kind = pull?.kind ?? "none";
   const steps = pull && "totalMs" in pull ? ` head=${pull.headMs} fetch=${pull.fetchMs} merge=${pull.mergeMs}` : "";
-  return `[quick-index] tick tenant=${tenantId} pull=${phases.pullMs ?? 0}ms(${kind})${steps} stat=${phases.statMs ?? 0}ms rebuild=${phases.rebuildMs ?? 0}ms(${phases.rebuilt ? "rebuilt" : "cached"}) update=${updateMs}ms total=${totalMs}ms`;
+  const tail = extra
+    ? ` result=${extra.result} cpu=${extra.cpu.selfMs}ms child=${extra.cpu.childMs}ms${extra.personasMs !== undefined ? ` personas=${extra.personasMs}ms` : ""}`
+    : "";
+  return `[quick-index] tick tenant=${tenantId} pull=${phases.pullMs ?? 0}ms(${kind})${steps} stat=${phases.statMs ?? 0}ms rebuild=${phases.rebuildMs ?? 0}ms(${phases.rebuilt ? "rebuilt" : "cached"}) update=${updateMs}ms total=${totalMs}ms${tail}`;
 }

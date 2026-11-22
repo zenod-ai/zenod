@@ -8,7 +8,7 @@ import { memoryTalkPrompt, talkCitations, type TalkMemory, type TalkPersona, typ
 import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_WHOLE_CONTEXT_CHARS, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
 import { captureOrigin, isPersonSource, outsideOpsRollup } from "../vault/captureOrigin.js";
 import { recentIntent, zoneOffsetMs } from "../vault/recentIntent.js";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
 import { assertFilingTarget, filingInputFingerprint, filingReceiptPath, freezeFilingClassification, parseFilingReceipt, parseFilingReceiptEnvelope, renderFilingReceipt, sealFilingReceipt, verifyPreparedFilingChanges, type FilingReceipt, type FrozenTopic } from "./filingReceipt.js";
@@ -73,7 +73,7 @@ import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString, unfiledEvidenceEntries } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
-import { buildTreeIndex, readTree } from "../vault/tree.js";
+import { buildTreeIndex, readTree, TREE_PATH } from "../vault/tree.js";
 import { lintTree, lintTreeIndex } from "../vault/treeLint.js";
 import { appendCorrection, CORRECTIONS_PATH, latestNoteFor, newCorrection, parentTitle, placementReview as readPlacementReview, placeOf, readCorrections, type PlacementCorrectionResult, type PlacementReview } from "./placementReview.js";
 import { applyDeskChanges, checkDeskChanges, checkDeskPlan, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
@@ -459,6 +459,8 @@ function boundedConcurrency(limit: number): <T>(task: () => Promise<T>) => Promi
 export { LONG_MEMORY_SEGMENT_CHARS, segmentLongMemoryContent } from "./sourcePassages.js";
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
+/** M34 round 3: how often the quick-index tick re-checks (pull included) a vault that has no Tree.md yet. */
+const TREELESS_RECHECK_MS = 60 * 60_000;
 const DEFAULT_READ_LOCK_WAIT_MS = 3_000;
 const MEMORY_FILING_BUSY_TEXT = "Memory filing is in progress. Please retry your question shortly.";
 const MAX_BRIEFING_MEANING_PAGES = 80;
@@ -577,6 +579,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   const queue = new WriteQueue(repo ? vaultPath : undefined, () => memoryIndex?.markDirty());
   const readSyncTtl = options.readSyncTtlMs ?? DEFAULT_READ_SYNC_TTL_MS;
   let lastSyncMs = Number.NEGATIVE_INFINITY;
+  let lastTreelessCheckMs = Number.NEGATIVE_INFINITY;
 
   function assertRepositoryRevision(revision: VaultRevision): void {
     assertVault(repo);
@@ -806,7 +809,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return (await timedSearch(query, searchOptions)).hits;
   }
 
-  async function timedSearch(query: string, searchOptions: { agentLogs?: number } = {}): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs: number } }> {
+  async function timedSearch(query: string, searchOptions: { agentLogs?: number } = {}): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number; refreshMs: number; queryMs: number } }> {
     const started = performance.now();
     const ms = () => Math.round((performance.now() - started) * 10) / 10;
     const index = openMemoryIndex();
@@ -816,7 +819,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (hits.length > 0) {
           const elapsed = ms();
           const { rows, bytes } = index.stats();
-          return { tier: "index", ms: elapsed, index: { rows, bytes, refreshMs: index.lastFreshMs }, hits: hits.map((hit) => {
+          return { tier: "index", ms: elapsed, index: { rows, bytes, refreshMs: index.lastFreshMs, queryMs: index.lastQueryMs }, hits: hits.map((hit) => {
             const [base, anchor] = hit.path.split("#^");
             return {
               snippet: hit.snippet || hit.title,
@@ -4291,6 +4294,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
     },
     quickIndexBase: async (phases?: QuickIndexPhases) => {
       assertVault(repo);
+      // EPIC-24 M34 round 3: a vault with no Tree.md has no quick index to keep (the tick would pull it from the
+      // remote and list every file only to find that out). Look again once an hour, which is how soon a tree that
+      // appears on the remote (another device's sweep) is noticed; reads, searches and filings pull on their own.
+      if (!(await stat(join(vaultPath, TREE_PATH)).then(() => true, () => false))) {
+        const at = now().getTime();
+        if (at - lastTreelessCheckMs < TREELESS_RECHECK_MS) {
+          if (phases) { phases.skipped = "no-tree"; phases.pullMs = 0; }
+          return null;
+        }
+        lastTreelessCheckMs = at;
+      }
       const pullStarted = performance.now();
       const pulled = await syncForRead();
       if (phases) {

@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { open as openFile, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseLogCaptures } from "./captureOrigin.js";
 import { basenameOf, isFilingReceiptPath, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
@@ -174,6 +174,18 @@ export interface MemoryIndexOptions {
 
 /** Commits of one filing land within moments of each other: one background refresh covers them. */
 const EAGER_REFRESH_DELAY_MS = 250;
+/**
+ * EPIC-24 M34 round 3. SQLite here is synchronous (`node:sqlite`): every page it does not find in the
+ * operating system's cache is one blocking read on the only thread that serves chat, WhatsApp and the web.
+ * On VPS1 the host is short of memory, so the cache keeps dropping the index file, and a cold search read it
+ * one page at a time: a 40 s block with the CPU near idle (container reading 3-5 MB/s, 13-25% I/O pressure,
+ * 0.1-0.2 cores). The files are therefore read once, in large chunks, on the thread pool before a sync
+ * section that needs them: the loop keeps serving, and the pages are in cache when SQLite asks.
+ */
+const PRIME_AGAIN_AFTER_MS = 15_000;
+const PRIME_CHUNK_BYTES = 1_048_576;
+/** A synchronous section holding the loop this long is named in the log (counts only). */
+const BLOCKED_WARN_MS = 1_000;
 
 export const CLOUD_DEFAULT_JOINS = 4;
 /** The best word matches the ranked list's paths start from, and the least a seed must match (E18-W1). */
@@ -465,6 +477,14 @@ export class MemoryIndex {
   private dirtyGen = 0;
   /** Time the last search spent bringing the index up to date first (E24-M7: logged per search). */
   lastFreshMs = 0;
+  /** M34 r3: time the last search spent in its synchronous query section (the part that holds the loop). */
+  lastQueryMs = 0;
+  /** M34 r3: time the last file read-ahead took on the thread pool (loop free). */
+  lastPrimeMs = 0;
+  /** M34 r3: how many file read-aheads actually ran (tests, the log). */
+  primeRuns = 0;
+  private primedAt = Number.NEGATIVE_INFINITY;
+  private priming: Promise<void> | null = null;
   private eagerTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private lastCheck = Number.NEGATIVE_INFINITY;
@@ -489,7 +509,9 @@ export class MemoryIndex {
     this.now = options.now ?? Date.now;
     if (options.path !== ":memory:") mkdirSync(dirname(options.path), { recursive: true });
     this.db = new DatabaseSync(options.path);
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 30000;");
+    // synchronous = NORMAL: the index is derived from the vault and rebuilt from it, so a commit need not wait for
+    // the disk (WAL + NORMAL syncs at checkpoints, never corrupts); a lost tail is re-read by the next refresh.
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 30000;");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, size INTEGER NOT NULL);
@@ -551,10 +573,12 @@ export class MemoryIndex {
   /** Build the per-version caches a search reads (privacy, graph, links, spoken words) ahead of it. */
   warm(): void {
     if (this.closed) return;
+    const started = performance.now();
     this.privacy();
     this.memoryGraph();
     this.weightedLinks();
     this.spokenVocabulary();
+    this.noteBlocked("warm", started);
     // search_memory reads the tree for each hit's place: build it now too (cached per vault state).
     void loadMemoryTree(this.options.vaultPath).catch(() => {});
   }
@@ -564,6 +588,45 @@ export class MemoryIndex {
     if (this.eagerTimer) clearTimeout(this.eagerTimer);
     this.eagerTimer = null;
     this.db.close();
+  }
+
+  /**
+   * Read the index file and its WAL once, in large chunks, so the synchronous SQLite calls that follow find
+   * their pages in cache instead of waiting on the disk page by page. Best effort: an error or a file that is
+   * gone changes nothing. Runs at most once per PRIME_AGAIN_AFTER_MS, and callers share one running read.
+   */
+  primeFileCache(): Promise<void> {
+    if (this.closed || this.options.path === ":memory:") return Promise.resolve();
+    if (this.priming) return this.priming;
+    if (this.now() - this.primedAt < PRIME_AGAIN_AFTER_MS) return Promise.resolve();
+    const started = performance.now();
+    this.primeRuns++;
+    const run = (async () => {
+      const buffer = Buffer.allocUnsafe(PRIME_CHUNK_BYTES);
+      for (const file of [this.options.path, `${this.options.path}-wal`]) {
+        let handle;
+        try { handle = await openFile(file, "r"); } catch { continue; }
+        try {
+          for (let position = 0; !this.closed; position += PRIME_CHUNK_BYTES) {
+            const { bytesRead } = await handle.read(buffer, 0, PRIME_CHUNK_BYTES, position);
+            if (bytesRead < PRIME_CHUNK_BYTES) break;
+          }
+        } catch { /* best effort */ } finally { await handle.close().catch(() => {}); }
+      }
+    })().finally(() => {
+      this.primedAt = this.now();
+      this.lastPrimeMs = Math.round(performance.now() - started);
+      this.priming = null;
+    });
+    this.priming = run;
+    return run;
+  }
+
+  /** Name a synchronous section that held the event loop for BLOCKED_WARN_MS or more (label and milliseconds only). */
+  private noteBlocked(label: string, started: number): number {
+    const ms = Math.round(performance.now() - started);
+    if (ms >= BLOCKED_WARN_MS && !this.closed) console.warn(`[memory-index] sync section held the loop ${ms} ms in ${label} tenant=${this.tenantId}`);
+    return ms;
   }
 
   /** Bring the index in line with the vault, re-reading only files whose mtime/size changed. */
@@ -644,6 +707,12 @@ export class MemoryIndex {
 
   private async searchHits(query: string, limit: number, agentLogs = 0): Promise<MemoryIndexHit[]> {
     await this.fresh();
+    const started = performance.now();
+    try { return this.queryHits(query, limit, agentLogs); } finally { this.lastQueryMs = this.noteBlocked("search", started); }
+  }
+
+  /** The synchronous part of a search: every SQLite read after the index is fresh. */
+  private queryHits(query: string, limit: number, agentLogs: number): MemoryIndexHit[] {
     // "What was in my last voice note?" is answered by time and the graph, not by its words (E12-S3c).
     const intent = recentIntent(query, this.now(), this.options.timeZone?.());
     if (intent) {
@@ -1396,7 +1465,7 @@ export class MemoryIndex {
 
   private async fresh(): Promise<void> {
     const started = performance.now();
-    try { await this.freshNow(); } finally { this.lastFreshMs = Math.round(performance.now() - started); }
+    try { await this.primeFileCache(); await this.freshNow(); } finally { this.lastFreshMs = Math.round(performance.now() - started); }
   }
 
   private async freshNow(): Promise<void> {
@@ -1443,6 +1512,7 @@ export class MemoryIndex {
 
   private async sync(full: boolean): Promise<{ changed: number; removed: number }> {
     const { vaultPath } = this.options;
+    await this.primeFileCache();
     const gen = this.dirtyGen;
     const files = (await listMarkdownFiles(vaultPath)).filter(indexable);
     const known = new Map((this.db.prepare("SELECT path, mtime_ms, size FROM files").all() as Array<{ path: string; mtime_ms: number; size: number }>)
@@ -1479,6 +1549,7 @@ export class MemoryIndex {
     })));
     const stale = full ? [] : await this.relineage(lineage, new Set(changed.map((file) => file.path)));
 
+    const writeStarted = performance.now();
     this.db.exec("BEGIN IMMEDIATE");
     try {
       if (full) this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges; DELETE FROM zids;");
@@ -1500,6 +1571,8 @@ export class MemoryIndex {
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
+    } finally {
+      this.noteBlocked("write", writeStarted);
     }
     this.version++;
     return { changed: changed.length, removed: removed.length };
