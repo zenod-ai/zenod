@@ -1,21 +1,29 @@
 {
   "row": "E7-S27",
   "card": "docs/cards/E7-S27.md",
-  "cardSha": "8a29475606ca8910",
+  "cardSha": "5561c93c76c7eaac",
   "inputs": {
-    "card": "8a29475606ca8910",
-    "page": "02ed7698fb75fed7",
+    "card": "5561c93c76c7eaac",
+    "page": "6c80aa9c6d071c07",
     "rules": "7dd845c8b4b0e115",
-    "words": "053e05835c1c0c25"
+    "words": "0f08260a1b8f4e4d"
   },
-  "checkedAt": "2026-11-22T20:10:53Z",
+  "checkedAt": "2026-11-22T20:50:47Z",
   "by": "card_qc.py (console judge)",
   "words": [
+    {
+      "said": "Okay, this is a good first step, but the tester, my man, I mean, can we just have a fucking email, bro? And if we want the... Like, right now I'm seeing some bullshit. I cannot even see the tester. And also, can this be a tracker inside the objective, man? And can this be part of the daily briefing? Like maybe some objectives can have a daily briefing to them and this Z-Node we can turn on the daily briefing and that's the briefing that we want to track. I don't know how to set that up.",
+      "where": "vn_c2e56f5c, his note on this card 2026-11-22",
+      "key": "vn_c2e56f5c",
+      "when": "newest",
+      "status": "declared",
+      "how": "Card says tracker on the objective and daily briefing wait on the team (✗ line). Page shows each tester by email, so the email part is met."
+    },
     {
       "said": "when the guys put a phone number ... we send a code to that phone number ... are we monitoring that in the testers scorecard, whether this ... handshake ... was successfully filled in, so ... the connection is complete?",
       "where": "vn_40b9ff8f",
       "status": "met",
-      "how": "Evidence page now has a WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns, so each handshake and storage step is visible."
+      "how": "Page has WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns; green or grey per tester."
     },
     {
       "said": "Hi, it's Zenod",
@@ -36,29 +44,29 @@
       "how": "The 48-hour reminder and storage gate are product behaviour, not a scorecard column on this page."
     },
     {
-      "said": "each tester having a color. Is it green or not green?\\",
-      "where": "vn_40b9ff8f",
+      "said": "can we just have a fucking email, bro? ... I cannot even see the tester ... a tracker inside the objective ... part of the daily briefing",
+      "where": "vn_c2e56f5c",
       "status": "met",
-      "how": "Each tester row shows green or grey dots per setup step, matching his green-or-not request."
+      "how": "Each tester is shown by sign-in email with sign-up date on the page, the picture matches; card lines state the tracker and briefing part is pending."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 px the table becomes stacked per-tester lists with no sideways overflow, and at 1280 px it is a clean grid; the punchline box comes first and the look is one quiet green-and-grey style."
+    "summary": "At 390 px the page stacks each tester as a card with a readable check list and no sideways scroll; at 1280 px a clean table with green and grey dots and the punchline box first; no house-rule breach visible."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the daily green-or-grey tester table, one row per tester with seven setup steps, is the table he wanted.",
+    "asked": "Decide whether he now sees each tester the way he wanted, by pressing Yes to keep it or Change it to say what to change.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "02ed7698fb75fed7",
-    "walkedAt": "2026-11-22T20:10:53Z",
+    "page": "6c80aa9c6d071c07",
+    "walkedAt": "2026-11-22T20:50:47Z",
     "steps": [
       {
         "n": 1,
