@@ -79,6 +79,7 @@ import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
 import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts } from "./testerProgress.js";
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
+import { mountTesterFirstNoteNudgeRoutes, parseFirstNoteNudgeMode, TesterFirstNoteNudge } from "./testerFirstNoteNudge.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
 import { mountTesterSignupWelcomeRoutes, parseSignupWelcomeMode, TesterSignupWelcome } from "./testerSignupWelcome.js";
 import type { CustomerAccount } from "./customerAccounts.js";
@@ -962,6 +963,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   welcomeMailer?.start();
   // EPIC-26 E26-S26: set with the mail sender routes below.
   let testerOnboarding: TesterOnboarding | null = null;
+  let testerFirstNoteNudge: TesterFirstNoteNudge | null = null;
   const customer = createCustomerLayer(
     {
       dataDir: storage.dataDir,
@@ -1534,6 +1536,25 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           ...testerSetups,
         }),
       });
+      // E7-S26: one WhatsApp message from Zenod's own number to a tester whose WhatsApp has been linked for a day with no note,
+      // once per tester. Shipped OFF: nothing is sent until Jordi approves the text and the ops route (or the env) switches it on.
+      const firstNoteNudge = new TesterFirstNoteNudge({
+        dataDir: storage.dataDir,
+        envMode: parseFirstNoteNudgeMode(env.ZENOD_TESTER_FIRST_NOTE_NUDGE) ?? "off",
+        ...testerSetups,
+        linkedAt: (accountId) => onboarding.linkedAt(accountId),
+        noteCount: (tenantId) => {
+          const counts = tenantJobCounts(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, 0);
+          return counts.whatsappNotes + counts.memoriesSaved;
+        },
+        send: (account, operationId) => zenodPhylax?.sendFirstNoteNudge(account, operationId) ?? Promise.resolve("skipped"),
+      });
+      testerFirstNoteNudge = firstNoteNudge;
+      firstNoteNudge.start();
+      mountTesterFirstNoteNudgeRoutes(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        nudge: firstNoteNudge,
+      });
       // E26-S33 (zenod-social's EPIC-6-A4, Jordi approved 15 Nov): the welcome email with the video and five things to
       // try, once per tester when the free sign-up is finished, sent first by the same timer; off with mode "off".
       mountTesterSignupWelcomeRoutes(app, {
@@ -1953,6 +1974,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => testerMonthEnd?.stop()),
           Promise.resolve().then(() => offerMailer?.stop()),
           Promise.resolve().then(() => testerOnboarding?.stop()),
+          Promise.resolve().then(() => testerFirstNoteNudge?.stop()),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => subscriberApi.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),
