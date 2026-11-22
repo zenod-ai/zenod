@@ -111,6 +111,8 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
 /** Where the lean receipts come from (TaskJobStore / TaskJobQueue); `recent` is the older full-history fallback. */
 export interface CaptureReceiptSource {
   captureReceipts?(evidenceRef?: string): TaskJob[];
+  /** The same receipts read on a worker thread (TaskJobStore.captureReceiptsAsync): preferred where a caller can await. */
+  captureReceiptsAsync?(evidenceRef?: string): Promise<TaskJob[]>;
   captureContent?(id: string): { content?: string; contentHint?: string } | null;
   recent?(limit?: number): TaskJob[];
 }
@@ -119,14 +121,19 @@ export interface CaptureReceiptSource {
  * EPIC-24 M15: the finished capture receipts a merge needs, without putting the whole job history on the heap.
  * Lean receipts carry no note text; `loadContent` reads it for the few entries the vault does not hold yet.
  */
-export function captureReceiptsFor(source: CaptureReceiptSource | undefined, evidenceRef?: string): { jobs: TaskJob[]; loadContent?: (id: string) => { content?: string; contentHint?: string } | null } {
+export type CaptureReceipts = { jobs: TaskJob[]; loadContent?: (id: string) => { content?: string; contentHint?: string } | null };
+
+export function captureReceiptsFor(source: CaptureReceiptSource | undefined, evidenceRef?: string): CaptureReceipts {
   if (source?.captureReceipts) {
     return { jobs: source.captureReceipts(evidenceRef), ...(source.captureContent ? { loadContent: (id: string) => source.captureContent!(id) } : {}) };
   }
   return { jobs: source?.recent?.(Number.MAX_SAFE_INTEGER) ?? [] };
 }
 
-export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[], loadContent?: (id: string) => { content?: string; contentHint?: string } | null): MemoryEntry[] {
+type ContentLoader = (id: string) => { content?: string; contentHint?: string } | null;
+
+/** The merge as steps: each yield is a safe place to hand the thread back (mergeMemoryEntriesAsync). */
+function* mergeMemoryEntrySteps(entries: MemoryEntry[], jobs: TaskJob[], loadContent?: ContentLoader): Generator<void, MemoryEntry[]> {
   const vaultByRef = new Map(entries.map((entry) => [entry.evidenceRef, entry]));
   const winningReceipts = new Map<string, TaskJob>();
   for (const job of [...jobs].sort((a, b) => a.updatedAt - b.updatedAt || a.id.localeCompare(b.id))) {
@@ -136,6 +143,7 @@ export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[], load
   }
   const byRef = new Map(vaultByRef);
   for (const [evidenceRef, job] of winningReceipts) {
+    yield;
     // Only immutable vault evidence is an authoritative base. An older derived
     // receipt must not make its content/title sticky under newer metadata.
     const base = vaultByRef.get(evidenceRef);
@@ -149,10 +157,42 @@ export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[], load
   return [...byRef.values()];
 }
 
+export function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[], loadContent?: ContentLoader): MemoryEntry[] {
+  const steps = mergeMemoryEntrySteps(entries, jobs, loadContent);
+  for (let step = steps.next(); ; step = steps.next()) if (step.done) return step.value;
+}
+
+/** How long the merge may hold the thread before it lets other requests run (EPIC-24 M34 round 4). */
+const MERGE_SLICE_MS = 20;
+
+/**
+ * The same merge, giving the thread back every ~20 ms. On production one merge over the receipts of every capture a
+ * tenant ever made held the loop for 5.7 s (`event_loop.blocked`, stack `entryFromJob`); chat and WhatsApp waited.
+ */
+export async function mergeMemoryEntriesAsync(entries: MemoryEntry[], jobs: TaskJob[], loadContent?: ContentLoader): Promise<MemoryEntry[]> {
+  const steps = mergeMemoryEntrySteps(entries, jobs, loadContent);
+  let sliceStart = Date.now();
+  for (let step = steps.next(); ; step = steps.next()) {
+    if (step.done) return step.value;
+    if (Date.now() - sliceStart >= MERGE_SLICE_MS) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      sliceStart = Date.now();
+    }
+  }
+}
+
+/** `captureReceiptsFor` for a caller that can await: the receipts are read off the main thread when the source can. */
+export async function captureReceiptsForAsync(source: CaptureReceiptSource | undefined, evidenceRef?: string): Promise<CaptureReceipts> {
+  if (source?.captureReceiptsAsync) {
+    return { jobs: await source.captureReceiptsAsync(evidenceRef), ...(source.captureContent ? { loadContent: (id: string) => source.captureContent!(id) } : {}) };
+  }
+  return captureReceiptsFor(source, evidenceRef);
+}
+
 export async function searchMemoryEntryPage(engine: BrainEngine, taskJobs: CaptureReceiptSource | undefined, input: EntrySearchInput): Promise<EntrySearchResult> {
   const vaultEntries = await engine.searchEntries({ limit: null });
-  const { jobs, loadContent } = captureReceiptsFor(taskJobs);
-  const page = paginateMemoryEntries(mergeMemoryEntries(vaultEntries, jobs, loadContent), {
+  const { jobs, loadContent } = await captureReceiptsForAsync(taskJobs);
+  const page = paginateMemoryEntries(await mergeMemoryEntriesAsync(vaultEntries, jobs, loadContent), {
     ...input, order: input.order ?? "newest", limit: input.limit ?? 20,
   }, memoryScope(engine), input.cursor);
   return { entries: memoryEntrySummaries(page.entries), pagination: {
