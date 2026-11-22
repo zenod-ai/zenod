@@ -41,6 +41,8 @@ export interface FunnelCounts {
   feedback_recorded: number;
   /** E7-S24: testers whose AI spend went above their monthly cap in the last 7 days, our own tests left out. */
   over_cap?: number;
+  /** E7-S25: signed-up testers whose WhatsApp has a verified link right now, our own tests left out. */
+  whatsapp_linked?: number;
   /** Our own test applications, left out of every count above (S7 round 2). */
   test_applications?: number;
   /** Our own test accounts on a tester code, left out of signed_up and active_testers (E26-S21 iteration 2). */
@@ -76,6 +78,7 @@ export const COUNT_DEFINITIONS: Record<keyof FunnelCounts | "by_source", string>
   whatsapp_replied: "testers who got at least one Saved reply over WhatsApp from the production number (a finished WhatsApp save), our own test accounts left out",
   feedback_recorded: "testers who filed at least one voice feedback note through their own feedback link (one link per person, the team's voice-feedback service), our own test accounts left out",
   over_cap: `signed-up testers whose AI spend this UTC month is above their monthly cap and who spent something in the last ${ACTIVE_DAYS} days, our own test accounts left out (the target is 0; 0 too in a week when no tester spent anything)`,
+  whatsapp_linked: "signed-up testers whose WhatsApp number is verified and linked to Zenod right now (read from the production WhatsApp service, one per person, linked or not, whether or not they sent a note yet), our own test accounts left out",
   test_applications: "applications that were our own tests, counted nowhere else",
   test_signups: "accounts on a tester code that are our own tests, counted nowhere else",
   by_source:
@@ -102,6 +105,8 @@ export interface CountSources {
   caps?: (tenantId: string) => TenantCap[];
   /** E7-S24: this tenant's succeeded-call spend in USD from `fromMs` (included) to `toMs` (excluded). */
   spendBetween?: (tenantId: string, fromMs: number, toMs: number, only?: ProviderFilter) => number;
+  /** E7-S25: whether this account's WhatsApp has a verified link now (the last reading); none when unset. */
+  whatsappLinked?: (accountId: string) => boolean;
   /** True for our own test applications (testerMarks.ts); none when unset. */
   isTest?: (contact: string, use: string) => boolean;
 }
@@ -174,6 +179,9 @@ function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts;
   let overCap = 0;
   // E7-S24: one tenant is one tester, even when two accounts share it.
   const overCapChecked = new Set<string>();
+  // E7-S25: likewise one tenant is one tester for the WhatsApp link.
+  const linkedTenants = new Set<string>();
+  const whatsappLinked = sources.whatsappLinked ?? (() => false);
   let paying = 0;
   const since = nowMs - ACTIVE_DAYS * 86_400_000;
   for (const account of sources.accounts()) {
@@ -195,6 +203,7 @@ function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts;
     }
     // E7-S8: the same testers as signed_up (test accounts already left out above), with a Saved reply on WhatsApp.
     if (tester && account.tenant_id && whatsappSaves(account.tenant_id) > 0) whatsappReplied += 1;
+    if (tester && whatsappLinked(account.account_id)) linkedTenants.add(account.tenant_id ?? account.account_id);
     const feedback = tester ? sources.feedbackNotes?.(account.account_id) ?? null : null;
     if (feedback && feedback.notes > 0) feedbackLinks.add(feedback.linkId);
     if (tester && account.tenant_id && !overCapChecked.has(account.tenant_id)) {
@@ -224,6 +233,7 @@ function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts;
     whatsapp_replied: whatsappReplied,
     feedback_recorded: feedbackLinks.size,
     over_cap: overCap,
+    whatsapp_linked: linkedTenants.size,
     test_applications: tests.size,
     test_signups: testSignups,
   };
@@ -338,6 +348,57 @@ export function tenantWhatsAppSaves(tasksPath: string, tenantId: string): number
     return 0;
   } finally {
     db?.close();
+  }
+}
+
+/**
+ * E7-S25: each account's WhatsApp link as of the last reading. The WhatsApp state comes from Phylax over the network
+ * while the counts are computed in one pass, so a timer reads it ahead of time and the counts only look it up.
+ * A reading that could not be made (null) keeps the earlier answer; an account with no earlier answer is unlinked.
+ */
+export class WhatsAppLinkCache {
+  private readonly linked = new Map<string, boolean>();
+  private timer: NodeJS.Timeout | null = null;
+  private running: Promise<void> | null = null;
+
+  constructor(
+    /** The accounts worth reading (finished sign-ups), asked fresh at each reading. */
+    private readonly accountIds: () => string[],
+    /** The account's WhatsApp state ("verified" ...), or null when unknown; may throw. */
+    private readonly read: (accountId: string) => Promise<string | null>,
+    /** Whether a state counts as linked. */
+    private readonly isLinked: (state: string) => boolean,
+  ) {}
+
+  has(accountId: string): boolean {
+    return this.linked.get(accountId) === true;
+  }
+
+  /** Read every account once, one after the other (a few testers: never a burst on the WhatsApp service). */
+  refresh(): Promise<void> {
+    if (this.running) return this.running;
+    this.running = (async () => {
+      for (const accountId of this.accountIds()) {
+        const state = await this.read(accountId).catch(() => null);
+        if (state !== null) this.linked.set(accountId, this.isLinked(state));
+      }
+    })().finally(() => {
+      this.running = null;
+    });
+    return this.running;
+  }
+
+  start(intervalMs = 5 * 60_000): void {
+    if (this.timer) return;
+    const tick = () => void this.refresh().catch((error) => console.error("[counts] could not read WhatsApp links:", error instanceof Error ? error.message : String(error)));
+    tick();
+    this.timer = setInterval(tick, intervalMs);
+    this.timer.unref?.();
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
   }
 }
 

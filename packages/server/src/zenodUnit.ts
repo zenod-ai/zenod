@@ -67,8 +67,8 @@ import {
 } from "./zenodPhylax.js";
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
-import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantSpendBetween, tenantWhatsAppSaves, type TenantCap } from "./publicCounts.js";
-import { cachedWhatsAppState, mountTesterApplicants, signInEmailsByUser, tenantFirstSave } from "./testerApplicants.js";
+import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantSpendBetween, tenantWhatsAppSaves, WhatsAppLinkCache, type TenantCap } from "./publicCounts.js";
+import { cachedWhatsAppState, isWhatsAppLinked, mountTesterApplicants, signInEmailsByUser, tenantFirstSave } from "./testerApplicants.js";
 import { setHelpersBuilding } from "./personaRunner.js";
 import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./quickStart.js";
 import { mountTesterFlowRoutes, testerFlowFromEnv, testerMail, type TesterFlow } from "./testerFlow.js";
@@ -1697,6 +1697,14 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     // EPIC-26 S7: the funnel as counts only, for zenod-social and the console; our own tests left out.
     const flow = testerFlow;
     const comped = compedAccountIdsFromEnv(env);
+    // E7-S25: who has a verified WhatsApp link now, read from Phylax every 5 minutes for the counts.
+    const linkCache = zenodPhylax
+      ? new WhatsAppLinkCache(
+          () => customer.accounts.list().filter((a) => a.checkout_completed_at && !comped.has(a.account_id)).map((a) => a.account_id),
+          (accountId) => zenodPhylax.whatsappState(accountId),
+          isWhatsAppLinked,
+        )
+      : null;
     const counts = new PublicCounts(storage.dataDir, {
       applications: () => readApplications(storage.dataDir),
       testers: () => flow.snapshot().testers,
@@ -1717,6 +1725,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       spendBetween: (tenantId, fromMs, toMs, only) => tenantSpendBetween(join(storage.dataDir, tenantId, "usage.sqlite"), fromMs, toMs, only),
       // E7-S9: filed voice feedback notes per tester link (kept by the vps3 feedback timer).
       feedbackNotes: (accountId) => readTesterFeedback(storage.dataDir)[accountId] ?? null,
+      ...(linkCache ? { whatsappLinked: (accountId: string) => linkCache.has(accountId) } : {}),
       isTest: (contact, use) => marks.isTest(contact, use),
     });
     // E26-S29: the zenod.dev/testers page reads N from here, so it always matches the setting.
@@ -1731,7 +1740,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     testerFlow.start();
     mountTesterApplications(app, { dataDir: storage.dataDir, clientAddress, flow: testerFlow });
     mountPublicCounts(app, counts);
+    linkCache?.start();
     counts.start();
+    // The first reading of the links finishes a moment after start: count again once it has, so the first answer is right.
+    void linkCache?.refresh().then(() => counts.refresh()).catch(() => undefined);
     // E26-S21: who applied, from where and how far they got, for the team console only (token-gated).
     mountTesterApplicants(app, {
       token: env.ZENOD_APPLICANTS_READ_TOKEN,
