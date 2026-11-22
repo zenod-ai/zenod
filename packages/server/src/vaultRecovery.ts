@@ -43,6 +43,17 @@ export async function recoverInterruptedFiling(deps: VaultRecoveryDeps): Promise
   }
   log("interrupted filing found", state);
 
+  // EPIC-24 M31: a restart that killed the weekly tree sweep left its moved receipts and new pages uncommitted. No
+  // receipt of that state can be replayed, so every enrichment fails with filing_recovery_pending for ever. Keep all of
+  // it on a side ref (nothing deleted) and go back to the published head; the sweep redoes its work from the receipts.
+  if (state.conditions.includes("pending_receipt") && engine.setAsideAbandonedChanges) {
+    const kept = await engine.setAsideAbandonedChanges();
+    if (kept.status === "set_aside") {
+      log("set aside uncommitted changes no filing can replay; nothing deleted, every byte kept on the side ref", { ref: kept.ref, paths: kept.paths, receipts: kept.receipts });
+      state = await engine.inspectInterruptedFiling();
+    }
+  }
+
   if (!state.receipts.length && state.conditions.includes("unpublished_head") && engine.recoverUnpublishedHead) {
     const result = await engine.recoverUnpublishedHead();
     log("unpublished local head", { result, localHead: state.localHead, publishedRevision: state.publishedRevision });

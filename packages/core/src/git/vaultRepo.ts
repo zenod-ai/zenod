@@ -261,6 +261,28 @@ export class VaultRepo implements VaultRepository {
     return changes;
   }
 
+  /**
+   * EPIC-24 M31: an operation killed mid-way (a restart during the weekly tree sweep) leaves hundreds of uncommitted
+   * changes that nothing can replay and that block every later save. Keep them all, byte for byte (modified, deleted
+   * and untracked files), as a stash commit that a ref under refs/zenod/set-aside/ also points at (so neither a
+   * stash drop nor gc can lose it), and return the working tree to HEAD. Never touches commits or the remote.
+   */
+  async setAsidePendingChanges(): Promise<{ ref: string; paths: number } | null> {
+    const paths = (await this.pendingChanges()).length;
+    if (!paths) return null;
+    const head = await this.headSha();
+    const stashBefore = (await this.git.raw(["rev-parse", "--verify", "--quiet", "refs/stash"]).catch(() => "")).trim();
+    await this.git.raw(["stash", "push", "--include-untracked", "--message", `zenod set-aside of abandoned changes on ${head.slice(0, 12)}`]);
+    const stash = (await this.git.raw(["rev-parse", "--verify", "refs/stash"]).catch(() => "")).trim();
+    if (!stash || stash === stashBefore || (await this.git.raw(["rev-parse", `${stash}^1`])).trim() !== head) {
+      throw new Error("set_aside_not_recorded");
+    }
+    const ref = `refs/zenod/set-aside/${new Date().toISOString().replace(/[:.]/g, "-")}-${stash.slice(0, 8)}`;
+    await this.git.raw(["update-ref", ref, stash]);
+    if ((await this.pendingChanges()).length) throw new Error("set_aside_left_changes");
+    return { ref, paths };
+  }
+
   /** Discard all uncommitted changes — the never-half-apply escape hatch. */
   async discardChanges(): Promise<void> {
     await this.git.reset(["--hard", "HEAD"]);

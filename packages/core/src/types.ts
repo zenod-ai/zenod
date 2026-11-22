@@ -137,6 +137,11 @@ export interface InterruptedFilingState {
 
 export type UnpublishedHeadRecovery = "clean" | "published" | "diverged" | "unsupported";
 
+/** EPIC-24 M31: outcome of setting aside abandoned working-tree changes (content-free). */
+export type SetAsideAbandonedChanges =
+  | { status: "unsupported" | "clean" | "not_eligible" }
+  | { status: "set_aside"; ref: string; paths: number; receipts: number };
+
 export type TokenCostOperation = "classify" | "compose" | "ask" | "chat" | "tasking" | "work";
 
 export interface TokenCostMeasurement {
@@ -521,6 +526,12 @@ export interface BrainEngine {
   inspectInterruptedFiling?(): Promise<InterruptedFilingState>;
   /** Publish an unpublished local commit only when it fast-forwards the authority; never discards anything. */
   recoverUnpublishedHead?(): Promise<UnpublishedHeadRecovery>;
+  /**
+   * EPIC-24 M31: when the only thing blocking writes is uncommitted changes whose filing receipts are all unreadable (a
+   * restart killed a tree sweep after it moved receipts), keep every changed byte on a side ref and return the working
+   * tree to the published head. Waits behind any live write; deletes nothing.
+   */
+  setAsideAbandonedChanges?(): Promise<SetAsideAbandonedChanges>;
   /** Rebuild the enrichment input of an already-committed evidence entry (fallback when its job record is gone). */
   evidenceEnrichInput?(evidenceRef: string): Promise<EnrichEvidenceInput | null>;
   /** EPIC-24 M3: enrichment inputs for Log entries since `since` (YYYY-MM-DD) with no filed line, receipt or citing page. */

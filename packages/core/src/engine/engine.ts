@@ -47,6 +47,7 @@ import type {
   TreeSweepResult,
   PersonaNotesInput,
   UnpublishedHeadRecovery,
+  SetAsideAbandonedChanges,
   WorkInput,
   WorkResult,
 } from "../types.js";
@@ -724,6 +725,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const publish = repo.publishLocalHead;
     if (!publish) return "unsupported";
     return queue.run(async () => publish.call(repo), "background");
+  }
+
+  /**
+   * EPIC-24 M31. Runs behind any live write under the vault lock, so what it sees is abandoned, never in flight.
+   * Eligible only when the head is published, the sole block is pending receipts, and no receipt can be replayed
+   * (all unreadable: the file is gone or cut off). Anything else is left to the replay path.
+   */
+  async function setAsideAbandonedChanges(): Promise<SetAsideAbandonedChanges> {
+    assertVault(repo);
+    const setAside = repo.setAsidePendingChanges;
+    if (!setAside) return { status: "unsupported" };
+    return queue.run(async (): Promise<SetAsideAbandonedChanges> => {
+      const state = await describeInterruptedFiling(false);
+      if (!state.interrupted) return { status: "clean" };
+      const eligible = state.conditions.length === 1 && state.conditions[0] === "pending_receipt" && state.headPublished === true
+        && state.receipts.length > 0 && state.receipts.every(receipt => receipt.phase === "unreadable" && receipt.where === "pending_change");
+      if (!eligible) return { status: "not_eligible" };
+      const kept = await setAside.call(repo);
+      return kept ? { status: "set_aside", ref: kept.ref, paths: kept.paths, receipts: state.receipts.length } : { status: "clean" };
+    }, "background");
   }
 
   async function evidenceEnrichInput(evidenceRef: string): Promise<EnrichEvidenceInput | null> {
@@ -4156,6 +4177,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     enrichEvidence,
     inspectInterruptedFiling,
     recoverUnpublishedHead,
+    setAsideAbandonedChanges,
     evidenceEnrichInput,
     unfiledEvidence,
     ask,

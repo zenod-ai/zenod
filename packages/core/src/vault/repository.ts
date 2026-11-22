@@ -65,6 +65,11 @@ export interface VaultRepository {
   unpublishedPaths?(): Promise<string[]>;
   /** Push an unpublished local head when it fast-forwards provider history; never rebases or forces. */
   publishLocalHead?(): Promise<"clean" | "published" | "diverged">;
+  /**
+   * EPIC-24 M31: keep every uncommitted change (tracked, deleted and untracked files) as a commit on a side ref and put the
+   * working tree back to HEAD. Nothing is deleted: the side ref holds each byte. Null when there was nothing to keep.
+   */
+  setAsidePendingChanges?(): Promise<{ ref: string; paths: number } | null>;
   /** Return the durable revision currently materialized in the local workspace. */
   currentRevision(): Promise<VaultRevision>;
   trackedFiles(): Promise<string[]>;
