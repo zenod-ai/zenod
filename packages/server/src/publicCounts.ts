@@ -11,6 +11,13 @@ import type { CustomerAccount } from "./customerAccounts.js";
 import { TESTER_APPLICATIONS_FILE } from "./testerApplications.js";
 import { cleanApplicantSource } from "./testerApplicants.js";
 import { normalizeTesterEmail, type TesterRecord } from "./testerFlow.js";
+import type { ProviderFilter } from "./usageStore.js";
+
+/** E7-S24: one monthly spend cap on a tenant and which provider's calls it counts (all calls when absent). */
+export interface TenantCap {
+  usd: number;
+  only?: ProviderFilter;
+}
 
 export const PUBLIC_COUNTS_FILE = "public-counts.json";
 const KEEP_DAYS = 60;
@@ -32,6 +39,8 @@ export interface FunnelCounts {
   whatsapp_replied: number;
   /** Signed-up testers with at least one voice feedback note filed through their own link (E7-S9). */
   feedback_recorded: number;
+  /** E7-S24: testers whose AI spend went above their monthly cap in the last 7 days, our own tests left out. */
+  over_cap?: number;
   /** Our own test applications, left out of every count above (S7 round 2). */
   test_applications?: number;
   /** Our own test accounts on a tester code, left out of signed_up and active_testers (E26-S21 iteration 2). */
@@ -66,6 +75,7 @@ export const COUNT_DEFINITIONS: Record<keyof FunnelCounts | "by_source", string>
   paying_customers: "accounts on a live subscription that pays (not free, not comped)",
   whatsapp_replied: "testers who got at least one Saved reply over WhatsApp from the production number (a finished WhatsApp save), our own test accounts left out",
   feedback_recorded: "testers who filed at least one voice feedback note through their own feedback link (one link per person, the team's voice-feedback service), our own test accounts left out",
+  over_cap: `signed-up testers whose AI spend this UTC month is above their monthly cap and who spent something in the last ${ACTIVE_DAYS} days, our own test accounts left out (the target is 0; 0 too in a week when no tester spent anything)`,
   test_applications: "applications that were our own tests, counted nowhere else",
   test_signups: "accounts on a tester code that are our own tests, counted nowhere else",
   by_source:
@@ -85,6 +95,13 @@ export interface CountSources {
   whatsappSaves?: (tenantId: string) => number;
   /** E7-S9: this account's feedback link and its filed notes (tester-feedback.json); none when unset. */
   feedbackNotes?: (accountId: string) => { linkId: string; notes: number } | null;
+  /**
+   * E7-S24: the monthly AI caps that apply to this tenant, each with the spend it covers (a credit cap counts
+   * only credit calls, the paid allowance the rest); none when unset or no cap applies.
+   */
+  caps?: (tenantId: string) => TenantCap[];
+  /** E7-S24: this tenant's succeeded-call spend in USD from `fromMs` (included) to `toMs` (excluded). */
+  spendBetween?: (tenantId: string, fromMs: number, toMs: number, only?: ProviderFilter) => number;
   /** True for our own test applications (testerMarks.ts); none when unset. */
   isTest?: (contact: string, use: string) => boolean;
 }
@@ -154,6 +171,9 @@ function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts;
   const whatsappSaves = sources.whatsappSaves ?? (() => 0);
   let testSignups = 0;
   let activeTesters = 0;
+  let overCap = 0;
+  // E7-S24: one tenant is one tester, even when two accounts share it.
+  const overCapChecked = new Set<string>();
   let paying = 0;
   const since = nowMs - ACTIVE_DAYS * 86_400_000;
   for (const account of sources.accounts()) {
@@ -177,6 +197,10 @@ function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts;
     if (tester && account.tenant_id && whatsappSaves(account.tenant_id) > 0) whatsappReplied += 1;
     const feedback = tester ? sources.feedbackNotes?.(account.account_id) ?? null : null;
     if (feedback && feedback.notes > 0) feedbackLinks.add(feedback.linkId);
+    if (tester && account.tenant_id && !overCapChecked.has(account.tenant_id)) {
+      overCapChecked.add(account.tenant_id);
+      if (testerOverCap(sources, account.tenant_id, nowMs)) overCap += 1;
+    }
     if (!live(account)) continue;
     if (!account.fully_discounted) {
       paying += 1;
@@ -199,10 +223,65 @@ function countAll(sources: CountSources, nowMs: number): { counts: FunnelCounts;
     paying_customers: paying,
     whatsapp_replied: whatsappReplied,
     feedback_recorded: feedbackLinks.size,
+    over_cap: overCap,
     test_applications: tests.size,
     test_signups: testSignups,
   };
   return { counts, bySource };
+}
+
+function utcMonthStart(ms: number, offset = 0): number {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + offset, 1);
+}
+
+/**
+ * E7-S24: whether this tenant's AI spend went above a monthly cap in the last 7 days: in a UTC month that
+ * touches the window, the month's spend is above the cap (a cap of 0 or less is no cap) and some of it was
+ * spent inside the window. A week with no spend never counts. 0 when the sources cannot say.
+ */
+export function testerOverCap(sources: CountSources, tenantId: string, nowMs: number): boolean {
+  const spendBetween = sources.spendBetween;
+  const caps = sources.caps?.(tenantId) ?? [];
+  if (!spendBetween || caps.length === 0) return false;
+  const since = nowMs - ACTIVE_DAYS * 86_400_000;
+  const end = nowMs + 1;
+  for (let month = utcMonthStart(since); month <= nowMs; month = utcMonthStart(month, 1)) {
+    const next = utcMonthStart(month, 1);
+    const windowFrom = Math.max(since, month);
+    const to = Math.min(next, end);
+    for (const cap of caps) {
+      if (!(cap.usd > 0)) continue;
+      if (spendBetween(tenantId, windowFrom, to, cap.only) <= 0) continue;
+      if (spendBetween(tenantId, month, to, cap.only) > cap.usd) return true;
+    }
+  }
+  return false;
+}
+
+/** E7-S24: succeeded-call spend for one tenant between two times from its usage.sqlite, read only; 0 when unreadable. */
+export function tenantSpendBetween(usagePath: string, fromMs: number, toMs: number, only?: ProviderFilter): number {
+  if (!existsSync(usagePath)) return 0;
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(usagePath, { readOnly: true });
+    const columns = db.prepare("PRAGMA table_info(llm_usage)").all() as unknown as Array<{ name: string }>;
+    if (columns.length === 0) return 0;
+    const has = (name: string) => columns.some((column) => column.name === name);
+    const spend = has("provider_cost_usd") ? "COALESCE(provider_cost_usd, cost_usd)" : "cost_usd";
+    const status = has("status") ? " AND status = 'succeeded'" : "";
+    const provider = !only ? "" : "only" in only ? " AND provider = ?" : " AND provider != ?";
+    const args: Array<string | number> = [fromMs, toMs];
+    if (only) args.push("only" in only ? only.only : only.except);
+    const row = db
+      .prepare(`SELECT COALESCE(SUM(${spend}), 0) AS spend FROM llm_usage WHERE ts >= ? AND ts < ?${status}${provider}`)
+      .get(...args) as { spend: number } | undefined;
+    return Number(row?.spend ?? 0);
+  } catch {
+    return 0;
+  } finally {
+    db?.close();
+  }
 }
 
 /** True for one of our own test accounts: its email looks like a test, or it redeemed a test application's place. */

@@ -67,7 +67,7 @@ import {
 } from "./zenodPhylax.js";
 import { cloudflareHttpsRedirect, isWebAppPath, mountStaticSurfaces, siteNotFound } from "./staticSurfaces.js";
 import { mountTesterApplications } from "./testerApplications.js";
-import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantWhatsAppSaves } from "./publicCounts.js";
+import { mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantSpendBetween, tenantWhatsAppSaves, type TenantCap } from "./publicCounts.js";
 import { cachedWhatsAppState, mountTesterApplicants, signInEmailsByUser, tenantFirstSave } from "./testerApplicants.js";
 import { setHelpersBuilding } from "./personaRunner.js";
 import { markQuickStart, QUICK_START_READ_TOOLS, toolFoundSomething } from "./quickStart.js";
@@ -95,7 +95,7 @@ import { walletFleetAllowlist } from "./walletUrl.js";
 import { mountSubscriberApi } from "./subscriberApi.js";
 import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
 import { subscribersEnabled } from "./subscribers.js";
-import { creditCallHealth, creditRouteFromEnv, type CreditRoute } from "./creditRoute.js";
+import { CREDIT_PROVIDER, creditCallHealth, creditRouteFor, creditRouteFromEnv, type CreditRoute } from "./creditRoute.js";
 
 /**
  * EPIC-14 S41 round 2: whether the Anthropic credit route is on and for how many accounts; never the key or the ids.
@@ -1704,6 +1704,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       comped,
       savesSince: (tenantId, sinceMs) => tenantSavesSince(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
       whatsappSaves: (tenantId) => tenantWhatsAppSaves(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId),
+      // E7-S24: the monthly caps a tester is held to (the credit cap on Anthropic calls, the paid allowance on the
+      // rest; the paid allowance alone when the tenant is not on the credit) and their spend, read only.
+      caps: (tenantId) => {
+        const caps: TenantCap[] = [];
+        const credit = creditRouteFor(creditRouteFromEnv(env), tenantId);
+        const allowance = tenantMonthlyAllowanceFromEnv(env);
+        if (credit) caps.push({ usd: credit.monthlyUsd, only: { only: CREDIT_PROVIDER } });
+        if (allowance) caps.push({ usd: allowance, ...(credit ? { only: { except: CREDIT_PROVIDER } } : {}) });
+        return caps;
+      },
+      spendBetween: (tenantId, fromMs, toMs, only) => tenantSpendBetween(join(storage.dataDir, tenantId, "usage.sqlite"), fromMs, toMs, only),
       // E7-S9: filed voice feedback notes per tester link (kept by the vps3 feedback timer).
       feedbackNotes: (accountId) => readTesterFeedback(storage.dataDir)[accountId] ?? null,
       isTest: (contact, use) => marks.isTest(contact, use),

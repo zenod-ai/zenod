@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { expect, it } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
-import { funnelCounts, sourceCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantWhatsAppSaves, type CountSources } from "../src/publicCounts.js";
+import { funnelCounts, sourceCounts, mountPublicCounts, PublicCounts, readApplications, tenantSavesSince, tenantSpendBetween, tenantWhatsAppSaves, type CountSources } from "../src/publicCounts.js";
 import type { TesterRecord } from "../src/testerFlow.js";
 
 // EPIC-26 S7: the funnel as counts only, readable by anyone.
@@ -55,6 +55,7 @@ it("counts applications, accepted, signed up, active testers and paying customer
     paying_customers: 1,
     whatsapp_replied: 0,
     feedback_recorded: 0,
+    over_cap: 0,
     test_applications: 0,
     test_signups: 0,
   });
@@ -102,6 +103,86 @@ it("counts testers with a filed voice feedback note, one per link, our own test 
   }), NOW);
   expect(counts).toMatchObject({ signed_up: 3, feedback_recorded: 1, test_signups: 1 });
   expect(funnelCounts(base, NOW).feedback_recorded).toBe(0);
+});
+
+const DAY = 86_400_000;
+
+it("counts testers whose spend this month is above their cap and who spent in the last 7 days, our own tests left out (E7-S24)", () => {
+  const base = sources();
+  // spend rows per tenant: [ts, usd, provider]
+  const rows: Record<string, Array<[number, number, string]>> = {
+    "t-t1": [[NOW - 3 * DAY, 4, "anthropic"], [NOW - 1 * DAY, 7, "anthropic"]],  // 11 on a cap of 10, spent this week: over
+    "t-t2": [[NOW - 20 * DAY, 30, "anthropic"]],                          // over the cap, but no spend this week (and a month ago): not counted
+    "t-b": [[NOW - 1 * DAY, 9.5, "anthropic"]],                                // under the cap
+    "t-payer": [[NOW - 1 * DAY, 99, "anthropic"]],                             // not a tester: never counted
+    "t-t7": [[NOW - 1 * DAY, 99, "anthropic"]],                                // our own test account: left out
+  };
+  const spendBetween: CountSources["spendBetween"] = (tenantId, from, to, only) =>
+    (rows[tenantId] ?? [])
+      .filter(([ts, , provider]) => ts >= from && ts < to && (!only || ("only" in only ? provider === only.only : provider !== only.except)))
+      .reduce((sum, [, usd]) => sum + usd, 0);
+  const counts = funnelCounts(sources({
+    accounts: () => [
+      ...base.accounts(),
+      account("t7", { stripe_email: "operations+t7r3@alpha9.io", fully_discounted: true, free_until: "2026-12-11T00:00:00Z" }),
+    ],
+    caps: () => [{ usd: 10, only: { only: "anthropic" } }],
+    spendBetween,
+    isTest: (contact) => contact.endsWith("@alpha9.io"),
+  }), NOW);
+  expect(counts).toMatchObject({ over_cap: 1, signed_up: 3, test_signups: 1 });
+  expect(funnelCounts(base, NOW).over_cap).toBe(0); // without caps or a ledger: 0
+});
+
+it("over_cap counts a tester once, checks the paid allowance on the other providers and ignores a cap of 0 (E7-S24)", () => {
+  const rows: Array<[number, number, string]> = [[NOW - 1 * DAY, 3, "openrouter"], [NOW - 2 * DAY, 1, "anthropic"]];
+  const spendBetween: CountSources["spendBetween"] = (_t, from, to, only) =>
+    rows.filter(([ts, , provider]) => ts >= from && ts < to && (!only || ("only" in only ? provider === only.only : provider !== only.except)))
+      .reduce((sum, [, usd]) => sum + usd, 0);
+  const two = (caps: CountSources["caps"]) => funnelCounts(sources({
+    // two accounts on one tenant is one tester
+    accounts: () => [
+      account("t1", { fully_discounted: true, free_until: "2026-12-01T00:00:00Z", tenant_id: "t-same" }),
+      account("t2", { fully_discounted: true, free_until: "2026-12-01T00:00:00Z", tenant_id: "t-same" }),
+    ],
+    caps, spendBetween,
+  }), NOW).over_cap;
+  expect(two(() => [{ usd: 2, only: { except: "anthropic" } }])).toBe(1); // 3 of paid spend over a paid 2
+  expect(two(() => [{ usd: 2, only: { only: "anthropic" } }])).toBe(0);   // 1 of credit spend under 2
+  expect(two(() => [{ usd: 0 }])).toBe(0);                                // a cap of 0 is no cap
+  expect(two(() => [{ usd: 3.5 }])).toBe(1);                              // 4 in all over 3.5, counted once for the two accounts
+});
+
+it("over_cap looks at the month before when the week crosses a month end (E7-S24)", () => {
+  const now = Date.UTC(2026, 11, 2, 12); // 2 Dec
+  const rows: Array<[number, number]> = [[Date.UTC(2026, 10, 29), 8], [Date.UTC(2026, 10, 30), 5], [Date.UTC(2026, 11, 1), 2]];
+  const spendBetween: CountSources["spendBetween"] = (_t, from, to) =>
+    rows.filter(([ts]) => ts >= from && ts < to).reduce((sum, [, usd]) => sum + usd, 0);
+  const counts = (cap: number) => funnelCounts(sources({
+    accounts: () => [account("t1", { fully_discounted: true, free_until: "2026-12-31T00:00:00Z" })],
+    caps: () => [{ usd: cap }], spendBetween,
+  }), now).over_cap;
+  expect(counts(10)).toBe(1); // November spent 13 (5 and 8 inside the week of 25 Nov to 2 Dec) over a cap of 10
+  expect(counts(14)).toBe(0); // November 13 and December 2 are each under 14: a month never carries over
+});
+
+it("reads a tenant's spend between two times from its usage.sqlite, failed calls and other providers handled, 0 without one (E7-S24)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "counts-"));
+  const path = join(dir, "usage.sqlite");
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE llm_usage (id INTEGER PRIMARY KEY, ts INTEGER, provider TEXT, cost_usd REAL, provider_cost_usd REAL, status TEXT)`);
+  const insert = db.prepare(`INSERT INTO llm_usage (ts, provider, cost_usd, provider_cost_usd, status) VALUES (?, ?, ?, ?, ?)`);
+  insert.run(100, "anthropic", 1, null, "succeeded");
+  insert.run(150, "anthropic", 1, 2, "succeeded");     // the provider's own charge wins
+  insert.run(160, "anthropic", 5, null, "failed");     // a failed call is not spend
+  insert.run(170, "openrouter", 4, null, "succeeded");
+  insert.run(300, "anthropic", 9, null, "succeeded");  // outside the range
+  db.close();
+  expect(tenantSpendBetween(path, 100, 200)).toBe(7);
+  expect(tenantSpendBetween(path, 100, 200, { only: "anthropic" })).toBe(3);
+  expect(tenantSpendBetween(path, 100, 200, { except: "anthropic" })).toBe(4);
+  expect(tenantSpendBetween(path, 200, 301)).toBe(9);
+  expect(tenantSpendBetween(join(dir, "missing.sqlite"), 0, 1e12)).toBe(0);
 });
 
 it("reads finished WhatsApp saves from a tenant's tasks.sqlite, self-tests and other channels left out", () => {
@@ -213,6 +294,9 @@ it("keeps one line per day, answers the endpoint publicly and leaks no email", a
   expect(body).toMatchObject({ schema: "zenod-counts/v1", date: "2026-11-11", applications: 3, accepted: 2, paying_customers: 1, whatsapp_replied: 0 });
   expect((body.definitions as Record<string, string>).whatsapp_replied).toMatch(/WhatsApp/);
   expect(body.history.every((day) => "whatsapp_replied" in day)).toBe(true);
+  expect(body).toMatchObject({ over_cap: 0 });
+  expect((body.definitions as Record<string, string>).over_cap).toMatch(/above their monthly cap.*last 7 days.*our own test accounts left out/);
+  expect(body.history.every((day) => "over_cap" in day)).toBe(true);
   expect(body.by_source).toEqual([{ source: "none", applications: 3, signed_up: 3 }]);
   expect((body.definitions as Record<string, string>).by_source).toMatch(/\?s=<post id>.*our own tests left out/);
   expect(body.history.map((day) => day.date)).toEqual(["2026-11-10", "2026-11-11"]);
