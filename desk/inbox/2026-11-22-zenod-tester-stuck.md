@@ -2,7 +2,8 @@
 from: zenod
 about: Testers stuck before WhatsApp: 3 to help today
 reply-to: zenod-ai/zenod
-status: open
+status: answered
+answered: …6839 and …9477 flagged as our bug or never linked: EPIC-24 M32 (worker run_4cf963a3); …0bbb (19 Nov) waits on Jordi's E7-A30 call offer
 daily: tester-stuck
 ---
 Each signed up over an hour ago and has not linked WhatsApp (E26-S31 check, every 15 min). Help them through it today: our own email or a call, inside the consent they gave; no automatic message. A line marked our bug also went to Jordi as an ops alarm.
