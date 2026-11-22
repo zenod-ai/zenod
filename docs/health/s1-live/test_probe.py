@@ -11,6 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import probe as P  # noqa: E402
+import aggregate as A  # noqa: E402
 
 
 class LogSpans(unittest.TestCase):
@@ -109,6 +110,19 @@ class Folds(unittest.TestCase):
         self.assertEqual(whole, parts)
         self.assertEqual(whole["capturesFailingSince"], "2026-11-09T10:01:00Z")   # a chat job is not a save
         self.assertEqual(len(whole["jobs"]), 2)
+
+    def test_a_whatsapp_link_answers_the_link_code_message(self):
+        # EPIC-24 M30: 2026-11-21 06:04:55Z a new tester sent their link code; the link was logged 24 s later and
+        # no chat or save job ever follows it, so the health page called it "no reply" until the next Saved reply
+        z = {"lastJob": None, "jobs": [], "lastIndex": None, "lastError": None, "errs": [], "lines": {},
+             "capturesFailingSince": None, "chat": []}
+        P.zenod_fold(z, [(P.parse_ts("2026-11-21T06:05:19Z"), "[tester-onboarding] WhatsApp linked, thank-you mail queued"),
+                         (P.parse_ts("2026-11-21T06:05:30Z"), "[tester-onboarding] mode set to on by x")])
+        self.assertEqual(z["chat"], ["2026-11-21T06:05:19Z"])
+        self.assertIsNone(A.reply_stall(["2026-11-21T06:04:55Z"], "2026-11-20T16:00:00Z",
+                                        A.parse_ts("2026-11-21T06:30:00Z"), minutes=A.ALERT_MIN, chat_replies=z["chat"]))
+        self.assertIsNotNone(A.reply_stall(["2026-11-21T06:04:55Z"], "2026-11-20T16:00:00Z",
+                                           A.parse_ts("2026-11-21T06:30:00Z"), minutes=A.ALERT_MIN))
 
     def test_failure_lines_become_ops_events_with_fixed_words_only(self):
         cases = {

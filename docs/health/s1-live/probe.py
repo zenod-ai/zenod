@@ -279,6 +279,10 @@ def zenod_fold(z: dict, lines: list[tuple[dt.datetime, str]]) -> None:
                 z["capturesFailingSince"] = None
             if m.group(1) == "chat":
                 z["chat"] = (z["chat"] + [iso(t)])[-50:]
+        # EPIC-24 M30: the message that carries a WhatsApp link code is answered by the link itself (Phylax verifies
+        # the number and sends the welcome), never by a chat or save job; zenod-mt logs the link within a minute
+        if rest.startswith("[tester-onboarding] WhatsApp linked"):
+            z["chat"] = (z["chat"] + [iso(t)])[-50:]
         # ZAL-A8: a save that failed with no save finished after it (kind logged since ZAL-A8; older lines count
         # only when the vault guard refused them)
         m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)
