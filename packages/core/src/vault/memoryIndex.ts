@@ -469,6 +469,10 @@ export class MemoryIndex {
   private closed = false;
   private lastCheck = Number.NEGATIVE_INFINITY;
   private inflight: Promise<unknown> | null = null;
+  /** M34: a refresh waiting behind the running sync (not yet started); later callers join it. */
+  private queuedRefresh: Promise<{ changed: number; removed: number }> | null = null;
+  /** M34: the refresh reading the vault now, with the dirty generation it started under. */
+  private runningRefresh: { gen: number; promise: Promise<{ changed: number; removed: number }> } | null = null;
   /** Bumped by every sync that changed rows: the cached graph is rebuilt on the next read. */
   private version = 0;
   private graphCache: { version: number; graph: MemoryGraph } | null = null;
@@ -564,7 +568,19 @@ export class MemoryIndex {
 
   /** Bring the index in line with the vault, re-reading only files whose mtime/size changed. */
   refresh(): Promise<{ changed: number; removed: number }> {
-    return this.serialize(() => this.sync(false));
+    // EPIC-24 M34: a refresh that is queued and has not started reading the vault yet will see everything this
+    // caller wants, so callers share it (a burst of parallel searches ran one full vault listing each, queued
+    // one behind the other, 0.2-4.7 s per search on production). One running plus one queued is the most there is.
+    if (this.queuedRefresh) return this.queuedRefresh;
+    const queued: Promise<{ changed: number; removed: number }> = this.serialize(async () => {
+      if (this.queuedRefresh === queued) this.queuedRefresh = null;
+      const gen = this.dirtyGen;
+      const work = this.sync(false);
+      this.runningRefresh = { gen, promise: work };
+      try { return await work; } finally { if (this.runningRefresh?.promise === work) this.runningRefresh = null; }
+    });
+    this.queuedRefresh = queued;
+    return queued;
   }
 
   /** Drop every row and index the whole vault again. Idempotent: same vault → same rows. */
@@ -1384,7 +1400,16 @@ export class MemoryIndex {
   }
 
   private async freshNow(): Promise<void> {
-    if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
+    if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) {
+      // M34: a sync already reading the vault under the same dirty generation saw every write marked so far
+      // (a write marks dirty after its files are on disk), so the search shares it instead of starting another.
+      const running = this.runningRefresh;
+      if (running && running.gen === this.dirtyGen) {
+        try { await running.promise; return; } catch { /* that sync failed: run one of our own below */ }
+      }
+      // A refresh several searches share fails for all of them: each tries once more (the retries share one again).
+      try { await this.refresh(); } catch { await this.refresh(); }
+    }
     // A sync already under way (a background refresh) clears `dirty` before it commits: wait for
     // it, so a search reads the same rows it would have after running the sync itself.
     else if (this.inflight) await this.inflight.catch(() => {});

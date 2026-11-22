@@ -50,6 +50,18 @@ export interface VaultPublicationGuard {
  * Repository-shaped boundary used by the existing local Markdown workflow.
  * Implementations own remote synchronization and publication semantics only.
  */
+/** EPIC-24 M34: one filing pull's outcome and the milliseconds each step took. */
+export interface VaultPullTiming {
+  kind: "skipped" | "fetched";
+  /** Asking the remote for its head ref (ls-remote), 0 when not asked. */
+  headMs: number;
+  /** The fetch of new commits, 0 when skipped. */
+  fetchMs: number;
+  /** The fast-forward of the working tree, 0 when nothing to merge. */
+  mergeMs: number;
+  totalMs: number;
+}
+
 export interface VaultRepository {
   readonly path: string;
   readonly provider: VaultProvider;
@@ -57,6 +69,11 @@ export interface VaultRepository {
   pull(): Promise<void>;
   /** Filing sync must never rebase a prepared local transaction. */
   pullForFiling?(): Promise<void>;
+  /**
+   * EPIC-24 M34: what the last `pullForFiling` did and what each step cost, in ms (logged per tick so the next
+   * measure is exact). `skipped`: the remote head was the one already held, so nothing was fetched.
+   */
+  lastPull?: VaultPullTiming | undefined;
   /** Verify remote publication without mistaking a prepared local commit for durable evidence. */
   currentPublishedRevision?(): Promise<VaultRevision>;
   /** Whether the local commit is contained in verified provider history. */

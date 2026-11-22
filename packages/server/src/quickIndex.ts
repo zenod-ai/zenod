@@ -1,6 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { sayableAlias, type QuickIndexBase, type QuickIndexPlace } from "zenod";
+import { sayableAlias, type QuickIndexBase, type QuickIndexPhases, type QuickIndexPlace } from "zenod";
 
 /**
  * The quick index (EPIC-14 S28): what Zenod knows you mean. For each place in the memory tree, its
@@ -464,4 +464,18 @@ export function quickIndexView(base: QuickIndexBase, state: QuickIndexState, now
       calls: state.calls.length,
     },
   };
+}
+
+/**
+ * EPIC-24 M34: the per-tenant tick's phases in ms, one log line (counts and timings only, never a name or text):
+ * `pull` (the vault sync: `recent` inside its freshness window, `busy` behind a write, `skipped` when the remote
+ * head was already held, `fetched` when it moved; `head`, `fetch`, `merge` are its steps), `stat` (the fingerprint of
+ * every Markdown file), `rebuild` (the base rebuild, 0 on a cache hit), `update` (the model-free update and the file
+ * write), `total` (the tick's wall time).
+ */
+export function quickIndexTickLine(tenantId: string, phases: QuickIndexPhases, updateMs: number, totalMs: number): string {
+  const pull = phases.pull;
+  const kind = pull?.kind ?? "none";
+  const steps = pull && "totalMs" in pull ? ` head=${pull.headMs} fetch=${pull.fetchMs} merge=${pull.mergeMs}` : "";
+  return `[quick-index] tick tenant=${tenantId} pull=${phases.pullMs ?? 0}ms(${kind})${steps} stat=${phases.statMs ?? 0}ms rebuild=${phases.rebuildMs ?? 0}ms(${phases.rebuilt ? "rebuilt" : "cached"}) update=${updateMs}ms total=${totalMs}ms`;
 }

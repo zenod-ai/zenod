@@ -69,7 +69,7 @@ export {
 export { lintTree, lintTreeIndex, type TreeLintIssue, type TreeLintReport, type TreeLintStats } from "./vault/treeLint.js";
 export { seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
 export { heat as treeHeat, jaccard, matchRootIds, newRootId } from "./engine/treeIdentity.js";
-export { quickIndexBase, quickIndexBaseCached, oneLine, sayableAlias, QUICK_INDEX_WEEK_DAYS, type QuickIndexBase, type QuickIndexPlace, type QuickIndexCapture } from "./vault/quickIndex.js";
+export { quickIndexBase, quickIndexBaseCached, oneLine, sayableAlias, QUICK_INDEX_WEEK_DAYS, type QuickIndexBase, type QuickIndexPhases, type QuickIndexPlace, type QuickIndexCapture } from "./vault/quickIndex.js";
 export { memoryTreeOutline, pageCaptureDate, type MemoryTreeOutline, type MemoryTreeOutlineNode, type MemoryTreeCapture } from "./vault/treeOutline.js";
 export { validTimeZone } from "./vault/recentIntent.js";
 export { idfOf, matchPercent, monotonic, withMatchPercent, type MatchInput } from "./vault/matchPercent.js";
@@ -106,6 +106,7 @@ export {
   type VaultPublicationFailure,
   type VaultRepository,
   type VaultRevision,
+  type VaultPullTiming,
   type VaultSourceRef,
 } from "./vault/repository.js";
 export {

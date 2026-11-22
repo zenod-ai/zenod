@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
@@ -353,5 +353,51 @@ describe("the index refreshes in the background after a write (E24-M7)", { timeo
     const hits = await index.search("wombatword");
     await background;
     expect(hits[0]?.path).toBe("Notes/Wombat.md");
+  });
+});
+
+describe("parallel searches share one index refresh (EPIC-24 M34)", { timeout: 20_000 }, () => {
+  const PAGE = (title: string, body: string) => `---\ntitle: ${title}\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-08\nsummary: ${title}.\n---\n\n# ${title}\n\n${body}\n`;
+
+  it("runs one vault read for a burst of searches, and every search gets the same hits", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = indexFor(vault, join(dirname(vault), "memory-index.sqlite"));
+    const sync = vi.spyOn(index as unknown as { sync: (full: boolean) => Promise<unknown> }, "sync");
+    const burst = await Promise.all(Array.from({ length: 40 }, () => index.search("Porto quotes")));
+    expect(sync).toHaveBeenCalledTimes(1);
+    for (const hits of burst) expect(hits.map((hit) => hit.path)).toEqual(burst[0]!.map((hit) => hit.path));
+    expect(burst[0]![0]).toMatchObject({ path: QUOTES });
+    // Settled and unchanged: more searches read nothing again.
+    await Promise.all(Array.from({ length: 10 }, () => index.search("Porto quotes")));
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("a write that lands while a burst is refreshing is seen by the next search", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = indexFor(vault, join(dirname(vault), "memory-index.sqlite"));
+    await index.search("Porto");
+    index.markDirty();
+    const early = Array.from({ length: 20 }, () => index.search("Porto"));
+    await new Promise((resolve) => setImmediate(resolve)); // the shared refresh is under way
+    await writeFile(join(vault, "Projects/Boat repair/Zanzibar ferry.md"), PAGE("Zanzibar ferry", "The zanzibar ferry leaves at dawn."));
+    index.markDirty(); // what the write queue does once a filing's files are on disk
+    const late = await Promise.all(Array.from({ length: 20 }, () => index.search("zanzibar")));
+    await Promise.all(early);
+    for (const hits of late) expect(hits[0]?.path).toBe("Projects/Boat repair/Zanzibar ferry.md");
+  });
+
+  it("a refresh that fails does not poison the searches behind it", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = indexFor(vault, join(dirname(vault), "memory-index.sqlite"));
+    const real = (index as unknown as { sync: (full: boolean) => Promise<unknown> }).sync.bind(index);
+    let first = true;
+    vi.spyOn(index as unknown as { sync: (full: boolean) => Promise<unknown> }, "sync").mockImplementation(async (full: boolean) => {
+      if (first) { first = false; throw new Error("disk hiccup"); }
+      return real(full);
+    });
+    const outcomes = await Promise.allSettled(Array.from({ length: 5 }, () => index.search("Porto quotes")));
+    // The searches that joined the failed refresh retry with their own; nothing hangs and later searches succeed.
+    expect(outcomes.some((outcome) => outcome.status === "fulfilled")).toBe(true);
+    expect((await index.search("Porto quotes"))[0]).toMatchObject({ path: QUOTES });
   });
 });

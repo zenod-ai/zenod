@@ -67,7 +67,7 @@ import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef,
 import { searchVault } from "../ops/search.js";
 import { ASKED_NOTE_LIFT, MemoryIndex, MemoryIndexTenantError, type MemoryCloudRequest } from "../vault/memoryIndex.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
-import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
+import { assertVaultProviderUrl, type VaultPullTiming, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString, unfiledEvidenceEntries } from "./evidence.js";
@@ -78,7 +78,7 @@ import { lintTree, lintTreeIndex } from "../vault/treeLint.js";
 import { appendCorrection, CORRECTIONS_PATH, latestNoteFor, newCorrection, parentTitle, placementReview as readPlacementReview, placeOf, readCorrections, type PlacementCorrectionResult, type PlacementReview } from "./placementReview.js";
 import { applyDeskChanges, checkDeskChanges, checkDeskPlan, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
-import { quickIndexBaseCached } from "../vault/quickIndex.js";
+import { quickIndexBaseCached, type QuickIndexPhases } from "../vault/quickIndex.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
@@ -843,22 +843,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { hits, tier: "scan", ms: ms() };
   }
 
-  async function syncForRead(): Promise<void> {
-    if (!repo) return; // vaultless: nothing to pull
-    if (now().getTime() - lastSyncMs < readSyncTtl) return;
+  async function syncForRead(): Promise<VaultPullTiming | { kind: "recent" | "busy" } | undefined> {
+    if (!repo) return undefined; // vaultless: nothing to pull
+    if (now().getTime() - lastSyncMs < readSyncTtl) return { kind: "recent" };
     // Never block an interactive turn on a best-effort freshness pull. If a
     // write is in flight (especially a slow background librarian filing), serve
     // the local clone now and sync on a later read — blocking here let
     // background filing stall replies for minutes (#96). lastSyncMs is left
     // untouched so the next idle read retries the pull.
-    if (queue.busy) return;
+    if (queue.busy) return { kind: "busy" };
+    let outcome: VaultPullTiming | { kind: "recent" | "busy" } | undefined = { kind: "busy" };
     const sync = queue.run(async () => {
-      if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
+      if (now().getTime() - lastSyncMs < readSyncTtl) { outcome = { kind: "recent" }; return; } // a queued turn already synced
+      repo.lastPull = undefined;
       await (repo.pullForFiling ? repo.pullForFiling() : repo.pull()).catch(() => {});
       lastSyncMs = now().getTime();
+      outcome = repo.lastPull;
     }, "interactive", { lockWaitMs: 0 }).catch(error => { if (!(error instanceof VaultWriteBusyError)) throw error; });
     readSyncInFlight = sync;
     try { await sync; } finally { if (readSyncInFlight === sync) readSyncInFlight = undefined; }
+    return outcome;
   }
 
   function estimateTokens(text: string): number {
@@ -4285,10 +4289,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await syncForRead();
       return memoryTreeOutline(vaultPath, { urlFor: (path) => repositoryUrl(path) || null, ...(options?.listUnplaced ? { listUnplaced: true } : {}) });
     },
-    quickIndexBase: async () => {
+    quickIndexBase: async (phases?: QuickIndexPhases) => {
       assertVault(repo);
-      await syncForRead();
-      return quickIndexBaseCached(vaultPath, now().getTime());
+      const pullStarted = performance.now();
+      const pulled = await syncForRead();
+      if (phases) {
+        phases.pullMs = Math.round(performance.now() - pullStarted);
+        phases.pull = pulled;
+      }
+      return quickIndexBaseCached(vaultPath, now().getTime(), phases);
     },
     lint: async (): Promise<LintReport> => {
       assertVault(repo);

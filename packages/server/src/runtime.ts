@@ -39,6 +39,7 @@ import {
   type PeerTools,
   type TaskingInput,
   type TokenCostMeasurement,
+  type QuickIndexPhases,
   type VaultRepository,
   isKnownTool,
   toolKind,
@@ -82,7 +83,7 @@ import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
 import { duePersonas, helpersBuilding, nextPersonaWakeAt, withAskRevision, personaEnabled, personaPeriodKey, personaSchedule, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import { putAwayProjectSuggestions } from "./helperScope.js";
-import { correctReading, QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
+import { correctReading, QuickIndexStore, quickIndexTickLine, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
 import { readAs, shownReadings, type ReadAs, type ReadAsIndex } from "./quickIndexRead.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
@@ -1142,19 +1143,25 @@ export class Runtime {
     if (this.quickIndexRun) return this.quickIndexRun;
     if (this.agent.vaultless === true || !this.settings.vaultConfigured()) return Promise.resolve(null);
     const active = (async () => {
+      const tickStarted = performance.now();
+      const phases: QuickIndexPhases = {};
       const engine = await this.getEngine();
-      const base = engine.quickIndexBase ? await engine.quickIndexBase() : null;
+      const base = engine.quickIndexBase ? await engine.quickIndexBase(phases) : null;
       if (!base) return null;
       const store = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir));
+      const updateStarted = performance.now();
       const { state, update } = await updateQuickIndex(base, store.read(), {
         model: this.quickIndexModel(),
         blocked: () => this.featureBlock("filing") !== null,
         now,
       });
       store.write(state);
+      const updateMs = Math.round(performance.now() - updateStarted);
       // S29: the tick keeps what chat reads warm, so a message never waits on reading the vault.
       const view = quickIndexView(base, state, now);
       this.readAsCache = { at: now, index: { places: view.places, corrections: state.corrections } };
+      // EPIC-24 M34: where the tick's wall time went, one line per tenant per tick (no names, no text), so the next measure is exact.
+      console.log(quickIndexTickLine(this.tenantId, phases, updateMs, Math.round(performance.now() - tickStarted)));
       if (update.pass || update.calls) {
         console.log(`[quick-index] tenant=${this.tenantId} ${update.pass ?? "summary"}: calls=${update.calls} names+${update.names} usd=${update.costUsd.toFixed(5)} places=${view.totals.places} named=${view.totals.named} names=${view.totals.names} week=${view.totals.thisWeek} today_usd=${view.cost.todayUsd.toFixed(5)}`);
       }
