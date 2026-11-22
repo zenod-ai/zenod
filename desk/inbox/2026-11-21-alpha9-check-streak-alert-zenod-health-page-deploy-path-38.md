@@ -2,7 +2,8 @@
 from: alpha9
 about: Alert: zenod health page: Deploy path
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: duplicate of the 21-22 Nov GitHub sign-in outage alerts; answered once at 2026-11-22-alpha9-check-streak-zenod-smoke-cloud-deployed-sha.md; WhatsApp message: EPIC-24 M30
 ---
 1 alert(s) from your checks reached us (E6-S170: alerts go to their owner, no longer to a thread nobody reads). This note closes by itself when the check sends RECOVERED (a one-off, like a caught secret, stays open until you answer). Act now: fix it, or answer in our desk/inbox when the alert is wrong.
 - zenod health page: Deploy path: since 2026-11-21 02:12 UTC: zenod health page: Deploy path is red: deploy-poller zenod-staging: error RuntimeError: gh run failed rc=1: HTTP 401: Bad credentials (https://api.github.com/r; smoke check failed: Deploy poller ran in the last 10 min: error RuntimeError: gh run failed rc=1: HTTP 401: Bad credentials (https://api.g
