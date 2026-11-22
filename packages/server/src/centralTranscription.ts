@@ -16,9 +16,13 @@ export const CENTRAL_STT_TIMEOUT_MS = 60_000;
 export const CENTRAL_STT_COOLDOWN_MS = 120_000;
 export const CENTRAL_STT_TURBO_MODEL = "large-v3-turbo";
 export const CENTRAL_STT_SMALL_MODEL = "small";
-/** Under load the service runs at about real time with turbo (33 s for 30 s of audio) and 2 to 3 times faster with small. */
-export const CENTRAL_STT_TURBO_MAX_SECONDS = 45;
-export const CENTRAL_STT_SMALL_MAX_SECONDS = 120;
+/**
+ * Measured on vps3 at load 12 (22 Nov): turbo takes 27 to 36 s even for a 5 s note and 33 s for a 30 s one; small takes 6 to 9 s
+ * for 5 s and 11 to 26 s for 30 s. So turbo is only tried for notes up to 30 s and small up to 90 s; longer ones would not
+ * finish in 60 s and go straight to the paid provider.
+ */
+export const CENTRAL_STT_TURBO_MAX_SECONDS = 30;
+export const CENTRAL_STT_SMALL_MAX_SECONDS = 90;
 
 export interface CentralSttConfig {
   url: string;
