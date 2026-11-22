@@ -27,15 +27,13 @@ export const ZENOD_WHATSAPP_TESTER_WELCOME = [
 ].join("\n");
 
 /**
- * EPIC-7 E7-S26: the one WhatsApp message a tester gets when WhatsApp has been linked for a day and no note has been
- * saved. It arrives from Zenod's own number, so it speaks as Zenod ("Hi, it's Zenod", Jordi's round-2 note on E7-A35),
- * warm first (root L-18), Zenod described by the product deck's one-liner (root L-19), then the one ask; 45 words, no
- * list. Sent only once the nudge is switched on (Jordi's yes to the ask).
+ * EPIC-7 E7-S26 round 3: the one reminder a tester gets 48 hours after the WhatsApp code handshake when storage is set up
+ * and nothing has been sent. It arrives from Zenod's own number, so it speaks as Zenod. The text is Jordi's own (voice note
+ * vn_bd12b21e on E7-A37: "Hey, I just want to remind you I'm here. Feel free to send me any thoughts that you want to
+ * store"), capitalized, nothing added. Sent only while the nudge is switched on.
  */
 export const ZENOD_WHATSAPP_FIRST_NOTE_NUDGE =
-  "Hi, it's Zenod. Thanks for linking WhatsApp. I keep your memory: I file what you tell me in your own " +
-  "Google Drive or GitHub, and Claude, ChatGPT and your other AI tools can read it. Send me a voice note about " +
-  "anything on your mind.";
+  "Hi, it's Zenod. Just a reminder that I'm here. Feel free to send me any thoughts you want to keep.";
 
 interface WelcomeState {
   tenants: Record<string, { kind: PhylaxWelcomeKind; armedAt: number }>;

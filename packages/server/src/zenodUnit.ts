@@ -1550,8 +1550,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           ...testerSetups,
         }),
       });
-      // E7-S26: one WhatsApp message from Zenod's own number to a tester whose WhatsApp has been linked for a day with no note,
-      // once per tester. Shipped OFF: nothing is sent until Jordi approves the text and the ops route (or the env) switches it on.
+      // E7-S26: one WhatsApp message from Zenod's own number to a tester whose WhatsApp code handshake finished 48 hours ago,
+      // with storage set up and nothing sent since, once per tester (Jordi's terms, E7-A37). Off until the ops route (or the env) switches it on.
       const firstNoteNudge = new TesterFirstNoteNudge({
         dataDir: storage.dataDir,
         envMode: parseFirstNoteNudgeMode(env.ZENOD_TESTER_FIRST_NOTE_NUDGE) ?? "off",

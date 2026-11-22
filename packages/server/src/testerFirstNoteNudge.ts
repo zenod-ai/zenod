@@ -1,22 +1,24 @@
-// EPIC-7 E7-S26 (Jordi's key result "Testers use voice notes", agent_team desk note 22 Nov): a tester whose WhatsApp has
-// been linked for 24 hours and who has saved no note gets one short WhatsApp message from Zenod's own number inviting a
-// first voice note. Once per tester ever; our own test accounts are left out; never on a tester who already sent a note.
+// EPIC-7 E7-S26 (Jordi's key result "Testers use voice notes", agent_team desk note 22 Nov; his terms in voice note
+// vn_bd12b21e on E7-A37, round 3): a tester who finished the WhatsApp code handshake 48 hours ago, has their storage set up
+// (Google Drive or GitHub) and has sent nothing since gets one friendly reminder from Zenod's own number. Once per tester
+// ever; our own test accounts are left out; never on a tester who already sent a note or has no storage yet.
 //
 // It goes through the same fixed-text channel as the tester welcome (Phylax account notice, kind first_note_nudge), so
 // nothing here can send an arbitrary message. It ships switched OFF: while the mode is off the timer does nothing at all
-// (no reads, no sends) until Jordi's yes to the ask that holds the exact text; then the ops route (or ZENOD_TESTER_FIRST_NOTE_NUDGE=on)
-// switches it on, and the same route switches it off at once.
+// (no reads, no sends) until the ops route (or ZENOD_TESTER_FIRST_NOTE_NUDGE=on) switches it on; the same route switches it
+// off at once.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Context, Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { accountEmail } from "./testerOnboarding.js";
+import { vaultState } from "./testerProgress.js";
 import { maskAccount, readTesterSetups, type TesterSetupOptions } from "./testerWhatsAppSetup.js";
 
 export const FIRST_NOTE_NUDGE_FILE = "tester-first-note-nudge.json";
-/** WhatsApp linked this long with no note before the message goes. */
-export const FIRST_NOTE_NUDGE_AFTER_MS = 24 * 60 * 60 * 1000;
+/** The WhatsApp code handshake finished this long ago with nothing sent since, before the reminder goes (Jordi: 48 hours). */
+export const FIRST_NOTE_NUDGE_AFTER_MS = 48 * 60 * 60 * 1000;
 export const FIRST_NOTE_SWEEP_MS = 15 * 60 * 1000;
 /** A send that failed is tried again on the next sweeps, up to this many times, then left for the team. */
 export const FIRST_NOTE_MAX_ATTEMPTS = 3;
@@ -48,6 +50,8 @@ interface NudgeState {
 
 export interface FirstNoteNudgeOptions extends TesterSetupOptions {
   dataDir: string;
+  /** True when the account's notes place (Google Drive or GitHub) is connected and ready; the reminder never goes without it. */
+  vaultSet?: (account: CustomerAccount) => boolean;
   /** The starting mode (ZENOD_TESTER_FIRST_NOTE_NUDGE); the runtime setting wins. Off when unset. */
   envMode: FirstNoteNudgeMode;
   /** When Zenod saw this account's WhatsApp link (ISO), null when it did not watch it. */
@@ -61,7 +65,7 @@ export interface FirstNoteNudgeOptions extends TesterSetupOptions {
 
 export interface FirstNoteDue {
   account: CustomerAccount;
-  /** when the 24 hours ran out */
+  /** when the 48 hours after the handshake ran out */
   dueAt: string;
 }
 
@@ -111,7 +115,8 @@ export class TesterFirstNoteNudge {
   }
 
   /**
-   * Who is due now: real testers with WhatsApp linked 24 hours or more, no note, never sent (by account or by address).
+   * Who is due now: real testers whose WhatsApp code handshake finished 48 hours ago or more, with storage set up, nothing
+   * sent since, and never reminded before (by account or by address).
    * Reads the setup of every tester account, so it runs only while the mode is on.
    */
   async due(): Promise<FirstNoteDue[]> {
@@ -120,6 +125,7 @@ export class TesterFirstNoteNudge {
       Object.values(state.accounts).filter((r) => r.sentAt && r.email).map((r) => r.email!.trim().toLowerCase()),
     );
     const nowMs = this.now().getTime();
+    const vaultSet = this.options.vaultSet ?? ((account: CustomerAccount) => vaultState(account).set);
     const out: FirstNoteDue[] = [];
     let seen = false;
     for (const row of await readTesterSetups(this.options)) {
@@ -139,6 +145,8 @@ export class TesterFirstNoteNudge {
       }
       const dueMs = Date.parse(linkedAt) + FIRST_NOTE_NUDGE_AFTER_MS;
       if (!Number.isFinite(dueMs) || nowMs < dueMs) continue;
+      // Jordi: "we cannot have this live without them having set up their storage".
+      if (!vaultSet(row.account)) continue;
       if (this.options.noteCount(row.account.tenant_id) > 0) continue;
       if (email) sentAddresses.add(email);
       out.push({ account: row.account, dueAt: new Date(dueMs).toISOString() });
