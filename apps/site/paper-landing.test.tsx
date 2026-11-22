@@ -204,11 +204,6 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(home).toContain('href="/testers">Become a tester and try it with your voice notes');
     const section = home.slice(sample, home.indexOf("</section>", sample));
     expect(section).not.toMatch(/garden|Westcombe/i);
-    // E26-S38: one quiet switch between three invented weeks, Sara's first
-    expect(section.match(/class="sm-week[^"]*" aria-pressed="(true|false)" data-week="(sara|dan|priya)"/g)?.length).toBe(3);
-    expect(section).toContain('aria-pressed="true" data-week="sara"');
-    expect(section).toContain("Dan, parent");
-    expect(section).toContain("Priya, freelancer");
   });
 
   it("shows a read-only sample memory, Sara's week, above the promises and the form (E26-S35)", () => {
@@ -223,8 +218,6 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(testers).toContain("Sara’s birthday is Saturday. Book dinner for six at the Italian place.");
     expect(testers.match(/class="sm-n[^"]*" role="button" tabindex="0"/g)?.length).toBe(7);
     expect(testers).not.toMatch(/garden|\bshed\b|westcomb|cabin/i);
-    expect(testers.match(/data-week="/g)?.length).toBe(3);
-    expect(testers).toContain("Dan, parent");
     expect(testers).toContain("Your first 30 memories free. No card.");
   });
 
