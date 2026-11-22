@@ -48,6 +48,7 @@ export type {
   TreeSweepResult,
   PersonaNotesInput,
   UnpublishedHeadRecovery,
+  SetAsideAbandonedChanges,
   WorkInput,
   WorkResult,
 } from "./types.js";
