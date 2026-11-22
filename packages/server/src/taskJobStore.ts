@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { MemoryContentType, Reply, StoreResult, Surface, TaskingReply, VaultRevision, WorkResult } from "zenod";
+import { ReceiptWorkerUnavailable, receiptsOffThread } from "./receiptsOffThread.js";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
@@ -225,17 +226,87 @@ export interface TaskJobPatch {
   error?: string | null;
 }
 
+/**
+ * The receipts query. With an evidence ref, `instr(result_json, <the ref as JSON wrote it>)` is checked first: it
+ * reads only the small result and skips the JSON parse (and the note text in `input_json`) of every other job.
+ */
+export function captureReceiptsSql(withEvidenceRef: boolean): string {
+  return `SELECT * FROM (
+        SELECT id, kind, idempotency_key, status, attempts, created_at, updated_at,
+          CASE WHEN json_type(result_json, '$.evidenceRef') = 'text' THEN json_extract(result_json, '$.evidenceRef')
+               WHEN json_type(result_json, '$.digest.evidenceRef') = 'text' THEN json_extract(result_json, '$.digest.evidenceRef') END AS evidence_ref,
+          CASE WHEN json_type(result_json, '$.evidenceUrl') = 'text' THEN json_extract(result_json, '$.evidenceUrl')
+               WHEN json_type(result_json, '$.digest.evidenceUrl') = 'text' THEN json_extract(result_json, '$.digest.evidenceUrl') END AS evidence_url,
+          CASE WHEN json_type(result_json, '$.revision') = 'object' THEN json_extract(result_json, '$.revision')
+               WHEN json_type(result_json, '$.digest.revision') = 'object' THEN json_extract(result_json, '$.digest.revision') END AS revision_json,
+          json_extract(input_json, '$.source') AS source, json_extract(input_json, '$.sourceHint') AS source_hint,
+          json_extract(input_json, '$.contentType') AS content_type, json_extract(input_json, '$.mediaType') AS media_type,
+          json_extract(input_json, '$.capturedAt') AS captured_at, json_extract(input_json, '$.senderTimestamp') AS sender_timestamp,
+          json_extract(input_json, '$.sourceId') AS source_id, json_type(input_json, '$.verbatim') AS verbatim
+        FROM task_jobs
+        WHERE tenant_id=? AND status='done' AND kind IN ('store', 'media_ingest')${withEvidenceRef ? " AND instr(result_json, ?) > 0" : ""}
+          AND result_json IS NOT NULL AND json_valid(result_json) AND json_valid(input_json)
+      ) WHERE evidence_ref IS NOT NULL${withEvidenceRef ? " AND evidence_ref=?" : ""}`;
+}
+
+/** The text a JSON string holds for `value`, without its quotes: how `result_json` spells an evidence ref. */
+export function jsonTextOf(value: string): string {
+  return JSON.stringify(value).slice(1, -1);
+}
+
+type ReceiptRow = Record<string, string | number | null>;
+
+function receiptRowsToJobs(rows: ReceiptRow[]): TaskJob[] {
+  const text = (value: string | number | null | undefined) => (typeof value === "string" ? value : undefined);
+  return rows.map((row) => {
+    const input: TaskJobInput = {};
+    const set = <K extends keyof TaskJobInput>(key: K, value: TaskJobInput[K] | undefined) => { if (value !== undefined) input[key] = value; };
+    set("source", text(row.source) as TaskJobInput["source"]);
+    set("sourceHint", text(row.source_hint));
+    set("contentType", text(row.content_type) as TaskJobInput["contentType"]);
+    set("mediaType", text(row.media_type) as TaskJobInput["mediaType"]);
+    set("capturedAt", text(row.captured_at));
+    set("senderTimestamp", text(row.sender_timestamp) as TaskJobInput["senderTimestamp"]);
+    set("sourceId", text(row.source_id));
+    if (row.verbatim === "true" || row.verbatim === "false") input.verbatim = row.verbatim === "true";
+    const result: Record<string, unknown> = { evidenceRef: row.evidence_ref };
+    if (typeof row.evidence_url === "string") result.evidenceUrl = row.evidence_url;
+    if (typeof row.revision_json === "string") result.revision = JSON.parse(row.revision_json);
+    return {
+      id: String(row.id),
+      kind: row.kind as TaskJobKind,
+      idempotencyKey: text(row.idempotency_key) ?? null,
+      claimToken: null,
+      input,
+      status: "done",
+      result: result as unknown as TaskJobResult,
+      error: null,
+      attempts: Number(row.attempts ?? 0),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  });
+}
+
+function receiptParams(tenantId: string, evidenceRef: string | undefined): string[] {
+  return evidenceRef === undefined ? [tenantId] : [tenantId, jsonTextOf(evidenceRef), evidenceRef];
+}
+
 export class TaskJobStore {
   private readonly db: DatabaseSync;
+  private readonly dbPath: string;
   private readonly tenantId: string;
   /** The tenant this store belongs to (log lines name it; EPIC-24 M25). */
   get tenant(): string { return this.tenantId; }
   private readonly ownerId = randomUUID();
+  /** Receipt reads in flight, by evidence ref: a second caller of the same read shares it. */
+  private readonly receiptReads = new Map<string, Promise<TaskJob[]>>();
 
   constructor(path: string, tenantId = "standalone", now: () => number = Date.now) {
     const normalizedTenantId = tenantId.trim();
     if (!normalizedTenantId) throw new Error("TaskJobStore tenantId must not be empty");
     this.tenantId = normalizedTenantId;
+    this.dbPath = path;
     this.db = openZenodSqlite(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS task_jobs (
@@ -569,52 +640,28 @@ export class TaskJobStore {
    * whole job history on the heap at once and ran production out of memory (13 Nov 2026).
    */
   captureReceipts(evidenceRef?: string): TaskJob[] {
-    const rows = this.db.prepare(`SELECT * FROM (
-        SELECT id, kind, idempotency_key, status, attempts, created_at, updated_at,
-          CASE WHEN json_type(result_json, '$.evidenceRef') = 'text' THEN json_extract(result_json, '$.evidenceRef')
-               WHEN json_type(result_json, '$.digest.evidenceRef') = 'text' THEN json_extract(result_json, '$.digest.evidenceRef') END AS evidence_ref,
-          CASE WHEN json_type(result_json, '$.evidenceUrl') = 'text' THEN json_extract(result_json, '$.evidenceUrl')
-               WHEN json_type(result_json, '$.digest.evidenceUrl') = 'text' THEN json_extract(result_json, '$.digest.evidenceUrl') END AS evidence_url,
-          CASE WHEN json_type(result_json, '$.revision') = 'object' THEN json_extract(result_json, '$.revision')
-               WHEN json_type(result_json, '$.digest.revision') = 'object' THEN json_extract(result_json, '$.digest.revision') END AS revision_json,
-          json_extract(input_json, '$.source') AS source, json_extract(input_json, '$.sourceHint') AS source_hint,
-          json_extract(input_json, '$.contentType') AS content_type, json_extract(input_json, '$.mediaType') AS media_type,
-          json_extract(input_json, '$.capturedAt') AS captured_at, json_extract(input_json, '$.senderTimestamp') AS sender_timestamp,
-          json_extract(input_json, '$.sourceId') AS source_id, json_type(input_json, '$.verbatim') AS verbatim
-        FROM task_jobs
-        WHERE tenant_id=? AND status='done' AND kind IN ('store', 'media_ingest')
-          AND result_json IS NOT NULL AND json_valid(result_json) AND json_valid(input_json)
-      ) WHERE evidence_ref IS NOT NULL${evidenceRef === undefined ? "" : " AND evidence_ref=?"}`)
-      .all(...(evidenceRef === undefined ? [this.tenantId] : [this.tenantId, evidenceRef])) as Array<Record<string, string | number | null>>;
-    const text = (value: string | number | null | undefined) => (typeof value === "string" ? value : undefined);
-    return rows.map((row) => {
-      const input: TaskJobInput = {};
-      const set = <K extends keyof TaskJobInput>(key: K, value: TaskJobInput[K] | undefined) => { if (value !== undefined) input[key] = value; };
-      set("source", text(row.source) as TaskJobInput["source"]);
-      set("sourceHint", text(row.source_hint));
-      set("contentType", text(row.content_type) as TaskJobInput["contentType"]);
-      set("mediaType", text(row.media_type) as TaskJobInput["mediaType"]);
-      set("capturedAt", text(row.captured_at));
-      set("senderTimestamp", text(row.sender_timestamp) as TaskJobInput["senderTimestamp"]);
-      set("sourceId", text(row.source_id));
-      if (row.verbatim === "true" || row.verbatim === "false") input.verbatim = row.verbatim === "true";
-      const result: Record<string, unknown> = { evidenceRef: row.evidence_ref };
-      if (typeof row.evidence_url === "string") result.evidenceUrl = row.evidence_url;
-      if (typeof row.revision_json === "string") result.revision = JSON.parse(row.revision_json);
-      return {
-        id: String(row.id),
-        kind: row.kind as TaskJobKind,
-        idempotencyKey: text(row.idempotency_key) ?? null,
-        claimToken: null,
-        input,
-        status: "done",
-        result: result as unknown as TaskJobResult,
-        error: null,
-        attempts: Number(row.attempts ?? 0),
-        createdAt: Number(row.created_at),
-        updatedAt: Number(row.updated_at),
-      };
-    });
+    return receiptRowsToJobs(this.db.prepare(captureReceiptsSql(evidenceRef !== undefined)).all(...receiptParams(this.tenantId, evidenceRef)) as ReceiptRow[]);
+  }
+
+  /**
+   * The same receipts, read on a worker thread with its own connection: the scan parses every finished capture
+   * job's JSON, which on a cold disk held the one thread that serves chat, WhatsApp and the web for 33-41 s
+   * (`event_loop.blocked`, EPIC-24 M34 round 4). Only this call waits. An in-memory store cannot be opened by
+   * another thread and a worker that cannot start falls back to the synchronous read.
+   */
+  captureReceiptsAsync(evidenceRef?: string): Promise<TaskJob[]> {
+    if (this.dbPath === ":memory:") return Promise.resolve(this.captureReceipts(evidenceRef));
+    const key = evidenceRef ?? "\u0000all";
+    const running = this.receiptReads.get(key);
+    if (running) return running;
+    const read = receiptsOffThread(this.dbPath, captureReceiptsSql(evidenceRef !== undefined), receiptParams(this.tenantId, evidenceRef))
+      .then(receiptRowsToJobs, (error: unknown) => {
+        if (error instanceof ReceiptWorkerUnavailable) return this.captureReceipts(evidenceRef);
+        throw error;
+      })
+      .finally(() => { this.receiptReads.delete(key); });
+    this.receiptReads.set(key, read);
+    return read;
   }
 
   /** EPIC-24 M15: the note text of one capture job, for an entry whose evidence is not in the vault yet. */

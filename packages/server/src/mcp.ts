@@ -1,4 +1,4 @@
-import { captureReceiptsFor, mergeMemoryEntries, searchMemoryEntryPage } from "./memoryEntryCatalog.js";
+import { captureReceiptsForAsync, mergeMemoryEntriesAsync, searchMemoryEntryPage } from "./memoryEntryCatalog.js";
 import { readAsLine, readAsNote, shownReadings, type ReadAs } from "./quickIndexRead.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -86,6 +86,7 @@ export interface TaskJobs {
   recent?(limit?: number): TaskJob[];
   /** EPIC-24 M15: lean finished capture receipts, so a read never loads the whole job history. */
   captureReceipts?(evidenceRef?: string): TaskJob[];
+  captureReceiptsAsync?(evidenceRef?: string): Promise<TaskJob[]>;
   captureContent?(id: string): { content?: string; contentHint?: string } | null;
   admit?(kind: TaskJobKind, input: TaskJobInput): { code: string; message: string } | null;
   /** Hosted public beta uses Drive only as an archive/export destination. */
@@ -1048,8 +1049,8 @@ export function buildMcpServer(
       const engine = await getEngine();
       if (path.includes("#^")) {
         const storedEntry = await engine.getEntry(path);
-        const receipts = captureReceiptsFor(taskJobs, storedEntry.evidenceRef);
-        const entry = mergeMemoryEntries([storedEntry], receipts.jobs, receipts.loadContent)
+        const receipts = await captureReceiptsForAsync(taskJobs, storedEntry.evidenceRef);
+        const entry = (await mergeMemoryEntriesAsync([storedEntry], receipts.jobs, receipts.loadContent))
           .find((candidate) => candidate.evidenceRef === storedEntry.evidenceRef) ?? storedEntry;
         return {
           content: [{ type: "text", text: `${entry.evidenceRef}\nsource: ${entry.source}\ncontentType: ${entry.contentType ?? "unknown"}\ncapturedAt: ${entry.capturedAt}\n${entry.url ? `source URL: ${entry.url}\n` : ""}${entry.content}` }],

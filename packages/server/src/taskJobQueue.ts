@@ -129,6 +129,11 @@ export class TaskJobQueue {
     return this.store.captureReceipts(evidenceRef);
   }
 
+  /** The same receipts read on a worker thread, so a big history never holds the main thread (EPIC-24 M34 round 4). */
+  captureReceiptsAsync(evidenceRef?: string): Promise<TaskJob[]> {
+    return this.store.captureReceiptsAsync(evidenceRef);
+  }
+
   captureContent(id: string): { content?: string; contentHint?: string } | null {
     return this.store.captureContent(id);
   }

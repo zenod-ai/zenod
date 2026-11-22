@@ -5,7 +5,7 @@ import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import type { BrainEngine, MemoryEntry } from "zenod";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { captureReceiptsFor, mergeMemoryEntries, searchMemoryEntryPage } from "../src/memoryEntryCatalog.js";
+import { captureReceiptsFor, captureReceiptsForAsync, mergeMemoryEntries, mergeMemoryEntriesAsync, searchMemoryEntryPage } from "../src/memoryEntryCatalog.js";
 import { TaskJobStore } from "../src/taskJobStore.js";
 
 setFlagsFromString("--expose-gc");
@@ -117,3 +117,90 @@ describe("capture receipts stay lean (EPIC-24 M15)", () => {
     expect(lean).toBeLessThan(full / 6);
   });
 });
+
+// EPIC-24 M34 round 4: the watchdog named the 33-41 s `event_loop.blocked` on production: `captureReceipts`
+// (a synchronous node:sqlite scan of every finished capture job) called from the notes list and get_memory, and
+// 5.7 s inside `mergeMemoryEntries`. Both now leave the main thread free.
+describe("capture receipts do not hold the main thread (EPIC-24 M34 round 4)", () => {
+  /** The longest time the event loop went without running a timer while `work` ran. */
+  async function longestGap<T>(work: () => Promise<T>): Promise<{ value: T; gapMs: number }> {
+    let last = Date.now();
+    let gapMs = 0;
+    const timer = setInterval(() => { const now = Date.now(); gapMs = Math.max(gapMs, now - last); last = now; }, 5);
+    try {
+      last = Date.now();
+      return { value: await work(), gapMs };
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
+  const rows: Seed[] = [
+    { id: "a", input: { content: "text a", source: "whatsapp", contentType: "voice_note", capturedAt: "2026-11-02T08:00:00Z", verbatim: true }, result: { evidenceRef: "Log/2026-11-02.md#^e-1", evidenceUrl: "https://example.test/1", revision: { provider: "github", id: "r1" } }, key: "cap:whatsapp:wamid.1", at: 10 },
+    { id: "b", kind: "media_ingest", input: { mediaType: "audio", contentHint: "memo" }, result: { digest: { evidenceRef: "Log/2026-11-04.md#^e-3", evidenceUrl: "https://example.test/3" } }, at: 30 },
+    { id: "quote", input: { content: "q" }, result: { evidenceRef: 'Log/2026-11-05 "café" \\ é.md#^e-4' }, at: 40 },
+    { id: "other", input: { content: "o" }, result: { evidenceRef: "Log/2026-11-02.md#^e-10" }, at: 50 },
+    { id: "failed", status: "error", input: { content: "f" }, result: { evidenceRef: "Log/2026-11-02.md#^e-1" }, at: 60 },
+  ];
+
+  it("reads the same receipts on a worker thread, for all of them and for one evidence ref", async () => {
+    const jobs = await store();
+    insert(jobs, rows);
+    expect(await jobs.captureReceiptsAsync()).toEqual(jobs.captureReceipts());
+    for (const ref of ["Log/2026-11-02.md#^e-1", "Log/2026-11-04.md#^e-3", 'Log/2026-11-05 "café" \\ é.md#^e-4', "Log/2026-11-02.md#^e-10", "Log/none.md#^e-0"]) {
+      expect(await jobs.captureReceiptsAsync(ref)).toEqual(jobs.captureReceipts(ref));
+    }
+    expect((await jobs.captureReceiptsAsync("Log/2026-11-02.md#^e-1")).map((job) => job.id)).toEqual(["a"]);
+    // The through-the-queue shape callers use.
+    const { jobs: lean, loadContent } = await captureReceiptsForAsync(jobs, "Log/2026-11-02.md#^e-1");
+    expect(lean.map((job) => job.id)).toEqual(["a"]);
+    expect(loadContent).toBeTypeOf("function");
+  });
+
+  it("shares one read between callers that ask for the same thing at once", async () => {
+    const jobs = await store();
+    insert(jobs, rows);
+    const [one, two] = await Promise.all([jobs.captureReceiptsAsync(), jobs.captureReceiptsAsync()]);
+    expect(one).toBe(two);
+  });
+
+  it("keeps the event loop running while a big history is read", async () => {
+    const jobs = await store();
+    const text = "remember the decision about the launch and the testers ".repeat(400); // ~22 KB of note text per job
+    insert(jobs, Array.from({ length: 5000 }, (_, i) => ({
+      id: `job-${i}`, at: i, input: { content: `${i} ${text}`, source: "mcp", contentType: "text" },
+      result: { evidenceRef: `Log/2026-11-01.md#^e-${i.toString(16)}`, revision: { provider: "github", id: "r" } },
+    })));
+    const started = Date.now();
+    jobs.captureReceipts();
+    const syncMs = Date.now() - started; // the whole read is one block of the loop
+    const off = await longestGap(() => jobs.captureReceiptsAsync());
+    expect(off.value).toHaveLength(5000);
+    if (process.env.M34_PRINT) console.log(`M34 receipts: main thread held ${syncMs} ms, off the thread ${off.gapMs} ms`);
+    expect(syncMs).toBeGreaterThan(off.gapMs);
+    expect(off.gapMs).toBeLessThan(250);
+  });
+
+  it("falls back to the synchronous read when the store cannot be opened by another thread", async () => {
+    const memory = new TaskJobStore(":memory:", "tenant-a");
+    insert(memory, rows);
+    expect((await memory.captureReceiptsAsync("Log/2026-11-02.md#^e-1")).map((job) => job.id)).toEqual(["a"]);
+  });
+
+  it("merges to the same entries in slices that give the thread back", async () => {
+    const jobs = await store();
+    insert(jobs, Array.from({ length: 1500 }, (_, i) => ({
+      id: `job-${i}`, at: i, input: { source: "mcp", contentType: "text" }, result: { evidenceRef: `Log/2026-11-01.md#^e-${i.toString(16)}` },
+    })));
+    const lean = jobs.captureReceipts();
+    // Each note read costs ~1 ms, as a cold disk would: 1.5 s of work that used to run as one block.
+    const slow = (id: string) => { const end = Date.now() + 1; while (Date.now() < end) { /* spin */ } return { content: `text of ${id}` }; };
+    const vault = [entry("Log/2026-11-01.md#^e-0")];
+    const expected = mergeMemoryEntries(vault, lean, (id) => ({ content: `text of ${id}` }));
+    const { value, gapMs } = await longestGap(() => mergeMemoryEntriesAsync(vault, lean, slow));
+    expect(value).toEqual(expected);
+    if (process.env.M34_PRINT) console.log(`M34 merge: longest hold ${gapMs} ms`);
+    expect(gapMs).toBeLessThan(150);
+  });
+});
+
