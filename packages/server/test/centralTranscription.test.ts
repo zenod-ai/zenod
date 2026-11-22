@@ -8,7 +8,10 @@ import {
   CENTRAL_STT_TIMEOUT_MS,
   centralSttConfig,
   centralSttModelFor,
+  networkCauseCode,
+  probeCentralStt,
   resetCentralSttCooldown,
+  transcribeWithCentral,
 } from "../src/centralTranscription.js";
 import { transcribeAudio } from "../src/transcribe.js";
 
@@ -115,7 +118,7 @@ describe.skipIf(!hasFfmpeg)("EPIC-20 A7: transcribeAudio tries the central servi
   });
 
   it.each([
-    ["unreachable", () => Promise.reject(new TypeError("fetch failed")), "network", ""],
+    ["unreachable", () => Promise.reject(new TypeError("fetch failed")), "network cause=other", ""],
     ["a 503", () => Promise.resolve(new Response("busy", { status: 503 })), "http_5xx", " status=503"],
     ["an empty text", () => Promise.resolve(new Response(JSON.stringify({ text: "  " }), { status: 200 })), "empty", ""],
     ["not JSON", () => Promise.resolve(new Response("<html>", { status: 200 })), "bad_reply", ""],
@@ -220,5 +223,32 @@ describe.skipIf(!hasFfmpeg)("EPIC-20 A7: transcribeAudio tries the central servi
     }));
     await transcribeAudio(tone(3), "voice.ogg", paid);
     expect(urls).toEqual([OPENAI]);
+  });
+});
+
+describe("EPIC-20 A7: why the central service could not be reached", () => {
+  it("names the network cause with fixed words, never a message", async () => {
+    const cfg = centralSttConfig({ ZENOD_CENTRAL_STT_URL: CENTRAL })!;
+    const refused = Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED 100.86.141.63:18946"), { code: "ECONNREFUSED" }) });
+    const result = await transcribeWithCentral(cfg, {
+      data: Buffer.from("x"), filename: "v.ogg", model: "small", language: "auto", fetchImpl: async () => { throw refused; },
+    });
+    expect(result).toMatchObject({ success: false, providerCode: "network", cause: "ECONNREFUSED" });
+    expect(networkCauseCode(new Error("private words in here"))).toBe("other");
+    expect(networkCauseCode(Object.assign(new Error("x"), { cause: { code: "ENETUNREACH" } }))).toBe("ENETUNREACH");
+  });
+
+  it("the boot probe logs reachable, or unreachable with the cause, and never throws", async () => {
+    const cfg = centralSttConfig({ ZENOD_CENTRAL_STT_URL: CENTRAL })!;
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const urls: string[] = [];
+    expect(await probeCentralStt(cfg, async (url) => { urls.push(String(url)); return new Response("{}", { status: 200 }); })).toBe(true);
+    expect(urls).toEqual(["http://central.test:18946/health"]);
+    expect(log).toHaveBeenCalledWith("[central-stt] reachable");
+    expect(await probeCentralStt(cfg, async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "EHOSTUNREACH" } }); })).toBe(false);
+    expect(warn).toHaveBeenCalledWith("[central-stt] unreachable cause=EHOSTUNREACH");
+    expect(await probeCentralStt(null)).toBe(false);
+    vi.restoreAllMocks();
   });
 });

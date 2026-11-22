@@ -5,6 +5,7 @@ import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
 import { outlastProxyKeepAlive } from "./proxyKeepAlive.js";
 import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
+import { probeCentralStt } from "./centralTranscription.js";
 import { startEventLoopWatchdog, watchdogOptionsFromEnv } from "./eventLoopWatchdog.js";
 import {
   assertDedicatedPhylaxProcessEnv,
@@ -44,6 +45,7 @@ const server = serve({ fetch: unit.app.fetch, port }, (info) => {
   );
 });
 
+void probeCentralStt();
 outlastProxyKeepAlive(server);
 
 const shutdown = createGracefulShutdown({
