@@ -78,7 +78,7 @@ import { lintTree, lintTreeIndex } from "../vault/treeLint.js";
 import { appendCorrection, CORRECTIONS_PATH, latestNoteFor, newCorrection, parentTitle, placementReview as readPlacementReview, placeOf, readCorrections, type PlacementCorrectionResult, type PlacementReview } from "./placementReview.js";
 import { applyDeskChanges, checkDeskChanges, checkDeskPlan, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
-import { quickIndexBase } from "../vault/quickIndex.js";
+import { quickIndexBaseCached } from "../vault/quickIndex.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
@@ -4288,7 +4288,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     quickIndexBase: async () => {
       assertVault(repo);
       await syncForRead();
-      return quickIndexBase(vaultPath, now().getTime());
+      return quickIndexBaseCached(vaultPath, now().getTime());
     },
     lint: async (): Promise<LintReport> => {
       assertVault(repo);
