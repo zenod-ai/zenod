@@ -55,7 +55,7 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 Last attempted: 2026-11-22T13:40Z DM run_809fefde roll-up: EPIC-24 (active) 21-22 Nov: the GitHub sign-in outage, blocked filing on the team vault (M31), two testers' WhatsApp alarms (M32), release timing (M33) and idle CPU (M34, round 3 running) fixed or in flight ; EPIC-7 (active) 3 sign-ups, 1 WhatsApp linked, 0 first notes; approved next-day email live; the 19 Nov tester email went through five rounds of Jordi's notes and waits on E7-A34; over_cap live (E7-S24); E7-S25 (linked count) and E7-S26 (first-note nudge) in flight ; EPIC-26 (active) one sample week on zenod.dev back in his review (E26-S38) ; root learnings L-18 (write to people like a person) and L-19 (describe Zenod with its one-liner) added from his notes
 Result: production zenod-mt 2c12217a healthy; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes, over_cap 0
 Waiting on: E7-A34 (the 19 Nov tester email) and the E26-S38 card, both with Jordi ; the three testers' first notes ; testers recruited by zenod-social
-Monitoring: Objective: Zenod: get 5 testers: a tester reply should not wait behind a 40 s freeze, idle Zenod should not burn VPS1. M34 round 3: #1735 merged 9cb4edef (ci g… · next check 2026-11-22T15:15:00.000Z
+Monitoring: No change since 15:51Z: E7-A35 waits for the ask gate's dry run; M34 re-measure worker run_26dbfa87 running. No ready rows; spine untouched. · next check 2026-11-22T17:00:00.000Z
 Next action: E7-S26 brings the first-note nudge text to Jordi; E7-S25 makes the key result read the linked tester; M34 round 3 removes the 40 s freeze
 Verified at: 2026-11-22T13:40Z (production 2c12217a via /api/health and /api/public/counts; child Current States read)
 
