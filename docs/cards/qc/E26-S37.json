@@ -1,40 +1,46 @@
 {
   "row": "E26-S37",
   "card": "docs/cards/E26-S37.md",
-  "cardSha": "e51b2ab6528c677f",
+  "cardSha": "9fb7ba5f1bb85467",
   "inputs": {
-    "card": "e51b2ab6528c677f",
+    "card": "9fb7ba5f1bb85467",
     "page": "6f6bc8d924656575",
     "rules": "7dd845c8b4b0e115",
-    "words": "1e3b3a318598c170"
+    "words": "ec8d0e91fc3b48d6"
   },
-  "checkedAt": "2026-11-22T05:38:10Z",
+  "checkedAt": "2026-11-22T05:50:52Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Dinner for six",
       "where": "2026-11-22",
       "status": "met",
-      "how": "The sample graph on the evidence page shows a \"Dinner for six\" thought node and chip; the card says tapping a thought shows its voice note."
+      "how": "The 1280 and 390 screenshots show a Dinner for six node and chip in Sara's week, and the card says tapping a thought shows its note."
+    },
+    {
+      "said": "it should be part of the landing page\\",
+      "where": "2026-11-08",
+      "status": "met",
+      "how": "Sara's week sits directly after the hero on the 390 and 1280 home pages, with its link on to the testers page."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 px and 1280 px the Sara's week section sits under the hero with its graph, note panel and tester link; no sideways overflow or visible clutter breaches the house rules."
+    "summary": "At 390 and 1280 the sample section sits under the hero with no sideways scroll; the graph, note panel and chips read cleanly and the section is consistent with the page."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the Sara's week sample is in the right place on the zenod.dev home page, and approve keeping it there.",
+    "asked": "Decide whether Sara's week, placed right under the home page hero with a link to the tester page, is the right place on the home page, and keep it or say what to change.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
     "page": "6f6bc8d924656575",
-    "walkedAt": "2026-11-22T05:38:10Z",
+    "walkedAt": "2026-11-22T05:50:52Z",
     "steps": [
       {
         "n": 1,
