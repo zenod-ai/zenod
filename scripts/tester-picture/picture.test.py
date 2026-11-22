@@ -174,6 +174,13 @@ class Table(unittest.TestCase):
         house = picture.load_house()
         self.assertIn(p["punchline"], picture.render_html(p, house))
 
+    def test_key_line_says_the_handshake_finished(self):
+        p = build(tester("aaaa1111"))
+        self.assertIn("handshake finished", p["key_line"])
+        self.assertIn("sent it back", p["key_line"])
+        self.assertIn(p["key_line"], picture.render_page(p))
+        self.assertIn(p["key_line"], picture.render_html(p, picture.load_house()))
+
     def test_empty_table(self):
         p = build()
         page = picture.render_page(p)

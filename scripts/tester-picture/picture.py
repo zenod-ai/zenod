@@ -235,7 +235,7 @@ def build(rows, counts, now, source):
         "columns": [{"id": cid, "title": title} for cid, title in COLUMNS],
         "column_counts": column_counts, "unread_cells": unread_cells,
         "punchline": headline(n, column_counts, c.get("applications")),
-        "phone_line": phone_line(n, column_counts["whatsapp"]),
+        "phone_line": phone_line(n, column_counts["whatsapp"]), "key_line": KEY_LINE,
         "page_url": PAGE_URL,
         "caveat": (f"{', '.join(label for cid, label in COLUMNS if cid in unread_cells)} cannot be read from production "
                    "until its next release, so those cells show grey" if unread_cells else None),
@@ -270,6 +270,12 @@ def headline(n, counts, applied):
     if all(counts[c] == n for c in ("whatsapp", "memory", "voice")) and vault == n:
         return f"{n} {'tester' if n == 1 else 'testers'}, all set up"
     return f"{n} {'tester' if n == 1 else 'testers'}: {tail}"
+
+
+# E7-S27 (Jordi, vn_40b9ff8f: "we send a code to that phone number ... are we monitoring ... whether this handshake was
+# successfully filled in, so the connection is complete?"): what a green cell means for the two steps that need a handshake.
+KEY_LINE = ("Green WhatsApp linked means the handshake finished: the tester gave their number, got a code, sent it back from the "
+            "phone and Zenod confirmed it. Green Google Drive or GitHub means their storage is set up and ready.")
 
 
 def phone_line(n, linked):
@@ -341,11 +347,11 @@ td,th.who{{padding:17px 6px;border-bottom:1px solid {s['tones']['muted'][1]};ver
 th.who{{text-align:left;font-weight:600;font-size:22px;color:{s['ink']};white-space:nowrap}}
 .dot{{display:inline-flex;width:42px;height:42px;border-radius:50%;align-items:center;justify-content:center}}
 .dot.on{{background:{GREEN}}}.dot.off{{background:{GREY}}}
-.ph{{margin-top:22px;font-size:21px;color:{s['ink']};max-width:1440px;line-height:1.35}}
+.ph{{margin-top:20px;font-size:21px;color:{s['ink']};max-width:1440px;line-height:1.35}}.ph.key{{font-size:18px;color:{s['muted']};margin-top:12px}}
 .f{{position:absolute;left:80px;right:80px;bottom:28px;font-size:16px;color:{s['muted']};display:flex;justify-content:space-between;gap:40px}}.f span:last-child{{white-space:nowrap}}"""
     return (f'<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(pic["punchline"])}</title><style>{css}</style></head><body>'
             f'<div class="c"><div class="k">Zenod testers · {day}</div><h1>{html.escape(pic["punchline"])}</h1>'
-            f'<table>{table_head()}{rows}</table><p class="ph">{html.escape(pic["phone_line"])}</p></div>'
+            f'<table>{table_head()}{rows}</table><p class="ph">{html.escape(pic["phone_line"])}</p><p class="ph key">{html.escape(pic["key_line"])}</p></div>'
             f'<div class="f"><span>{footer_text(pic)}</span><span>zenod · {ROW}</span></div>'
             "</body></html>")
 
@@ -381,6 +387,7 @@ def render_page(pic, png_name="tester-table.png"):
     body = (f'<style>{PAGE_CSS}</style>'
             f'<div class="tt-wrap"><table class="tt"><thead>{table_head()}</thead><tbody>{rows}</tbody></table></div>'
             f'<p class="tt-phone"><b>{html.escape(pic["phone_line"])}</b></p>'
+            f'<p class="tt-foot">{html.escape(pic["key_line"])}</p>'
             f'<p class="tt-foot">{footer_text(pic)} Green means done, grey means not yet. Rebuilt every day at 05:30 Mexico City; '
             f'<a href="{png_name}">today\'s picture</a>.</p>')
     return (f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
