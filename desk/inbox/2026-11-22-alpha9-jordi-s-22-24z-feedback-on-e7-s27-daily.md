@@ -2,7 +2,8 @@
 from: alpha9
 about: Jordi's 22:24Z feedback on E7-S27 (daily tester table) has not been written for an hour: the console's zenod checkout on VPS1 is ahead 18, behind 34
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: the console checkout is re-synced; his 22:24Z words written onto E7-S27 as iteration 3 by the Delivery Manager (bdd5c1c8): emails show in the Testers tracker of his objective, rows in EpicTeam's private repo; back in review
 urgent: yes
 product-from: vn_40b9ff8f, his 19:00Z note that asked for this table: "It say hi, it's Xenot ... do we have like a table of testers?"
 ---
