@@ -29,14 +29,14 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-22T05:40Z roll-up (DM run_11d5fcb1): E26-S35 approved by Jordi (the sample memory on /testers) ; E26-S37 the same sample live on the zenod.dev home page (a4209aab), card in his review ; a third tester signed up 21 Nov from post P-0538 and linked WhatsApp 06:05Z ; E26-S3 watches all three to a first Saved reply
+Last attempted: 2026-11-22T10:05Z Ticket worker run_bc8e480a: E26-S38 (Dan's and Priya's weeks beside Sara's, a Whose week switch) confirmed live on production 955bd353 at 390 and 1280 px on zenod.dev and /testers; card in Jordi's review ; E26-S37 approved by Jordi
 Result: production a4209aab: apply with only an email, the sample memory on /testers and the home page, 30 free memories, welcome, stuck alert, the approved next-day one-tap email (live 8079bd06), thank-you email; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes
 Evidence: [tester welcome](http://vps3.taild81fbb.ts.net:9002/) · [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/) · [phone setup review](evidence/e26-s23-2026-11-14.md) · [WhatsApp setup words](http://vps3.taild81fbb.ts.net:9001/)
-Waiting on: Jordi: E26-S37 card (the home-page sample) ; the three testers sending a first WhatsApp note ; the next stranger to apply (zenod-social recruits)
+Waiting on: Jordi: E26-S38 card (three sample weeks) ; the three testers sending a first WhatsApp note ; the next stranger to apply (zenod-social recruits)
 Approved work: none
 Next action: E26-S3 watches the 21 Nov tester (WhatsApp linked) to a first Saved reply ; Jordi's verdict on E26-S37
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
-Verified at: 2026-11-22T05:40Z (production a4209aab via /api/health and /api/public/counts; rows E26-S3, S35 to S37 read)
+Verified at: 2026-11-22T10:05Z (production 955bd353 via /api/health; E26-S38 read in a real browser)
 
 ## Waiting on
 - [answered E26-A18 2026-11-19 @Delivery-Manager · done 2026-11-19 c68f23f] The next-day WhatsApp email (approved by you as E26-A17) now names the new one-tap button: only its middle sentence changes, to "It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send."; the rest stays word for word — answer: decided by Delivery Manager under your E26-A17 yes (the console's ask gate: act on that answer) — why: the old sentence told testers to type their number and make a code, which the app no longer needs since E7-S16 — rollback: the old sentence returns, one commit
