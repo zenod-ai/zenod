@@ -1,14 +1,14 @@
 {
   "row": "E7-S27",
   "card": "docs/cards/E7-S27.md",
-  "cardSha": "26d00e0cae3a303f",
+  "cardSha": "5f5bd70aa0fc9039",
   "inputs": {
-    "card": "26d00e0cae3a303f",
+    "card": "5f5bd70aa0fc9039",
     "page": "bc7087f1fc2c3c78",
     "rules": "7dd845c8b4b0e115",
     "words": "0f08260a1b8f4e4d"
   },
-  "checkedAt": "2026-11-22T21:09:43Z",
+  "checkedAt": "2026-11-22T21:10:27Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,13 +17,13 @@
       "key": "vn_c2e56f5c",
       "when": "newest",
       "status": "declared",
-      "how": "Emails show on the page at both widths. The card's ✗ line says the objective tracker and daily briefing still wait on the team."
+      "how": "Full emails show on the root page at both widths; the evidence page shows shortened emails. The objective tracker and daily briefing are declared as still waiting."
     },
     {
       "said": "when the guys put a phone number ... we send a code to that phone number ... are we monitoring that in the testers scorecard, whether this ... handshake ... was successfully filled in, so ... the connection is complete?",
       "where": "vn_40b9ff8f",
       "status": "met",
-      "how": "Evidence shows a WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns, green or grey."
+      "how": "The table has a WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns, each green or grey."
     },
     {
       "said": "Hi, it's Zenod",
@@ -54,21 +54,19 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 and 1280 px both the card page and the root page open with the punchline box, show a clean one-ink table with green and grey marks, and have no sideways overflow."
+    "summary": "Both pages open with the title, punchline box and table at 390 and 1280 px; nothing is cut off and the page does not scroll sideways."
   },
-  "pass": false,
-  "held": [
-    "ambiguous: The question \"Do you now see each tester the way you wanted?\" with the ✗ line \"Tracker on the objective and a daily briefing wait on the team\": a Yes could mean you accept the email table alone, or that the objective tracker and daily briefing you also asked for are settled, even though the card says they are not done."
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether you now see each tester the way you wanted, by approving the page as it is or telling the team what to change.",
-    "ambiguous": "The question \"Do you now see each tester the way you wanted?\" with the ✗ line \"Tracker on the objective and a daily briefing wait on the team\": a Yes could mean you accept the email table alone, or that the objective tracker and daily briefing you also asked for are settled, even though the card says they are not done."
+    "asked": "Does he approve the tester table showing each tester by email, with the tracker and daily briefing left open for the team to place.",
+    "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "bc7087f1fc2c3c78",
-    "walkedAt": "2026-11-22T21:09:43Z",
+    "walkedAt": "2026-11-22T21:10:27Z",
     "steps": [
       {
         "n": 1,
