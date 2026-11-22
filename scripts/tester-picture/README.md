@@ -2,7 +2,7 @@
 
 **E7-S27 (Jordi, vn_40b9ff8f, 22 Nov): "rows, and each row is a tester, and each column is like a sign up, Google Drive set up,
 GitHub set up, one memory created, one voice note sent ... each tester having a color ... welcome WhatsApp sent."** The picture
-is now exactly that table: one row per tester (sign-up date and the last 4 of the account key, never an email), seven columns
+is now exactly that table: one row per tester (shown by their sign-in email since iteration 2, below), seven columns
 (signed up, Google Drive set up, GitHub set up, WhatsApp code confirmed, one memory saved, one voice note sent, welcome WhatsApp sent), each cell green or grey,
 one headline, and one line on whether we hold their phone numbers (only Phylax holds a linked tester's number; nothing here shows
 it). The same run rebuilds a calm page on the page host, `http://vps3.taild81fbb.ts.net:9008/` (`zenod-tester-table-page.service`,
@@ -11,6 +11,14 @@ running release cannot read yet (voice note and welcome need the E7-S27 producti
 The JSON is `zenod-tester-picture/v2`: the v1 fields plus `columns`, `column_counts`, `unread_cells`, `phone_line`, `page_url` and
 per tester `label` and `cells` (seven true/false values).
 
+
+**Iteration 2 (Jordi, vn_c2e56f5c, 22 Nov): "can we just have a fucking email, bro? ... I cannot even see the tester ... can this be a
+tracker inside the objective ... and part of the daily briefing?"** Each tester is their sign-in email (small sign-up date under
+it) on the tailnet page, in the picture and in the JSON (`email`, and `label` = the email; `tester` stays `…` + last 4). The email
+comes from `tester-watch --json` on VPS1 (the progress route keeps it back), joined by the last 8 of the account key; a tester
+whose email cannot be read keeps the old date and last-4 label. Never a phone number, code or note text. The page is tailnet-only
+and this repo is public: no email is ever committed here (evidence screenshots are masked). agent_team's Testers tracker is fed from
+`latest.json` by `python3 ~/github/agent_team/scripts/trackers.py feed zenod-live testers` and takes `label` as its Name.
 
 Jordi, vn_b73d7c41 (20 Nov): how many testers, how many logged in, how many fully set up by his four steps (vault: GitHub or
 Google Drive; WhatsApp linked; at least one WhatsApp note; at least one memory), where each is stuck, and "right now I'm lost".
@@ -28,9 +36,9 @@ Google Drive; WhatsApp linked; at least one WhatsApp note; at least one memory),
 
 `punchline` (one line, say it first), `caveat` (a step production cannot be read for yet, else null), `signed_up`, `applied`,
 `logged_in_24h`, `fully_set_up`, `step_counts`, `notes_24h`, `saves_24h`, `stuck_by_step`, `owner`, `png` (path of the
-picture or null), and `testers[]`: `tester` (`…` + last 4 of the account id), `steps` (`vault`, `whatsapp`, `message`,
+picture or null), and `testers[]`: `tester` (`…` + last 4 of the account id), `email` (iteration 2), `steps` (`vault`, `whatsapp`, `message`,
 `memory`: true, false or null = unknown), `fully_set_up`, `logged_in_24h`, `stuck_at` (the first false step), `stuck_text`,
-`detail`, `owner`, `next`, `our_bug`, `notes_24h`, `saves_24h`. No email, number, code or note text, ever.
+`detail`, `owner`, `next`, `our_bug`, `notes_24h`, `saves_24h`. No number, code or note text, ever; the email only on the tailnet page, in this JSON and in the private tracker.
 
 ## Sources (read only)
 
