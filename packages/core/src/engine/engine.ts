@@ -4218,7 +4218,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const index = openMemoryIndex();
       if (!index) return null;
       await index.refresh();
-      index.warm();
+      await index.warm();
       await loadMemoryTree(vaultPath);
       return { ms: Math.round(performance.now() - started), rows: index.stats().rows };
     },

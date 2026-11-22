@@ -3,6 +3,7 @@ import { accessSync } from "node:fs";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
+import { handBackRunningJobs, stopTakingJobs } from "./taskJobQueue.js";
 import { outlastProxyKeepAlive } from "./proxyKeepAlive.js";
 import { createApp } from "./app.js";
 import { Runtime } from "./runtime.js";
@@ -107,6 +108,9 @@ outlastProxyKeepAlive(server);
 const shutdown = createGracefulShutdown({
   server,
   closeResources: () => unit?.close() ?? runtime?.close(),
+  // EPIC-24 M35: no new job from the signal on; filing still running at 53 s of the 60 s grace goes back to the queue.
+  onSignal: stopTakingJobs,
+  handBack: handBackRunningJobs,
   ...shutdownTimings(process.env),
 });
 

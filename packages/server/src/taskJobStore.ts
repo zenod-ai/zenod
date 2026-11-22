@@ -526,6 +526,19 @@ export class TaskJobStore {
     return result.changes === 1;
   }
 
+  /**
+   * EPIC-24 M35: at shutdown, put a filing job this process is still running back in the queue so the replacement
+   * runs it (same job, same idempotency key; the claim is cleared, so a late result from this process is ignored
+   * and its next fence throws task_job_claim_lost). Not a failure: the retry count is not touched. Chat and
+   * desk jobs are left to the restart's own interrupted mark, because running them twice is not safe.
+   */
+  handBack(claim: Pick<TaskJob, "id" | "claimToken">, now: number = Date.now()): boolean {
+    return this.db.prepare(`UPDATE task_jobs SET status='queued', owner_id=NULL, claim_token=NULL, lease_expires_at=NULL, updated_at=?
+      WHERE tenant_id=? AND id=? AND status='running' AND owner_id=? AND claim_token=?
+      AND kind IN ('store', 'media_ingest', 'enrich_memory')`)
+      .run(now, this.tenantId, claim.id, this.ownerId, claim.claimToken).changes === 1;
+  }
+
   /** Execution/publish fence; lease expiry is final even before another worker recovers it. */
   assertClaim(claim: Pick<TaskJob, "id" | "claimToken">, now: number = Date.now()): void {
     const live = this.db.prepare(`SELECT 1 FROM task_jobs WHERE tenant_id=? AND id=?
