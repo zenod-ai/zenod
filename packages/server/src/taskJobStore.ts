@@ -256,36 +256,52 @@ export function jsonTextOf(value: string): string {
 
 type ReceiptRow = Record<string, string | number | null>;
 
-function receiptRowsToJobs(rows: ReceiptRow[]): TaskJob[] {
+function receiptRowToJob(row: ReceiptRow): TaskJob {
   const text = (value: string | number | null | undefined) => (typeof value === "string" ? value : undefined);
-  return rows.map((row) => {
-    const input: TaskJobInput = {};
-    const set = <K extends keyof TaskJobInput>(key: K, value: TaskJobInput[K] | undefined) => { if (value !== undefined) input[key] = value; };
-    set("source", text(row.source) as TaskJobInput["source"]);
-    set("sourceHint", text(row.source_hint));
-    set("contentType", text(row.content_type) as TaskJobInput["contentType"]);
-    set("mediaType", text(row.media_type) as TaskJobInput["mediaType"]);
-    set("capturedAt", text(row.captured_at));
-    set("senderTimestamp", text(row.sender_timestamp) as TaskJobInput["senderTimestamp"]);
-    set("sourceId", text(row.source_id));
-    if (row.verbatim === "true" || row.verbatim === "false") input.verbatim = row.verbatim === "true";
-    const result: Record<string, unknown> = { evidenceRef: row.evidence_ref };
-    if (typeof row.evidence_url === "string") result.evidenceUrl = row.evidence_url;
-    if (typeof row.revision_json === "string") result.revision = JSON.parse(row.revision_json);
-    return {
-      id: String(row.id),
-      kind: row.kind as TaskJobKind,
-      idempotencyKey: text(row.idempotency_key) ?? null,
-      claimToken: null,
-      input,
-      status: "done",
-      result: result as unknown as TaskJobResult,
-      error: null,
-      attempts: Number(row.attempts ?? 0),
-      createdAt: Number(row.created_at),
-      updatedAt: Number(row.updated_at),
-    };
-  });
+  const input: TaskJobInput = {};
+  const set = <K extends keyof TaskJobInput>(key: K, value: TaskJobInput[K] | undefined) => { if (value !== undefined) input[key] = value; };
+  set("source", text(row.source) as TaskJobInput["source"]);
+  set("sourceHint", text(row.source_hint));
+  set("contentType", text(row.content_type) as TaskJobInput["contentType"]);
+  set("mediaType", text(row.media_type) as TaskJobInput["mediaType"]);
+  set("capturedAt", text(row.captured_at));
+  set("senderTimestamp", text(row.sender_timestamp) as TaskJobInput["senderTimestamp"]);
+  set("sourceId", text(row.source_id));
+  if (row.verbatim === "true" || row.verbatim === "false") input.verbatim = row.verbatim === "true";
+  const result: Record<string, unknown> = { evidenceRef: row.evidence_ref };
+  if (typeof row.evidence_url === "string") result.evidenceUrl = row.evidence_url;
+  if (typeof row.revision_json === "string") result.revision = JSON.parse(row.revision_json);
+  return {
+    id: String(row.id),
+    kind: row.kind as TaskJobKind,
+    idempotencyKey: text(row.idempotency_key) ?? null,
+    claimToken: null,
+    input,
+    status: "done",
+    result: result as unknown as TaskJobResult,
+    error: null,
+    attempts: Number(row.attempts ?? 0),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
+function receiptRowsToJobs(rows: ReceiptRow[]): TaskJob[] {
+  return rows.map(receiptRowToJob);
+}
+
+/** The same, handing the thread back every ~20 ms: a tenant's whole capture history is one array of rows. */
+async function receiptRowsToJobsInSlices(rows: ReceiptRow[]): Promise<TaskJob[]> {
+  const jobs: TaskJob[] = [];
+  let sliceStart = Date.now();
+  for (let i = 0; i < rows.length; i += 1) {
+    jobs.push(receiptRowToJob(rows[i]!));
+    if (i % 64 === 63 && Date.now() - sliceStart >= 20) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      sliceStart = Date.now();
+    }
+  }
+  return jobs;
 }
 
 function receiptParams(tenantId: string, evidenceRef: string | undefined): string[] {
@@ -655,7 +671,7 @@ export class TaskJobStore {
     const running = this.receiptReads.get(key);
     if (running) return running;
     const read = receiptsOffThread(this.dbPath, captureReceiptsSql(evidenceRef !== undefined), receiptParams(this.tenantId, evidenceRef))
-      .then(receiptRowsToJobs, (error: unknown) => {
+      .then(receiptRowsToJobsInSlices, (error: unknown) => {
         if (error instanceof ReceiptWorkerUnavailable) return this.captureReceipts(evidenceRef);
         throw error;
       })
