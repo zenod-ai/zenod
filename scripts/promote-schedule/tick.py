@@ -14,6 +14,9 @@ when every rule below holds, in this order, and writes ONE line per tick to ~/ze
   nothing-new     staging runs the sha production runs
   quiet-hours     22:00-08:00 Europe/Madrid, unless a fix is waiting: production is unhealthy, or the Delivery
                   Manager touched ~/zenod-eval/promote-now (consumed by the attempt)
+  vps1-busy       04:00-09:00 UTC (VPS1's morning burst: a container boot costs 60-78% of a core on a 4-core box at
+                  load 16-24 and froze the team console on 22 Nov, EPIC-24 M33), same exception as quiet-hours.
+                  Window: ZENOD_TICK_BUSY_FROM / ZENOD_TICK_BUSY_TO (UTC hours, default 4 and 9)
   paused          infra-vps paused the zenod-mt promote (hosts/vps1/deploy-poller.json: not in promote_targets)
   batching        staging rolled onto that sha less than ZENOD_TICK_MIN_AGE_MIN (30) minutes ago
   hourly-limit    a promote, rollback or gate run happened less than 60 minutes ago
@@ -51,6 +54,8 @@ MIN_AGE = float(E("ZENOD_TICK_MIN_AGE_MIN", "30"))
 GAP_MIN = float(E("ZENOD_TICK_GAP_MIN", "60"))
 RETRY_H = float(E("ZENOD_TICK_RETRY_H", "6"))
 QUIET = (int(E("ZENOD_TICK_QUIET_FROM", "22")), int(E("ZENOD_TICK_QUIET_TO", "8")))
+# VPS1's morning burst, in UTC (named so it can move without touching the rules): no non-urgent boot inside it.
+BUSY_UTC = (int(E("ZENOD_TICK_BUSY_FROM", "4")), int(E("ZENOD_TICK_BUSY_TO", "9")))
 TZ = ZoneInfo("Europe/Madrid")
 LOG = EVAL / "promote-schedule.jsonl"
 PROMOTIONS = EVAL / "promotions.jsonl"
@@ -133,6 +138,8 @@ def decide(t: dt.datetime, probe: dict, staging: str, prod: dict, ticks: list[di
         facts["fix_waiting"] = "promote-now flag" if flag else "production unhealthy"
     if quiet and not fix_waiting:
         return "quiet-hours", facts
+    if BUSY_UTC[0] <= t.astimezone(dt.timezone.utc).hour < BUSY_UTC[1] and not fix_waiting:
+        return "vps1-busy", facts
     if probe.get("promote_paused") and not assume_unpaused:
         return "paused", facts
     # Age of the candidate on staging: VPS1's roll time when it names this sha, else when a tick first saw it.
