@@ -24,7 +24,7 @@ import {
 } from "./phylaxTenantSettings.js";
 import type { HostedChannelMutationAuditStore } from "./hostedChannels.js";
 import type { PhylaxUsageMeter } from "./phylaxUsageMeter.js";
-import { ZENOD_WHATSAPP_TESTER_WELCOME, type PhylaxWhatsAppWelcome } from "./phylaxWhatsAppWelcome.js";
+import { ZENOD_WHATSAPP_FIRST_NOTE_NUDGE, ZENOD_WHATSAPP_TESTER_WELCOME, type PhylaxWhatsAppWelcome } from "./phylaxWhatsAppWelcome.js";
 
 export const PHYLAX_MANAGEMENT_PROTOCOL = "phylax.management";
 export const PHYLAX_MANAGEMENT_VERSION = "1.0";
@@ -697,7 +697,7 @@ function registerChannelMutationTools(
   );
 }
 
-export type PhylaxAccountNoticeKind = "payment_past_due" | "access_suspended" | "tester_welcome";
+export type PhylaxAccountNoticeKind = "payment_past_due" | "access_suspended" | "tester_welcome" | "first_note_nudge";
 
 /** Fixed copy, so the management surface stays free of an arbitrary send-message primitive. */
 export function phylaxAccountNoticeText(
@@ -708,6 +708,8 @@ export function phylaxAccountNoticeText(
   const product = owner === "zenod" ? "Zenod" : "Phylax";
   // E26-S26: the same tester welcome a new link gets, for a number that is already linked (our test send).
   if (kind === "tester_welcome") return ZENOD_WHATSAPP_TESTER_WELCOME;
+  // E7-S26: the once-only first-note invitation, fixed text like the welcome.
+  if (kind === "first_note_nudge") return ZENOD_WHATSAPP_FIRST_NOTE_NUDGE;
   return kind === "payment_past_due"
     ? `${product}: your renewal could not be charged, so your subscription is past due. ` +
       `${product} keeps working while the payment is retried over the next days; if it is not sorted out, ` +
@@ -730,10 +732,10 @@ function registerAccountNoticeTool(
   server.registerTool(
     "phylax_management_v1_account_notice",
     {
-      description: "Send one fixed account notice (billing lapse, or the Zenod tester welcome) to this tenant's verified channel.",
+      description: "Send one fixed account notice (billing lapse, the Zenod tester welcome, or the first-note invitation) to this tenant's verified channel.",
       inputSchema: {
         operationId,
-        kind: z.enum(["payment_past_due", "access_suspended", "tester_welcome"]),
+        kind: z.enum(["payment_past_due", "access_suspended", "tester_welcome", "first_note_nudge"]),
         consoleUrl: z.string().trim().url().max(200).refine((value) => value.startsWith("https://"), "https only"),
       },
       annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },

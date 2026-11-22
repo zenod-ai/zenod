@@ -285,6 +285,12 @@ export class TesterOnboarding {
     return { whatsapp, mail };
   }
 
+  /** E7-S26: when Zenod saw this account's real link (ISO), null when it never watched one (or it was a test send). */
+  linkedAt(accountId: string): string | null {
+    const record = this.read().accounts[accountId];
+    return record?.linkedAt && record.via !== "test send" ? record.linkedAt : null;
+  }
+
   /** Mode and counts only (no addresses), for the admin page and the ops route. */
   status(): {
     mode: TesterOnboardingMode;
