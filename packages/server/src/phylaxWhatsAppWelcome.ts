@@ -28,11 +28,12 @@ export const ZENOD_WHATSAPP_TESTER_WELCOME = [
 
 /**
  * EPIC-7 E7-S26: the one WhatsApp message a tester gets when WhatsApp has been linked for a day and no note has been
- * saved. Written as Jordi would write to one person (root L-18), Zenod described by the product deck's one-liner
- * (root L-19), then the one ask; 47 words, no list. Sent only once the nudge is switched on (Jordi's yes to the ask).
+ * saved. It arrives from Zenod's own number, so it speaks as Zenod ("Hi, it's Zenod", Jordi's round-2 note on E7-A35),
+ * warm first (root L-18), Zenod described by the product deck's one-liner (root L-19), then the one ask; 45 words, no
+ * list. Sent only once the nudge is switched on (Jordi's yes to the ask).
  */
 export const ZENOD_WHATSAPP_FIRST_NOTE_NUDGE =
-  "Hi, it's Jordi. Thanks for linking WhatsApp to Zenod. Zenod is your own memory: it files what you tell it in your " +
+  "Hi, it's Zenod. Thanks for linking WhatsApp. I keep your memory: I file what you tell me in your own " +
   "Google Drive or GitHub, and Claude, ChatGPT and your other AI tools can read it. Send me a voice note about " +
   "anything on your mind.";
 
