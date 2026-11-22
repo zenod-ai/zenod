@@ -8,6 +8,12 @@ exactly that table: one row per tester (the sign-up date and the last 4 of the a
 or grey, one headline, and one line on whether we hold their phone numbers. The same facts also go out as a calm page on
 the page host (see PAGE_DIR) rebuilt on every run.
 
+E7-S27 iteration 2 (Jordi, vn_c2e56f5c, 22 Nov): "can we just have a fucking email, bro? ... I cannot even see the tester."
+Each tester is now shown by their sign-in email (he owns these testers' data), on the tailnet page, in the picture and in
+the JSON (`email`, and `label` = the email) that agent_team's Testers tracker is fed from. The page stays tailnet-only.
+Still never a phone number, code or note text. The email is read from `tester-watch` on VPS1 (the progress route keeps it
+back), joined by the last 8 of the account key; a tester whose email cannot be read keeps the old date and last-4 label.
+
 Jordi, vn_b73d7c41 (20 Nov 22:38Z): "how many testers do we have? How many testers logged in? How many testers are fully
 set up, meaning that they have set up their GitHub, they have set up their WhatsApp, that they send at least one message
 on WhatsApp, and they saved at least one memory? ... I would like to get some daily state on what's happening with the
@@ -22,11 +28,11 @@ where the ops token lives (the zenod-tester-stuck pattern), and writes:
 
 Per tester: signed up, logged in in the last 24 h, and four steps (vault set up: GitHub or Google Drive; WhatsApp linked;
 at least one WhatsApp note sent; at least one memory saved), the first step not done = where they are stuck, who owns
-moving them and what happens next, and the last 24 h of use. Never an email, number, code or note text: a tester is the
-last 4 characters of their account id.
+moving them and what happens next, and the last 24 h of use. A tester is their email (E7-S27 iteration 2), with the last 4
+characters of their account id kept as `tester`. Never a phone number, code or note text.
 
 Sources, read only: GET /api/ops/testers/progress (this release), else GET /api/ops/testers/whatsapp-setup with
-`tester-watch --json --redact` (the steps those two cannot see are shown as "?", never guessed), and the public counts.
+`tester-watch --json` (memories and, since iteration 2, each tester's email; the steps those two cannot see are shown as "?", never guessed), and the public counts.
 
   python3 scripts/tester-picture/picture.py            # build today's picture
   python3 scripts/tester-picture/picture.py --dry-run  # print the punchline and the JSON, write nothing
@@ -105,17 +111,18 @@ def read_sources(ops_call=None, run=subprocess.run, fetch=None):
     if ops_call is None:
         from send import ops as ops_call  # noqa: E402  the same VPS1 ops call as the stuck-sign-up check
     code, progress = ops_call("GET", "/api/ops/testers/progress")
-    setup = watch = None
+    setup = None
     if code != 200:
         progress = None
         c2, setup = ops_call("GET", "/api/ops/testers/whatsapp-setup")
         setup = setup if c2 == 200 else None
-        try:
-            r = run(["ssh", "-o", "BatchMode=yes", OPS_HOST, "tester-watch --json --redact --no-stripe"],
-                    capture_output=True, text=True, timeout=120)
-            watch = json.loads(r.stdout).get("testers") if r.returncode == 0 else None
-        except (ValueError, OSError, subprocess.TimeoutExpired):
-            watch = None
+    # tester-watch on VPS1 holds each tester's email (E7-S27 iteration 2) and, for the fallback, the memories; never a reason to skip the picture
+    try:
+        r = run(["ssh", "-o", "BatchMode=yes", OPS_HOST, "tester-watch --json --no-stripe"],
+                capture_output=True, text=True, timeout=120)
+        watch = json.loads(r.stdout).get("testers") if r.returncode == 0 else None
+    except (ValueError, OSError, subprocess.TimeoutExpired):
+        watch = None
     try:
         counts = (fetch or fetch_counts)()
     except Exception:  # the counts are context, never a reason to skip the picture
@@ -129,12 +136,23 @@ def fetch_counts():
         return json.loads(r.read().decode())
 
 
-def rows_from_progress(progress):
+def emails_by_key(watch):
+    """The last 8 of each account id to that account's sign-in email, from tester-watch rows; a row without an email is left out."""
+    out = {}
+    for w in watch or []:
+        acct, email = str(w.get("account_id") or ""), str(w.get("email") or "").strip().lower()
+        if acct and "@" in email:
+            out[acct[-8:]] = email
+    return out
+
+
+def rows_from_progress(progress, emails=None):
     since = parse_time(progress.get("lastSeenSince"))
+    emails = emails or {}
     out = []
     for t in progress.get("testers") or []:
         out.append({
-            "key": t["key"], "signed_up_at": t.get("signedUpAt"),
+            "key": t["key"], "signed_up_at": t.get("signedUpAt"), "email": emails.get(str(t["key"])[-8:]),
             "vault": bool(t["vault"]["set"]), "vault_provider": t["vault"].get("provider"),
             "whatsapp": bool(t["whatsapp"]["linked"]), "whatsapp_text": t["whatsapp"].get("text"),
             "our_bug": bool(t["whatsapp"].get("ourBug")) and not t["whatsapp"]["linked"],
@@ -161,7 +179,7 @@ def rows_from_fallback(setup, watch):
         saves = (w or {}).get("saves") or {}
         has_capture = None if w is None else bool(saves.get("last_capture_any"))
         out.append({
-            "key": t["key"], "signed_up_at": t.get("signedUpAt"),
+            "key": t["key"], "signed_up_at": t.get("signedUpAt"), "email": str((w or {}).get("email") or "").strip().lower() or None,
             "vault": None, "vault_provider": None,
             "whatsapp": t.get("step") == "linked", "whatsapp_text": t.get("text"),
             "our_bug": bool(t.get("ourBug")) and t.get("step") != "linked",
@@ -202,7 +220,7 @@ def build(rows, counts, now, source):
         cells, unread_cells = table_cells(r)
         testers.append({
             "tester": "…" + str(r["key"])[-4:], "signed_up_at": r.get("signed_up_at"),
-            "label": row_label(r), "cells": cells, "unread_cells": unread_cells,
+            "email": r.get("email"), "label": row_label(r), "since": signed_up_text(r), "cells": cells, "unread_cells": unread_cells,
             "logged_in_24h": logged_in, "last_seen_at": r.get("last_seen_at"),
             "steps": steps, "fully_set_up": fully,
             "stuck_at": stuck, "stuck_text": where, "detail": r.get("whatsapp_text") if stuck == "whatsapp" else None, "owner": None if fully else OWNER, "next": nxt,
@@ -253,8 +271,15 @@ def table_cells(r):
     return {k: v is True for k, v in raw.items()}, [k for k, v in raw.items() if v is None]
 
 
+def signed_up_text(r):
+    when = parse_time(r.get("signed_up_at"))
+    return "signed up " + when.astimezone(MX).strftime("%-d %b") if when else "sign-up date unknown"
+
+
 def row_label(r):
-    """The sign-up date and the last 4 of the account key: never an email or a name."""
+    """The tester's email (Jordi, vn_c2e56f5c: "can we just have a fucking email"); only when it cannot be read, the sign-up date and the last 4 of the account key."""
+    if r.get("email"):
+        return r["email"]
     when = parse_time(r.get("signed_up_at"))
     day = when.astimezone(MX).strftime("%-d %b") if when else "date unknown"
     return f"{day} · …{str(r['key'])[-4:]}"
@@ -310,7 +335,8 @@ def table_rows(pic, limit=None):
     rows = ""
     for t in shown:
         cells = "".join(f'<td data-label="{html.escape(title)}">{dot(t["cells"][cid], title)}</td>' for cid, title in COLUMNS)
-        rows += f'<tr><th scope="row" class="who">{html.escape(t["label"])}</th>{cells}</tr>'
+        rows += (f'<tr><th scope="row" class="who"><span class="em">{html.escape(t["label"])}</span>'
+                 f'<small>{html.escape(t.get("since") or "")}</small></th>{cells}</tr>')
     return rows, len(pic["testers"]) - len(shown)
 
 
@@ -320,8 +346,8 @@ def table_head():
 
 def footer_text(pic):
     caveat = f" Grey can also mean not readable yet: {html.escape(', '.join(t for c, t in COLUMNS if c in pic['unread_cells']))}." if pic.get("unread_cells") else ""
-    return (f"Read {pic['generated_at'][:16].replace('T', ' ')}Z from production. Each tester is the sign-up date and the last 4 of the "
-            f"account key: no email, number or note text.{caveat}")
+    return (f"Read {pic['generated_at'][:16].replace('T', ' ')}Z from production. Each tester is their sign-in email; "
+            f"no phone number, code or note text. This page is on the tailnet only.{caveat}")
 
 
 def render_html(pic, house):
@@ -345,6 +371,7 @@ th{{text-align:center;font-weight:600;font-size:18px;color:{s['muted']};padding:
 th:first-child{{text-align:left}}
 td,th.who{{padding:17px 6px;border-bottom:1px solid {s['tones']['muted'][1]};vertical-align:middle;text-align:center}}
 th.who{{text-align:left;font-weight:600;font-size:22px;color:{s['ink']};white-space:nowrap}}
+th.who small{{display:block;margin-top:3px;font-size:15px;font-weight:400;color:{s['muted']}}}
 .dot{{display:inline-flex;width:42px;height:42px;border-radius:50%;align-items:center;justify-content:center}}
 .dot.on{{background:{GREEN}}}.dot.off{{background:{GREY}}}
 .ph{{margin-top:20px;font-size:21px;color:{s['ink']};max-width:1440px;line-height:1.35}}.ph.key{{font-size:18px;color:{s['muted']};margin-top:12px}}
@@ -363,6 +390,7 @@ PAGE_CSS = """
 .tt th:first-child{text-align:left}
 .tt td,.tt th.who{padding:.7rem .35rem;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
 .tt th.who{text-align:left;font:600 1rem/1.3 var(--sans);color:var(--ink);white-space:nowrap}
+.tt th.who small{display:block;margin-top:.15rem;font:400 .8rem/1.3 var(--sans);color:var(--muted)}
 .dot{display:inline-flex;width:1.7rem;height:1.7rem;border-radius:50%;align-items:center;justify-content:center}
 .dot.on{background:var(--accent)}.dot.off{background:var(--stage-2)}
 .tt-phone{margin:1.1rem 0 0;font-size:1rem;line-height:1.5}
@@ -371,7 +399,7 @@ PAGE_CSS = """
   .tt thead{display:none}
   .tt,.tt tbody,.tt tr{display:block}
   .tt tr{border-bottom:1px solid var(--line);padding:.9rem 0}
-  .tt th.who{display:block;border:0;padding:0 0 .6rem}
+  .tt th.who{display:block;border:0;padding:0 0 .6rem;white-space:normal;overflow-wrap:anywhere}
   .tt td{display:flex;justify-content:space-between;align-items:center;border:0;padding:.25rem 0;text-align:left}
   .tt td::before{content:attr(data-label);font:500 .95rem/1.2 var(--sans);color:var(--ink)}
 }
@@ -450,7 +478,7 @@ def run(dry_run=False, now=None, sources=None, png=render_png):
     now = now or dt.datetime.now(dt.timezone.utc)
     progress, setup, watch, counts = (sources or read_sources)()
     if progress is not None:
-        rows, source = rows_from_progress(progress), "progress"
+        rows, source = rows_from_progress(progress, emails_by_key(watch)), "progress"
     elif setup is not None:
         rows, source = rows_from_fallback(setup, watch), "fallback"
     else:

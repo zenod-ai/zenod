@@ -26,8 +26,8 @@ def progress(*testers, since="2026-11-19T00:00:00Z"):
     return {"generatedAt": "x", "lastSeenSince": since, "testers": list(testers)}
 
 
-def build(*testers, **kw):
-    rows = picture.rows_from_progress(progress(*testers, **kw))
+def build(*testers, emails=None, **kw):
+    rows = picture.rows_from_progress(progress(*testers, **kw), emails)
     return picture.strip_private(picture.build(rows, {"applications": 3}, NOW, "progress"))
 
 
@@ -85,13 +85,13 @@ class Model(unittest.TestCase):
         p = build()
         self.assertEqual(p["punchline"], "No tester has signed up yet: 3 applied, nothing to set up")
         text = json.dumps(build(tester("aaaa1111", whatsapp={"linked": False, "step": "x", "text": "code issued", "ourBug": False})))
-        self.assertNotIn("@", text)
+        self.assertNotIn("@", text)  # no email readable: nothing invented
         self.assertNotIn("_since", text)
 
     def test_fallback_marks_unreadable_steps(self):
         setup = {"testers": [{"key": "aaaa9477", "account": "d***@g*** …9477", "signedUpAt": "2026-11-13T20:35:31Z",
                               "step": "waiting_for_code", "text": "code issued", "ourBug": False}]}
-        watch = [{"account_id": "user-usr_…9477", "saves": {"last_capture_any": None}}]
+        watch = [{"account_id": "user-usr_…9477", "email": "Ann@Example.com", "saves": {"last_capture_any": None}}]
         p = picture.strip_private(picture.build(picture.rows_from_fallback(setup, watch), None, NOW, "fallback"))
         t = p["testers"][0]
         self.assertEqual(t["steps"], {"vault": None, "whatsapp": False, "message": False, "memory": False})
@@ -100,6 +100,8 @@ class Model(unittest.TestCase):
         self.assertIn("Google Drive set up", p["caveat"])
         self.assertEqual(p["punchline"], "1 tester: 0 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
         self.assertEqual(p["unread_cells"], ["drive", "github", "voice", "welcome"])
+        self.assertEqual(t["email"], "ann@example.com")
+        self.assertEqual(t["label"], "ann@example.com")
 
 
 class Table(unittest.TestCase):
@@ -134,9 +136,22 @@ class Table(unittest.TestCase):
         self.assertEqual(ready["unread_cells"], [])
         self.assertIsNone(ready["caveat"])
 
-    def test_row_label_is_date_and_last_four_only(self):
+    def test_row_label_is_the_email_when_it_is_known(self):
+        """Jordi, vn_c2e56f5c: 'can we just have a fucking email, bro?'"""
+        p = build(tester("usr_aaaa9477", signedUpAt="2026-11-13T20:35:31.939Z"), emails={"aaaa9477": "ann@example.com"})
+        t = p["testers"][0]
+        self.assertEqual((t["label"], t["email"], t["tester"], t["since"]), ("ann@example.com", "ann@example.com", "…9477", "signed up 13 Nov"))
+
+    def test_row_label_falls_back_to_date_and_last_four_when_no_email_is_readable(self):
         p = build(tester("usr_aaaa9477", signedUpAt="2026-11-13T20:35:31.939Z"))
         self.assertEqual(p["testers"][0]["label"], "13 Nov · …9477")
+        self.assertIsNone(p["testers"][0]["email"])
+
+    def test_emails_by_key_joins_on_the_last_eight_and_skips_rows_without_one(self):
+        watch = [{"account_id": "acct-0000aaaa9477", "email": " Ann@Example.com "}, {"account_id": "x-1", "email": None},
+                 {"account_id": None, "email": "no@example.com"}, {"account_id": "y-22222222", "email": "not an address"}]
+        self.assertEqual(picture.emails_by_key(watch), {"aaaa9477": "ann@example.com"})
+        self.assertEqual(picture.emails_by_key(None), {})
 
     def test_rows_in_sign_up_order_when_equally_set_up(self):
         a = tester("aaaa1111", signedUpAt="2026-11-20T10:00:00Z")
@@ -158,17 +173,23 @@ class Table(unittest.TestCase):
         self.assertNotRegex(line, r"\+?\d{7,}")
         self.assertEqual(build(tester("aaaa1111"))["phone_line"], picture.phone_line(1, 0))
 
-    def test_page_and_png_html_carry_the_table_and_nothing_private(self):
+    def test_page_and_png_html_carry_the_table_the_emails_and_no_number(self):
         ok = {"set": True, "provider": "google_drive", "status": "ready"}
-        p = build(tester("aaaa9477", vault=ok, voiceNotes=0, welcomeSentAt=None), tester("bbbb2222", voiceNotes=0, welcomeSentAt=None))
+        p = build(tester("aaaa9477", vault=ok, voiceNotes=0, welcomeSentAt=None), tester("bbbb2222", voiceNotes=0, welcomeSentAt=None),
+                  emails={"aaaa9477": "ann@example.com", "bbbb2222": "bo@example.org"})
         page = picture.render_page(p)
         self.assertIn("data-page-shell", page)
         self.assertIn(p["punchline"], page)
         self.assertIn("Phone numbers:", page)
         self.assertEqual(page.count('<tr><th scope="row" class="who">'), 2)
+        for email in ("ann@example.com", "bo@example.org"):
+            self.assertIn(email, page)
+            self.assertIn(email, picture.render_html(p, picture.load_house()))
+        self.assertIn("signed up 19 Nov", page)
+        self.assertNotRegex(page, r"\+?\d{7,}")
+        self.assertIn("tailnet only", page)
         self.assertEqual(page.count('class="dot on"'), 3)   # two signed up + one drive
         self.assertEqual(page.count('class="dot off"'), 11)  # 14 cells, 3 green
-        self.assertNotIn("@", page.replace("@media", ""))
         for word in ("Google Drive set up", "GitHub set up", "WhatsApp code confirmed", "One memory saved", "One voice note sent", "Welcome WhatsApp sent"):
             self.assertIn(word, page)
         house = picture.load_house()
@@ -248,6 +269,49 @@ class Files(unittest.TestCase):
         self.assertEqual(watch, [{"account_id": "x"}])
         self.assertEqual(counts, {"applications": 2})
         self.assertEqual(calls, ["/api/ops/testers/progress", "/api/ops/testers/whatsapp-setup"])
+
+
+class EmailsReachTheOutput(unittest.TestCase):
+    def test_run_reads_emails_from_tester_watch_into_json_page_and_picture_html(self):
+        with tempfile.TemporaryDirectory() as d:
+            picture.OUT = pathlib.Path(d)
+            picture.PAGE_DIR = pathlib.Path(d) / "page"
+            watch = [{"account_id": "acct-0000aaaa1111", "email": "ann@example.com"}]
+            src = lambda: (progress(tester("aaaa1111")), None, watch, {"applications": 1})  # noqa: E731
+            self.assertEqual(picture.run(now=NOW, sources=src, png=lambda p, path: path.write_bytes(b"x")), 0)
+            latest = json.loads((pathlib.Path(d) / "latest.json").read_text())
+            self.assertEqual(latest["testers"][0]["email"], "ann@example.com")
+            self.assertEqual(latest["testers"][0]["label"], "ann@example.com")
+            self.assertIn("ann@example.com", (pathlib.Path(d) / "page" / "index.html").read_text())
+
+    def test_read_sources_reads_tester_watch_even_when_progress_is_live(self):
+        seen = []
+
+        def ops(method, path):
+            return 200, {"testers": []}
+
+        class R:
+            returncode = 0
+            stdout = json.dumps({"testers": [{"account_id": "x", "email": "ann@example.com"}]})
+
+        def runner(cmd, **kw):
+            seen.append(cmd[-1])
+            return R()
+
+        progress_, _setup, watch, _counts = picture.read_sources(ops_call=ops, run=runner, fetch=lambda: None)
+        self.assertEqual(progress_, {"testers": []})
+        self.assertEqual(watch[0]["email"], "ann@example.com")
+        self.assertEqual(seen, ["tester-watch --json --no-stripe"])  # unredacted: it carries the email
+
+    def test_a_failed_tester_watch_keeps_the_old_label_and_the_picture_goes_out(self):
+        class R:
+            returncode = 1
+            stdout = ""
+
+        _p, _s, watch, _c = picture.read_sources(ops_call=lambda m, p: (200, {"testers": []}), run=lambda *a, **k: R(), fetch=lambda: None)
+        self.assertIsNone(watch)
+        rows = picture.rows_from_progress(progress(tester("aaaa1111")), picture.emails_by_key(watch))
+        self.assertTrue(picture.build(rows, None, NOW, "progress")["testers"][0]["label"].endswith("…1111"))
 
 
 if __name__ == "__main__":
