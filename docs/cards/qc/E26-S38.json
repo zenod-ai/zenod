@@ -1,0 +1,96 @@
+{
+  "row": "E26-S38",
+  "card": "docs/cards/E26-S38.md",
+  "cardSha": "223046af5a731ec6",
+  "inputs": {
+    "card": "223046af5a731ec6",
+    "page": "5c4cc0747b218c56",
+    "rules": "7dd845c8b4b0e115",
+    "words": "1918ffcd1b2615c3"
+  },
+  "checkedAt": "2026-11-22T10:03:45Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "switch (Sara first) on /testers and the home page, same SampleMemory component; looked at 390 and 1280 px (no sideways scroll, flat, two typefaces); site tests 65/65 | review | E26-S37 | none | main | [PR #1728](https://github.com/zenod-ai/zenod/pull/1728) merged 56cac474 (ci green) · live 955bd353 (zenod-mt, /api/health sha 955bd353c20f, 2026-11-22): on [zenod.dev/testers](https://zenod.dev/testers) and [zenod.dev](https://zenod.dev/) the",
+      "where": "2026-11-22",
+      "status": "met",
+      "how": "The Whose week switch shows Sara, Dan and Priya at 390 and 1280 px, and the cloud and notes change with each tab."
+    },
+    {
+      "said": "Yes: keep it\\",
+      "where": "the card's source",
+      "status": "met",
+      "how": "The card's source records Jordi's \"Yes: keep it\" on the home-page sample, which led to the extra weeks."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The testers page at 390 and 1280 px is flat and readable, with the punchline line under the h1, a shaped network diagram for Sara's week, no sideways scroll, and no review feedback block required on this product page."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the three sample weeks (Sara, Dan and Priya) cover enough kinds of visitors, by choosing Yes: keep three or No: say who is missing.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
+    "page": "5c4cc0747b218c56",
+    "walkedAt": "2026-11-22T10:03:45Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "https://zenod.dev/testers",
+        "result": "his screen: a paste box (nothing of his pressed)"
+      },
+      {
+        "n": 2,
+        "what": "press 'Apply'",
+        "url": "https://zenod.dev/testers#apply",
+        "result": "leads to https://zenod.dev/testers#apply"
+      },
+      {
+        "n": 3,
+        "what": "press 'Apply now, it takes a minute'",
+        "url": "https://zenod.dev/testers#apply",
+        "result": "leads to https://zenod.dev/testers#apply"
+      },
+      {
+        "n": 4,
+        "what": "press 'Sara, office job'",
+        "url": "https://zenod.dev/testers",
+        "result": "already chosen: nothing to change"
+      },
+      {
+        "n": 5,
+        "what": "press 'Dan, parent'",
+        "url": "https://zenod.dev/testers",
+        "result": "changes the page"
+      },
+      {
+        "n": 6,
+        "what": "press 'Priya, freelancer'",
+        "url": "https://zenod.dev/testers",
+        "result": "changes the page"
+      }
+    ],
+    "unfinished": "https://zenod.dev/testers"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "https://zenod.dev/testers",
+      "file": "E26-S38-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "https://zenod.dev/testers",
+      "file": "E26-S38-1280.webp"
+    }
+  ]
+}
