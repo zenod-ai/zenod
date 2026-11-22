@@ -1,46 +1,42 @@
 {
   "row": "E26-S38",
   "card": "docs/cards/E26-S38.md",
-  "cardSha": "223046af5a731ec6",
+  "cardSha": "d6f2aabac8036719",
   "inputs": {
-    "card": "223046af5a731ec6",
-    "page": "5c4cc0747b218c56",
+    "card": "d6f2aabac8036719",
+    "page": "a4c704221e935fa9",
     "rules": "7dd845c8b4b0e115",
-    "words": "1918ffcd1b2615c3"
+    "words": "8f19c8b1b93c8435"
   },
-  "checkedAt": "2026-11-22T10:03:45Z",
+  "checkedAt": "2026-11-22T12:54:17Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
-      "said": "switch (Sara first) on /testers and the home page, same SampleMemory component; looked at 390 and 1280 px (no sideways scroll, flat, two typefaces); site tests 65/65 | review | E26-S37 | none | main | [PR #1728](https://github.com/zenod-ai/zenod/pull/1728) merged 56cac474 (ci green) · live 955bd353 (zenod-mt, /api/health sha 955bd353c20f, 2026-11-22): on [zenod.dev/testers](https://zenod.dev/testers) and [zenod.dev](https://zenod.dev/) the",
-      "where": "2026-11-22",
+      "said": "Don't complicate it, man. Don't make me choose the type of person. Just give one example, man. Remove these three shit that I never asked for. Make it simple, bro.",
+      "where": "vn_254c366f, his note on this card 2026-11-22",
+      "key": "vn_254c366f",
+      "when": "newest",
       "status": "met",
-      "how": "The Whose week switch shows Sara, Dan and Priya at 390 and 1280 px, and the cloud and notes change with each tab."
-    },
-    {
-      "said": "Yes: keep it\\",
-      "where": "the card's source",
-      "status": "met",
-      "how": "The card's source records Jordi's \"Yes: keep it\" on the home-page sample, which led to the extra weeks."
+      "how": "Only Sara's week shows on the testers page at 390 and 1280 px; no Whose week switch, Dan or Priya."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The testers page at 390 and 1280 px is flat and readable, with the punchline line under the h1, a shaped network diagram for Sara's week, no sideways scroll, and no review feedback block required on this product page."
+    "summary": "Both widths show one Sara's week sample with a flat layout, no sideways overflow, and the apply form intact."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the three sample weeks (Sara, Dan and Priya) cover enough kinds of visitors, by choosing Yes: keep three or No: say who is missing.",
+    "asked": "Decide whether one example, Sara's week, is all he wanted, by pressing Yes or No.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
-    "page": "5c4cc0747b218c56",
-    "walkedAt": "2026-11-22T10:03:45Z",
+    "page": "a4c704221e935fa9",
+    "walkedAt": "2026-11-22T12:54:17Z",
     "steps": [
       {
         "n": 1,
@@ -62,19 +58,19 @@
       },
       {
         "n": 4,
-        "what": "press 'Sara, office job'",
+        "what": "press 'Concert tickets 0.95'",
         "url": "https://zenod.dev/testers",
-        "result": "already chosen: nothing to change"
+        "result": "changes the page"
       },
       {
         "n": 5,
-        "what": "press 'Dan, parent'",
+        "what": "press 'Dinner for six 0.9'",
         "url": "https://zenod.dev/testers",
         "result": "changes the page"
       },
       {
         "n": 6,
-        "what": "press 'Priya, freelancer'",
+        "what": "press 'Saturday 0.9'",
         "url": "https://zenod.dev/testers",
         "result": "changes the page"
       }
