@@ -641,3 +641,19 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     }
   });
 });
+
+describe("job order (EPIC-24 M31)", () => {
+  it("claims a person's save before older background filing and the weekly sweep, each group oldest first", () => {
+    const store = new TaskJobStore(tmpDb(), "tenant-a");
+    const early = store.enqueue("enrich_memory", { content: "a", source: "whatsapp", evidenceRef: "Log/2026-11-09.md#^e-aaaaaa" }, "enrich:early", 1_000);
+    const sweep = store.enqueue("tree_sweep", {}, "tree-sweep:week:2026-11-22", 1_500);
+    const note = store.enqueue("store", { content: "a new note", source: "whatsapp" }, undefined, 2_000);
+    const voice = store.enqueue("media_ingest", { mediaType: "audio" } as never, undefined, 3_000);
+    const late = store.enqueue("enrich_memory", { content: "b", source: "whatsapp", evidenceRef: "Log/2026-11-10.md#^e-bbbbbb" }, "enrich:late", 500);
+    expect(store.nextQueued()?.id).toBe(note.id);
+    const order: string[] = [];
+    for (let job = store.claimNextQueued(); job; job = store.claimNextQueued()) { order.push(job.id); store.update(job.id, { status: "done" }); }
+    expect(order).toEqual([note.id, voice.id, late.id, early.id, sweep.id]);
+    store.close();
+  });
+});

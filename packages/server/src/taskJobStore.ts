@@ -212,6 +212,13 @@ export function awaitingVaultRecovery(job: Pick<TaskJob, "status" | "kind" | "er
     && Boolean(job.error?.includes("filing_recovery_pending"));
 }
 
+/**
+ * EPIC-24 M31: a person's save (store, media_ingest) and their chats never wait behind background filing. After a
+ * vault block 260 requeued enrichments held 33 real saves for hours; background filing and the weekly sweep now
+ * go after everything else, each group oldest first.
+ */
+const BACKGROUND_FIRST_LAST = "(CASE WHEN kind IN ('enrich_memory', 'tree_sweep') THEN 1 ELSE 0 END)";
+
 export interface TaskJobPatch {
   status?: TaskJobStatus;
   result?: TaskJobResult | null;
@@ -389,7 +396,7 @@ export class TaskJobStore {
       .prepare(
         `SELECT * FROM task_jobs
          WHERE tenant_id=? AND status='queued'
-         ORDER BY created_at ASC LIMIT 1`,
+         ORDER BY ${BACKGROUND_FIRST_LAST}, created_at ASC LIMIT 1`,
       )
       .get(this.tenantId) as Row | undefined;
     return row ? rowToJob(row) : null;
@@ -412,7 +419,7 @@ export class TaskJobStore {
          WHERE tenant_id=? AND status='queued' AND id=(
            SELECT id FROM task_jobs
            WHERE tenant_id=? AND status='queued'${kindFilter}
-           ORDER BY created_at ASC
+           ORDER BY ${BACKGROUND_FIRST_LAST}, created_at ASC
            LIMIT 1
          )
          RETURNING *`,
