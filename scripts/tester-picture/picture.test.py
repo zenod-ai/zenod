@@ -195,6 +195,21 @@ class Table(unittest.TestCase):
         house = picture.load_house()
         self.assertIn(p["punchline"], picture.render_html(p, house))
 
+    def test_card_copy_shortens_the_emails_and_the_main_page_keeps_them(self):
+        """The card check screenshots a page into this public repo: that copy never carries a full address."""
+        p = build(tester("aaaa9477"), emails={"aaaa9477": "ann.long@example.com"})
+        self.assertEqual(picture.mask_email("ann.long@example.com"), "an…@example.com")
+        self.assertIn("ann.long@example.com", picture.render_page(p))
+        card = picture.render_page(p, masked=True)
+        self.assertNotIn("ann.long", card)
+        self.assertIn("an…@example.com", card)
+        self.assertIn("public repository", card)
+        self.assertIn("signed up", card)
+        with tempfile.TemporaryDirectory() as d:
+            picture.write_page(p, pathlib.Path(d))
+            self.assertIn("ann.long@example.com", (pathlib.Path(d) / "index.html").read_text())
+            self.assertNotIn("ann.long", (pathlib.Path(d) / "card.html").read_text())
+
     def test_key_line_says_the_handshake_finished(self):
         p = build(tester("aaaa1111"))
         self.assertIn("handshake finished", p["key_line"])

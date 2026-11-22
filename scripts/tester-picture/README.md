@@ -16,7 +16,7 @@ per tester `label` and `cells` (seven true/false values).
 tracker inside the objective ... and part of the daily briefing?"** Each tester is their sign-in email (small sign-up date under
 it) on the tailnet page, in the picture and in the JSON (`email`, and `label` = the email; `tester` stays `…` + last 4). The email
 comes from `tester-watch --json` on VPS1 (the progress route keeps it back), joined by the last 8 of the account key; a tester
-whose email cannot be read keeps the old date and last-4 label. Never a phone number, code or note text. The page is tailnet-only
+whose email cannot be read keeps the old date and last-4 label. The page folder also holds `card.html`, the same page with the emails shortened (`an…@domain`): the card check's screenshot of the evidence is committed to this public repo, so the card's evidence points at `card.html` and never at the full page. Never a phone number, code or note text. The page is tailnet-only
 and this repo is public: no email is ever committed here (evidence screenshots are masked). agent_team's Testers tracker is fed from
 `latest.json` by `python3 ~/github/agent_team/scripts/trackers.py feed zenod-live testers` and takes `label` as its Name.
 
