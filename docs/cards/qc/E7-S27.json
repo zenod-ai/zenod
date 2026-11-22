@@ -1,14 +1,14 @@
 {
   "row": "E7-S27",
   "card": "docs/cards/E7-S27.md",
-  "cardSha": "5561c93c76c7eaac",
+  "cardSha": "26d00e0cae3a303f",
   "inputs": {
-    "card": "5561c93c76c7eaac",
-    "page": "6c80aa9c6d071c07",
+    "card": "26d00e0cae3a303f",
+    "page": "bc7087f1fc2c3c78",
     "rules": "7dd845c8b4b0e115",
     "words": "0f08260a1b8f4e4d"
   },
-  "checkedAt": "2026-11-22T20:50:47Z",
+  "checkedAt": "2026-11-22T21:09:43Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -17,13 +17,13 @@
       "key": "vn_c2e56f5c",
       "when": "newest",
       "status": "declared",
-      "how": "Card says tracker on the objective and daily briefing wait on the team (✗ line). Page shows each tester by email, so the email part is met."
+      "how": "Emails show on the page at both widths. The card's ✗ line says the objective tracker and daily briefing still wait on the team."
     },
     {
       "said": "when the guys put a phone number ... we send a code to that phone number ... are we monitoring that in the testers scorecard, whether this ... handshake ... was successfully filled in, so ... the connection is complete?",
       "where": "vn_40b9ff8f",
       "status": "met",
-      "how": "Page has WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns; green or grey per tester."
+      "how": "Evidence shows a WhatsApp code confirmed column per tester, plus Google Drive and GitHub storage columns, green or grey."
     },
     {
       "said": "Hi, it's Zenod",
@@ -46,32 +46,34 @@
     {
       "said": "can we just have a fucking email, bro? ... I cannot even see the tester ... a tracker inside the objective ... part of the daily briefing",
       "where": "vn_c2e56f5c",
-      "status": "met",
-      "how": "Each tester is shown by sign-in email with sign-up date on the page, the picture matches; card lines state the tracker and briefing part is pending."
+      "status": "declared",
+      "how": "Each tester is shown by sign-in email with sign-up date. The objective tracker and daily briefing are declared as waiting on the team."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 px the page stacks each tester as a card with a readable check list and no sideways scroll; at 1280 px a clean table with green and grey dots and the punchline box first; no house-rule breach visible."
+    "summary": "At 390 and 1280 px both the card page and the root page open with the punchline box, show a clean one-ink table with green and grey marks, and have no sideways overflow."
   },
-  "pass": true,
-  "held": [],
+  "pass": false,
+  "held": [
+    "ambiguous: The question \"Do you now see each tester the way you wanted?\" with the ✗ line \"Tracker on the objective and a daily briefing wait on the team\": a Yes could mean you accept the email table alone, or that the objective tracker and daily briefing you also asked for are settled, even though the card says they are not done."
+  ],
   "reader": {
-    "asked": "Decide whether he now sees each tester the way he wanted, by pressing Yes to keep it or Change it to say what to change.",
-    "ambiguous": ""
+    "asked": "Decide whether you now see each tester the way you wanted, by approving the page as it is or telling the team what to change.",
+    "ambiguous": "The question \"Do you now see each tester the way you wanted?\" with the ✗ line \"Tracker on the objective and a daily briefing wait on the team\": a Yes could mean you accept the email table alone, or that the objective tracker and daily briefing you also asked for are settled, even though the card says they are not done."
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "6c80aa9c6d071c07",
-    "walkedAt": "2026-11-22T20:50:47Z",
+    "page": "bc7087f1fc2c3c78",
+    "walkedAt": "2026-11-22T21:09:43Z",
     "steps": [
       {
         "n": 1,
         "what": "open the card's link",
-        "url": "http://vps3.taild81fbb.ts.net:9008/",
+        "url": "http://vps3.taild81fbb.ts.net:9008/card.html",
         "result": "opened"
       },
       {
@@ -91,18 +93,42 @@
         "what": "open the link 'today's picture'",
         "url": "http://vps3.taild81fbb.ts.net:9008/tester-table.png",
         "result": "answered 200"
+      },
+      {
+        "n": 5,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9008/",
+        "result": "opened"
+      },
+      {
+        "n": 6,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 7,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 8,
+        "what": "open the link 'today's picture'",
+        "url": "http://vps3.taild81fbb.ts.net:9008/tester-table.png",
+        "result": "answered 200"
       }
     ]
   },
   "shots": [
     {
       "width": 390,
-      "url": "http://vps3.taild81fbb.ts.net:9008/",
+      "url": "http://vps3.taild81fbb.ts.net:9008/card.html",
       "file": "E7-S27-390.webp"
     },
     {
       "width": 1280,
-      "url": "http://vps3.taild81fbb.ts.net:9008/",
+      "url": "http://vps3.taild81fbb.ts.net:9008/card.html",
       "file": "E7-S27-1280.webp"
     }
   ]
