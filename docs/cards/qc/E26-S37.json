@@ -1,0 +1,102 @@
+{
+  "row": "E26-S37",
+  "card": "docs/cards/E26-S37.md",
+  "cardSha": "e51b2ab6528c677f",
+  "inputs": {
+    "card": "e51b2ab6528c677f",
+    "page": "6f6bc8d924656575",
+    "rules": "7dd845c8b4b0e115",
+    "words": "1e3b3a318598c170"
+  },
+  "checkedAt": "2026-11-22T05:38:10Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Dinner for six",
+      "where": "2026-11-22",
+      "status": "met",
+      "how": "The sample graph on the evidence page shows a \"Dinner for six\" thought node and chip; the card says tapping a thought shows its voice note."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "At 390 px and 1280 px the Sara's week section sits under the hero with its graph, note panel and tester link; no sideways overflow or visible clutter breaches the house rules."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the Sara's week sample is in the right place on the zenod.dev home page, and approve keeping it there.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
+    "page": "6f6bc8d924656575",
+    "walkedAt": "2026-11-22T05:38:10Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "https://zenod.dev/",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "press 'Get started'",
+        "url": "https://zenod.dev/#start",
+        "result": "leads to https://zenod.dev/#start"
+      },
+      {
+        "n": 3,
+        "what": "press 'Connect your AI tool'",
+        "url": "https://zenod.dev/connect",
+        "result": "leads to https://zenod.dev/connect"
+      },
+      {
+        "n": 4,
+        "what": "follow 'Connect your AI tool' to",
+        "url": "https://zenod.dev/connect",
+        "result": "opened"
+      },
+      {
+        "n": 5,
+        "what": "press 'Get started'",
+        "url": "https://zenod.dev/pricing",
+        "result": "leads to https://zenod.dev/pricing"
+      },
+      {
+        "n": 6,
+        "what": "follow 'Get started' to",
+        "url": "https://zenod.dev/pricing",
+        "result": "opened"
+      },
+      {
+        "n": 7,
+        "what": "press 'Get started'",
+        "url": "https://zenod.dev/pricing#start",
+        "result": "leads to https://zenod.dev/pricing#start"
+      },
+      {
+        "n": 8,
+        "what": "press 'View install guide'",
+        "url": "https://zenod.dev/pricing",
+        "result": "opens https://github.com/zenod-ai/zenod#readme"
+      }
+    ],
+    "unfinished": "https://zenod.dev/pricing"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "https://zenod.dev/",
+      "file": "E26-S37-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "https://zenod.dev/",
+      "file": "E26-S37-1280.webp"
+    }
+  ]
+}
