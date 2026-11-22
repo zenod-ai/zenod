@@ -81,6 +81,7 @@ import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts } from "./tes
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
 import { mountTesterFirstNoteNudgeRoutes, parseFirstNoteNudgeMode, TesterFirstNoteNudge } from "./testerFirstNoteNudge.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
+import { mountTesterSetupEmailRoutes, parseSetupEmailMode, TesterSetupEmail } from "./testerSetupEmail.js";
 import { mountTesterSignupWelcomeRoutes, parseSignupWelcomeMode, TesterSignupWelcome } from "./testerSignupWelcome.js";
 import type { CustomerAccount } from "./customerAccounts.js";
 import { mountTesterMailQueueRoutes, TesterOnboarding, testerThanksMail, parseOnboardingMode, accountEmail, TESTER_ONBOARDING_MODES, type TesterOnboardingMode } from "./testerOnboarding.js";
@@ -1533,6 +1534,16 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           dataDir: storage.dataDir,
           envMode: parseNudgeMode(env.ZENOD_TESTER_NUDGE) ?? "on",
           firstName: applicantFirstName,
+          ...testerSetups,
+        }),
+      });
+      // E7-S28 (Jordi's approval on E7-A36, 22 Nov): his own setup email to a tester who signed up 48 hours ago or more and
+      // has done nothing (no notes place, no WhatsApp), once per tester, sent by the same timer; off with mode "off".
+      mountTesterSetupEmailRoutes(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        setupEmail: new TesterSetupEmail({
+          dataDir: storage.dataDir,
+          envMode: parseSetupEmailMode(env.ZENOD_TESTER_SETUP_EMAIL) ?? "on",
           ...testerSetups,
         }),
       });

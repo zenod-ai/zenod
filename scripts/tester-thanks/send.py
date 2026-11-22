@@ -35,7 +35,7 @@ import sys
 import urllib.error
 import urllib.request
 
-ROW = "E26-S28/E26-S32/E26-S33"
+ROW = "E26-S28/E26-S32/E26-S33/E7-S28"
 CONSOLE = os.environ.get("CONSOLE_URL", "http://127.0.0.1:18750").rstrip("/")
 # The Zenod milestone's Delivery Manager (persona with Send switched on, console Services page).
 ASSIGNMENT = os.environ.get("ZENOD_DM_ASSIGNMENT", "as_f4fd49bd-5c61-4b8f-a5c5-397a238b1617")
@@ -134,6 +134,8 @@ QUEUES = (
     ("signup-welcome", "/api/ops/testers/signup-welcome/queue", "/api/ops/testers/signup-welcome/sent", True),
     ("thank-you", "/api/ops/testers/onboarding/mail-queue", "/api/ops/testers/onboarding/mail-sent", False),
     ("whatsapp-nudge", "/api/ops/testers/whatsapp-nudge/queue", "/api/ops/testers/whatsapp-nudge/sent", True),
+    # E7-S28 (Jordi's approval on E7-A36): his own setup email 48 hours after a sign-up with nothing done, once per tester.
+    ("setup-email", "/api/ops/testers/setup-email/queue", "/api/ops/testers/setup-email/sent", True),
 )
 
 

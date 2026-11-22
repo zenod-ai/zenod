@@ -16,7 +16,8 @@ MAIL = {"id": "acct-1", "to": "ana@example.org", "subject": "Thank you for testi
 
 
 class Fake:
-    def __init__(self, mails, mark_codes=(200,), send_ok=True, nudges=None, welcomes=None):
+    def __init__(self, mails, mark_codes=(200,), send_ok=True, nudges=None, welcomes=None, setups=None):
+        self.setups = None if setups is None else list(setups)
         self.mails = list(mails)
         self.nudges = None if nudges is None else list(nudges)
         self.welcomes = None if welcomes is None else list(welcomes)
@@ -29,6 +30,8 @@ class Fake:
             return 200, {"mode": "on", "mails": self.mails}
         if path.endswith("/whatsapp-nudge/queue"):
             return (401, {"error": "unauthorized"}) if self.nudges is None else (200, {"mode": "on", "mails": self.nudges})
+        if path.endswith("/setup-email/queue"):
+            return (404, {"error": "not found"}) if self.setups is None else (200, {"mode": "on", "mails": self.setups})
         if path.endswith("/signup-welcome/queue"):
             return (404, {"error": "not found"}) if self.welcomes is None else (200, {"mode": "on", "mails": self.welcomes})
         code = self.mark_codes.pop(0) if self.mark_codes else 200
@@ -39,6 +42,8 @@ class Fake:
                 self.nudges = [m for m in self.nudges if m["id"] != body["id"]]
             if self.welcomes is not None:
                 self.welcomes = [m for m in self.welcomes if m["id"] != body["id"]]
+            if self.setups is not None:
+                self.setups = [m for m in self.setups if m["id"] != body["id"]]
         return code, {"result": "sent"} if code == 200 else {"error": "boom"}
 
     def console(self, method, path, body=None):
@@ -140,6 +145,49 @@ class NudgeTest(unittest.TestCase):
         self.assertEqual(len(fake.sends), 1)
 
     def test_production_without_the_nudge_route_still_sends_thanks(self):
+        fake = Fake([MAIL])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
+
+
+class SetupEmailTest(unittest.TestCase):
+    """E7-S28: Jordi's setup email rides the same tick and ledger, once per tester, ever."""
+
+    SETUP = {"id": "setup-acct-3", "to": "cy@example.org", "subject": "Your Zenod setup", "text": "Hey,", "html": "", "queuedAt": "2026-11-19T00:00:00Z"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        send.STATE = pathlib.Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def tick(self, fake):
+        return send.tick(ops_call=fake.ops, console_call=fake.console, log=lambda *_: None)
+
+    def test_sent_and_marked_on_its_own_route(self):
+        fake = Fake([], setups=[self.SETUP])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual([s["subject"] for s in fake.sends], ["Your Zenod setup"])
+        self.assertEqual(fake.marks[0]["path"], "/api/ops/testers/setup-email/sent")
+        self.assertEqual(fake.marks[0]["to"], "cy@example.org")
+
+    def test_sent_by_hand_before_the_route_exists_is_only_marked(self):
+        send.write_ledger({"setup-acct-3": {"to": "cy@example.org", "sentAt": "2026-11-22T20:00:00+00:00", "messageId": "<m@x>", "run": "run_x"}})
+        fake = Fake([], setups=[self.SETUP])
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(fake.sends, [])
+        self.assertEqual(fake.marks[0]["path"], "/api/ops/testers/setup-email/sent")
+        self.assertEqual(fake.marks[0]["messageId"], "<m@x>")
+
+    def test_never_resent_when_its_mark_failed(self):
+        fake = Fake([], mark_codes=(503, 200), setups=[self.SETUP])
+        self.assertEqual(self.tick(fake), 1)
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(self.tick(fake), 0)
+        self.assertEqual(len(fake.sends), 1)
+
+    def test_production_without_the_route_is_skipped(self):
         fake = Fake([MAIL])
         self.assertEqual(self.tick(fake), 0)
         self.assertEqual(len(fake.sends), 1)
