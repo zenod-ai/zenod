@@ -30,6 +30,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -42,6 +43,11 @@ ASSIGNMENT = os.environ.get("ZENOD_DM_ASSIGNMENT", "as_f4fd49bd-5c61-4b8f-a5c5-3
 STATE = pathlib.Path(os.environ.get("TESTER_STUCK_STATE", "~/.local/state/zenod-tester-stuck")).expanduser()
 DESK_REPO = pathlib.Path(os.environ.get("TESTER_STUCK_DESK_REPO", str(STATE / "desk"))).expanduser()
 AGENT_TEAM = pathlib.Path(os.environ.get("AGENT_TEAM", "~/github/agent_team")).expanduser()
+# EPIC-24 M32: production re-confirms every binding every 5 minutes, and a binding read in that moment says "setting up"
+# or "unavailable" for a second or two. A tester read that way is read again before it is called our bug.
+TRANSIENT = {"channel_setting_up", "channel_unavailable"}
+SETTLE_TRIES = int(os.environ.get("TESTER_STUCK_SETTLE_TRIES", "3"))
+SETTLE_WAIT = float(os.environ.get("TESTER_STUCK_SETTLE_SECONDS", "20"))
 ABOUT = "Testers stuck before WhatsApp: {open} to help today"
 INTRO = ("Each signed up over an hour ago and has not linked WhatsApp (E26-S31 check, every 15 min). Help them through it "
          "today: our own email or a call, inside the consent they gave; no automatic message. A line marked our bug "
@@ -108,12 +114,29 @@ def alarm(text: str, call=console, run=subprocess.run) -> str:
     return answer
 
 
-def tick(dry_run: bool = False, ops_call=ops, desk_call=desk, alarm_call=alarm, now: dt.datetime | None = None, log=print) -> int:
+def settle(data: dict, ops_call, sleep=time.sleep, log=print) -> dict:
+    """Read the setup again (up to SETTLE_TRIES times, SETTLE_WAIT apart) while any tester still reads as in a transient
+    channel state; a state that stays is real and is returned as read the last time."""
+    for _ in range(SETTLE_TRIES):
+        if not any(t.get("step") in TRANSIENT for t in data.get("testers") or []):
+            break
+        sleep(SETTLE_WAIT)
+        code, again = ops_call("GET", "/api/ops/testers/whatsapp-setup")
+        if code != 200:
+            break
+        log("a tester read as setting up or unavailable; read again")
+        data = again
+    return data
+
+
+def tick(dry_run: bool = False, ops_call=ops, desk_call=desk, alarm_call=alarm, now: dt.datetime | None = None, log=print,
+         sleep=time.sleep) -> int:
     now = now or dt.datetime.now(dt.timezone.utc)
     code, data = ops_call("GET", "/api/ops/testers/whatsapp-setup")
     if code != 200:
         log(f"could not read the testers' WhatsApp setup: {code} {str(data)[:200]}")
         return 2
+    data = settle(data, ops_call, sleep, log)
     ledger = read_ledger()
     new = [t for t in stuck(data.get("testers") or [], now) if ledger.get(t["key"]) != t["step"]]
     if not new:

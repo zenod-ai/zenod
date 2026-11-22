@@ -825,6 +825,15 @@ export class ZenodPhylaxAdapter {
     const impossibleInitialAllocation = entitled &&
       currentAllowance === null &&
       localCapacity + allocationUnits > this.config.masterAllowanceUnits;
+    // EPIC-24 M32: this runs for every account every 5 minutes (the Phylax refresh) and used to flip a healthy binding
+    // to setting_up until its reconcile finished. A tester's channel read in that window answered 503 and the 15-minute
+    // stuck check called it "still being set up, our bug" (22 Nov 01:26Z and 03:26Z). An active binding whose desired
+    // state did not change stays active; the reconcile that follows still marks it unavailable if Phylax fails.
+    const unchanged = row.state === "active" &&
+      row.last_error_code === null &&
+      row.desired_access === (entitled ? "active" : "suspended") &&
+      row.period_id === (period?.id ?? null) &&
+      row.allocation_units === allocationUnits;
     this.db.prepare(
       `UPDATE zenod_phylax_bindings
        SET desired_access=?, state=?, period_id=?, period_starts_at=?,
@@ -833,7 +842,7 @@ export class ZenodPhylaxAdapter {
        WHERE account_id=?`,
     ).run(
       entitled ? "active" : "suspended",
-      impossibleInitialAllocation ? "unavailable" : "setting_up",
+      impossibleInitialAllocation ? "unavailable" : unchanged ? "active" : "setting_up",
       period?.id ?? null,
       period?.startsAt ?? null,
       period?.endsAt ?? null,

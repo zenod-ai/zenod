@@ -731,6 +731,40 @@ describe("Zenod Phylax product adapter", () => {
     restarted.close();
   });
 
+  it("EPIC-24 M32: the 5-minute refresh keeps a healthy binding active while it reconciles", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf6-refresh-window-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const alpha = account("alpha");
+    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
+    await adapter.bootstrapAccounts([alpha]);
+    expect(adapter.viewForAccount(alpha.account_id)?.state).toBe("active");
+
+    // The refresh records the desired state first, then calls Phylax: a channel read in between used to see setting_up.
+    const seen: string[] = [];
+    const ensure = remote.ensureTenant.bind(remote);
+    remote.ensureTenant = async (input) => {
+      seen.push(adapter.viewForAccount(alpha.account_id)?.state ?? "none");
+      return ensure(input);
+    };
+    await adapter.bootstrapAccounts([alpha]);
+    expect(seen).toEqual(["active"]);
+    expect(adapter.viewForAccount(alpha.account_id)?.state).toBe("active");
+
+    // Phylax down during a refresh: the binding still turns unavailable (the reconcile result, not the reset).
+    remote.unavailable = true;
+    await adapter.bootstrapAccounts([alpha]);
+    expect(adapter.viewForAccount(alpha.account_id)?.state).toBe("unavailable");
+
+    // Phylax back: the next refresh brings it active again.
+    remote.unavailable = false;
+    remote.ensureTenant = ensure;
+    await adapter.bootstrapAccounts([alpha]);
+    expect(adapter.viewForAccount(alpha.account_id)?.state).toBe("active");
+    adapter.close();
+  });
+
   it("isolates a bootstrap record failure and continues seeding later tenants", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-bootstrap-isolation-"));
     dirs.push(dataDir);
