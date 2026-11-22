@@ -54,10 +54,12 @@ function setup(opts: {
 }
 
 describe("the message", () => {
-  it("is under 50 words, warm, says what Zenod is, then asks for a voice note; no list", () => {
+  it("is under 50 words, speaks as Zenod, says what Zenod is, then asks for a voice note; no list", () => {
     const text = ZENOD_WHATSAPP_FIRST_NOTE_NUDGE;
     expect(text.split(/\s+/).length).toBeLessThan(50);
-    expect(text).toBe("Hi, it's Jordi. Thanks for linking WhatsApp to Zenod. Zenod is your own memory: it files what you tell it in your Google Drive or GitHub, and Claude, ChatGPT and your other AI tools can read it. Send me a voice note about anything on your mind.");
+    expect(text).toBe("Hi, it's Zenod. Thanks for linking WhatsApp. I keep your memory: I file what you tell me in your own Google Drive or GitHub, and Claude, ChatGPT and your other AI tools can read it. Send me a voice note about anything on your mind.");
+    expect(text.startsWith("Hi, it's Zenod.")).toBe(true);
+    expect(text).not.toMatch(/Jordi/);
     expect(text).not.toMatch(/[\n•*]|—/);
     expect(phylaxAccountNoticeText("zenod", "first_note_nudge", "https://cloud.zenod.dev")).toBe(text);
   });
