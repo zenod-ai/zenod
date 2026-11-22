@@ -32,7 +32,7 @@ Status: active
 Last attempted: 2026-11-22T12:55Z Ticket worker run_4fa57feb: E26-S38 iteration 2 (one sample week, no switch) confirmed live on production 2c12217a at 390 and 1280 px on zenod.dev and /testers; card back in Jordi's review ; E26-S37 approved by Jordi
 Result: production a4209aab: apply with only an email, the sample memory on /testers and the home page, 30 free memories, welcome, stuck alert, the approved next-day one-tap email (live 8079bd06), thank-you email; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes
 Evidence: [tester welcome](http://vps3.taild81fbb.ts.net:9002/) · [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/) · [phone setup review](evidence/e26-s23-2026-11-14.md) · [WhatsApp setup words](http://vps3.taild81fbb.ts.net:9001/)
-Waiting on: Jordi's verdict on E26-S38 iteration 2 (one sample week, live 2c12217a) ; the three testers sending a first WhatsApp note ; the next stranger to apply (zenod-social recruits)
+Waiting on: the three testers sending a first WhatsApp note ; the next stranger to apply (zenod-social recruits)
 Approved work: none
 Next action: E26-S3 watches the 21 Nov tester (WhatsApp linked) to a first Saved reply ; Jordi's verdict on E26-S37
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
