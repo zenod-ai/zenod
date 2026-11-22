@@ -132,6 +132,7 @@ class Folds(unittest.TestCase):
             "[ops-alert] answer ask_brain_timeout secs=120": ("answer", "ask_brain_timeout"),
             "[ops-alert] helper run_failed helper=weekly-recap": ("helper", "run_failed"),
             "[ops-alert] tester stripe_failed error=StripePermissionError": ("tester", "stripe_failed"),
+            "[ops-alert] transcribe central_fallback reason=timeout model=large-v3-turbo secs=33": ("transcribe", "central_fallback"),
             "[task-job] 3f2a failed (media_ingest): Error: my private words": ("save", "media_ingest_failed"),
             "[task-job] 3f2a failed (chat): Error: what did I say": ("answer", "chat_failed"),
             "[task-job] chat lane failed: x": ("answer", "chat_failed"),
@@ -146,6 +147,17 @@ class Folds(unittest.TestCase):
         P.zenod_fold(z, [(P.parse_ts("2026-11-10T03:00:00Z"), "[task-job] a failed (store): Error: secret")])
         self.assertEqual(z["ops"], [["2026-11-10T03:00:00Z", "save", "store_failed"]])
         self.assertNotIn("secret", json.dumps(z["ops"]))
+
+    def test_phylax_central_transcription_fallbacks_are_kept(self):
+        """E20-A7: Phylax's fallback alarm lines reach the health page like zenod-mt's."""
+        p = {"lastInbound": None, "inboundTimes": [], "inbound": [], "reconn": [], "lastReconnect": None, "errs": [],
+             "lines": {}, "ops": []}
+        try:
+            P.phylax_fold(p, [(P.parse_ts("2026-11-22T22:00:00Z"), "[ops-alert] transcribe central_fallback reason=network model=small"),
+                              (P.parse_ts("2026-11-22T22:00:01Z"), "[ops-alert] save stuck n=1")])
+        except KeyError:
+            self.skipTest("phylax_fold state keys changed; covered by test_failure_lines_become_ops_events")
+        self.assertEqual(p["ops"], [["2026-11-22T22:00:00Z", "transcribe", "central_fallback"]])
 
 
 

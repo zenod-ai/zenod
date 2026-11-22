@@ -554,9 +554,33 @@ def components(d: dict) -> list[dict]:
               "VPS1 · zenod-mt: the tester month-end job (extend if used in 14 days, else end gently)",
               "zenod-mt container log ([ops-alert] tester)",
               "packages/server/test/testerMonthEnd.test.ts; test_aggregate.py AlertRows")
+    # 21 E20-A7: voice notes go to the team's free transcription service on vps3 first; each fallback to the paid
+    # provider is one `[ops-alert] transcribe central_fallback` line (zenod-mt and Phylax logs). Amber while one
+    # happened in the last 15 min (nobody is hurt: the note was written out by the paid provider), red at 5 or more
+    # (the service looks down and every note is paying again).
+    tops = ops + ((pl or {}).get("ops") or [])
+    tnow, tday = recent_ops(tops, ("transcribe",), ref), day_ops(tops, ("transcribe",), ref)
+    treasons: dict[str, int] = {}
+    for _, r in tnow:
+        treasons[r] = treasons.get(r, 0) + 1
+    tcol = "red" if len(tnow) >= TRANSCRIBE_RED_COUNT else ("amber" if tnow else "green")
+    tprob = (f"{len(tnow)} voice notes fell back to the paid provider in the last {ALERT_MIN} min, newest "
+             f"{ago(iso(tnow[-1][0]), ref)} (central transcription on vps3 was slow or down)") if tnow else None
+    row(id="alert_transcription", n="21", name="Central transcription: fallbacks to the paid provider",
+        where="VPS1 · zenod-mt and Phylax: voice notes try the team's free service on vps3 first",
+        status=tcol, problem=tprob,
+        signal=(tprob or f"no fallback in the last {ALERT_MIN} min") + f"; {len(tday)} in 24 h",
+        signal_value={"window": len(tnow), "day": len(tday), "reasons": treasons},
+        activity=f"last fallback {ago(iso(tday[-1][0]), ref)} ({tday[-1][1]})" if tday else "none in 24 h",
+        activity_at=None,
+        error=f"last {ago(iso(tday[-1][0]), ref)}: {tday[-1][1]}" if tday else "none in 24 h",
+        events=[ev(iso(tday[-1][0]), f"fallback: {tday[-1][1]}", "zenod-mt and phylax container logs ([ops-alert] transcribe)")] if tday else [],
+        source="zenod-mt and phylax container logs ([ops-alert] transcribe central_fallback)",
+        tests="packages/server/test/centralTranscription.test.ts; test_aggregate.py AlertRows")
     return R
 
 
+TRANSCRIBE_RED_COUNT = 5                        # E20-A7: fallbacks in 15 min that turn row 21 red
 CREDIT_RED_DAYS, CREDIT_AMBER_DAYS = 5, 10      # E26-S8: days left at the current daily spend
 CREDIT_RED_USD, CREDIT_AMBER_USD = 2.0, 5.0     # and a floor for when the spend is not known yet
 CREDIT_SPEND_DAYS = 3                           # the daily spend is the drop over the last 3 days
