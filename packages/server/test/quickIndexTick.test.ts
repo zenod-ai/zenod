@@ -78,6 +78,11 @@ describe("tick line format and CPU marks", () => {
       .toBe("[quick-index] tick tenant=t-1 pull=0ms(none) stat=0ms rebuild=0ms(cached) update=0ms total=2ms result=no-tree cpu=3ms child=40ms personas=1ms");
   });
 
+  it("says how many files the rebuild read again and how many it reused, only when it rebuilt", () => {
+    expect(quickIndexTickLine("t-1", { pullMs: 5, statMs: 6, rebuildMs: 40, rebuilt: true, parsedFiles: 2, reusedFiles: 2350 }, 1, 60))
+      .toBe("[quick-index] tick tenant=t-1 pull=5ms(none) stat=6ms rebuild=40ms(rebuilt) files=2/2350 update=1ms total=60ms");
+  });
+
   it("measures this process's CPU and the CPU of the processes it waited for", () => {
     const before = cpuMark();
     // Burn until this process has used 30 ms of CPU (wall time says nothing on a loaded machine).

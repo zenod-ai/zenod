@@ -234,7 +234,29 @@ export interface TreeIndex {
 /** Pages read at once when building the tree index. */
 const TREE_READ_CONCURRENCY = 16;
 
-export async function buildTreeIndex(vaultPath: string, snapshot?: VaultSnapshot): Promise<TreeIndex> {
+export type TreePageFields = PageTreeFields & { title: string };
+
+/** One page's tree fields and title from its frontmatter. */
+export function treePageFieldsOf(path: string, frontmatter: Record<string, unknown> | null): TreePageFields {
+  const title = typeof frontmatter?.title === "string" && frontmatter.title.trim() ? frontmatter.title.trim() : basenameOf(path);
+  return { ...pageTreeFields(frontmatter), title };
+}
+
+/** One page's tree fields and title, read from disk. */
+export async function readTreePageFields(vaultPath: string, path: string): Promise<TreePageFields> {
+  return treePageFieldsOf(path, parseNote(await readFile(join(vaultPath, path), "utf8")).frontmatter);
+}
+
+/**
+ * `readFields` lets a caller that already holds a page's parsed fields (the quick index's per-file memo, EPIC-24 M34)
+ * skip the read and the parse; it must return exactly what reading the page would. `snapshot` needs only the file list
+ * and the link table.
+ */
+export async function buildTreeIndex(
+  vaultPath: string,
+  snapshot?: Pick<VaultSnapshot, "files" | "linkTargets">,
+  readFields?: (path: string) => Promise<TreePageFields>,
+): Promise<TreeIndex> {
   const snap = snapshot ?? (await scanVault(vaultPath));
   const tree = await readTree(vaultPath);
   const fields = new Map<string, PageTreeFields & { title: string }>();
@@ -244,10 +266,7 @@ export async function buildTreeIndex(vaultPath: string, snapshot?: VaultSnapshot
   let next = 0;
   const worker = async () => {
     for (let i = next++; i < pages.length; i = next++) {
-      const raw = await readFile(join(vaultPath, pages[i]!), "utf8");
-      const { frontmatter } = parseNote(raw);
-      const title = typeof frontmatter?.title === "string" && frontmatter.title.trim() ? frontmatter.title.trim() : basenameOf(pages[i]!);
-      parsed[i] = { ...pageTreeFields(frontmatter), title };
+      parsed[i] = readFields ? await readFields(pages[i]!) : await readTreePageFields(vaultPath, pages[i]!);
     }
   };
   await Promise.all(Array.from({ length: Math.min(TREE_READ_CONCURRENCY, pages.length) }, worker));

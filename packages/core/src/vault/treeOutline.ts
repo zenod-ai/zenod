@@ -63,7 +63,7 @@ export interface MemoryTreeOutlineOptions {
 const UNPLACED_PAGES_LISTED = 20;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function frontmatterDate(value: unknown): string | null {
+export function frontmatterDate(value: unknown): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
   if (typeof value === "string" && DATE_RE.test(value.trim().slice(0, 10))) return value.trim().slice(0, 10);
   return null;

@@ -14,6 +14,7 @@ import { createRingUnit } from "./ringUnit.js";
 import { createHeraldUnit } from "./heraldUnit.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
 import { resolveServerMode } from "./serverMode.js";
+import { startEventLoopWatchdog, watchdogOptionsFromEnv } from "./eventLoopWatchdog.js";
 
 const port = Number(process.env.PORT ?? 8080);
 const dataDir = resolve(process.env.ZENOD_DATA_DIR ?? "./data");
@@ -93,6 +94,8 @@ const app =
     ...(hasSite ? { siteDist } : {}),
   });
 
+// EPIC-24 M34 round 4: a freeze of the event loop writes the main thread's stack to the log (one line per block).
+startEventLoopWatchdog(watchdogOptionsFromEnv(process.env));
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(
     `${agent.name} ${unit ? "chassis unit" : "server"} listening on :${info.port} (data: ${dataDir}${hasWeb ? `, dashboard: ${webDist}` : ", no dashboard build"}${hasSite ? `, site: ${siteDist}` : ", no site build"})`,
