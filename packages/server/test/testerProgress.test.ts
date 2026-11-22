@@ -60,9 +60,11 @@ describe("tenantJobCounts", () => {
       ins.run("t", "store", "failed", now - 2000, "x:whatsapp:2", "{}");
       ins.run("t", "media_ingest", "done", now - 3 * 86_400_000, "k", '{"source":"web"}');
       ins.run("t", "store", "done", now - 1000, "k2", '{"source":"selftest"}');
+      ins.run("t", "media_ingest", "failed", now - 1000, "k3", '{"mediaType":"audio","source":"web"}');
+      ins.run("t", "media_ingest", "done", now - 1000, "k4", '{"mediaType":"pdf"}');
       ins.run("other", "store", "done", now - 1000, "x:whatsapp:3", "{}");
       db.close();
-      expect(tenantJobCounts(path, "t", now - 86_400_000)).toEqual({ whatsappNotes: 2, whatsappNotes24h: 2, memoriesSaved: 2, memoriesSaved24h: 1 });
+      expect(tenantJobCounts(path, "t", now - 86_400_000)).toEqual({ whatsappNotes: 2, whatsappNotes24h: 2, memoriesSaved: 3, memoriesSaved24h: 2, voiceNotes: 1 });
       expect(tenantJobCounts(join(dir, "none.sqlite"), "t", 0).memoriesSaved).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -87,7 +89,8 @@ describe("GET /api/ops/testers/progress", () => {
     isTest: (a) => (a.stripe_email ?? "").endsWith("@alpha9.io"),
     setup: async (id) => (id.endsWith("3333") ? read() : read({ state: "off", attempts: 0, lastStatus: null })),
     isOps: (c) => c.req.header("authorization") === "Bearer ops",
-    counts: (tenantId) => ({ whatsappNotes: tenantId.endsWith("3333") ? 2 : 0, whatsappNotes24h: 1, memoriesSaved: 1, memoriesSaved24h: 0 }),
+    counts: (tenantId) => ({ whatsappNotes: tenantId.endsWith("3333") ? 2 : 0, whatsappNotes24h: 1, memoriesSaved: 1, memoriesSaved24h: 0, voiceNotes: 1 }),
+    welcomeSentAt: (accountId) => (accountId.endsWith("3333") ? "2026-11-19T08:00:00.000Z" : accountId.endsWith("cccc2222") ? "2026-11-18T08:00:00.000Z" : null),
     seenSince: () => Date.parse("2026-11-20T09:00:00Z"),
     seenAt: (userId) => (userId.endsWith("aaaa9477") ? Date.parse("2026-11-20T10:00:00Z") : null),
     now: () => Date.parse("2026-11-20T22:00:00Z"),
@@ -107,7 +110,8 @@ describe("GET /api/ops/testers/progress", () => {
     expect(body.testers).toHaveLength(2);
     const [dana, two] = body.testers;
     expect(dana).toMatchObject({ key: "aaaa9477".slice(-8), lastSeenAt: "2026-11-20T10:00:00.000Z", vault: { set: false }, whatsapp: { linked: false } });
-    expect(two).toMatchObject({ vault: { set: true }, whatsapp: { linked: true }, whatsappNotes: 2, memoriesSaved: 2 });
+    expect(two).toMatchObject({ vault: { set: true }, whatsapp: { linked: true }, whatsappNotes: 2, memoriesSaved: 2, voiceNotes: 2, welcomeSentAt: "2026-11-18T08:00:00.000Z" });
+    expect(dana).toMatchObject({ voiceNotes: 1, welcomeSentAt: null });
     const text = JSON.stringify(body);
     expect(text).not.toContain("dana@gmail.com");
     expect(text).not.toContain("two@x.io");

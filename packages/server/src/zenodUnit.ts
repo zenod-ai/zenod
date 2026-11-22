@@ -1510,6 +1510,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         counts: (tenantId, sinceMs) => tenantJobCounts(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
         seenAt: (userId) => testerLastSeen.seenAt(userId),
         seenSince: () => testerLastSeen.since(),
+        // E7-S27: the link welcome (the earlier of the two) or the first-note message, whichever reached this account.
+        welcomeSentAt: (accountId) => onboarding.welcomeSentAt(accountId) ?? testerFirstNoteNudge?.sentAt(accountId) ?? null,
       });
       // E7-S9: each tester's own voice feedback link, made on the team console by a vps3 timer and kept here; the app
       // shows it as one "Tell us what you think" entry to testers only.

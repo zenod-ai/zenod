@@ -291,6 +291,12 @@ export class TesterOnboarding {
     return record?.linkedAt && record.via !== "test send" ? record.linkedAt : null;
   }
 
+  /** E7-S27: when the link welcome reached this account's WhatsApp (ISO), null when it was never sent. */
+  welcomeSentAt(accountId: string): string | null {
+    const record = this.read().accounts[accountId];
+    return record?.linkedAt && record.whatsapp === "sent" ? record.linkedAt : null;
+  }
+
   /** Mode and counts only (no addresses), for the admin page and the ops route. */
   status(): {
     mode: TesterOnboardingMode;

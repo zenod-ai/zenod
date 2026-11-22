@@ -94,6 +94,11 @@ export class TesterFirstNoteNudge {
     renameSync(temp, this.path);
   }
 
+  /** E7-S27: when the first-note message reached this account (ISO), null when it was never sent. */
+  sentAt(accountId: string): string | null {
+    return this.read().accounts[accountId]?.sentAt ?? null;
+  }
+
   mode(): FirstNoteNudgeMode {
     return this.read().mode ?? this.options.envMode;
   }

@@ -78,9 +78,11 @@ export interface TenantJobCounts {
   /** memories saved, on any channel (finished saves, our own self-tests left out), and those in the last 24 h */
   memoriesSaved: number;
   memoriesSaved24h: number;
+  /** E7-S27: voice notes the tester sent on any channel (audio taken in, any outcome, our self-tests left out) */
+  voiceNotes: number;
 }
 
-const NO_COUNTS: TenantJobCounts = { whatsappNotes: 0, whatsappNotes24h: 0, memoriesSaved: 0, memoriesSaved24h: 0 };
+const NO_COUNTS: TenantJobCounts = { whatsappNotes: 0, whatsappNotes24h: 0, memoriesSaved: 0, memoriesSaved24h: 0, voiceNotes: 0 };
 
 export function tenantJobCounts(tasksPath: string, tenantId: string, sinceMs: number): TenantJobCounts {
   if (!existsSync(tasksPath)) return NO_COUNTS;
@@ -94,17 +96,19 @@ export function tenantJobCounts(tasksPath: string, tenantId: string, sinceMs: nu
            COALESCE(SUM(CASE WHEN ${wa} THEN 1 ELSE 0 END), 0) AS wa,
            COALESCE(SUM(CASE WHEN ${wa} AND updated_at >= ? THEN 1 ELSE 0 END), 0) AS wa24,
            COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) AS saved,
-           COALESCE(SUM(CASE WHEN status = 'done' AND updated_at >= ? THEN 1 ELSE 0 END), 0) AS saved24
+           COALESCE(SUM(CASE WHEN status = 'done' AND updated_at >= ? THEN 1 ELSE 0 END), 0) AS saved24,
+           COALESCE(SUM(CASE WHEN kind = 'media_ingest' AND json_extract(input_json, '$.mediaType') = 'audio' THEN 1 ELSE 0 END), 0) AS voice
          FROM task_jobs
          WHERE tenant_id = ? AND kind IN ('store', 'media_ingest')
            AND COALESCE(json_extract(input_json, '$.source'), '') <> 'selftest'`,
       )
-      .get(sinceMs, sinceMs, tenantId) as { wa: number; wa24: number; saved: number; saved24: number } | undefined;
+      .get(sinceMs, sinceMs, tenantId) as { wa: number; wa24: number; saved: number; saved24: number; voice: number } | undefined;
     return {
       whatsappNotes: Number(row?.wa ?? 0),
       whatsappNotes24h: Number(row?.wa24 ?? 0),
       memoriesSaved: Number(row?.saved ?? 0),
       memoriesSaved24h: Number(row?.saved24 ?? 0),
+      voiceNotes: Number(row?.voice ?? 0),
     };
   } catch {
     return NO_COUNTS;
@@ -128,6 +132,8 @@ export interface TesterProgressOptions extends TesterSetupOptions {
   isOps: (c: Context) => boolean;
   counts: (tenantId: string, sinceMs: number) => TenantJobCounts;
   seenAt: (userId: string) => number | null;
+  /** E7-S27: when a WhatsApp message from Zenod's number reached this account (the link welcome, or the first-note nudge), ISO, or null */
+  welcomeSentAt?: (accountId: string) => string | null;
   /** when the last-seen record began (epoch ms), or null */
   seenSince?: () => number | null;
   now?: () => number;
@@ -143,6 +149,10 @@ export interface TesterProgressRow {
   whatsappNotes24h: number;
   memoriesSaved: number;
   memoriesSaved24h: number;
+  /** E7-S27: voice notes sent on any channel */
+  voiceNotes: number;
+  /** E7-S27: when Zenod's welcome WhatsApp reached this tester, or null (never sent, or not recorded) */
+  welcomeSentAt: string | null;
   lastSeenAt: string | null;
 }
 
@@ -162,6 +172,7 @@ export async function readTesterProgress(options: TesterProgressOptions): Promis
       vault: vaultState(s.account),
       whatsapp: { linked: s.step === "linked", step: s.step, text: s.text, ourBug: s.ourBug },
       ...counts,
+      welcomeSentAt: options.welcomeSentAt?.(s.account.account_id) ?? null,
       lastSeenAt: seen ? new Date(seen).toISOString() : null,
     };
   });
@@ -181,6 +192,8 @@ export async function readTesterProgress(options: TesterProgressOptions): Promis
     first.whatsappNotes24h += row.whatsappNotes24h;
     first.memoriesSaved += row.memoriesSaved;
     first.memoriesSaved24h += row.memoriesSaved24h;
+    first.voiceNotes += row.voiceNotes;
+    if (row.welcomeSentAt && (!first.welcomeSentAt || row.welcomeSentAt < first.welcomeSentAt)) first.welcomeSentAt = row.welcomeSentAt;
     if (row.lastSeenAt && (!first.lastSeenAt || row.lastSeenAt > first.lastSeenAt)) first.lastSeenAt = row.lastSeenAt;
   }
   return out.map(({ email: _email, ...row }) => row);

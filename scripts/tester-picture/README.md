@@ -1,4 +1,16 @@
-# Daily tester picture (EPIC-7 E7-S17)
+# Daily tester picture (EPIC-7 E7-S17) and tester table (E7-S27)
+
+**E7-S27 (Jordi, vn_40b9ff8f, 22 Nov): "rows, and each row is a tester, and each column is like a sign up, Google Drive set up,
+GitHub set up, one memory created, one voice note sent ... each tester having a color ... welcome WhatsApp sent."** The picture
+is now exactly that table: one row per tester (sign-up date and the last 4 of the account key, never an email), seven columns
+(signed up, Google Drive, GitHub, WhatsApp linked, one memory, one voice note, welcome WhatsApp sent), each cell green or grey,
+one headline, and one line on whether we hold their phone numbers (only Phylax holds a linked tester's number; nothing here shows
+it). The same run rebuilds a calm page on the page host, `http://vps3.taild81fbb.ts.net:9008/` (`zenod-tester-table-page.service`,
+`page_server.py`, folder `/var/lib/vps3-scratch/t3agent/pages/e7-s27`, `PAGE_DIR` in picture.py). Grey also covers a cell the
+running release cannot read yet (voice note and welcome need the E7-S27 production release); the footer names those columns.
+The JSON is `zenod-tester-picture/v2`: the v1 fields plus `columns`, `column_counts`, `unread_cells`, `phone_line`, `page_url` and
+per tester `label` and `cells` (seven true/false values).
+
 
 Jordi, vn_b73d7c41 (20 Nov): how many testers, how many logged in, how many fully set up by his four steps (vault: GitHub or
 Google Drive; WhatsApp linked; at least one WhatsApp note; at least one memory), where each is stuck, and "right now I'm lost".
