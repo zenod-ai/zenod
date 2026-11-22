@@ -5,6 +5,7 @@ import { createGracefulShutdown, shutdownTimings } from "./gracefulShutdown.js";
 import { outlastProxyKeepAlive } from "./proxyKeepAlive.js";
 import { compileAllToolOutputSchemas } from "./toolOutput.js";
 import { createPhylaxUnit } from "./phylaxUnit.js";
+import { startEventLoopWatchdog, watchdogOptionsFromEnv } from "./eventLoopWatchdog.js";
 import {
   assertDedicatedPhylaxProcessEnv,
   resolvePhylaxInstanceConfig,
@@ -36,6 +37,7 @@ const unit = createPhylaxUnit({
   env,
   instance,
 });
+startEventLoopWatchdog(watchdogOptionsFromEnv(process.env));
 const server = serve({ fetch: unit.app.fetch, port }, (info) => {
   console.log(
     `phylax ${instance.mode} instance ${instance.instanceId} listening on :${info.port} (data: ${dataDir})`,

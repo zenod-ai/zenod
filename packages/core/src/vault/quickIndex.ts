@@ -1,12 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { parseNote } from "./frontmatter.js";
 import { basenameOf } from "./files.js";
-import { CITATION_RE } from "./pages.js";
-import { readLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
-import { buildTreeIndex, MAX_TREE_DEPTH, type MemoryKind } from "./tree.js";
-import { pageCaptureDate } from "./treeOutline.js";
-import { vaultFingerprint } from "./lineage.js";
+import { CITATION_RE, linkTargetsOf } from "./pages.js";
+import { parseLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
+import { buildTreeIndex, MAX_TREE_DEPTH, readTree, treePageFieldsOf, type MemoryKind, type TreePageFields } from "./tree.js";
+import { frontmatterDate } from "./treeOutline.js";
+import { RACY_MS, vaultFingerprint, type VaultFingerprint } from "./lineage.js";
 import type { VaultPullTiming } from "./repository.js";
 
 /**
@@ -91,20 +91,32 @@ function frontmatterList(value: unknown): string[] {
 
 const MAX_CACHED_BASES = 8;
 const baseCache = new Map<string, { fingerprint: string; weekFrom: string; base: Promise<QuickIndexBase | null> }>();
+const memos = new Map<string, Promise<QuickIndexMemo>>();
+
+/** Where the persisted per-file memo lives. */
+export interface QuickIndexBaseOptions {
+  /** File the per-file memo is kept in across restarts (beside the memory index, never in the vault); none: in memory only. */
+  memoPath?: string;
+}
 
 /**
  * `quickIndexBase`, rebuilt only when a Markdown file was added, removed or changed, or the week window moved
- * (EPIC-24 M34). The base reads and parses every page and every Log file (about 2.3 s of CPU on a 2,400-file vault),
- * and the 5-minute clock of every tenant asked for it whether or not anything had been filed: a Zenod with nobody
- * saving burned a core in 15-second bursts. The base depends only on those files and, through `now`, on the first
- * day of the week, so a hit returns the very same object a fresh build would. A file changed in the last 100 ms is
- * never trusted (the same racy rule as the memory tree); a failed build is not kept.
+ * (EPIC-24 M34). The base reads and parses every page and every Log file (about 2.3 s of CPU on a 2,400-file vault,
+ * 8-16 s on VPS1), and the 5-minute clock of every tenant asked for it whether or not anything had been filed: a Zenod
+ * with nobody saving burned a core in 15-second bursts. The base depends only on those files and, through `now`, on
+ * the first day of the week, so a hit returns the very same object a fresh build would. A file changed in the last
+ * 100 ms is never trusted (the same racy rule as the memory tree); a failed build is not kept.
+ *
+ * Round 4: when the fingerprint did change, only the changed files are read and parsed again. What each page and each
+ * Log file contributes is kept per file (keyed by its mtime and size) in a memo that is also saved to `memoPath`, so
+ * a save re-reads the one page and the one Log day it touched, and a restart re-reads nothing that has not changed.
  */
-export async function quickIndexBaseCached(vaultPath: string, now: number = Date.now(), phases?: QuickIndexPhases): Promise<QuickIndexBase | null> {
+export async function quickIndexBaseCached(vaultPath: string, now: number = Date.now(), phases?: QuickIndexPhases, options: QuickIndexBaseOptions = {}): Promise<QuickIndexBase | null> {
   const key = resolve(vaultPath);
   const weekFrom = weekFromOf(now);
   const statStarted = performance.now();
-  const { hash, racy } = await vaultFingerprint(vaultPath);
+  const fingerprint = await vaultFingerprint(vaultPath);
+  const { hash, racy } = fingerprint;
   if (phases) phases.statMs = Math.round(performance.now() - statStarted);
   const cached = baseCache.get(key);
   if (cached && !racy && cached.fingerprint === hash && cached.weekFrom === weekFrom) {
@@ -113,7 +125,7 @@ export async function quickIndexBaseCached(vaultPath: string, now: number = Date
     return cached.base;
   }
   const rebuildStarted = performance.now();
-  const base = quickIndexBase(vaultPath, now);
+  const base = memoFor(key, options.memoPath).then((memo) => buildBase(vaultPath, now, fingerprint, memo, phases));
   baseCache.delete(key);
   if (!racy) {
     const entry = { fingerprint: hash, weekFrom, base };
@@ -123,6 +135,119 @@ export async function quickIndexBaseCached(vaultPath: string, now: number = Date
   }
   if (!phases) return base;
   try { return await base; } finally { phases.rebuildMs = Math.round(performance.now() - rebuildStarted); phases.rebuilt = true; }
+}
+
+/** Tests only: forget what this process kept, as a restart does. */
+export function forgetQuickIndexCaches(): void {
+  baseCache.clear();
+  memos.clear();
+}
+
+function memoFor(key: string, memoPath: string | undefined): Promise<QuickIndexMemo> {
+  const id = `${key}\0${memoPath ?? ""}`;
+  let memo = memos.get(id);
+  if (!memo) {
+    memo = memoPath ? QuickIndexMemo.load(memoPath, key) : Promise.resolve(new QuickIndexMemo(null, key));
+    memos.set(id, memo);
+    if (memos.size > MAX_CACHED_BASES) memos.delete(memos.keys().next().value!);
+  }
+  return memo;
+}
+
+/** The memo's format and what it was derived with: bump MEMO_VERSION when what a page or Log file contributes changes. */
+const MEMO_VERSION = 1;
+
+interface Stamp { mtimeMs: number; size: number }
+/** What one tree page contributes, whatever the other files say. */
+interface PageMemo {
+  stamp: Stamp;
+  fields: TreePageFields;
+  summary: string;
+  aliases: string[];
+  /** Every Log citation outside the ops rollup, once each (`YYYY-MM-DD#^e-xxxxxx`), in first-seen order. */
+  keys: string[];
+  /** The frontmatter `updated:`/`created:` date, the last-touched fallback of a page that cites nothing. */
+  date: string | null;
+}
+/** What one Log day contributes: its entries, already cut for the nickname pass. */
+interface LogMemo {
+  stamp: Stamp;
+  captures: Array<{ key: string; agent: boolean; text: string }>;
+}
+
+/**
+ * Per-file derivations of the quick index (EPIC-24 M34 round 4), saved to disk. Everything cross-file (tree shape,
+ * which citations are agent reports, the counts) is recomputed from them on every build, which is cheap; only the
+ * read and the parse of a file are skipped, and only for a file whose mtime and size are unchanged and which was not
+ * written within RACY_MS of the stat that stamped it.
+ */
+export class QuickIndexMemo {
+  pages = new Map<string, PageMemo>();
+  logs = new Map<string, LogMemo>();
+
+  constructor(private readonly path: string | null, private readonly vault: string) {}
+
+  static async load(path: string, vault: string): Promise<QuickIndexMemo> {
+    const memo = new QuickIndexMemo(path, vault);
+    try {
+      const raw = JSON.parse(await readFile(path, "utf8")) as { version?: number; chars?: number; vault?: string; pages?: Array<[string, PageMemo]>; logs?: Array<[string, LogMemo]> };
+      if (raw?.version !== MEMO_VERSION || raw.chars !== CAPTURE_CHARS || raw.vault !== vault || !Array.isArray(raw.pages) || !Array.isArray(raw.logs)) return memo;
+      memo.pages = new Map(raw.pages);
+      memo.logs = new Map(raw.logs);
+    } catch {
+      // No memo, or one we cannot read: start empty and rebuild it from the vault.
+    }
+    return memo;
+  }
+
+  /** Best effort: a failed write costs the next restart a rebuild, never an answer. */
+  async save(): Promise<void> {
+    if (!this.path) return;
+    try {
+      const body = JSON.stringify({ version: MEMO_VERSION, chars: CAPTURE_CHARS, vault: this.vault, pages: [...this.pages].sort(byPath), logs: [...this.logs].sort(byPath) });
+      await mkdir(dirname(this.path), { recursive: true });
+      const tmp = `${this.path}.${process.pid}.tmp`;
+      await writeFile(tmp, body, { mode: 0o600 });
+      await rename(tmp, this.path);
+    } catch {
+      // see above
+    }
+  }
+}
+
+const byPath = (a: [string, unknown], b: [string, unknown]) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+const sameStamp = (a: Stamp | undefined, b: Stamp | null | undefined): boolean => Boolean(a && b && a.mtimeMs === b.mtimeMs && a.size === b.size);
+const MEMO_READ_CONCURRENCY = 16;
+
+async function inParallel<T>(items: readonly T[], work: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => { for (let i = next++; i < items.length; i = next++) await work(items[i]!); };
+  await Promise.all(Array.from({ length: Math.min(MEMO_READ_CONCURRENCY, items.length) }, worker));
+}
+
+function derivePage(path: string, raw: string, stamp: Stamp): PageMemo {
+  const { frontmatter, body } = parseNote(raw);
+  const keys = new Set<string>();
+  for (const match of withoutOpsRollup(body).matchAll(CITATION_RE)) keys.add(`${match[1]}#^${match[2]}`);
+  return {
+    stamp,
+    fields: treePageFieldsOf(path, frontmatter),
+    summary: frontmatterString(frontmatter?.summary),
+    aliases: frontmatterList(frontmatter?.aliases),
+    keys: [...keys],
+    date: frontmatterDate(frontmatter?.updated) ?? frontmatterDate(frontmatter?.created),
+  };
+}
+
+function deriveLog(date: string, raw: string, stamp: Stamp): LogMemo {
+  return {
+    stamp,
+    captures: parseLogCaptures(date, raw).map((capture) => ({
+      key: capture.key,
+      agent: capture.origin === "agent",
+      text: `${capture.title}\n${capture.content}`.replace(/\s+/g, " ").trim().slice(0, CAPTURE_CHARS),
+    })),
+  };
 }
 
 /**
@@ -136,6 +261,9 @@ export interface QuickIndexPhases {
   statMs?: number;
   rebuildMs?: number;
   rebuilt?: boolean;
+  /** Round 4: files read and parsed again, and files whose kept result was reused, in the rebuild. */
+  parsedFiles?: number;
+  reusedFiles?: number;
   /** `no-tree`: the vault has no Tree.md, so there is nothing to index: no pull, no scan (round 3). */
   skipped?: "no-tree";
 }
@@ -144,30 +272,77 @@ function weekFromOf(now: number): string {
   return new Date(now - (QUICK_INDEX_WEEK_DAYS - 1) * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** Null when the vault has no Tree.md yet. */
+/** Null when the vault has no Tree.md yet. Reads every file: the per-file memo only helps `quickIndexBaseCached`. */
 export async function quickIndexBase(vaultPath: string, now: number = Date.now()): Promise<QuickIndexBase | null> {
-  const index = await buildTreeIndex(vaultPath);
+  return buildBase(vaultPath, now, await vaultFingerprint(vaultPath), new QuickIndexMemo(null, resolve(vaultPath)));
+}
+
+async function buildBase(vaultPath: string, now: number, fingerprint: VaultFingerprint, memo: QuickIndexMemo, phases?: QuickIndexPhases): Promise<QuickIndexBase | null> {
+  if (!(await readTree(vaultPath))) return null;
+  const { files, stamps, takenAt } = fingerprint;
+  const stampOf = new Map(files.map((file, i) => [file, stamps[i] ?? null] as const));
+  // A file written within RACY_MS of its stat could be rewritten with the same size inside one timestamp tick.
+  const keepable = (stamp: Stamp | null): stamp is Stamp => stamp !== null && stamp.mtimeMs < takenAt - RACY_MS;
+  const pagesNow = new Map<string, PageMemo>();
+  const logsNow = new Map<string, LogMemo>();
+  let parsed = 0;
+  let reused = 0;
+
+  const derived = new Map<string, PageMemo>();
+  const index = await buildTreeIndex(vaultPath, { files, linkTargets: linkTargetsOf(files) }, async (path) => {
+    const stamp = stampOf.get(path) ?? null;
+    const kept = memo.pages.get(path);
+    let page: PageMemo;
+    if (kept && sameStamp(kept.stamp, stamp)) {
+      reused++; pagesNow.set(path, kept); page = kept;
+    } else {
+      page = derivePage(path, await readFile(join(vaultPath, path), "utf8"), stamp ?? { mtimeMs: -1, size: -1 });
+      parsed++;
+      if (keepable(stamp)) pagesNow.set(path, page);
+    }
+    derived.set(path, page);
+    return page.fields;
+  });
   if (!index.tree) return null;
   const weekFrom = weekFromOf(now);
-  const captures = await readLogCaptures(vaultPath);
-  const isAgentCapture = (key: string) => captures.get(key)?.origin === "agent";
+
+  const logFiles = files.filter((file) => /^Log\/\d{4}-\d{2}-\d{2}\.md$/.test(file));
+  const logs = new Map<string, LogMemo>();
+  await inParallel(logFiles, async (file) => {
+    const stamp = stampOf.get(file) ?? null;
+    const kept = memo.logs.get(file);
+    if (kept && sameStamp(kept.stamp, stamp)) { reused++; logsNow.set(file, kept); logs.set(file, kept); return; }
+    const raw = await readFile(join(vaultPath, file), "utf8").catch(() => "");
+    const log = deriveLog(/^Log\/(\d{4}-\d{2}-\d{2})\.md$/.exec(file)![1]!, raw, stamp ?? { mtimeMs: -1, size: -1 });
+    parsed++;
+    if (keepable(stamp)) logsNow.set(file, log);
+    logs.set(file, log);
+  });
+  // Later days win a key two Log files both hold, as when the files were read in order.
+  const captures = new Map<string, { agent: boolean; text: string }>();
+  for (const file of logFiles) for (const capture of logs.get(file)!.captures) captures.set(capture.key, capture);
+  const isAgentCapture = (key: string) => captures.get(key)?.agent === true;
+
+  const changed = parsed > 0 || pagesNow.size !== memo.pages.size || logsNow.size !== memo.logs.size;
+  memo.pages = pagesNow;
+  memo.logs = logsNow;
+  if (phases) { phases.parsedFiles = parsed; phases.reusedFiles = reused; }
 
   const pages = new Map<string, { summary: string; aliases: string[]; keys: string[]; lastTouched: string | null }>();
-  await Promise.all([...index.fields.keys()].map(async (path) => {
-    const raw = await readFile(join(vaultPath, path), "utf8").catch(() => "");
-    const { frontmatter, body } = parseNote(raw);
-    const keys = new Set<string>();
-    for (const match of withoutOpsRollup(body).matchAll(CITATION_RE)) {
-      const key = `${match[1]}#^${match[2]}`;
-      if (!isAgentCapture(key)) keys.add(key);
-    }
+  for (const path of index.fields.keys()) {
+    const page = derived.get(path)!;
+    const own = page.keys.filter((key) => !isAgentCapture(key));
+    let newest: string | null = null;
+    for (const key of own) if (!newest || key.slice(0, 10) > newest) newest = key.slice(0, 10);
     pages.set(path, {
-      summary: frontmatterString(frontmatter?.summary),
-      aliases: frontmatterList(frontmatter?.aliases),
-      keys: [...keys].sort().reverse(),
-      lastTouched: pageCaptureDate(raw, isAgentCapture),
+      summary: page.summary,
+      aliases: page.aliases,
+      keys: [...own].sort().reverse(),
+      // A page whose only citations are agent reports has no date; one that cites nothing falls back to its frontmatter.
+      lastTouched: page.keys.length > 0 ? newest : page.date,
     });
-  }));
+  }
+  if (changed) await memo.save();
 
   const places: QuickIndexPlace[] = [];
   const seen = new Set<string>();
@@ -193,8 +368,7 @@ export async function quickIndexBase(vaultPath: string, now: number = Date.now()
       lastTouched: page?.lastTouched ?? null,
       captureKeys: page?.keys ?? [],
       captures: (page?.keys ?? []).flatMap((key) => {
-        const capture = captures.get(key);
-        const text = capture ? `${capture.title}\n${capture.content}`.replace(/\s+/g, " ").trim().slice(0, CAPTURE_CHARS) : "";
+        const text = captures.get(key)?.text ?? "";
         return text ? [{ key, date: key.slice(0, 10), text }] : [];
       }).slice(0, CAPTURES_PER_PLACE),
     };

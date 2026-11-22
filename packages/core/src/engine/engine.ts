@@ -4311,7 +4311,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         phases.pullMs = Math.round(performance.now() - pullStarted);
         phases.pull = pulled;
       }
-      return quickIndexBaseCached(vaultPath, now().getTime(), phases);
+      // The per-file memo is kept beside the memory index (never in the vault), so a restart re-reads only changed files.
+      return quickIndexBaseCached(vaultPath, now().getTime(), phases, options.memoryIndex ? { memoPath: join(dirname(options.memoryIndex.path), "quick-index-base.json") } : {});
     },
     lint: async (): Promise<LintReport> => {
       assertVault(repo);

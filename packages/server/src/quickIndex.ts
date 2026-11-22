@@ -536,5 +536,7 @@ export function quickIndexTickLine(
   const tail = extra
     ? ` result=${extra.result} cpu=${extra.cpu.selfMs}ms child=${extra.cpu.childMs}ms${extra.personasMs !== undefined ? ` personas=${extra.personasMs}ms` : ""}`
     : "";
-  return `[quick-index] tick tenant=${tenantId} pull=${phases.pullMs ?? 0}ms(${kind})${steps} stat=${phases.statMs ?? 0}ms rebuild=${phases.rebuildMs ?? 0}ms(${phases.rebuilt ? "rebuilt" : "cached"}) update=${updateMs}ms total=${totalMs}ms${tail}`;
+  // Round 4: files read again / files reused from the per-file memo, when the base was built this tick.
+  const files = phases.parsedFiles !== undefined ? ` files=${phases.parsedFiles}/${phases.reusedFiles ?? 0}` : "";
+  return `[quick-index] tick tenant=${tenantId} pull=${phases.pullMs ?? 0}ms(${kind})${steps} stat=${phases.statMs ?? 0}ms rebuild=${phases.rebuildMs ?? 0}ms(${phases.rebuilt ? "rebuilt" : "cached"})${files} update=${updateMs}ms total=${totalMs}ms${tail}`;
 }

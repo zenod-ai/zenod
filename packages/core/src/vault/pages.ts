@@ -76,6 +76,18 @@ export const MARKDOWN_LINK_RE = /!?\[[^\]]+\]\(([^)#][^)]+?)(?:#[^)]+)?\)/g;
 export const CITATION_RE = /\[\[(\d{4}-\d{2}-\d{2})#\^(e-[0-9a-f]{6})(?:\|[^\]]*)?\]\]/g;
 export const ANCHOR_RE = /\^(e-[0-9a-f]{6})\b/g;
 
+/** Lowercased link targets (full path without .md, and basename) → real path, first file wins. */
+export function linkTargetsOf(files: readonly string[]): Map<string, string> {
+  const linkTargets = new Map<string, string>();
+  for (const file of files) {
+    const pathKey = file.replace(/\.md$/, "").toLowerCase();
+    if (!linkTargets.has(pathKey)) linkTargets.set(pathKey, file);
+    const baseKey = basenameOf(file).toLowerCase();
+    if (!linkTargets.has(baseKey)) linkTargets.set(baseKey, file);
+  }
+  return linkTargets;
+}
+
 /** Read the whole vault once: file list, frontmatter index, evidence anchors, link-resolution table. */
 export async function scanVault(vaultPath: string): Promise<VaultSnapshot> {
   const files = await listMarkdownFiles(vaultPath);
@@ -84,14 +96,7 @@ export async function scanVault(vaultPath: string): Promise<VaultSnapshot> {
   const catalogCoverage = { unreadable: [] as string[], reused: 0, rebuilt: 0 };
   for (const cached of cache.keys()) if (!files.includes(cached)) cache.delete(cached);
   const anchors = new Map<string, Set<string>>();
-  const linkTargets = new Map<string, string>();
-
-  for (const file of files) {
-    const pathKey = file.replace(/\.md$/, "").toLowerCase();
-    if (!linkTargets.has(pathKey)) linkTargets.set(pathKey, file);
-    const baseKey = basenameOf(file).toLowerCase();
-    if (!linkTargets.has(baseKey)) linkTargets.set(baseKey, file);
-  }
+  const linkTargets = linkTargetsOf(files);
 
   for (const file of files) {
     const tier = tierOf(file);

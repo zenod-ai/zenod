@@ -75,7 +75,17 @@ function evidenceRefs(body: string): string[] {
  * (page bodies for evidence and citers) depend only on these files (E24-M7). `racy` (as in Git's
  * index): a file changed so close to now that a same-size rewrite could keep its coarse mtime.
  */
-export async function vaultFingerprint(vaultPath: string): Promise<{ hash: string; racy: boolean }> {
+export interface VaultFingerprint {
+  hash: string;
+  racy: boolean;
+  /** Every Markdown file, sorted, and the stat the hash was taken from (null: unreadable), so a caller can reuse them. */
+  files: string[];
+  stamps: Array<{ mtimeMs: number; size: number } | null>;
+  /** When the stats were taken (ms): a file changed within RACY_MS of it is not trusted by a memo. */
+  takenAt: number;
+}
+
+export async function vaultFingerprint(vaultPath: string): Promise<VaultFingerprint> {
   const takenAt = Date.now();
   const files = await listMarkdownFiles(vaultPath);
   const infos = await Promise.all(files.map((path) => stat(join(vaultPath, path)).catch(() => null)));
@@ -86,11 +96,17 @@ export async function vaultFingerprint(vaultPath: string): Promise<{ hash: strin
     if (info && info.mtimeMs > newest) newest = info.mtimeMs;
     hash.update(`${path}\0${info?.mtimeMs ?? -1}\0${info?.size ?? -1}\n`);
   });
-  return { hash: hash.digest("hex"), racy: newest >= takenAt - RACY_MS };
+  return {
+    hash: hash.digest("hex"),
+    racy: newest >= takenAt - RACY_MS,
+    files,
+    stamps: infos.map((info) => (info ? { mtimeMs: info.mtimeMs, size: info.size } : null)),
+    takenAt,
+  };
 }
 
 /** Many times a file system's timestamp tick (Linux: a few ms). */
-const RACY_MS = 100;
+export const RACY_MS = 100;
 const MAX_CACHED_TREES = 8;
 /** Pages read at once when mapping Log entries to the pages citing them. */
 const CITER_READ_CONCURRENCY = 16;
