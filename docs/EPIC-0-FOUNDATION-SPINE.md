@@ -52,12 +52,12 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): in the official MCP Registry and on Glama; E10-S4 waits on an awesome-mcp-servers maintainer, R9 on 2026-12-07.
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; S2 trial token is its own Delivery Manager's.
-Last attempted: 2026-11-21T12:05Z DM run_9511b11e roll-up: EPIC-24 (active) all 19-20 Nov alarms explained and fixed (M23 to M27, M29 the leaked GitHub key off Zenod's git commands, live 6b619b9c) ; EPIC-7 (active) 3 sign-ups (a third on 21 Nov), 0 first notes; the one-tap WhatsApp start approved by Jordi (E7-S16); daily tester picture built (E7-S17, waits on agent_team placing it in his briefing); the 19 Nov tester stopped at choosing where notes are kept (E7-S18) ; EPIC-26 (active) the sample memory on /testers approved by Jordi (E26-S35); the same on the zenod.dev home page built, not live (E26-S37) ; EPIC-6 and EPIC-9 (review) wait for his mark ; other children unchanged
-Result: production zenod-mt 6b619b9c healthy; 3 applications, 3 sign-ups (a third on 21 Nov), 0 WhatsApp replies; no release can go out since 02:04Z (GitHub sign-in ended by the key revoke)
-Waiting on: Jordi: infra-vps/EPIC-2-A61 (one GitHub sign-in code: until then nothing pushes or deploys), E7-A28 (call-offer email to the 19 Nov tester), E7-A29 (new next-day email words) ; testers recruited by zenod-social ; Hetzner about the VPS1 data volume (infra-vps)
+Last attempted: 2026-11-22T13:40Z DM run_809fefde roll-up: EPIC-24 (active) 21-22 Nov: the GitHub sign-in outage, blocked filing on the team vault (M31), two testers' WhatsApp alarms (M32), release timing (M33) and idle CPU (M34, round 3 running) fixed or in flight ; EPIC-7 (active) 3 sign-ups, 1 WhatsApp linked, 0 first notes; approved next-day email live; the 19 Nov tester email went through five rounds of Jordi's notes and waits on E7-A34; over_cap live (E7-S24); E7-S25 (linked count) and E7-S26 (first-note nudge) in flight ; EPIC-26 (active) one sample week on zenod.dev back in his review (E26-S38) ; root learnings L-18 (write to people like a person) and L-19 (describe Zenod with its one-liner) added from his notes
+Result: production zenod-mt 2c12217a healthy; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes, over_cap 0
+Waiting on: E7-A34 (the 19 Nov tester email) and the E26-S38 card, both with Jordi ; the three testers' first notes ; testers recruited by zenod-social
 Monitoring: Objective: Zenod: get 5 testers: the idle tick and parallel searches no longer have to burn VPS1. M34 round 2 merged: PR #1732 (2c12217a, ci green, self-merged… · next check 2026-11-22T13:30:00.000Z
-Next action: after EPIC-2-A61: push the waiting commits, promote E26-S37 and check it live ; E26-S3 watches both testers to a first Saved reply
-Verified at: 2026-11-21T12:05Z (production 6b619b9c via /api/health and /api/public/counts; child Current States read)
+Next action: E7-S26 brings the first-note nudge text to Jordi; E7-S25 makes the key result read the linked tester; M34 round 3 removes the 40 s freeze
+Verified at: 2026-11-22T13:40Z (production 2c12217a via /api/health and /api/public/counts; child Current States read)
 
 ## Spine Map
 
