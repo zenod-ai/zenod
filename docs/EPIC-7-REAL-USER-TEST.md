@@ -35,7 +35,7 @@ Status: active
 Last attempted: 2026-11-21T14:05Z roll-up (DM run_cf16becf): E7-S16 approved by Jordi (one-tap WhatsApp start) ; E7-S17 daily tester picture built, waits on agent_team placing it in his briefing ; E7-S18 done, the 19 Nov tester stopped at choosing where notes are kept, call-offer email waits on E7-A28 ; E7-S19 done, new next-day email words wait on E7-A29 ; a third tester signed up 21 Nov from post P-0538
 Result: production 6b619b9c; 3 applications, 3 sign-ups, 0 WhatsApp replies, 0 active testers (21 Nov 14:00Z); no release since 02:04Z (GitHub sign-in ended by the key revoke)
 Evidence: [E7-S15](evidence/e7-s15-2026-11-19.md) · [E7-S12](evidence/e7-s12-2026-11-18.md) · [public counts](https://cloud.zenod.dev/api/public/counts) · [E7-S9 feedback link](http://vps3.taild81fbb.ts.net:8921/e7-s9/)
-Waiting on: Jordi: E7-A28 round 2 (the call-offer email, now from jordi@zenod.dev: a new ask comes from E7-S18) ; the three testers sending a first WhatsApp note ; testers recruited by zenod-social
+Waiting on: Jordi: E7-A28 round 2 (the call-offer email, now from jordi@zenod.dev: a new ask comes from E7-S18) ; the three testers sending a first WhatsApp note (22 Nov, M32: …6839 linked and working, no note yet; …9477 never linked, his one 13 Nov code request failed on our side, no number held, he must type it again; …0bbb 19 Nov code expired, never sent) ; testers recruited by zenod-social
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: E26-S3 watches the 21 Nov tester through the welcome, the one-hour stuck check and the next-day email to a first Saved reply
 Source revision: see git log
