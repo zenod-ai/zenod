@@ -21,6 +21,8 @@ export const SEARCH_MEMORY_SHAPE = {
     .enum(["text", "voice_note", "audio", "image", "screenshot", "pdf", "document", "link"])
     .optional()
     .describe("Optional structural content-type filter."),
+  label: z.string().trim().min(1).max(100).optional().describe("Optional filter on the plain label a voice note shows, case-insensitive: 'From EpicTeam Chat', 'From an EpicTeam card answer', 'From EpicSocial' (any app's name) or 'Spoken to Zenod' (WhatsApp, web and call notes)."),
+  origin: z.enum(["app", "zenod"]).optional().describe("Optional filter: 'app' keeps voice notes forwarded from another app, 'zenod' keeps notes spoken straight to Zenod."),
   capturedAfter: z.string().min(1).optional().describe("Optional inclusive ISO-8601 lower bound for the source capture time."),
   capturedBefore: z.string().min(1).optional().describe("Optional inclusive ISO-8601 upper bound for the source capture time."),
   order: z.enum(["newest", "oldest", "relevance"]).optional().describe("Ordering. Defaults to relevance for text queries and newest for structural entry queries."),

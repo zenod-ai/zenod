@@ -1469,7 +1469,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
     const limit = Number(c.req.query("limit") ?? RECENT_SAVES_DEFAULT_LIMIT);
-    return c.json({ saves: recentSaves(runtime.taskJobStore, limit) });
+    const origin = c.req.query("origin");
+    return c.json({ saves: recentSaves(runtime.taskJobStore, limit, {
+      ...(c.req.query("label")?.trim() ? { label: c.req.query("label")!.trim().slice(0, 100) } : {}),
+      ...(origin === "app" || origin === "zenod" ? { origin } : {}),
+    }) });
   });
 
   // EPIC-26 S15: the tester quick start, five steps that tick off by themselves from what this

@@ -99,6 +99,7 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
     contentType: job.input.contentType ?? base?.contentType ?? contentTypeFromJob(job, source),
     capturedAt: job.input.capturedAt ?? job.input.senderTimestamp ?? new Date(job.createdAt).toISOString(),
     sourceId: job.input.sourceId ?? identity.sourceId,
+    ...(job.input.sourceApp?.trim() ? { sourceApp: job.input.sourceApp.trim() } : {}),
     url,
     provider: revision?.provider ?? base?.provider ?? "github",
     ...(revision?.id ? { revisionId: revision.id } : base?.revisionId ? { revisionId: base.revisionId } : {}),

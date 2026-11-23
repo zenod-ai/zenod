@@ -257,6 +257,7 @@ export {
 export * from "./connections/github.js";
 
 export { selectMemoryEntries, memoryTimestamp } from "./engine/evidence.js";
+export { SPOKEN_TO_ZENOD, fromAppLabel, matchesOriginFilter, originLabel, originOf, readableTitle, sourceAppOf, wordsTitle, type EntryOrigin } from "./engine/entryLabel.js";
 export { paginateMemoryEntries, memoryEntrySummaries, type MemoryEntryPage, type EntrySearchInput, type EntrySearchResult } from "./engine/entryPagination.js";
 export type { AnswerCoverage } from "./engine/retrievalCoverage.js";
 

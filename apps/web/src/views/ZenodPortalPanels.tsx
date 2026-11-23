@@ -44,6 +44,7 @@ import {
 import {
   RecentSavesCard,
   type RecentSave,
+  type SavesFilter,
 } from "@/components/recent-saves-card"
 import {
   MemoryTreeCard,
@@ -92,24 +93,38 @@ export function HostedUsagePanel({ compact = false }: { compact?: boolean }) {
 export function RecentSavesPanel() {
   const [saves, setSaves] = React.useState<RecentSave[] | null>(null)
   const [loaded, setLoaded] = React.useState(false)
+  const [filter, setFilter] = React.useState<SavesFilter>("all")
 
   React.useEffect(() => {
     let cancelled = false
-    api<{ saves: RecentSave[] }>("/api/console/recent-saves")
+    api<{ saves: RecentSave[] }>(
+      filter === "all"
+        ? "/api/console/recent-saves"
+        : `/api/console/recent-saves?origin=${filter}`
+    )
       .then((result) => {
         if (!cancelled) setSaves(result.saves)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setSaves(null)
+      })
       .finally(() => {
         if (!cancelled) setLoaded(true)
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [filter])
 
   if (!loaded) return <Skeleton className="h-48 w-full" />
-  return <RecentSavesCard saves={saves ?? []} unavailable={saves === null} />
+  return (
+    <RecentSavesCard
+      saves={saves ?? []}
+      unavailable={saves === null}
+      filter={filter}
+      onFilter={setFilter}
+    />
+  )
 }
 
 /**

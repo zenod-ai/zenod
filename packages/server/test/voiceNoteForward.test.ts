@@ -248,7 +248,7 @@ describe("ingest_voice_note", () => {
     });
     const job = h.store.get(String(first.jobId))!;
     expect(job.idempotencyKey).toBe(forwardIdempotencyKey("jordi", "zc_team", "vn_demo0001"));
-    expect(projectCapture(h.store, job)).toMatchObject({ channelLabel: "EpicTeam Chat voice", status: "saved", notePath: "Projects/Boat repair.md" });
+    expect(projectCapture(h.store, job)).toMatchObject({ channelLabel: "From EpicTeam Chat", status: "saved", notePath: "Projects/Boat repair.md" });
     await client.close();
   });
 

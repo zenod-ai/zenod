@@ -778,6 +778,42 @@ describe("MCP endpoint", () => {
     }
   });
 
+  it("labels voice notes by where they were spoken and filters search by that label (EPIC-21 V9)", async () => {
+    const client = await connect();
+    const vault = join(dir, "voice-label-vault");
+    const original = { searchEntries: fakeEngine.searchEntries, getEntry: fakeEngine.getEntry };
+    fakeEngine.searchEntries = query => searchEvidenceEntries(vault, query);
+    fakeEngine.getEntry = ref => getEvidenceEntry(vault, ref);
+    const note = (file: string, hint: string, app: string | null, words: string) =>
+      `Voice note "${file}" ingested through Zenod media seam.\nRaw artifact: drive://file/raw\nSource: ${hint}\n${app ? `Source app: ${app}\n` : ""}Transcribed by whisper.cpp base.\n\n${words}`;
+    try {
+      const chat = await appendEvidence(vault, note("epicteam-chat-voice-note-2026-11-23T00-57-38-983Z.webm", "EpicTeam Chat voice note", "EpicTeam Chat", "labelcase Team chat demo words"), "mcp", true, new Date("2026-11-23T09:00:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:00:00Z" });
+      await appendEvidence(vault, note("epicteam-card-answer.webm", "EpicTeam card answer voice note", "EpicTeam card answer", "labelcase Card answer demo words"), "mcp", true, new Date("2026-11-23T09:01:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:01:00Z" });
+      await appendEvidence(vault, note("ABCD.ogg", "WhatsApp voice note", null, "labelcase Direct demo words"), "whatsapp", true, new Date("2026-11-23T09:02:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:02:00Z" });
+      const search = async (args: Record<string, unknown>) => (await client.callTool({ name: "search_memory", arguments: { query: "labelcase", order: "newest", ...args } })).structuredContent as any;
+
+      const all = await search({});
+      expect(all.entries.map((e: any) => e.label).sort()).toEqual(["From EpicTeam Chat", "From an EpicTeam card answer", "Spoken to Zenod"]);
+      expect(all.entries.map((e: any) => e.title)).toContain("labelcase Team chat demo words");
+      expect(JSON.stringify(all.entries.map((e: any) => e.title))).not.toMatch(/\.webm|\.ogg/);
+      expect(validateToolResponse("zenod.search_memory", all)).toBeTruthy();
+
+      expect((await search({ label: "From EpicTeam Chat" })).entries.map((e: any) => e.label)).toEqual(["From EpicTeam Chat"]);
+      expect((await search({ label: "spoken to zenod" })).entries.map((e: any) => e.sourceId ?? e.label)).toEqual(["Spoken to Zenod"]);
+      expect((await search({ origin: "app" })).entries).toHaveLength(2);
+      expect((await search({ origin: "zenod" })).entries).toHaveLength(1);
+
+      const exact = (await client.callTool({ name: "get_memory", arguments: { path: `${chat.logPath}#^${chat.anchor}` } })).structuredContent as any;
+      expect(exact.entry).toMatchObject({ label: "From EpicTeam Chat", title: "labelcase Team chat demo words" });
+      // The stored text is exactly what was written, Source app line included.
+      expect(exact.entry.content).toContain("Source app: EpicTeam Chat");
+      expect(exact.entry.content).toContain('Voice note "epicteam-chat-voice-note-2026-11-23T00-57-38-983Z.webm"');
+    } finally {
+      Object.assign(fakeEngine, original);
+      await client.close();
+    }
+  });
+
   it("store_memory replays the original job and receipt for an idempotency key", async () => {
     const client = await connect();
     const storeSpy = vi.spyOn(fakeEngine, "store");

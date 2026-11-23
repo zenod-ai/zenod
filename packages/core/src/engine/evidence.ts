@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type { MemoryContentType, MemoryEntry, MemoryEntryQuery, Surface } from "../types.js";
 import { vaultSourceRef, type VaultSourceContext } from "../vault/source.js";
 import { listMarkdownFiles } from "../vault/files.js";
+import { matchesOriginFilter } from "./entryLabel.js";
 
 export interface EvidenceEntry {
   /** "Log/YYYY-MM-DD.md" */
@@ -237,6 +238,7 @@ export function selectMemoryEntries(entries: MemoryEntry[], query: MemoryEntryQu
     return (!query.source || entry.source === query.source)
       && (!query.contentType || entry.contentType === query.contentType)
       && (!query.sourceId || entry.sourceId === query.sourceId)
+      && matchesOriginFilter(entry, query)
       && time >= after && time <= before && terms.every(term => text.includes(term));
   }).sort((left, right) => {
     const comparison = memoryTimestamp(left.capturedAt) - memoryTimestamp(right.capturedAt)

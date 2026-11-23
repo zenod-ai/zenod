@@ -69,7 +69,7 @@ describe("recent saves (EPIC-7 T2.5)", () => {
     try {
       seedTenant(store, "tenant-a", "alpha");
       const saves = recentSaves(store);
-      expect(saves.map((save) => save.channelLabel)).toEqual(["WhatsApp voice", "WhatsApp text"]);
+      expect(saves.map((save) => save.channelLabel)).toEqual(["Spoken to Zenod", "WhatsApp text"]);
       expect(saves[0]).toMatchObject({
         channel: "whatsapp",
         kind: "voice",
@@ -86,6 +86,32 @@ describe("recent saves (EPIC-7 T2.5)", () => {
         reply: "Saved.",
         notePath: "Notes/alpha.md",
       });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("labels voice notes by where they were spoken and filters the list by that label (EPIC-21 V9)", () => {
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"), "tenant-a");
+    try {
+      seedTenant(store, "tenant-a", "alpha");
+      const forward = (app: string, words: string, at: number) => {
+        const job = store.enqueue("media_ingest", { mediaType: "audio", contentType: "voice_note", providedTranscript: words, filename: "epicteam-chat-voice-note-x.webm", sourceHint: `${app} voice note`, sourceApp: app }, `tenant-a:forward:${app}:${at}`, T0 + at);
+        store.update(job.id, { status: "done", result: { status: "done", message: "captured", mediaType: "audio", source: {}, rawArtifact: { handle: null, archiveUrl: null }, extraction: { handle: null, provider: null }, digest: { evidenceRef: null, pagesTouched: [], revision: null, urls: [] } } as never });
+      };
+      forward("EpicTeam Chat", "Demo chat words for the team test", 10);
+      forward("EpicTeam card answer", "Demo card words", 11);
+      forward("EpicSocial", "Demo social words", 12);
+      const saves = recentSaves(store);
+      expect(saves.map((save) => save.label)).toEqual(["From EpicSocial", "From an EpicTeam card answer", "From EpicTeam Chat", "Spoken to Zenod", null]);
+      expect(saves.map((save) => save.channelLabel).slice(0, 3)).toEqual(["From EpicSocial", "From an EpicTeam card answer", "From EpicTeam Chat"]);
+      expect(saves[2]).toMatchObject({ title: "Demo chat words for the team test", kind: "voice" });
+      expect(saves[3]).toMatchObject({ title: "alpha spoken words" });
+      expect(JSON.stringify(saves)).not.toContain(".webm");
+      expect(recentSaves(store, 20, { origin: "app" }).map((save) => save.label)).toEqual(["From EpicSocial", "From an EpicTeam card answer", "From EpicTeam Chat"]);
+      expect(recentSaves(store, 20, { origin: "zenod" }).map((save) => save.label)).toEqual(["Spoken to Zenod"]);
+      expect(recentSaves(store, 20, { label: "from epicteam chat" })).toHaveLength(1);
+      expect(recentSaves(store, 1, { origin: "app" })).toHaveLength(1);
     } finally {
       store.close();
     }

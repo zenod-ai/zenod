@@ -92,3 +92,15 @@ curl -sS https://cloud.zenod.dev/api/subscribers/v1/mcp \
         "audioUrl":"https://example-bucket.s3.amazonaws.com/vn_d4b0d617.webm?X-Amz-Signature=…",
         "transcript":"…","transcriptModel":"gpt-4o-mini-transcribe","recordedAt":"2026-11-08T18:53:00Z","durationSeconds":571}}}'
 ```
+
+## How Zenod labels a note (EPIC-21 V9)
+
+Zenod's memory list, entry view and search show where each voice note was spoken, in plain words, read from the `Source app:` line above (so notes stored before this are labelled too, and no stored text is rewritten):
+
+| Label | When |
+|---|---|
+| `From EpicTeam Chat` | `sourceApp` was `EpicTeam Chat` (any app's name works: `From <your sourceApp>`) |
+| `From an EpicTeam card answer` | `sourceApp` ended in `card answer`, e.g. `EpicTeam card answer` |
+| `Spoken to Zenod` | a voice note with no `Source app:` line: WhatsApp, the web app, a call |
+
+Text notes and other captures carry no label. The entry title is the first words of the transcript, never the file name. `search_memory` accepts `label` (exact label, any case) and `origin` (`app` or `zenod`) next to its other filters; its entries and `get_memory` return `label` and the readable `title`. The app's Recent saves list has the same filter.

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { RecentSavesCard } from "./recent-saves-card"
 
 afterEach(cleanup)
@@ -54,5 +54,39 @@ describe("RecentSavesCard", () => {
   it("explains the empty state in the user's terms", () => {
     render(<RecentSavesCard saves={[]} />)
     expect(screen.getByText(/Nothing saved yet/)).not.toBeNull()
+  })
+
+  it("shows the plain label and a real title, and lets the list be filtered by it (EPIC-21 V9)", () => {
+    const save = (id: string, label: string) => ({
+      id,
+      savedAt: "2026-11-23T10:00:00.000Z",
+      channel: "connector" as const,
+      kind: "voice" as const,
+      channelLabel: label,
+      label,
+      title: "Demo words for the team test",
+      snippet: "Demo words for the team test and some more",
+      status: "saved" as const,
+      reply: "Saved.",
+      notePath: null,
+      noteUrl: null,
+    })
+    const onFilter = vi.fn()
+    render(
+      <RecentSavesCard
+        saves={[save("a", "From EpicTeam Chat"), save("b", "Spoken to Zenod")]}
+        onFilter={onFilter}
+      />
+    )
+    expect(screen.getAllByText("From EpicTeam Chat").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Demo words for the team test")).toHaveLength(2)
+    fireEvent.click(screen.getByRole("button", { name: "From an app" }))
+    expect(onFilter).toHaveBeenCalledWith("app")
+    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("says so when a filter finds nothing", () => {
+    render(<RecentSavesCard saves={[]} filter="zenod" onFilter={() => {}} />)
+    expect(screen.getByText(/No notes like that yet/)).not.toBeNull()
   })
 })

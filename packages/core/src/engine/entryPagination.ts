@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { MemoryEntry, MemoryEntryQuery } from "../types.js";
 import { memoryTimestamp, selectMemoryEntries } from "./evidence.js";
+import { originLabel, readableTitle } from "./entryLabel.js";
 
 // Process-local signing: stateless HTTP requests share this key. Restart/another
 // process invalidates continuations explicitly; no deployment credential needed.
@@ -21,7 +22,9 @@ export interface MemoryEntryPage {
 /** Shared public/internal catalog. Snippets are discovery metadata, never read evidence. */
 export function memoryEntrySummaries(entries: MemoryEntry[]) {
   return entries.map(entry => ({
-    evidenceRef: entry.evidenceRef, path: entry.path, anchor: entry.anchor, title: entry.title,
+    evidenceRef: entry.evidenceRef, path: entry.path, anchor: entry.anchor, title: readableTitle(entry),
+    // EPIC-21 V9: where a voice note was spoken, read from what the entry stores (null for anything else).
+    label: originLabel(entry),
     source: entry.source, contentType: entry.contentType ?? null, capturedAt: entry.capturedAt,
     sourceId: entry.sourceId ?? null, chars: entry.content.length, snippet: entry.content.slice(0, 280),
     url: entry.url, provider: entry.provider,
@@ -58,7 +61,7 @@ export function paginateMemoryEntries(
   const scopeHash = hash(scope);
   const snapshot = hash([...entries].sort((a, b) => a.evidenceRef < b.evidenceRef ? -1 : a.evidenceRef > b.evidenceRef ? 1 : 0));
   const queryHash = hash({ query: query.query?.normalize("NFKC").toLowerCase().trim().split(/\s+/), source: query.source, contentType: query.contentType,
-    sourceId: query.sourceId, after: query.capturedAfter ? memoryTimestamp(query.capturedAfter) : null,
+    sourceId: query.sourceId, label: query.label?.trim().toLowerCase(), origin: query.origin, after: query.capturedAfter ? memoryTimestamp(query.capturedAfter) : null,
     before: query.capturedBefore ? memoryTimestamp(query.capturedBefore) : null, order: query.order ?? "newest" });
   const selected = selectMemoryEntries(entries, query);
   let offset = 0;
