@@ -71,7 +71,7 @@ import { assertVaultProviderUrl, type VaultPullTiming, type VaultRepository, typ
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString, unfiledEvidenceEntries } from "./evidence.js";
-import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
+import { appendOpsRollup, isAgentOpsReport, isOneOff, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree, TREE_PATH } from "../vault/tree.js";
 import { lintTree, lintTreeIndex } from "../vault/treeLint.js";
@@ -2154,6 +2154,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }
       }
       if (!(await readTree(vaultPath))) continue;
+      // E22-S5: a one-off note ("And the reply now done.") stays in the Log only; it makes no file.
+      if (isOneOff(content)) continue;
       const writes = new TrackedWrites(vaultPath);
       // E12-S20: a rescued memory hangs on the branch of its subject page when that page is in the tree;
       // otherwise under a top-level branch, never deep under a page that only shares a word with it.

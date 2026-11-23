@@ -76,7 +76,9 @@ const STOPWORDS = new Set((
   "they them their its it's what when where which who will would should could can may might just also more most very " +
   "some any all one two out over under than then there here only like want need get got make made new old now today " +
   "yesterday tomorrow week month year note notes page pages memory capture log working long term ongoing things thing " +
-  "por para con que los las del una uno como pero más este esta esto"
+  "por para con que los las del una uno como pero más este esta esto " +
+  // E22-S5: transcribed notes open "The user says …": those words name no topic (a stray root caught 149 leaves on them).
+  "user users say says said saying report reports reported ask asks asked want wants wanted think thinks mention mentions mentioned"
 ).split(" "));
 
 export function tokens(text: string): Set<string> {
@@ -144,6 +146,8 @@ export async function chooseTreeNode(
     if (options.rootsOnly && !root) continue;
     const lineage = index.lineage(path);
     if (!lineage.ok) continue;
+    // E22-S5: a root that is one note (`Notes/…`: an article, a stray capture) is no topic; nothing hangs on its branch.
+    if (isNoteRoot(lineage.steps[0]?.path)) continue;
     if (options.exclude && lineage.steps.some(step => options.exclude!.has(step.path))) continue;
     if (options.under && (path === options.under || !lineage.steps.some(step => step.path === options.under))) continue;
     const summary = await pageSummary(vaultPath, path);
@@ -166,9 +170,16 @@ export async function chooseTreeNode(
   }
   if (best && best.score > 0) return { path: best.path, score: best.score, weak: best.score < CONFIDENT_SCORE };
   if (options.under) return null;
-  const fallback = index.tree?.nodes.find(node => node.kind === "long-term") ?? index.tree?.nodes[0];
-  const resolved = fallback ? index.resolveRef(fallback.path) : null;
+  const resolvedNodes = (index.tree?.nodes ?? []).map(node => ({ node, path: index.resolveRef(node.path) }))
+    .filter(entry => entry.path && !isNoteRoot(entry.path));
+  const fallbackEntry = resolvedNodes.find(entry => entry.node.kind === "long-term") ?? resolvedNodes[0];
+  const resolved = fallbackEntry?.path ?? null;
   return resolved && index.fields.has(resolved) ? { path: resolved, score: 0, weak: true } : null;
+}
+
+/** E22-S5: a level-1 node whose page is a single note under `Notes/` rather than a topic page. */
+function isNoteRoot(path: string | undefined | null): boolean {
+  return !!path && path.startsWith("Notes/");
 }
 
 /** `infra` ~ `infrastructure`: a 5+ letter stem of a name word counts once. */
@@ -316,7 +327,7 @@ export async function writeProvisionalLeaf(
   input: { content: string; evidenceRef: string; reason: string; today: string; title?: string },
   writes: TrackedWrites = new TrackedWrites(vaultPath),
   options: { rootsOnly?: boolean; anchors?: readonly string[]; fallback?: NodeChoice | null } = {},
-): Promise<{ path: string; parent: string } | null> {
+): Promise<{ path: string; parent: string; grown?: boolean } | null> {
   const anchored = anchorNode(index, options.anchors ?? []);
   const choice = anchored ?? options.fallback ?? await chooseTreeNode(vaultPath, index, input.title ? `${input.title}\n\n${input.content}` : input.content, options.rootsOnly ? { rootsOnly: true } : {});
   if (!choice) return null;
@@ -324,6 +335,15 @@ export async function writeProvisionalLeaf(
   const citation = `[[${date}#^${anchor}]]`;
   const parentTitle = index.fields.get(choice.path)?.title ?? basenameOf(choice.path);
   const quoted = input.content.trimEnd().split("\n").map(line => `> ${line}`).join("\n");
+  // E22-S5 (Jordi vn_8e8b0693, "growing vertically" not "spreading horizontally"): a topic within
+  // reach grows a dated section instead of gaining a new leaf beside it.
+  // A later point of a note whose section is already on this page joins it, even on a weaker word match.
+  const holdsNote = new RegExp(`^## .*${citation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m")
+    .test(await readFile(join(vaultPath, choice.path), "utf8").catch(() => ""));
+  if (canGrow(index, holdsNote ? { ...choice, weak: false, score: Math.max(choice.score, CONFIDENT_SCORE) } : choice)) {
+    const grown = await growTopic(vaultPath, choice.path, { citation, date, quoted, title: input.title ?? input.content, today: input.today }, writes);
+    if (grown) return { path: choice.path, parent: choice.path, grown: true };
+  }
   const block = [`## Capture ${date} ${citation}`, "", quoted, "", `Filing note: ${oneLine(input.reason, 200)}`, ""].join("\n");
   let title = pageTitle(input.title ?? input.content);
   for (let n = 2; ; n++) {
@@ -357,6 +377,71 @@ export async function writeProvisionalLeaf(
     }
     title = `${pageTitle(input.title ?? input.content)} ${n}`;
   }
+}
+
+/** E22-S5: a capture under this many content words, in at most this many words, has no lasting point. */
+export const ONE_OFF_MAX_CONTENT_WORDS = 2;
+export const ONE_OFF_MAX_WORDS = 12;
+const INGEST_LINE_RE = /^(?:voice note "|raw artifact|original:|media type:|source:|source timestamp:|transcribed by\b|extraction artifact:|user context:|captured-at:)/i;
+
+/** E22-S5: a short acknowledgement or aside ("Amen, it was painful to get here.") that stays in the Log only. */
+export function isOneOff(content: string): boolean {
+  const spoken = content.split("\n").filter(line => !INGEST_LINE_RE.test(line.trim().replace(/^-\s*/, ""))).join(" ").trim();
+  if (!spoken) return false;
+  if (spoken.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length > ONE_OFF_MAX_WORDS) return false;
+  return tokens(spoken).size <= ONE_OFF_MAX_CONTENT_WORDS;
+}
+
+/** E22-S5: the chosen node is a confirmed topic page close enough to grow (not a weak guess, not a pointer or a single note). */
+function canGrow(index: TreeIndex, choice: NodeChoice): boolean {
+  if (choice.weak || choice.score < CONFIDENT_SCORE || isNoteRoot(choice.path)) return false;
+  const fields = index.fields.get(choice.path);
+  if (!fields || fields.provisional || fields.merged) return false;
+  const lineage = index.lineage(choice.path);
+  return lineage.ok && !isNoteRoot(lineage.steps[0]?.path);
+}
+
+/** Heading of the dated section a capture grows on its topic page. */
+export function grownHeading(date: string, title: string, citation: string): string {
+  const short = pageTitle(title).slice(0, 90).trim();
+  return `## ${date} · ${short} ${citation}`;
+}
+
+/**
+ * E22-S5: append the capture to its topic page as a dated section, quoting the person's words with
+ * the Log citation. A second point of the same note joins the section the first one opened (a note
+ * is one section per topic, never one per sentence). `updated:` moves to today. Null when the page
+ * is unreadable or has no frontmatter.
+ */
+export async function growTopic(
+  vaultPath: string,
+  path: string,
+  input: { citation: string; date: string; quoted: string; title: string; today: string },
+  writes: TrackedWrites,
+): Promise<string | null> {
+  const raw = await readFile(join(vaultPath, path), "utf8").catch(() => null);
+  if (raw === null || !/^---\r?\n[\s\S]*?\r?\n---/.test(raw)) return null;
+  const firstQuoted = input.quoted.split("\n")[0]!;
+  const lines = raw.split("\n");
+  const at = lines.findIndex(line => line.startsWith("## ") && line.includes(input.citation));
+  let next: string;
+  if (at >= 0) {
+    let end = lines.findIndex((line, i) => i > at && line.startsWith("## "));
+    if (end < 0) end = lines.length;
+    const section = lines.slice(at, end).join("\n");
+    if (section.includes(firstQuoted)) return path;
+    let last = end;
+    while (last > at + 1 && !lines[last - 1]!.trim()) last--;
+    next = [...lines.slice(0, last), "", input.quoted, ...(end < lines.length ? [""] : []), ...lines.slice(end)].join("\n");
+    if (end === lines.length && !next.endsWith("\n")) next += "\n";
+  } else {
+    if (raw.includes(input.citation) && raw.includes(firstQuoted)) return path;
+    const block = `${grownHeading(input.date, input.title, input.citation)}\n\n${input.quoted}\n`;
+    next = outsideOpsRollup(raw, head => `${head}${head.endsWith("\n") ? "\n" : "\n\n"}${block}`);
+  }
+  next = next.replace(/^---\r?\n[\s\S]*?\r?\n---/, front => front.replace(/^updated: .*$/m, `updated: ${input.today}`));
+  await writes.write(path, next);
+  return path;
 }
 
 /**
@@ -592,9 +677,13 @@ export async function placeCapture(
     touched.add(path);
   }
   let finalPages = pages;
-  if (!pages.length && plan.leafAllowed) {
+  let logOnly = plan.reason ?? "no page written";
+  // E22-S5: a one-off note ("And the reply now done.") has no lasting point: it stays in the Log and makes no file.
+  if (!pages.length && plan.leafAllowed && isOneOff(input.content)) logOnly = "one-off: no lasting point";
+  else if (!pages.length && plan.leafAllowed) {
     const leaf = await writeProvisionalLeaf(vaultPath, index, { ...input, reason: plan.reason ?? "nothing fitted" }, writes);
-    if (leaf) { finalPages = [leaf.path]; touched.add(leaf.path); provisional.add(leaf.path); how.set(leaf.path, "leaf"); }
+    if (leaf?.grown) { finalPages = [leaf.path]; touched.add(leaf.path); how.set(leaf.path, "hung"); }
+    else if (leaf) { finalPages = [leaf.path]; touched.add(leaf.path); provisional.add(leaf.path); how.set(leaf.path, "leaf"); }
   }
   if (touched.size) index = await buildTreeIndex(vaultPath);
   // E9-2f: a capture that reached only level-1 roots is also cited on the deepest page below them that fits (rule 2), so lineage reaches the leaf.
@@ -625,7 +714,7 @@ export async function placeCapture(
       ...(plan.rollup ? { rollup: true } : { confidence: placementConfidence(classifier(path), placedHow) }),
     };
   });
-  const targets = placed.length ? placed.map(filedTarget) : [filedTarget({ logOnly: plan.reason ?? "no page written" })];
+  const targets = placed.length ? placed.map(filedTarget) : [filedTarget({ logOnly })];
   const filedLines = await appendFiledLines(vaultPath, input.evidenceRef, targets, writes);
   return { hasTree, pagesTouched: [...touched], placed, filedLines, treeIssues };
 }

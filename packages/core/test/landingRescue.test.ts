@@ -157,9 +157,11 @@ describe("E12-S20 a rescued memory lands on its subject's branch", { timeout: 12
     const topic = result.topics![0]!;
     expect(topic.status).toBe("uncertain");
     expect(topic.reason).toMatch(/^provisional_leaf: reconciliation_needs_clarification/);
-    const raw = await readFile(join(repo.path, topic.filedPages[0]!), "utf8");
     // Tide Cart brand sits under Launching Tide Cart: the sister apps' branch, not Moss Lantern's.
-    expect(parseNote(raw).frontmatter).toMatchObject({ parent: "[[Projects/Launching Tide Cart]]", provisional: true });
+    // E22-S5: that branch is a topic within reach, so it grows a dated section instead of a new leaf.
+    expect(topic.filedPages[0]).toBe("Projects/Launching Tide Cart.md");
+    const raw = await readFile(join(repo.path, topic.filedPages[0]!), "utf8");
+    expect(raw).toMatch(/^## \d{4}-\d{2}-\d{2} · .*\[\[\d{4}-\d{2}-\d{2}#\^e-[0-9a-f]+\]\]$/m);
     expect(raw).toContain(SENTENCE);
     expect(raw).toContain(`#^${captured.evidenceRef.split("#^")[1]}]]`);
     expect(await readFile(join(repo.path, "Projects/Tide Cart brand.md"), "utf8")).toBe(TIDE_BRAND);
