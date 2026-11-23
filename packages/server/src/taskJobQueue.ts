@@ -88,6 +88,8 @@ export class TaskJobQueue {
   private channelBrain: TaskJobChannelBrain | null = null;
   private activeChatDrain: Promise<void> | null = null;
   private activeDurableDrain: Promise<void> | null = null;
+  private chatDrainAgain = false;
+  private durableDrainAgain = false;
   private leaseTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   /** M35: set at SIGTERM; no new job is claimed, jobs already running finish or are handed back. */
@@ -165,10 +167,10 @@ export class TaskJobQueue {
     return this.store.get(id);
   }
 
-  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string, forwardedBy?: string): void {
+  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string, forwardedBy?: string, announceTo?: string[]): void {
     if (!evidenceRef || !this.onEntryStored) return;
     try {
-      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}), ...(forwardedBy ? { forwardedBy } : {}) });
+      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}), ...(forwardedBy ? { forwardedBy } : {}), ...(announceTo?.length ? { announceTo } : {}) });
     } catch {
       console.warn("[subscribers] notification failed after durable capture");
     }
@@ -285,18 +287,21 @@ export class TaskJobQueue {
   }
 
   private requestChatDrain(): void {
-    if (this.activeChatDrain) return;
+    // A request made while the lane is finishing is remembered and run once it ends: a job queued in that gap
+    // (EPIC-20 A8: a chat job that keeps a note at once) must not wait for the next poll.
+    if (this.activeChatDrain) { this.chatDrainAgain = true; return; }
     const active = this.drain(["chat"]);
     this.activeChatDrain = active;
     void active
       .catch((error) => console.error("[task-job] chat lane failed:", error))
       .finally(() => {
         if (this.activeChatDrain === active) this.activeChatDrain = null;
+        if (this.chatDrainAgain) { this.chatDrainAgain = false; if (!this.closed && !this.draining) this.requestChatDrain(); }
       });
   }
 
   private requestDurableDrain(): void {
-    if (this.activeDurableDrain) return;
+    if (this.activeDurableDrain) { this.durableDrainAgain = true; return; }
     // The weekly tree sweep shares this serial lane, so it never runs alongside a live filing.
     const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory", "tree_sweep", "desk_job"]);
     this.activeDurableDrain = active;
@@ -304,6 +309,7 @@ export class TaskJobQueue {
       .catch((error) => console.error("[task-job] durable lane failed:", error))
       .finally(() => {
         if (this.activeDurableDrain === active) this.activeDurableDrain = null;
+        if (this.durableDrainAgain) { this.durableDrainAgain = false; if (!this.closed && !this.draining) this.requestDurableDrain(); }
       });
   }
 
@@ -414,7 +420,7 @@ export class TaskJobQueue {
         });
         assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job, { status: "done", result });
-        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source, job.input.capturedAt);
+        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source, job.input.capturedAt, undefined, job.input.announceTo);
         if (completed && (job.input.source === "whatsapp" || job.input.source === "telegram")) {
           try { this.deskHooks?.afterCapture?.(job); } catch { console.warn("[memory-desk] could not look at a chat capture"); }
         }

@@ -20,6 +20,8 @@ import {
   subscriptionJson,
   deliveryJson,
   TEST_NOTE_ID,
+  REPLY_WORDS_HELP,
+  parseReplyWords,
   validateSubscriberUrl,
   type AddressLookup,
   type GrantScope,
@@ -535,6 +537,8 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
       if (body[field] !== undefined && typeof body[field] !== "string") return apiError(c, 400, "invalid_request", `${field} must be a string.`);
     }
     if (body.kind !== undefined && body.kind !== "agent_team" && body.kind !== "webhook") return apiError(c, 400, "invalid_request", "kind must be agent_team or webhook.");
+    const replyWords = body.reply_words === undefined ? [] : parseReplyWords(body.reply_words);
+    if (!replyWords) return apiError(c, 400, "invalid_request", REPLY_WORDS_HELP);
     const existing = store.forGrant(auth.grant.id)[0];
     if (existing) return apiError(c, 409, "subscription_exists", "This connection already has a subscription.", { subscription_id: existing.id });
     let url: URL;
@@ -556,6 +560,7 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
       via: "oauth",
       grantId: auth.grant.id,
       createdBy: auth.grant.account,
+      replyWords,
     });
     return c.json({ subscription: subscriptionJson(store.view(subscription)), signing_secret: signingSecret }, 201);
   });
@@ -572,6 +577,20 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
     if (!sub) return apiError(c, 404, "not_found", "No such subscription for this connection.");
     const store = auth.runtime.subscribers!;
     return c.json({ subscription: subscriptionJson(store.view(sub)), deliveries: store.deliveries(sub.id).map(deliveryJson) });
+  });
+
+  // EPIC-20 A8: a connected app sets or clears its reply words (a subscription made before they existed has none).
+  app.patch(`${API_PREFIX}/subscriptions/:id`, async (c) => {
+    const auth = authenticate(c, "voice_notes.subscribe");
+    if (auth instanceof Response) return auth;
+    const sub = ownSubscription(auth, c.req.param("id"));
+    if (!sub) return apiError(c, 404, "not_found", "No such subscription for this connection.");
+    const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+    const replyWords = body && typeof body === "object" ? parseReplyWords(body.reply_words) : null;
+    if (!replyWords) return apiError(c, 400, "invalid_request", REPLY_WORDS_HELP);
+    const store = auth.runtime.subscribers!;
+    const updated = store.setReplyWords(sub.id, replyWords) ?? sub;
+    return c.json({ subscription: subscriptionJson(store.view(updated)) });
   });
 
   app.delete(`${API_PREFIX}/subscriptions/:id`, (c) => {
@@ -615,11 +634,13 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
     } catch {
       return notFound();
     }
-    if (!entry || entry.evidenceRef !== id || entry.contentType !== "voice_note") return notFound();
+    if (!entry || entry.evidenceRef !== id || (entry.contentType !== "voice_note" && entry.contentType !== "text")) return notFound();
     const capturedMs = Date.parse(entry.capturedAt);
     const sinceGrant = Number.isFinite(capturedMs) && capturedMs >= Date.parse(auth.grant.createdAt);
-    if (!sinceGrant && !auth.runtime.subscribers!.announcedToGrant(auth.grant.id, id)) return notFound();
-    return c.json({ note: { id, text: entry.content, captured_at: entry.capturedAt, source: entry.source ?? null, content_type: "voice_note" } });
+    const announced = auth.runtime.subscribers!.announcedToGrant(auth.grant.id, id);
+    // EPIC-20 A8: a typed note is readable only when Zenod announced it to this connection (its reply word), never by browsing.
+    if (entry.contentType === "text" ? !announced : !sinceGrant && !announced) return notFound();
+    return c.json({ note: { id, text: entry.content, captured_at: entry.capturedAt, source: entry.source ?? null, content_type: entry.contentType } });
   });
 
   // EPIC-21 V1: the forwarding door, a stateless MCP server holding only ingest_voice_note and its receipt.

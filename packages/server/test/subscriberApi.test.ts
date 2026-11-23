@@ -48,6 +48,8 @@ async function harness(options: { enabled?: boolean; signedIn?: boolean } = {}) 
     ["Log/2026-11-02.md#^e-new", { evidenceRef: "Log/2026-11-02.md#^e-new", content: "Voice note \"x\" ingested\n\nRemind the delivery manager about the demo.", capturedAt: "2026-11-02T16:12:01.000Z", source: "whatsapp", contentType: "voice_note" }],
     ["Log/2026-11-01.md#^e-old", { evidenceRef: "Log/2026-11-01.md#^e-old", content: "An older voice note.", capturedAt: "2026-11-01T09:00:00.000Z", source: "whatsapp", contentType: "voice_note" }],
     ["Log/2026-11-02.md#^e-memo", { evidenceRef: "Log/2026-11-02.md#^e-memo", content: "A private memory.", capturedAt: "2026-11-02T17:00:00.000Z", source: "mcp", contentType: "note" }],
+    ["Log/2026-11-02.md#^e-now", { evidenceRef: "Log/2026-11-02.md#^e-now", content: "Now", capturedAt: "2026-11-02T18:00:00.000Z", source: "whatsapp", contentType: "text" }],
+    ["Log/2026-11-02.md#^e-chat", { evidenceRef: "Log/2026-11-02.md#^e-chat", content: "A typed note nobody was told about.", capturedAt: "2026-11-02T18:05:00.000Z", source: "whatsapp", contentType: "text" }],
   ]);
   const engine = {
     getEntry: vi.fn(async (ref: string) => { const e = entries.get(ref); if (!e) throw new Error("not found"); return e; }),
@@ -231,6 +233,32 @@ describe("subscriber API", () => {
     await dispatcher.idle();
     expect((await read("Log/2026-11-01.md#^e-old")).status).toBe(200);
     expect(await (await read("test")).json()).toMatchObject({ note: { id: "test", text: expect.stringContaining("test note") } });
+  });
+
+  it("reads a typed reply word by id once Zenod announced it to this connection, and no other typed note (EPIC-20 A8)", async () => {
+    const { app, dispatcher, store, deliveries } = await harness();
+    const { token } = await signIn(app);
+    const created = await app.request(`${BASE}/api/subscribers/v1/subscriptions`, bearer(token, { method: "POST", body: JSON.stringify({ url: "https://team.alpha9.io/api/hooks/zenod/c1", event: "voice_note.captured", reply_words: ["Now"] }) }));
+    const sub = (await created.json() as { subscription: { id: string; reply_words: string[] } }).subscription;
+    expect(sub.reply_words).toEqual(["now"]);
+    const read = (id: string) => app.request(`${BASE}/api/subscribers/v1/notes?id=${encodeURIComponent(id)}`, bearer(token));
+    expect((await read("Log/2026-11-02.md#^e-now")).status).toBe(404);
+    dispatcher.onEntryStored({ evidenceRef: "Log/2026-11-02.md#^e-now", contentType: "text", source: "whatsapp", capturedAt: "2026-11-02T18:00:00.000Z", announceTo: [sub.id] });
+    await dispatcher.idle();
+    expect(JSON.parse(deliveries.at(-1)!.body)).toMatchObject({ type: "voice_note.captured", note: { id: "Log/2026-11-02.md#^e-now", content_type: "text" } });
+    const note = await read("Log/2026-11-02.md#^e-now");
+    expect(note.status).toBe(200);
+    expect(await note.json()).toMatchObject({ note: { id: "Log/2026-11-02.md#^e-now", text: "Now", source: "whatsapp", content_type: "text" } });
+    expect((await read("Log/2026-11-02.md#^e-chat")).status).toBe(404);
+    // the safety-net list stays voice notes only
+    const list = await (await app.request(`${BASE}/api/subscribers/v1/notes?since=2026-10-01T00:00:00.000Z`, bearer(token))).json() as { notes: Array<{ content_type: string }> };
+    expect(list.notes.every((n) => n.content_type === "voice_note")).toBe(true);
+    // an app sets its words on a subscription made before they existed
+    expect((await app.request(`${BASE}/api/subscribers/v1/subscriptions/${sub.id}`, bearer(token, { method: "PATCH", body: JSON.stringify({ reply_words: ["go"] }) }))).status).toBe(200);
+    expect(store.get(sub.id)?.replyWords).toEqual(["go"]);
+    expect((await app.request(`${BASE}/api/subscribers/v1/subscriptions/${sub.id}`, bearer(token, { method: "PATCH", body: JSON.stringify({ reply_words: [] }) }))).status).toBe(200);
+    expect(store.get(sub.id)?.replyWords).toEqual([]);
+    expect((await app.request(`${BASE}/api/subscribers/v1/subscriptions/${sub.id}`, bearer(token, { method: "PATCH", body: JSON.stringify({}) }))).status).toBe(400);
   });
 
   it("lists pointers to voice notes since a time for the safety net, never from before the grant, never the words", async () => {

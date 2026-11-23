@@ -5,6 +5,8 @@ import type { Runtime } from "./runtime.js";
 import {
   deliveryJson,
   FORWARD_SCOPE,
+  parseReplyWords,
+  REPLY_WORDS_HELP,
   SUBSCRIBER_EVENT,
   SubscriberUrlError,
   subscriberUrlPolicyFromEnv,
@@ -94,6 +96,8 @@ export function mountSubscriberRoutes(
       throw error;
     }
     const name = (typeof body.name === "string" && body.name.trim()) || url.hostname;
+    const replyWords = body.reply_words === undefined ? [] : parseReplyWords(body.reply_words);
+    if (!replyWords) return apiError(c, 400, "invalid_request", REPLY_WORDS_HELP);
     const { subscription, signingSecret } = store.create({
       name,
       kind: "webhook",
@@ -101,6 +105,7 @@ export function mountSubscriberRoutes(
       event: SUBSCRIBER_EVENT,
       via: "manual",
       createdBy: actor(c),
+      replyWords,
     });
     // The form promises a test event as soon as the webhook is created.
     const test = await dispatcher.sendTest(subscription);
@@ -111,9 +116,14 @@ export function mountSubscriberRoutes(
   app.patch("/api/subscribers/:id", async (c) => {
     const store = runtime.subscribers;
     if (!store) return subscribersDisabled(c);
-    const body = await c.req.json<{ enabled?: unknown }>().catch(() => null);
-    if (!body || typeof body.enabled !== "boolean") return apiError(c, 400, "invalid_request", "Send {\"enabled\": true|false}.");
-    const sub = store.setEnabled(c.req.param("id"), body.enabled);
+    const body = await c.req.json<{ enabled?: unknown; reply_words?: unknown }>().catch(() => null);
+    if (!body || (typeof body.enabled !== "boolean" && body.reply_words === undefined)) return apiError(c, 400, "invalid_request", "Send {\"enabled\": true|false} and/or {\"reply_words\": [...]}.");
+    const replyWords = body.reply_words === undefined ? null : parseReplyWords(body.reply_words);
+    if (body.reply_words !== undefined && !replyWords) return apiError(c, 400, "invalid_request", REPLY_WORDS_HELP);
+    const id = c.req.param("id");
+    if (!store.get(id)) return apiError(c, 404, "not_found", "No such subscriber.");
+    if (replyWords) store.setReplyWords(id, replyWords);
+    const sub = typeof body.enabled === "boolean" ? store.setEnabled(id, body.enabled) : store.get(id);
     if (!sub) return apiError(c, 404, "not_found", "No such subscriber.");
     return c.json({ subscription: subscriptionJson(store.view(sub)) });
   });

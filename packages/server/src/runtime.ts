@@ -94,7 +94,7 @@ import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore, type TaskJob, type TreeSweepJobResult } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
-import { SubscriberDispatcher, SubscriberStore, subscriberUrlPolicyFromEnv, subscribersEnabled } from "./subscribers.js";
+import { SubscriberDispatcher, SubscriberStore, subscriberUrlPolicyFromEnv, subscribersEnabled, type Subscription } from "./subscribers.js";
 import { ExecutionStore } from "./executionStore.js";
 import { TranscriptStore } from "./transcriptStore.js";
 import { JourneyStore } from "./journeyStore.js";
@@ -519,6 +519,23 @@ export class Runtime {
       job: (id) => this.taskJobQueue.get(id),
       offerJob: (captureId, request) => { offerDeskJobFromChat(inboxFor(this), captureId, request, () => true); },
       appUrl: subscriberPublicBaseUrl(),
+      // EPIC-20 A8: the owner's one typed word that a subscription declared (EpicTeam: "now") is kept as a note and
+      // told to that subscription only; Zenod gives no reply of its own to it. Every other message is unchanged.
+      relayReplyWord: (text) => {
+        let subs: Subscription[];
+        try { subs = this.subscribers?.replyWordSubscriptions(text) ?? []; } catch { return false; }
+        if (!subs.length) return false;
+        try {
+          this.taskJobQueue.enqueue("store", {
+            content: text, source: "whatsapp", contentType: "text",
+            ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
+            announceTo: subs.map((sub) => sub.id),
+          }, `whatsapp-keep:${job.idempotencyKey ?? job.id}`);
+        } catch {
+          return false; // could not keep it: the message goes the normal way and gets its normal reply
+        }
+        return true;
+      },
     }));
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,

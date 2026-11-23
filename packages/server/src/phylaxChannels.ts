@@ -277,6 +277,8 @@ export interface PhylaxInboundReceipt {
   }>;
   /** Runtime invokes this only after the foreground provider reply is accepted. */
   afterReply?: () => void;
+  /** EPIC-20 A8: Zenod passed this typed message on as a subscription's reply word and gives no reply of its own: send none. */
+  silent?: true;
 }
 
 export interface PhylaxFailureAudit {
@@ -1028,6 +1030,8 @@ export function terminalCaptureReceipt(
   state: "done" | "error";
   text: string;
   evidenceRef: string | null;
+  /** EPIC-20 A8: the chat job passed the message on as a reply word; there is no reply text and none is owed. */
+  silent?: true;
 } | null {
   const state = jobState(result);
   if (!state || !["done", "error", "interrupted"].includes(state)) return null;
@@ -1050,6 +1054,7 @@ export function terminalCaptureReceipt(
       ? stored.evidenceRef.trim()
       : null;
     const reply = sanitizePhylaxCustomerReply(typeof payload.text === "string" ? payload.text : "");
+    if (payload.silent === true && !reply) return { state: "done", text: "", evidenceRef, silent: true };
     return {
       state: "done",
       text: reply || "Zenod finished the request, but returned no reply text.",
@@ -1473,7 +1478,7 @@ export class PhylaxChannelsOrgan {
           throw new Error("tenant route is unavailable while resuming capture");
         }
         const completed = await this.pollCapture(job, route, handoff, null);
-        if (!completed || !completed.receipt) return;
+        if (!completed || !completed.receipt || completed.receipt.silent) return;
         await this.deliverTerminalReceipt(job, completed.receipt.text);
       } catch (error) {
         if (error instanceof PhylaxChannelNotConnectedError) {
@@ -2029,6 +2034,8 @@ export class PhylaxChannelsOrgan {
     // Zenod itself answered that the save job failed. Retrying the same key only
     // returns the same failed job, so this ends in the try-again text, not a retry.
     let captureJobFailed = false;
+    // EPIC-20 A8: the typed message went to a subscription as its reply word; the channel answers nothing.
+    let silentReply = false;
     try {
       if (binding || fixedAdapterCall) {
         try {
@@ -2081,6 +2088,7 @@ export class PhylaxChannelsOrgan {
         const completed = await this.pollCapture(existing, route, handoff, deadline);
         if (completed?.receipt) {
           captureJobFailed = completed.receipt.state === "error";
+          if (completed.receipt.silent) silentReply = true;
           downstream = {
             ...completed.result,
             content: [{ type: "text", text: completed.receipt.text }],
@@ -2127,6 +2135,7 @@ export class PhylaxChannelsOrgan {
           const completed = await this.pollCapture(job, route, handoff, deadline);
           if (completed?.receipt) {
             captureJobFailed = completed.receipt.state === "error";
+            if (completed.receipt.silent) silentReply = true;
             downstream = {
               ...completed.result,
               content: [{ type: "text", text: completed.receipt.text }],
@@ -2190,7 +2199,7 @@ export class PhylaxChannelsOrgan {
       );
     }
     const replyText = sanitizePhylaxCustomerReply(textFromResult(downstream));
-    if (!replyText) {
+    if (!replyText && !silentReply) {
       throw new PhylaxChannelError(
         "downstream_error",
         "Zenod finished the request but returned no reply. Please try again.",
@@ -2224,6 +2233,7 @@ export class PhylaxChannelsOrgan {
       ...(backgroundCaptureJob
         ? { afterReply: () => this.startBackgroundPoll(backgroundCaptureJob, handoff) }
         : {}),
+      ...(silentReply && !replyText ? { silent: true as const } : {}),
     };
   }
 

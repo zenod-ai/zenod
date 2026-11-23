@@ -28,6 +28,29 @@ export const SUBSCRIBER_TOKEN_PREFIX = "zvn_";
 export const DELIVERY_LOG_DAYS = 7;
 export const DELIVERY_TIMEOUT_MS = 5_000;
 export const DELIVERY_RETRY_MS = [2_000, 10_000] as const;
+/** EPIC-20 A8: a subscription may declare up to this many one-word replies, each at most this long. */
+export const REPLY_WORDS_MAX = 5;
+export const REPLY_WORD_MAX_CHARS = 32;
+
+export const REPLY_WORDS_HELP = `reply_words must be a list of up to ${REPLY_WORDS_MAX} words, each up to ${REPLY_WORD_MAX_CHARS} characters of letters or digits.`;
+
+/** A reply word, or a typed message, as compared: lower case, letters and digits only, punctuation and spacing ignored. */
+export function normalizeReplyWord(raw: string): string {
+  return raw.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** The declared reply words, normalized and de-duplicated, or null when the value is not a list of 1 to 5 short words. */
+export function parseReplyWords(raw: unknown): string[] | null {
+  if (!Array.isArray(raw) || raw.length > REPLY_WORDS_MAX) return null;
+  const words: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") return null;
+    const word = normalizeReplyWord(item);
+    if (!word || word.length > REPLY_WORD_MAX_CHARS) return null;
+    if (!words.includes(word)) words.push(word);
+  }
+  return words;
+}
 
 export function subscribersEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.ZENOD_SUBSCRIBERS?.trim().toLowerCase() === "on";
@@ -82,6 +105,8 @@ export interface Subscription {
   grantId: string | null;
   createdAt: string;
   createdBy: SubscriberPerson;
+  /** EPIC-20 A8: typed WhatsApp messages from the owner that are exactly one of these words go to this subscription (normalized, empty: none). */
+  replyWords: string[];
 }
 
 export interface SubscriptionView extends Subscription {
@@ -103,6 +128,7 @@ interface SubscriptionRow {
   created_by_name: string | null;
   created_by_email: string | null;
   secret_handle: string;
+  reply_words: string | null;
 }
 
 interface DeliveryRow {
@@ -178,6 +204,9 @@ export class SubscriberStore {
       CREATE INDEX IF NOT EXISTS idx_deliveries_subscription ON subscriber_deliveries (subscription_id, at);
       CREATE INDEX IF NOT EXISTS idx_deliveries_note ON subscriber_deliveries (note_id);
     `);
+    // EPIC-20 A8: the one added column (a JSON list of normalized words); older databases get it here.
+    const columns = this.db.prepare("PRAGMA table_info(subscriptions)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "reply_words")) this.db.exec("ALTER TABLE subscriptions ADD COLUMN reply_words TEXT");
   }
 
   // --- grants (Sign in with Zenod) ---
@@ -233,6 +262,7 @@ export class SubscriberStore {
     via: SubscriptionVia;
     grantId?: string | null;
     createdBy?: SubscriberPerson;
+    replyWords?: string[];
   }): { subscription: Subscription; signingSecret: string } {
     const id = shortId("sub_");
     const signingSecret = opaque("whsec_", 24);
@@ -249,13 +279,15 @@ export class SubscriberStore {
       grantId: input.grantId ?? null,
       createdAt: new Date(this.now()).toISOString(),
       createdBy: input.createdBy ?? { name: null, email: null },
+      replyWords: input.replyWords ?? [],
     };
     try {
       this.db
-        .prepare(`INSERT INTO subscriptions (id, name, kind, product, url, event, enabled, via, grant_id, created_at, created_by_name, created_by_email, secret_handle)
-          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`)
+        .prepare(`INSERT INTO subscriptions (id, name, kind, product, url, event, enabled, via, grant_id, created_at, created_by_name, created_by_email, secret_handle, reply_words)
+          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, subscription.name, subscription.kind, subscription.product, subscription.url, subscription.event, subscription.via,
-          subscription.grantId, subscription.createdAt, subscription.createdBy.name, subscription.createdBy.email, handle);
+          subscription.grantId, subscription.createdAt, subscription.createdBy.name, subscription.createdBy.email, handle,
+          subscription.replyWords.length ? JSON.stringify(subscription.replyWords) : null);
     } catch (error) {
       this.vault.delete(secretKey(id), handle);
       throw error;
@@ -279,6 +311,19 @@ export class SubscriberStore {
   setEnabled(id: string, enabled: boolean): Subscription | null {
     this.db.prepare("UPDATE subscriptions SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
     return this.get(id);
+  }
+
+  /** EPIC-20 A8: replace the reply words (already parsed with parseReplyWords; empty clears them). */
+  setReplyWords(id: string, words: string[]): Subscription | null {
+    this.db.prepare("UPDATE subscriptions SET reply_words = ? WHERE id = ?").run(words.length ? JSON.stringify(words) : null, id);
+    return this.get(id);
+  }
+
+  /** EPIC-20 A8: the enabled subscriptions that declared this typed message, as a whole, as one of their reply words. */
+  replyWordSubscriptions(text: string): Subscription[] {
+    const word = normalizeReplyWord(text);
+    if (!word || word.length > REPLY_WORD_MAX_CHARS) return [];
+    return this.list().filter((sub) => sub.enabled && sub.replyWords.includes(word));
   }
 
   /** Delete a subscription with its secret and log. An oauth subscription also revokes its grant unless told not to. */
@@ -386,7 +431,17 @@ function toSubscription(row: SubscriptionRow): Subscription {
     grantId: row.grant_id,
     createdAt: row.created_at,
     createdBy: { name: row.created_by_name, email: row.created_by_email },
+    replyWords: parseStoredReplyWords(row.reply_words),
   };
+}
+
+function parseStoredReplyWords(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    return parseReplyWords(JSON.parse(raw)) ?? [];
+  } catch {
+    return [];
+  }
 }
 
 function toDelivery(row: DeliveryRow): DeliveryRecord {
@@ -437,6 +492,7 @@ export function subscriptionJson(view: SubscriptionView): Record<string, unknown
     created_at: view.createdAt,
     created_by: view.createdBy,
     via: view.via,
+    reply_words: view.replyWords,
     last_delivery: view.lastDelivery
       ? {
           at: view.lastDelivery.at,
@@ -538,6 +594,8 @@ export interface StoredEntry {
   capturedAt?: string;
   /** EPIC-21 V1: the OAuth client that forwarded this note; its own subscriptions are not told about it. */
   forwardedBy?: string;
+  /** EPIC-20 A8: a typed message kept because a subscription's reply word matched it; only these subscriptions are told. */
+  announceTo?: string[];
 }
 
 export type EntryStoredListener = (entry: StoredEntry) => void;
@@ -558,6 +616,13 @@ export interface DispatcherOptions {
 
 export const TEST_NOTE_ID = "test";
 
+/** `contentType` is "voice_note" unless a typed message went to a reply-word subscription (EPIC-20 A8: "text"). */
+interface DeliveryEvent {
+  eventId: string;
+  test: boolean;
+  note: { id: string; capturedAt: string; source: string | null; contentType?: "voice_note" | "text" };
+}
+
 export class SubscriberDispatcher {
   private readonly pending = new Set<Promise<unknown>>();
   private readonly cancelled = new Set<string>();
@@ -571,10 +636,13 @@ export class SubscriberDispatcher {
 
   /** Called after a capture is durably stored; never throws, never awaited by the caller. */
   readonly onEntryStored: EntryStoredListener = (entry) => {
-    if (!entry.evidenceRef || entry.contentType !== "voice_note") return;
+    // EPIC-20 A8: a typed message is announced only to the subscriptions whose reply word it was, never to all.
+    const typed = entry.contentType === "text" && Boolean(entry.announceTo?.length);
+    if (!entry.evidenceRef || (entry.contentType !== "voice_note" && !typed)) return;
     let subs: Subscription[];
     try {
       subs = this.options.store.list().filter((sub) => sub.enabled && sub.event === SUBSCRIBER_EVENT &&
+        (!typed || entry.announceTo!.includes(sub.id)) &&
         // A note an app forwarded is not announced back to that same app (no echo loop).
         !(entry.forwardedBy && sub.grantId && this.options.store.grant(sub.grantId)?.clientId === entry.forwardedBy));
     } catch {
@@ -586,7 +654,7 @@ export class SubscriberDispatcher {
       this.track(this.deliver(sub, {
         eventId: shortId("evt_"),
         test: false,
-        note: { id: entry.evidenceRef, capturedAt, source: entry.source ?? null },
+        note: { id: entry.evidenceRef, capturedAt, source: entry.source ?? null, contentType: typed ? "text" : "voice_note" },
       }, { retries: true }).catch(() => undefined));
     }
   };
@@ -619,7 +687,7 @@ export class SubscriberDispatcher {
     return (this.options.now ?? Date.now)();
   }
 
-  eventBody(sub: Subscription, event: { eventId: string; test: boolean; note: { id: string; capturedAt: string; source: string | null } }): string {
+  eventBody(sub: Subscription, event: DeliveryEvent): string {
     const noteUrl = new URL("/api/subscribers/v1/notes", this.options.publicBaseUrl);
     noteUrl.searchParams.set("id", event.note.id);
     return JSON.stringify({
@@ -632,7 +700,7 @@ export class SubscriberDispatcher {
         id: event.note.id,
         captured_at: event.note.capturedAt,
         source: event.note.source,
-        content_type: "voice_note",
+        content_type: event.note.contentType ?? "voice_note",
         url: noteUrl.toString(),
       },
     });
@@ -640,7 +708,7 @@ export class SubscriberDispatcher {
 
   private async deliver(
     sub: Subscription,
-    event: { eventId: string; test: boolean; note: { id: string; capturedAt: string; source: string | null } },
+    event: DeliveryEvent,
     mode: { retries: boolean },
   ): Promise<DeliveryRecord> {
     const { store } = this.options;
@@ -702,7 +770,7 @@ export class SubscriberDispatcher {
       record.status = record.ok ? "delivered" : more ? "retrying" : "failed";
       safeUpdate(store, record);
       if (!more) {
-        log(`[subscribers] tenant=${this.options.tenantId} ${sub.id} ${event.test ? "test" : "voice note"} -> ${record.ok ? record.httpStatus : `failed (${record.error})`} after ${attempt} ${attempt === 1 ? "try" : "tries"}`);
+        log(`[subscribers] tenant=${this.options.tenantId} ${sub.id} ${event.test ? "test" : event.note.contentType === "text" ? "typed reply word" : "voice note"} -> ${record.ok ? record.httpStatus : `failed (${record.error})`} after ${attempt} ${attempt === 1 ? "try" : "tries"}`);
         return record;
       }
       await new Promise((resolve) => setTimeout(resolve, retryMs[attempt - 1]));

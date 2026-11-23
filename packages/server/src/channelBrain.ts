@@ -34,15 +34,22 @@ export interface ChannelBrainDeps {
   offerJob(captureId: string, request: string): void;
   /** The app's public origin, for the inbox and memory links. */
   appUrl: string;
+  /**
+   * EPIC-20 A8: true when the whole message is one subscription's reply word and it has been kept for that
+   * subscription (a text event goes to it once stored). The turn then gives no reply of its own.
+   */
+  relayReplyWord?(text: string): boolean;
   wait?(ms: number): Promise<void>;
   keepWaitMs?: number;
 }
 
-export type ChannelOutcome = "keep" | "answer" | "both" | "job" | "unsure" | "hello";
+export type ChannelOutcome = "keep" | "answer" | "both" | "job" | "unsure" | "hello" | "relayed";
 
 export interface ChannelReply extends Reply {
   /** What the brain decided, for the audit and the proof (EPIC-20 E20-3). */
   outcome: ChannelOutcome;
+  /** EPIC-20 A8: the message went to a subscription as its reply word; the channel sends no reply for it (text is empty). */
+  silent?: true;
 }
 
 const SMALL_TALK = /^(?:hi|hello|hey|hola|buenas|thanks|thank you|thx|ty|gracias|ok|okay|vale|cool|great|nice|perfect|perfecto|genial|bye|adi[oó]s|good (?:morning|night|evening|afternoon)|buenos d[ií]as|buenas noches|👍|🙏|❤️)(?![\p{L}\p{N}])[\s!.?]*$/iu;
@@ -135,6 +142,7 @@ async function savedReply(deps: ChannelBrainDeps, job: TaskJob): Promise<string>
 /** One typed WhatsApp message, decided and answered like the cloud chat's one Send. */
 export async function channelTurn(engine: BrainEngine, message: string, chatJobId: string, deps: ChannelBrainDeps): Promise<ChannelReply> {
   const text = message.trim();
+  if (text && deps.relayReplyWord?.(text)) return { outcome: "relayed", sources: [], text: "", silent: true };
   if (!text || SMALL_TALK.test(text)) {
     return { outcome: "hello", sources: [], text: "Hi! Send me anything to remember, or ask me something about your memory." };
   }

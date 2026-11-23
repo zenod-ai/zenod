@@ -290,6 +290,73 @@ describe("PhylaxChannelsOrgan", () => {
     }
   });
 
+  it("sends no reply for a typed word Zenod passed on as a subscription's reply word, and stays silent on a replay (EPIC-20 A8)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-silent-chat-"));
+    dirs.push(dataDir);
+    let chatCalls = 0;
+    const routes = {
+      resolve: () => ({
+        tenantId: "alpha",
+        downstreamUrl: "https://zenod.test/mcp/alpha",
+        downstreamToken: "zenod-alpha",
+        turnBindings: {
+          voice_note: { tool: "store_memory", argumentMappings: { content: { source: "transcript" as const } } },
+          text: {
+            tool: "chat_with_zenod",
+            argumentMappings: {
+              message: { source: "message" as const },
+              surface: { source: "surface" as const },
+              conversationKey: { source: "conversationKey" as const },
+            },
+          },
+          media: { tool: "ingest_memory", argumentMappings: { artifactUrl: { source: "artifactUrl" as const } } },
+        },
+      }),
+    };
+    const discoverDownstream = async () => ({
+      transport: "connected",
+      tools: "ready",
+      specs: [{
+        as: "chat",
+        mcp: "chat_with_zenod",
+        description: "Durable direct Zenod chat",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["message", "surface", "conversationKey"],
+          properties: {
+            message: { type: "string" },
+            surface: { type: "string" },
+            conversationKey: { type: "string" },
+            idempotencyKey: { type: "string" },
+          },
+        },
+      }],
+    }) as const;
+    const callDownstream = async (call: PhylaxDownstreamCall): Promise<PeerToolResult> => {
+      if (call.tool === "chat_with_zenod") {
+        chatCalls += 1;
+        return { content: [{ type: "text", text: "queued" }], structuredContent: { ticket_id: "now-job-1", state: "accepted" } };
+      }
+      return {
+        content: [{ type: "text", text: "done" }],
+        structuredContent: { ticket_id: "now-job-1", state: "done", result: { outcome: "relayed", sources: [], text: "", silent: true } },
+      };
+    };
+    const organ = new PhylaxChannelsOrgan({ dataDir, routes, discoverDownstream, capturePollIntervalMs: 1, callDownstream });
+    try {
+      const input = { channel: "whatsapp" as const, sender: "34611111111", chatId: "chat-alpha", messageId: "now-provider-1", text: "Now" };
+      const first = await organ.receive(input);
+      expect(first.replyText).toBe("");
+      expect(first.silent).toBe(true);
+      const replay = await organ.receive(input);
+      expect(replay.silent).toBe(true);
+      expect(chatCalls).toBe(1);
+    } finally {
+      await organ.close();
+    }
+  });
+
   it("dispatches a tenant voice binding mechanically, validates its live schema, and polls to a terminal receipt", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-dispatch-"));
     dirs.push(dataDir);
