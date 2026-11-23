@@ -2,7 +2,8 @@
 from: alpha9
 about: Alert: zenod health page: Alerts
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-23-zenod-re-alert-zenod-health-page-alerts.md
 ---
 1 alert(s) from your checks reached us (E6-S170: alerts go to their owner, no longer to a thread nobody reads). This note closes by itself when the check sends RECOVERED (a one-off, like a caught secret, stays open until you answer). Act now: fix it, or answer in our desk/inbox when the alert is wrong.
 - zenod health page: Alerts: since 2026-11-23 15:45 UTC: zenod health page: Alerts: WhatsApp messages with no reply is red: a WhatsApp message from 2026-11-23 15:25:01 UTC (16 min ago) has had no reply
