@@ -1,0 +1,71 @@
+{
+  "row": "V9",
+  "card": "docs/cards/V9.md",
+  "cardSha": "64546b38fb1f0bb4",
+  "inputs": {
+    "card": "64546b38fb1f0bb4",
+    "page": "94fc5fab58509461",
+    "rules": "c1a7854c21d10fb4",
+    "words": "d97299e28fe837ba"
+  },
+  "checkedAt": "2026-11-23T11:57:35Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "memories that are happening within an app are different than memories that are originated directly in Zenod",
+      "where": "vn_42bc4eb9",
+      "status": "met",
+      "how": "Evidence page shows list labels 'From EpicTeam Chat' and 'Spoken to Zenod', opened note with label and real title, and search hits with labels."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "At 390 and 1280 px the page opens with the punchline box and a three-box sequence, the list, opened note and search screens all show labels, and there is no sideways overflow."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Asks Jordi to confirm whether labelling each voice note by where it was spoken, shown in the list, opened note and search, does tell app notes from notes spoken to Zenod everywhere he looks.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "94fc5fab58509461",
+    "walkedAt": "2026-11-23T11:57:35Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:8921/v9/#opened-note",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '#1751'",
+        "url": "https://github.com/zenod-ai/zenod/pull/1751",
+        "result": "answered 200 (another site)"
+      },
+      {
+        "n": 3,
+        "what": "open the link '#1753'",
+        "url": "https://github.com/zenod-ai/zenod/pull/1753",
+        "result": "answered 200 (another site)"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:8921/v9/#opened-note",
+      "file": "V9-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:8921/v9/#opened-note",
+      "file": "V9-1280.webp"
+    }
+  ]
+}
