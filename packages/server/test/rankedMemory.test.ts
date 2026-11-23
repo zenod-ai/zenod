@@ -10,7 +10,7 @@ import type { CustomerStripeClient } from "../src/customerBilling.js";
 import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { issueCustomerSession } from "../src/customerSession.js";
-import { memoryAppPath, rankHits, rankMemories } from "../src/rankedMemory.js";
+import { labelRankedMemories, memoryAppPath, rankHits, rankMemories } from "../src/rankedMemory.js";
 import { Runtime } from "../src/runtime.js";
 
 // EPIC-12 E12-S3a: ranked retrieval, the top memories with a match percentage and links.
@@ -55,6 +55,33 @@ describe("ranked memory (E12-S3a)", () => {
     expect((await rankMemories(engineWith(hits), "x", 99)).results).toHaveLength(7);
     expect((await rankMemories(engineWith(hits), "x", Number.NaN)).results).toHaveLength(5);
     expect((await rankMemories(engineWith(hits, false), "x", 2)).tier).toBe("scan");
+  });
+});
+
+describe("ranked hits carry the label of their note (EPIC-21 V9)", () => {
+  const entry = (content: string, contentType: "voice_note" | "text" = "voice_note") => ({
+    evidenceRef: "Log/2026-11-23.md#^e-1", path: "Log/2026-11-23.md", anchor: "e-1", title: "Voice note", content, source: "mcp", verbatim: true,
+    contentType, capturedAt: "2026-11-23T09:00:00Z", url: "", provider: "github",
+  }) as never;
+  const body = (app: string | null, words: string) => `Voice note "epicteam-chat-voice-note-x.webm" ingested.\nSource: x\n${app ? `Source app: ${app}\n` : ""}\n${words}`;
+
+  it("labels an app note, a note spoken to Zenod and leaves pages and typed notes without one", async () => {
+    const results = [
+      { path: "Log/2026-11-23.md#^e-1", title: "x" }, { path: "Log/2026-11-23.md#^e-2", title: "x" },
+      { path: "Log/2026-11-23.md#^e-3", title: "x" }, { path: "Notes/Page.md", title: "Page" }, { path: "Log/2026-11-23.md#^e-gone", title: "x" },
+    ];
+    const entries: Record<string, ReturnType<typeof entry>> = {
+      "Log/2026-11-23.md#^e-1": entry(body("EpicTeam Chat", "team demo words here")),
+      "Log/2026-11-23.md#^e-2": entry(body(null, "direct demo words here")),
+      "Log/2026-11-23.md#^e-3": entry("A typed note", "text"),
+    };
+    const read = vi.fn(async (ref: string) => entries[ref] ?? null);
+    const labelled = await labelRankedMemories(results, read);
+    expect(labelled.map((r) => r.label)).toEqual(["From EpicTeam Chat", "Spoken to Zenod", null, null, null]);
+    expect(labelled[0]!.title).toBe("team demo words here");
+    expect(labelled[3]!.title).toBe("Page");
+    // A page is never read.
+    expect(read).not.toHaveBeenCalledWith("Notes/Page.md");
   });
 });
 
@@ -103,6 +130,8 @@ describe("console memory search route (E12-S3a)", () => {
       const body = await response.json();
       expect(body.results).toHaveLength(5);
       expect(body.results[0]).toMatchObject({ rank: 1, path: "Notes/alpha 1.md", matchPercent: 100, appPath: "/#memory?path=Notes%2Falpha%201.md" });
+      // EPIC-21 V9: a page hit has no label.
+      expect(body.results[0]).toHaveProperty("label", null);
       expect(JSON.stringify(body)).not.toContain("beta");
       expect((await (await get("?q=notes&limit=3", bob)).json()).results.map((item: { path: string }) => item.path)).toEqual(["Notes/beta 1.md", "Notes/beta 2.md", "Notes/beta 3.md"]);
     } finally {

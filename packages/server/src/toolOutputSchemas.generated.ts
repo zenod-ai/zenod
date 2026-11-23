@@ -1571,6 +1571,13 @@ export const TOOL_OUTPUT_SCHEMAS = (
             },
             "appPath": {
               "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Where a voice note was spoken: From EpicTeam Chat, From an EpicTeam card answer, From <app>, or Spoken to Zenod; null for a page or anything that is not a voice note."
             }
           }
         }

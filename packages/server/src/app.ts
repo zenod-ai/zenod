@@ -32,7 +32,8 @@ import {
   protectedResourceMetadata,
   publicBaseUrl,
 } from "./oauth.js";
-import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
+import { labelRankedMemories, rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
+import { readMergedEntry } from "./memoryEntryCatalog.js";
 import { mountSubscriberRoutes } from "./subscriberRoutes.js";
 import {
   appStatus,
@@ -3031,7 +3032,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const query = (c.req.query("q") ?? "").trim();
     if (!query) return c.json({ error: "q is required" }, 400);
     const engine = await runtime.getEngine();
-    return c.json(await rankMemories(engine, query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT)));
+    const ranked = await rankMemories(engine, query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT));
+    // EPIC-21 V9: each hit that is a captured note names where it was spoken.
+    return c.json({ ...ranked, results: await labelRankedMemories(ranked.results, (ref) => readMergedEntry(engine, runtime.taskJobQueue, ref)) });
   });
 
   app.get("/api/note", async (c) => {

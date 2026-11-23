@@ -203,3 +203,19 @@ export async function searchMemoryEntryPage(engine: BrainEngine, taskJobs: Captu
     scope: "all-local-vault-evidence-and-retained-tenant-receipts",
   } };
 }
+
+/**
+ * One captured entry as get_memory shows it: the vault entry with its capture receipt merged in, so a note still
+ * being enriched carries its `Source app` too. null for a path that is not an entry or an entry that is gone.
+ */
+export async function readMergedEntry(engine: BrainEngine, taskJobs: CaptureReceiptSource | undefined, evidenceRef: string): Promise<MemoryEntry | null> {
+  if (!evidenceRef.includes("#^")) return null;
+  try {
+    const stored = await engine.getEntry(evidenceRef);
+    const receipts = await captureReceiptsForAsync(taskJobs, stored.evidenceRef);
+    return (await mergeMemoryEntriesAsync([stored], receipts.jobs, receipts.loadContent))
+      .find((candidate) => candidate.evidenceRef === stored.evidenceRef) ?? stored;
+  } catch {
+    return null;
+  }
+}

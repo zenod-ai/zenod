@@ -1,4 +1,5 @@
-import { captureReceiptsForAsync, mergeMemoryEntriesAsync, searchMemoryEntryPage } from "./memoryEntryCatalog.js";
+import { captureReceiptsForAsync, mergeMemoryEntriesAsync, readMergedEntry, searchMemoryEntryPage } from "./memoryEntryCatalog.js";
+import { labelRankedMemories } from "./rankedMemory.js";
 import { readAsLine, readAsNote, shownReadings, type ReadAs } from "./quickIndexRead.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -991,10 +992,13 @@ export function buildMcpServer(
       // E12-S3c: the chat's recent-note fields (relation, via, unlinked, unwritten) stay out of this tool's output.
       const rankedHits = rankHits((timed?.hits ?? []).slice(0, hitLimit ?? undefined).map(({ relation: _r, via: _v, unlinked: _u, unwritten: _w, ...hit }) => hit));
       const tree = rankedHits.length ? await loadTree(engine) : null;
-      const hits = await Promise.all(rankedHits.map(async (hit) => {
+      const placedHits = await Promise.all(rankedHits.map(async (hit) => {
         const { placement, lineage, evidenceRefs } = await lineageFields(tree, hit.path);
         return { ...hit, placement, lineage, evidenceRefs };
       }));
+      // EPIC-21 V9: a hit that is a captured note carries the plain label of its note and a readable title, as the entries do.
+      const hits = await labelRankedMemories(placedHits.map((hit) => ({ ...hit, title: hit.title ?? "" })), (ref) => readMergedEntry(engine, taskJobs, ref))
+        .then((labelled) => labelled.map(({ title, ...hit }) => (title ? { ...hit, title } : hit)));
       const structuralQuery = Boolean(source || sourceId || contentType || label || origin || capturedAfter || capturedBefore || cursor || order === "newest" || order === "oldest" || !query);
       let entries: ReturnType<typeof memoryEntrySummaries> = [];
       let pagination: Record<string, unknown> | null = null;
@@ -1013,7 +1017,7 @@ export function buildMcpServer(
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
         // Tree lineage stays in structured output only (E9-5j, root L-6): the text is as before EPIC-9.
-        : hits.map((hit) => `${hit.path} (score ${hit.score}, ${hit.matchPercent}% match) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}\n  app: ${hit.appPath}`).join("\n");
+        : hits.map((hit) => `${hit.path} (score ${hit.score}, ${hit.matchPercent}% match${hit.label ? `, ${hit.label}` : ""}) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}\n  app: ${hit.appPath}`).join("\n");
       // M34 r3: a slow search is named even when it found nothing (a search that waited 40 s printed no line at all).
       if (timed?.ms != null && (rankedHits.length || timed.ms >= 1000)) {
         // E24-M7: `tool` is the whole call so far (vault sync, index, tree places, entries).

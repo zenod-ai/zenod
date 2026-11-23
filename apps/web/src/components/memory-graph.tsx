@@ -763,8 +763,11 @@ function GraphSearch({ onOpen }: { onOpen: (path: string) => void }) {
                     <i style={{ width: `${result.matchPercent}%` }} />
                   </span>
                   <span className="zp-pct">{result.matchPercent}%</span>
-                  {result.treePath ? (
-                    <span className="zp-meta">{result.treePath}</span>
+                  {result.label || result.treePath ? (
+                    <span className="zp-meta">
+                      {result.label ? <b>{result.label}</b> : null}
+                      {result.treePath ? <span>{result.treePath}</span> : null}
+                    </span>
                   ) : null}
                 </button>
               </li>

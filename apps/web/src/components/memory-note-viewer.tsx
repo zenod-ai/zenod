@@ -47,7 +47,11 @@ export function MemoryNoteViewer({
     }
   }, [path])
 
-  const title = path.split("#")[0]!.split("/").pop()!.replace(/\.md$/i, "")
+  // EPIC-21 V9: a captured note shows its real title and where it was spoken, not the day's file name.
+  const readNote = state.kind === "ready" ? state.note : null
+  const title =
+    readNote?.title ||
+    path.split("#")[0]!.split("/").pop()!.replace(/\.md$/i, "")
   return (
     <article className="zp zp-note" aria-label={`Memory ${title}`}>
       <div className="zp-notehead">
@@ -62,6 +66,11 @@ export function MemoryNoteViewer({
           ← Back to chat
         </a>
         <h2>{title}</h2>
+        {readNote?.label ? (
+          <p className="zp-origin" data-testid="note-label">
+            {readNote.label}
+          </p>
+        ) : null}
         <p className="zp-path">{path.split("#")[0]}</p>
       </div>
       {state.kind === "loading" ? <p className="zp-hint">Opening…</p> : null}

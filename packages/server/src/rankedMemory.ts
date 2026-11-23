@@ -1,4 +1,5 @@
-import type { BrainEngine, Hit } from "zenod";
+import type { BrainEngine, Hit, MemoryEntry } from "zenod";
+import { originLabel, readableTitle } from "zenod/entry-label";
 import { withMatchPercent } from "zenod/match-percent";
 
 /**
@@ -38,6 +39,8 @@ export interface RankedMemory {
   unwritten?: number;
   /** A private memory's kind, flagged when it was filed (E15-S2). */
   private?: NonNullable<Hit["private"]>;
+  /** EPIC-21 V9: where a voice note was spoken (From EpicTeam Chat, Spoken to Zenod ...), null for anything else; set by `labelRankedMemories`. */
+  label?: string | null;
 }
 
 export interface RankedMemories {
@@ -80,4 +83,26 @@ export async function rankMemories(engine: BrainEngine, query: string, limit = R
     ...(hit.private ? { private: hit.private } : {}),
   }));
   return { query, tier: timed.tier, ms: Math.round((performance.now() - started) * 10) / 10, results };
+}
+
+/** How many entries are read at once when hits are labelled. */
+const LABEL_READS_AT_ONCE = 8;
+
+/**
+ * EPIC-21 V9: a ranked hit that is a captured entry (its path is an evidence ref) gets the plain label of its note and a
+ * readable title, read from the entry itself. Pages and other hits get `label: null`. Opt-in, so chat's own ranking is unchanged.
+ */
+export async function labelRankedMemories<T extends { path: string; title: string }>(
+  results: readonly T[],
+  readEntry: (evidenceRef: string) => Promise<MemoryEntry | null>,
+): Promise<Array<T & { label: string | null }>> {
+  const out: Array<T & { label: string | null }> = [];
+  for (let i = 0; i < results.length; i += LABEL_READS_AT_ONCE) {
+    const batch = results.slice(i, i + LABEL_READS_AT_ONCE);
+    out.push(...await Promise.all(batch.map(async (hit) => {
+      const entry = hit.path.includes("#^") ? await readEntry(hit.path) : null;
+      return entry ? { ...hit, title: readableTitle(entry), label: originLabel(entry) } : { ...hit, label: null };
+    })));
+  }
+  return out;
 }

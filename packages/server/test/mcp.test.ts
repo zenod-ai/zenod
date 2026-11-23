@@ -654,8 +654,8 @@ describe("MCP endpoint", () => {
     expect(JSON.stringify(search.structuredContent)).toContain("Areas/Insurance.md");
     // An engine without a memory tree (and every vault before E9-2c) reports unplaced hits, unchanged ranking.
     expect((search.structuredContent as { hits: unknown[] }).hits).toEqual([
-      // E12-S3a: rank, matchPercent and appPath are additive; every earlier field is unchanged.
-      { path: "Areas/Insurance.md", snippet: "about insurance", score: 9, githubUrl: "", rank: 1, matchPercent: 100, appPath: "/#memory?path=Areas%2FInsurance.md", placement: "unplaced", lineage: [], evidenceRefs: [] },
+      // E12-S3a: rank, matchPercent and appPath are additive; every earlier field is unchanged. EPIC-21 V9: label is null for a page.
+      { path: "Areas/Insurance.md", snippet: "about insurance", score: 9, githubUrl: "", rank: 1, matchPercent: 100, appPath: "/#memory?path=Areas%2FInsurance.md", placement: "unplaced", lineage: [], evidenceRefs: [], label: null },
     ]);
     const searchText = search.content.map((item) => (item as { text: string }).text).join("\n");
     expect(searchText).toContain("Areas/Insurance.md (score 9, 100% match) — about insurance");
@@ -781,15 +781,15 @@ describe("MCP endpoint", () => {
   it("labels voice notes by where they were spoken and filters search by that label (EPIC-21 V9)", async () => {
     const client = await connect();
     const vault = join(dir, "voice-label-vault");
-    const original = { searchEntries: fakeEngine.searchEntries, getEntry: fakeEngine.getEntry };
+    const original = { searchEntries: fakeEngine.searchEntries, getEntry: fakeEngine.getEntry, search: fakeEngine.search };
     fakeEngine.searchEntries = query => searchEvidenceEntries(vault, query);
     fakeEngine.getEntry = ref => getEvidenceEntry(vault, ref);
     const note = (file: string, hint: string, app: string | null, words: string) =>
       `Voice note "${file}" ingested through Zenod media seam.\nRaw artifact: drive://file/raw\nSource: ${hint}\n${app ? `Source app: ${app}\n` : ""}Transcribed by whisper.cpp base.\n\n${words}`;
     try {
       const chat = await appendEvidence(vault, note("epicteam-chat-voice-note-2026-11-23T00-57-38-983Z.webm", "EpicTeam Chat voice note", "EpicTeam Chat", "labelcase Team chat demo words"), "mcp", true, new Date("2026-11-23T09:00:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:00:00Z" });
-      await appendEvidence(vault, note("epicteam-card-answer.webm", "EpicTeam card answer voice note", "EpicTeam card answer", "labelcase Card answer demo words"), "mcp", true, new Date("2026-11-23T09:01:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:01:00Z" });
-      await appendEvidence(vault, note("ABCD.ogg", "WhatsApp voice note", null, "labelcase Direct demo words"), "whatsapp", true, new Date("2026-11-23T09:02:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:02:00Z" });
+      const card = await appendEvidence(vault, note("epicteam-card-answer.webm", "EpicTeam card answer voice note", "EpicTeam card answer", "labelcase Card answer demo words"), "mcp", true, new Date("2026-11-23T09:01:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:01:00Z" });
+      const direct = await appendEvidence(vault, note("ABCD.ogg", "WhatsApp voice note", null, "labelcase Direct demo words"), "whatsapp", true, new Date("2026-11-23T09:02:00Z"), { contentType: "voice_note", capturedAt: "2026-11-23T09:02:00Z" });
       const search = async (args: Record<string, unknown>) => (await client.callTool({ name: "search_memory", arguments: { query: "labelcase", order: "newest", ...args } })).structuredContent as any;
 
       const all = await search({});
@@ -808,6 +808,21 @@ describe("MCP endpoint", () => {
       // The stored text is exactly what was written, Source app line included.
       expect(exact.entry.content).toContain("Source app: EpicTeam Chat");
       expect(exact.entry.content).toContain('Voice note "epicteam-chat-voice-note-2026-11-23T00-57-38-983Z.webm"');
+
+      // The ranked note hits carry the label too (the entries' own wording), and a page hit carries none.
+      const refs = [chat, card, direct].map((e) => `${e.logPath}#^${e.anchor}`);
+      fakeEngine.search = async () => [
+        ...refs.map((path, i) => ({ path, snippet: "labelcase", score: 9 - i, url: "", provider: "github" as const })),
+        { path: "Notes/Page.md", snippet: "labelcase", score: 1, url: "", provider: "github" as const },
+      ];
+      const ranked = await search({});
+      const labelOf = (path: string) => ranked.hits.find((h: any) => h.path === path)?.label;
+      expect(labelOf(refs[0]!)).toBe("From EpicTeam Chat");
+      expect(labelOf(refs[1]!)).toBe("From an EpicTeam card answer");
+      expect(labelOf(refs[2]!)).toBe("Spoken to Zenod");
+      expect(labelOf("Notes/Page.md")).toBeNull();
+      expect(ranked.hits.find((h: any) => h.path === refs[0])?.title).toBe("labelcase Team chat demo words");
+      expect(validateToolResponse("zenod.search_memory", ranked)).toBeTruthy();
     } finally {
       Object.assign(fakeEngine, original);
       await client.close();

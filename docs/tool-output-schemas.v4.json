@@ -620,7 +620,8 @@
               "evidenceRefs": { "type": "array", "items": { "type": "string" } },
               "rank": { "type": "integer", "minimum": 1 },
               "matchPercent": { "type": "integer", "minimum": 1, "maximum": 100 },
-              "appPath": { "type": "string" }
+              "appPath": { "type": "string" },
+              "label": { "type": ["string", "null"], "description": "Where a voice note was spoken: From EpicTeam Chat, From an EpicTeam card answer, From <app>, or Spoken to Zenod; null for a page or anything that is not a voice note." }
             }
           }
         },

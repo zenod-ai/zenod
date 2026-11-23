@@ -129,6 +129,9 @@ export type MemoryNote = {
   body: string
   url: string
   provider: string
+  /** EPIC-21 V9: set for a captured note: its real title and where it was spoken (`From EpicTeam Chat`, `Spoken to Zenod`). */
+  title?: string
+  label?: string | null
 }
 
 export class MemoryChatError extends Error {

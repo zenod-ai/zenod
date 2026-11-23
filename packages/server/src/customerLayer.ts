@@ -67,7 +67,9 @@ import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
-import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
+import { labelRankedMemories, rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
+import { readMergedEntry } from "./memoryEntryCatalog.js";
+import { originLabel, readableTitle } from "zenod/entry-label";
 /** Nodes per graph view (E12-S2): what the app draws legibly; core caps a request at 120. */
 const MEMORY_GRAPH_LIMIT = 21;
 /** A lit answer (E12-S13): up to 12 memories, the pages between them and their parents. */
@@ -1671,9 +1673,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
     try {
-      const ranked = await rankMemories(await runtime.getEngine(), query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT));
+      const engine = await runtime.getEngine();
+      const ranked = await rankMemories(engine, query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT));
       if (ranked.results.length > 0) markQuickStart(runtime.dataDir, "found");
-      return c.json(ranked);
+      // EPIC-21 V9: each hit that is a captured note names where it was spoken.
+      return c.json({ ...ranked, results: await labelRankedMemories(ranked.results, (ref) => readMergedEntry(engine, runtime.taskJobQueue, ref)) });
     } catch (error) {
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ query, tier: "scan", ms: null, results: [] });
       console.warn(`[memory-search] console search unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -2040,7 +2044,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.get("/api/console/memory-note", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
-    const path = (c.req.query("path") ?? "").split("#")[0]!.trim();
+    const rawPath = (c.req.query("path") ?? "").trim();
+    const path = rawPath.split("#")[0]!.trim();
     if (!path || path.startsWith("/") || path.split("/").includes("..") || !/\.md$/i.test(path)) {
       return c.json({ error: "a vault .md path is required" }, 400);
     }
@@ -2049,7 +2054,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
     try {
-      const note = await (await runtime.getEngine()).get(path);
+      const engine = await runtime.getEngine();
+      // EPIC-21 V9: a captured note (a Log entry, `Log/2026-11-23.md#^e-…`) opens as that note, with its plain label and a real title.
+      const entry = await readMergedEntry(engine, runtime.taskJobQueue, rawPath);
+      if (entry) {
+        return c.json({ path: entry.path, body: entry.content, url: entry.url, provider: entry.provider, title: readableTitle(entry), label: originLabel(entry), evidenceRef: entry.evidenceRef });
+      }
+      const note = await engine.get(path);
       return c.json({ path: note.path, body: note.body, url: note.url, provider: note.provider });
     } catch (error) {
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);

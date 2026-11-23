@@ -269,6 +269,7 @@
 .zp-typing i:nth-child(2) { animation-delay: 150ms; } .zp-typing i:nth-child(3) { animation-delay: 300ms; }
 .zp-note { background: var(--zp-bg); border-radius: 6px; padding: clamp(1rem, 2.4vw, 1.75rem); display: flex; flex-direction: column; gap: 0.9rem; }
 .zp-back { font-size: 0.9rem; text-decoration: none; }
+.zp-origin { font-size: 0.82rem; font-weight: 600; color: var(--zp-accent, currentColor); margin: 0.2rem 0 0; }
 .zp-path { font-size: 0.82rem; color: var(--zp-faint); margin: 0.2rem 0 0; }
 .zp-notebody { font: 400 1.06rem / 1.6 var(--zp-serif); max-width: 68ch; border-top: 1px solid var(--zp-ink); padding-top: 0.8rem; }
 .zp-notebody h1, .zp-notebody h2, .zp-notebody h3 { font-weight: 500; margin: 1rem 0 0.4rem; }
