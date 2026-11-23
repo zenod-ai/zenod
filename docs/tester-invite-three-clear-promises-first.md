@@ -30,13 +30,13 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 Owner: Delivery Manager (Zenod launch)
 Status: active
 Last attempted: 2026-11-23T19:10Z Ticket worker run_077e027c: E26-S3 named where each of the three testers stopped (A our 503 on 13 Nov, fixed; B a code and no trace of why; C linked, no note) and added a log line for unmatched code messages (PR #1756, [evidence](evidence/e26-s3-2026-11-23.md)) ; 2026-11-23T18:35Z DM run_87182dee started E26-S3 ; 2026-11-22T12:55Z Ticket worker run_4fa57feb: E26-S38 iteration 2 (one sample week, no switch) confirmed live on production 2c12217a at 390 and 1280 px on zenod.dev and /testers; card back in Jordi's review ; E26-S37 approved by Jordi
-Result: production a4209aab: apply with only an email, the sample memory on /testers and the home page, 30 free memories, welcome, stuck alert, the approved next-day one-tap email (live 8079bd06), thank-you email; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes
+Result: production 49f5ca5c: apply with only an email, the sample memory, 30 free memories, welcome, stuck alert, the one-tap next-day email, thank-you email; E26-S37 and E26-S38 approved by Jordi 22 Nov; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes; where each tester stopped is known (E26-S3)
 Evidence: [tester welcome](http://vps3.taild81fbb.ts.net:9002/) · [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/) · [phone setup review](evidence/e26-s23-2026-11-14.md) · [WhatsApp setup words](http://vps3.taild81fbb.ts.net:9001/)
-Waiting on: the three testers sending a first WhatsApp note ; the next stranger to apply (zenod-social recruits)
+Waiting on: the three testers sending a first note ; EPIC-7 E7-A39 (one question to the stuck testers 25 Nov) ; the next stranger to apply (zenod-social recruits)
 Approved work: none
-Next action: Phylax roll carries the E26-S3 log line (read `[whatsapp][link]` in the next stuck tester's window) ; the 21 Nov tester's first note is watched by the first-note reminder and the tester table ; Jordi's verdict on E26-S37
+Next action: the next Phylax roll carries the E26-S3 log line (read `[whatsapp][link]` in the next stuck tester's window) ; on E7-A39 yes, EPIC-7 asks the testers what stopped them and this epic fixes the step they name
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
-Verified at: 2026-11-22T12:55Z (production 2c12217a via /api/health; E26-S38 read in a real browser)
+Verified at: 2026-11-23T19:05Z (production 49f5ca5c via /api/health; E26-S3 evidence and row statuses read)
 
 ## Waiting on
 - [answered E26-A18 2026-11-19 @Delivery-Manager · done 2026-11-19 c68f23f] The next-day WhatsApp email (approved by you as E26-A17) now names the new one-tap button: only its middle sentence changes, to "It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send."; the rest stays word for word — answer: decided by Delivery Manager under your E26-A17 yes (the console's ask gate: act on that answer) — why: the old sentence told testers to type their number and make a code, which the app no longer needs since E7-S16 — rollback: the old sentence returns, one commit
