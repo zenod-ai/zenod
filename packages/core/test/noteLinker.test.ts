@@ -89,7 +89,7 @@ describe("E12-S20 every voice note linked to its topics", () => {
     expect(byRef.has("Log/2026-10-22.md#^e-bbbbb1")).toBe(false);
   });
 
-  it("links each unlinked note with a provisional leaf on its subject's branch, and touches nothing else", async () => {
+  it("links each unlinked note on its subject's branch: grows the topic within reach, a leaf only where none fits (E22-S5)", async () => {
     const before = new Map<string, string>();
     for (const file of await listMarkdownFiles(dir)) before.set(file, await readFile(join(dir, file), "utf8"));
     const written = await applyNoteLinks(dir, await planNoteLinks(dir), "2026-11-08");
@@ -97,15 +97,17 @@ describe("E12-S20 every voice note linked to its topics", () => {
       ["Log/2026-10-21.md#^e-aaaaa1", "Projects/Garden.md", true],
       ["Log/2026-10-21.md#^e-aaaaa2", "Areas/Life admin.md", false],
     ]);
-    const timer = await readFile(join(dir, written[0]!.leaf), "utf8");
-    expect(written[0]!.leaf).toBe("Notes/Drip line timer.md");
-    expect(parseNote(timer).frontmatter).toMatchObject({ parent: "[[Projects/Garden]]", provisional: true });
-    expect(timer).toContain(`> ${STOPPED}`);
-    expect(timer).toContain("[[2026-10-21#^e-aaaaa1]]");
+    // E22-S5: the timer point grows its topic page (Garden) as a dated section; no new leaf beside it.
+    expect(written[0]!.leaf).toBe("Projects/Garden.md");
+    const garden = await readFile(join(dir, "Projects/Garden.md"), "utf8");
+    expect(garden).toContain("## 2026-10-21 · Drip line timer [[2026-10-21#^e-aaaaa1]]");
+    expect(garden).toContain(`> ${STOPPED}`);
+    expect(garden.startsWith(before.get("Projects/Garden.md")!.split("\n## ")[0]!.replace(/^updated: .*$/m, "updated: 2026-11-08"))).toBe(true);
     expect(await readFile(join(dir, written[1]!.leaf), "utf8")).toContain("[[2026-10-21#^e-aaaaa2]]");
-    // Only new leaves: every existing file, the Log and the receipts byte for byte as before.
-    for (const [file, raw] of before) expect(await readFile(join(dir, file), "utf8")).toBe(raw);
-    expect((await listMarkdownFiles(dir)).filter(file => !before.has(file)).sort()).toEqual(written.map(item => item.leaf).sort());
+    // Every other existing file, the Log and the receipts byte for byte as before.
+    const grown = new Set(written.map(item => item.leaf));
+    for (const [file, raw] of before) if (!grown.has(file)) expect(await readFile(join(dir, file), "utf8")).toBe(raw);
+    expect((await listMarkdownFiles(dir)).filter(file => !before.has(file)).sort()).toEqual(written.map(item => item.leaf).filter(leaf => !before.has(leaf)).sort());
     expect((await lintVault(dir)).errors).toEqual([]);
     const after = await planNoteLinks(dir);
     expect(after).toMatchObject({ linked: 3, unlinked: 0, partial: 1 });
@@ -187,9 +189,12 @@ describe("E12-S20 every voice note linked to its topics", () => {
       ["Tomato stakes", "Projects/Garden.md", false],
       [null, "Projects/Garden.md", false],
     ]);
-    const stakes = await readFile(join(dir, "Notes/Tomato stakes.md"), "utf8");
-    expect(stakes).toContain(`> ${stakesA}`);
-    expect(stakes).toContain(`> ${stakesB}`);
+    // E22-S5: the note grows one dated section on Garden; its second stakes point joins that section, no leaf per sentence.
+    const garden = await readFile(join(dir, "Projects/Garden.md"), "utf8");
+    expect(garden).toContain(`> ${stakesA}`);
+    expect(garden).toContain(`> ${stakesB}`);
+    expect(garden.match(/^## .*\[\[2026-10-25#\^e-aaaaa9\]\]$/gm)).toHaveLength(1);
+    await expect(readFile(join(dir, "Notes/Tomato stakes.md"), "utf8")).rejects.toThrow();
     expect(await readFile(join(dir, written[5]!.leaf), "utf8")).not.toContain("example.test");
     expect((await planNoteLinks(dir)).notes.find(item => item.evidenceRef === note.evidenceRef)).toBeUndefined();
   });
