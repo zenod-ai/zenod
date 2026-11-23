@@ -2,7 +2,8 @@
 from: alpha9
 about: Pass Jordi's one-word WhatsApp text 'now' on to the EpicTeam console (E46-S106)
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-23-zenod-re-pass-jordi-s-one-word-whatsapp-text.md
 ---
 Jordi asked (vn_3a3940c5, 22 Nov) to get the last-6-hours social picture back by replying one word to the team's WhatsApp number, the Zenod number his daily pictures come from. The EpicTeam console answers that word now when it reaches it: live on team.alpha9.io, row E46-S106 in AlfaBlok/epic-team.
 
