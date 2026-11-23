@@ -231,9 +231,17 @@ CREDIT_RX = re.compile(r"\b(openrouter|deepseek)\b.*?(\(402\)|\b(?:http|status|c
                        r"insufficient balance|requires at least \$[\d.]+ in balance|credit_exhausted)", re.I)
 
 
+# EPIC-24 M36 (23 Nov): OpenAI says "no credits" with HTTP 429 and type insufficient_quota, not 402, so the dead key behind
+# every long voice note (12 of 14 notes failed that month) never showed. A plain rate-limit 429 has neither phrase.
+OPENAI_CREDIT_RX = re.compile(r"\bopenai\b.*?\b429\b.*?(no credits remaining|insufficient_quota|exceeded your current quota|"
+                              r"check your plan and billing)", re.I)
+
+
 def credit_event(rest: str) -> tuple[str, str] | None:
     m = CREDIT_RX.search(rest)
-    return ("credit", m.group(1).lower() + "_402") if m else None
+    if m:
+        return ("credit", m.group(1).lower() + "_402")
+    return ("credit", "openai_429") if OPENAI_CREDIT_RX.search(rest) else None
 
 
 def ops_event(rest: str) -> tuple[str, str] | None:
@@ -315,6 +323,12 @@ def phylax_fold(p: dict, lines: list[tuple[dt.datetime, str]]) -> None:
         for op in (credit_event(rest), ops_event(rest)):
             if op and op[0] in ("credit", "transcribe"):   # E20-A7: Phylax's central-transcription fallbacks
                 p.setdefault("ops", []).append([iso(t), op[0], op[1]])
+        # EPIC-24 M36: Phylax tells the owner a long note will take about N minutes and logs it with fixed words; the
+        # "no reply" rows give that note its transcribing time before they go red
+        m = re.match(r"\[voice\] long_note secs=(\d+) eta_min=(\d+)$", rest)
+        if m:
+            p["longNotes"] = (p.get("longNotes") or []) + [[iso(t), int(m.group(2))]]
+            p["longNotes"] = p["longNotes"][-100:]
         if rest.startswith("[whatsapp][diag] markRead"):
             p["lastInbound"] = iso(t)
             p["inboundTimes"] = (p["inboundTimes"] + [iso(t)])[-200:]
@@ -461,10 +475,11 @@ def remote() -> dict:
     for k in ("lastInbound", "lastReconnect", "lastError"):
         pc[k] = _within(pc[k], week)
     pc["ops"] = [x for x in pc.get("ops") or [] if parse_ts(x[0]) >= day][-200:]
+    pc["longNotes"] = [x for x in pc.get("longNotes") or [] if parse_ts(x[0]) >= week]
     out["phylax_log"] = {
         "lastInbound": pc["lastInbound"], "inbound24h": len(pc["inbound"]), "lastReconnect": pc["lastReconnect"],
         "reconnects24h": len(pc["reconn"]), "lastError": pc["lastError"], "errors24h": len(pc["errs"]),
-        "inboundTimes": pc["inboundTimes"], "ops": pc["ops"]}
+        "inboundTimes": pc["inboundTimes"], "ops": pc["ops"], "longNotes": pc["longNotes"]}
     # a failed read: this run shows what it got (as before), the next run reads the whole 7 days again
     if failed:
         cache.update(zenod=None, phylax=None, logsUntil=None)

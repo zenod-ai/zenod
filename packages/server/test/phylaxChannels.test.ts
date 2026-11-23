@@ -4094,6 +4094,10 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("completed"));
       expect(transcriptionCalls).toBe(2);
       expect(downstreamCalls).toHaveLength(2);
+      // EPIC-24 M36: a long note says so at once with the minutes to wait (not "usually quick"), then the saved reply follows.
+      expect(sent).toContain("Long voice note, transcribing it, about 10 min. I will reply here once it is saved. Send “cancel transcription” to stop it.");
+      expect(sent.filter((text) => text.startsWith("Long voice note")).length).toBe(1);
+      expect(sent.filter((text) => text.includes("queued it for transcription")).length).toBe(1);
 
       await runtime.whatsapp.handleEvent(event("beta-confirm", "34622222222", "confirm transcription"));
       expect(sent).toContain("No confirmation is required. Zenod starts voice-note processing automatically.");

@@ -26,6 +26,7 @@ import {
   type PhylaxTranscriptionReceipt,
 } from "./phylaxChannels.js";
 import { probeAudioDurationSeconds } from "./transcribe.js";
+import { LONG_NOTE_NOTICE_SECONDS, longNoteEstimateMinutes, longNoteNotice } from "./centralTranscription.js";
 import type {
   PhylaxDeliveryUsageInput,
   PhylaxTranscriptionUsageInput,
@@ -541,11 +542,18 @@ export class PhylaxPortedRuntime {
             durationSeconds,
             state: "queued",
           });
+          if (durationSeconds !== null && durationSeconds > LONG_NOTE_NOTICE_SECONDS && durationSeconds <= MAX_VOICE_TRANSCRIPTION_SECONDS) {
+            // Fixed words and numbers: the health page reads this line to give a long note its transcribing time before "no reply".
+            console.log(`[voice] long_note secs=${Math.round(durationSeconds)} eta_min=${longNoteEstimateMinutes(durationSeconds)}`);
+          }
           return {
             deferred: true,
             replyText: durationSeconds !== null && durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS
               ? "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it."
-              : 'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+              : durationSeconds !== null && durationSeconds > LONG_NOTE_NOTICE_SECONDS
+                // EPIC-24 M36: a long note says so at once, with the minutes to wait, instead of "usually quick"
+                ? longNoteNotice(durationSeconds)
+                : 'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
             afterReply: () => this.kickVoiceWorker(),
             timing: { mediaDownloadMs: timing.mediaDownloadMs },
           };
