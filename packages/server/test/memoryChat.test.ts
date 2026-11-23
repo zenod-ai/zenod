@@ -627,7 +627,7 @@ describe("console memory chat routes (E12-S1)", () => {
       const sent = await send(t.ada, audio);
       expect(sent.status).toBe(202);
       const receipt = await sent.json();
-      expect(receipt).toMatchObject({ channel: "app", kind: "voice", channelLabel: "Zenod app" });
+      expect(receipt).toMatchObject({ channel: "app", kind: "voice", channelLabel: "Spoken to Zenod", label: "Spoken to Zenod" });
       expect(enqueue).toHaveBeenCalledTimes(1);
       expect(enqueue.mock.calls[0]![0]).toBe("media_ingest");
       expect(enqueue.mock.calls[0]![1]).toMatchObject({
