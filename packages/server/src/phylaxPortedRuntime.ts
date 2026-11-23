@@ -631,6 +631,7 @@ export class PhylaxPortedRuntime {
         }
         return {
           replyText: forwarded.replyText,
+          ...(forwarded.silent ? { suppressReply: true } : {}),
           ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
           timing: {
             mediaDownloadMs: timing.mediaDownloadMs,

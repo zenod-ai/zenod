@@ -59,6 +59,8 @@ export interface TaskJobInput {
   capturedAt?: string;
   /** store: stable source/provider entry identifier. */
   sourceId?: string;
+  /** store (EPIC-20 A8): ids of the subscriptions a typed reply word matched; once kept, only they are told (subscribers.ts). */
+  announceTo?: string[];
   /** media_ingest: artifact class. */
   mediaType?: "audio" | "screenshot" | "image" | "pdf" | "document" | "link";
   /** media_ingest: fetchable raw artifact URL. */
