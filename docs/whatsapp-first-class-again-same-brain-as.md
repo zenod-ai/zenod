@@ -30,14 +30,14 @@ Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-19T17:03Z roll-up (DM run_048ce373): A5 done, after the 19 Nov incident (WhatsApp stuck in error 11:43Z to 14:46Z when a credential save timed out during a VPS1 disk freeze) Phylax now reconnects by itself and a red WhatsApp reaches the Zenod desk within 5 minutes, live 5bda977 ; A4 live 0596030, voice notes go to cloud transcription on the shared OpenAI key with a 10-dollar monthly stop, waits for the first real note through it ; A6 running, a delivered or read receipt for each notify ; A3 waits for its first picture alert ; A2 draft
-Result: Phylax 5bda977 healthy and WhatsApp connected; recovery from a disk hiccup is automatic; transcription back in the cloud
+Last attempted: 2026-11-23T01:50Z roll-up (DM run_c12b2601): A4 done (OpenAI transcription, night load measured) ; A5 done (WhatsApp recovers by itself after a disk hiccup) ; A6 done (delivery receipts) ; A7 live on Phylax and production cc23c626 (voice notes on the team's free transcription service first, paid fallback after 60 s), its production test note waits for a worker seat ; A8 merged (a typed 'now' from Jordi reaches EpicTeam, no double reply), live at the next promote ; A3 monitoring (picture alerts) ; A2 draft
+Result: Phylax cc23c626 healthy, WhatsApp connected; the first-note nudge (EPIC-7 E7-S26) is on and sends through Phylax from 23 Nov 06:05Z
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
-Waiting on: the first real voice note through OpenAI (check 2026-11-20 03:30Z, A4) ; A6 worker
+Waiting on: a worker seat for A7's production proof (vps3 low on memory) ; the next promote for A8 ; EpicTeam setting its reply word 'now' once A8 is live
 Approved work: L-6 mandate (vn_14cb0d46)
-Next action: close A4 on the first OpenAI note; A6 ships the receipt tool and tells alpha9
+Next action: A7: one team test note on production and the fallback count, then close ; A8: close after the promote
 Source revision: main `468ee50` live
-Verified at: 2026-11-19T17:03Z (phylax.zenod.dev /healthz ok; rows A1 to A6 read)
+Verified at: 2026-11-23T01:50Z (phylax.zenod.dev health cc23c626 connected; production cc23c626; rows A1 to A8 read)
 
 ## Waiting on
 
