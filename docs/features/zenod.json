@@ -2,7 +2,7 @@
  "_about": "Zenod's feature list (same shape as agent_team docs/features/epicteam.json and epicsocial.json; started by EPIC-14 S8's worker 2026-11-08). Each line is true today and names the rows that built it. Habit: when Jordi closes a row done (approved) for something new a Zenod user can see, add it here in the same change or the next wake. `title` and `text` are public words: no row codes, no file paths. A line drafted for a row still in review has \"draft\": true until he closes it.",
  "service": "Zenod",
  "title": "What Zenod does for you",
- "updated": "2026-11-18",
+ "updated": "2026-11-23",
  "groups": [
   {
    "id": "talk-to-your-memory",
@@ -250,6 +250,16 @@
       "E14-S28"
      ],
      "since": "2026-11-10",
+     "draft": true
+    },
+    {
+     "id": "label-where-spoken",
+     "title": "See where each voice note was spoken",
+     "text": "Every voice note says where it came from: From EpicTeam Chat, From an EpicTeam card answer, another app by name, or Spoken to Zenod for WhatsApp, the web and calls. The label shows in Recent saves, on an opened note next to a readable title, and in search results, and you can search by it.",
+     "rows": [
+      "V9"
+     ],
+     "since": "2026-11-23",
      "draft": true
     }
    ]
