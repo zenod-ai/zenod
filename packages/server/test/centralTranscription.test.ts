@@ -41,7 +41,8 @@ describe("EPIC-20 A7: central transcription settings", () => {
     const cfg = centralSttConfig({})!;
     expect(centralSttModelFor(8, cfg)).toBe("large-v3-turbo");
     expect(centralSttModelFor(30, cfg)).toBe("large-v3-turbo");
-    expect(centralSttModelFor(31, cfg)).toBe("small");
+    expect(centralSttModelFor(45, cfg)).toBe("large-v3-turbo");
+    expect(centralSttModelFor(46, cfg)).toBe("small");
     expect(centralSttModelFor(90, cfg)).toBe("small");
     expect(centralSttModelFor(91, cfg)).toBeNull();
     expect(centralSttModelFor(null, cfg)).toBe("large-v3-turbo");
