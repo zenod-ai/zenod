@@ -1,0 +1,746 @@
+{
+ "run": "2026-11-23",
+ "source": "27 of the team's own recordings (Jordi's and the team's notes, no tester) from Zenod's archive, compared with the text stored the day each was recorded",
+ "note": "numbers only, no note text",
+ "excluded": [
+  {
+   "why": "audio is silent (-75 dB), stored text belongs to speech that is not in this file"
+  },
+  {
+   "why": "both models returned empty for the first 30 s of a long Spanish note"
+  }
+ ],
+ "groups": {
+  "All notes": {
+   "turbo": {
+    "n": 21,
+    "words": 1747,
+    "wer_pooled": 6.5,
+    "wer_median": 4.0,
+    "wer_worst": 30.7,
+    "speed_median": 0.78,
+    "wall_median": 29,
+    "wall_max": 52,
+    "nums": 16,
+    "miss_nums": 1
+   },
+   "small": {
+    "n": 27,
+    "words": 2930,
+    "wer_pooled": 6.7,
+    "wer_median": 5.2,
+    "wer_worst": 29.4,
+    "speed_median": 0.23,
+    "wall_median": 11,
+    "wall_max": 27,
+    "nums": 46,
+    "miss_nums": 2
+   }
+  },
+  "Up to 30 s": {
+   "turbo": {
+    "n": 11,
+    "words": 416,
+    "wer_pooled": 2.6,
+    "wer_median": 1.7,
+    "wer_worst": 14.3,
+    "speed_median": 1.36,
+    "wall_median": 25,
+    "wall_max": 38,
+    "nums": 0,
+    "miss_nums": 0
+   },
+   "small": {
+    "n": 11,
+    "words": 416,
+    "wer_pooled": 5.3,
+    "wer_median": 4.5,
+    "wer_worst": 14.3,
+    "speed_median": 0.51,
+    "wall_median": 7,
+    "wall_max": 25,
+    "nums": 0,
+    "miss_nums": 0
+   }
+  },
+  "30 to 90 s": {
+   "turbo": {
+    "n": 10,
+    "words": 1331,
+    "wer_pooled": 7.7,
+    "wer_median": 4.3,
+    "wer_worst": 30.7,
+    "speed_median": 0.71,
+    "wall_median": 43,
+    "wall_max": 52,
+    "nums": 16,
+    "miss_nums": 1
+   },
+   "small": {
+    "n": 10,
+    "words": 1331,
+    "wer_pooled": 9.0,
+    "wer_median": 7.8,
+    "wer_worst": 29.4,
+    "speed_median": 0.21,
+    "wall_median": 11,
+    "wall_max": 20,
+    "nums": 16,
+    "miss_nums": 1
+   }
+  },
+  "Over 90 s": {
+   "turbo": null,
+   "small": {
+    "n": 6,
+    "words": 1183,
+    "wer_pooled": 4.6,
+    "wer_median": 5.0,
+    "wer_worst": 8.3,
+    "speed_median": 0.14,
+    "wall_median": 17,
+    "wall_max": 27,
+    "nums": 30,
+    "miss_nums": 1
+   }
+  },
+  "English": {
+   "turbo": {
+    "n": 16,
+    "words": 1442,
+    "wer_pooled": 4.4,
+    "wer_median": 4.0,
+    "wer_worst": 7.9,
+    "speed_median": 0.8,
+    "wall_median": 31,
+    "wall_max": 52,
+    "nums": 15,
+    "miss_nums": 0
+   },
+   "small": {
+    "n": 22,
+    "words": 2625,
+    "wer_pooled": 5.2,
+    "wer_median": 5.0,
+    "wer_worst": 13.6,
+    "speed_median": 0.23,
+    "wall_median": 11,
+    "wall_max": 27,
+    "nums": 45,
+    "miss_nums": 1
+   }
+  },
+  "Spanish": {
+   "turbo": {
+    "n": 5,
+    "words": 305,
+    "wer_pooled": 16.7,
+    "wer_median": 4.8,
+    "wer_worst": 30.7,
+    "speed_median": 0.78,
+    "wall_median": 23,
+    "wall_max": 47,
+    "nums": 1,
+    "miss_nums": 1
+   },
+   "small": {
+    "n": 5,
+    "words": 305,
+    "wer_pooled": 19.7,
+    "wer_median": 13.6,
+    "wer_worst": 29.4,
+    "speed_median": 0.21,
+    "wall_median": 8,
+    "wall_max": 11,
+    "nums": 1,
+    "miss_nums": 1
+   }
+  },
+  "WhatsApp recordings": {
+   "turbo": {
+    "n": 3,
+    "words": 459,
+    "wer_pooled": 3.9,
+    "wer_median": 4.0,
+    "wer_worst": 4.1,
+    "speed_median": 0.71,
+    "wall_median": 46,
+    "wall_max": 49,
+    "nums": 1,
+    "miss_nums": 0
+   },
+   "small": {
+    "n": 6,
+    "words": 1008,
+    "wer_pooled": 4.9,
+    "wer_median": 5.0,
+    "wer_worst": 8.6,
+    "speed_median": 0.15,
+    "wall_median": 12,
+    "wall_max": 27,
+    "nums": 14,
+    "miss_nums": 1
+   }
+  },
+  "Web recordings": {
+   "turbo": {
+    "n": 13,
+    "words": 983,
+    "wer_pooled": 4.6,
+    "wer_median": 4.0,
+    "wer_worst": 7.9,
+    "speed_median": 1.21,
+    "wall_median": 27,
+    "wall_max": 52,
+    "nums": 14,
+    "miss_nums": 0
+   },
+   "small": {
+    "n": 16,
+    "words": 1617,
+    "wer_pooled": 5.4,
+    "wer_median": 5.0,
+    "wer_worst": 13.6,
+    "speed_median": 0.27,
+    "wall_median": 11,
+    "wall_max": 27,
+    "nums": 31,
+    "miss_nums": 0
+   }
+  },
+  "Quiet recordings": {
+   "turbo": {
+    "n": 5,
+    "words": 352,
+    "wer_pooled": 4.5,
+    "wer_median": 4.8,
+    "wer_worst": 14.3,
+    "speed_median": 0.76,
+    "wall_median": 24,
+    "wall_max": 33,
+    "nums": 11,
+    "miss_nums": 0
+   },
+   "small": {
+    "n": 6,
+    "words": 587,
+    "wer_pooled": 3.7,
+    "wer_median": 6.9,
+    "wer_worst": 14.3,
+    "speed_median": 0.22,
+    "wall_median": 10,
+    "wall_max": 16,
+    "nums": 17,
+    "miss_nums": 0
+   }
+  },
+  "Normal level": {
+   "turbo": {
+    "n": 16,
+    "words": 1395,
+    "wer_pooled": 7.0,
+    "wer_median": 3.9,
+    "wer_worst": 30.7,
+    "speed_median": 0.78,
+    "wall_median": 34,
+    "wall_max": 52,
+    "nums": 5,
+    "miss_nums": 1
+   },
+   "small": {
+    "n": 21,
+    "words": 2343,
+    "wer_pooled": 7.5,
+    "wer_median": 5.2,
+    "wer_worst": 29.4,
+    "speed_median": 0.23,
+    "wall_median": 11,
+    "wall_max": 27,
+    "nums": 29,
+    "miss_nums": 2
+   }
+  }
+ },
+ "clips": [
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 16,
+   "ratio": 5.123775952482877,
+   "cut": 1
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 16,
+   "ratio": 1.38109514158066,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.05357142857142857,
+   "words": 56,
+   "ratio": 1.4687297080769133,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.017857142857142856,
+   "words": 56,
+   "ratio": 1.3680062513759172,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.05,
+   "words": 20,
+   "ratio": 4.5597249685331835,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.05,
+   "words": 20,
+   "ratio": 0.8929298367611197,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.037037037037037035,
+   "words": 81,
+   "ratio": 1.2126324657632523,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.04938271604938271,
+   "words": 81,
+   "ratio": 0.23387553311195694,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 34,
+   "ratio": 2.6077417137562415,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 34,
+   "ratio": 0.780452250504819,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 41,
+   "ratio": 1.9140866457247268,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.024390243902439025,
+   "words": 41,
+   "ratio": 0.514673502171407,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 16,
+   "ratio": 3.6097438462817943,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 16,
+   "ratio": 0.9424652580086512,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.03968253968253968,
+   "words": 126,
+   "ratio": 0.7007486112007483,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.05555555555555555,
+   "words": 126,
+   "ratio": 0.42928229382816313,
+   "cut": 2
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.03571428571428571,
+   "words": 112,
+   "ratio": 0.6516978697807817,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.07142857142857142,
+   "words": 112,
+   "ratio": 0.21926184700587406,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.05263157894736842,
+   "words": 95,
+   "ratio": 0.8232620139496116,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.09473684210526316,
+   "words": 95,
+   "ratio": 0.2932383856767438,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.045454545454545456,
+   "words": 22,
+   "ratio": 0.7016164144087506,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.13636363636363635,
+   "words": 22,
+   "ratio": 0.22456444627421662,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.07909604519774012,
+   "words": 177,
+   "ratio": 0.7192055187927112,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0903954802259887,
+   "words": 177,
+   "ratio": 0.2745290008107101,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0481283422459893,
+   "words": 187,
+   "ratio": 0.7250420407796809,
+   "cut": 8
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0427807486631016,
+   "words": 187,
+   "ratio": 0.21349958741930913,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": ">90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0,
+   "words": 235,
+   "ratio": 0.13513344327608745,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": ">90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.0650887573964497,
+   "words": 169,
+   "ratio": 0.1443168913748061,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": ">90s",
+   "kind": "console webm",
+   "lang": "en",
+   "wer": 0.08260869565217391,
+   "words": 230,
+   "ratio": 0.22669774925882255,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": ">90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.047619047619047616,
+   "words": 210,
+   "ratio": 0.2766592015120789,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.04,
+   "words": 125,
+   "ratio": 0.7773962195566352,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.056,
+   "words": 125,
+   "ratio": 0.15530950250112122,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.04081632653061224,
+   "words": 147,
+   "ratio": 0.7097336861220399,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.006802721088435374,
+   "words": 147,
+   "ratio": 0.16322781644982287,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": ">90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.05161290322580645,
+   "words": 155,
+   "ratio": 0.11668765541730343,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.0374331550802139,
+   "words": 187,
+   "ratio": 0.5560080532970909,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.0855614973262032,
+   "words": 187,
+   "ratio": 0.13954172216107452,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": ">90s",
+   "kind": "WhatsApp ogg",
+   "lang": "en",
+   "wer": 0.03804347826086957,
+   "words": 184,
+   "ratio": 0.09746990242052339,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.047619047619047616,
+   "words": 42,
+   "ratio": 1.2592601776123047,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.09523809523809523,
+   "words": 42,
+   "ratio": 0.25775671799977623,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.14285714285714285,
+   "words": 7,
+   "ratio": 0.6765127261479695,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.14285714285714285,
+   "words": 7,
+   "ratio": 0.1404411792755127,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.0,
+   "words": 44,
+   "ratio": 0.7826775312423706,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.045454545454545456,
+   "words": 44,
+   "ratio": 0.18448530038197836,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.01694915254237288,
+   "words": 59,
+   "ratio": 0.7012656132380167,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "<=30s",
+   "kind": "Spanish clip",
+   "lang": "es",
+   "wer": 0.13559322033898305,
+   "words": 59,
+   "ratio": 0.27543280919392904,
+   "cut": 0
+  },
+  {
+   "model": "turbo",
+   "bucket": "30-90s",
+   "kind": "Spanish whole",
+   "lang": "es",
+   "wer": 0.30718954248366015,
+   "words": 153,
+   "ratio": 0.9261144294711483,
+   "cut": 0
+  },
+  {
+   "model": "small",
+   "bucket": "30-90s",
+   "kind": "Spanish whole",
+   "lang": "es",
+   "wer": 0.29411764705882354,
+   "words": 153,
+   "ratio": 0.2088378498139854,
+   "cut": 0
+  }
+ ]
+}
