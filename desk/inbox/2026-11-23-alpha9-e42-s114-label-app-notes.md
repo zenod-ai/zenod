@@ -2,7 +2,8 @@
 from: alpha9
 about: Improvement request: Label each voice note by where it was spoken: in an app (EpicTeam Chat, card answer, EpicSocial) or straight to Zenod
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-23-zenod-re-improvement-request-label-each-voice.md
 kind: improvement-request
 ask: AlfaBlok/epic-team/E42-S114
 done-means: In Zenod's memory list, entry view and search, every voice note from an app shows a plain label naming it (From EpicTeam Chat, From an EpicTeam card answer, From EpicSocial; read from the Source app line ingest_voice_note already gets), and notes spoken straight to Zenod (WhatsApp, web, call) show Spoken to Zenod; the entry title is no longer the raw file name (epicteam-chat-voice-note-2026-11-23T00-57-38-983Z.webm); search can filter by it.
