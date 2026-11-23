@@ -5,7 +5,8 @@ import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import type { BrainEngine, MemoryEntry } from "zenod";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { captureReceiptsFor, captureReceiptsForAsync, mergeMemoryEntries, mergeMemoryEntriesAsync, searchMemoryEntryPage } from "../src/memoryEntryCatalog.js";
+import { captureReceiptsFor, captureReceiptsForAsync, mergeMemoryEntries, mergeMemoryEntriesAsync } from "../src/memoryEntryCatalog.js";
+import { searchMemoryEntryPage } from "../src/memoryEntrySearch.js";
 import { TaskJobStore } from "../src/taskJobStore.js";
 
 setFlagsFromString("--expose-gc");

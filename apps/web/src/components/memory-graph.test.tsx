@@ -82,7 +82,7 @@ const graphRoutes = (url: string) => {
   if (url.startsWith("/api/console/memory-search")) {
     return { body: { query: "shed", tier: "index", ms: 3, results: [
       { rank: 1, path: "Notes/Shed.md", title: "Shed", snippet: "cedar", matchPercent: 100, treePath: "Working memory › Garden › Shed", kind: "page" },
-      { rank: 2, path: "Log/2026-11-07.md#^e-abc123", title: "Voice note", snippet: "shed", matchPercent: 48, treePath: "", kind: "log" },
+      { rank: 2, path: "Log/2026-11-07.md#^e-abc123", title: "Voice note", snippet: "shed", matchPercent: 48, treePath: "", kind: "log", label: "From EpicTeam Chat" },
     ] } }
   }
   return { status: 404, body: { error: "not_found" } }
@@ -147,6 +147,8 @@ describe("MemoryGraph (E12-S2)", () => {
     fireEvent.change(screen.getByPlaceholderText("Find a memory…"), { target: { value: "shed" } })
     const results = await screen.findByRole("list", { name: "Matching memories" })
     expect(results.textContent).toContain("100%")
+    // EPIC-21 V9: a voice note names where it was spoken; a page names nothing.
+    expect(results.textContent).toContain("From EpicTeam Chat")
     expect(calls).toContain("/api/console/memory-search?q=shed&limit=8")
     fireEvent.click(within(results).getByRole("button", { name: /Shed/ }))
     await screen.findByLabelText("About Shed")

@@ -47,6 +47,16 @@ function fakeEngine(label: string, options: { ask?: (question: string) => Promis
     },
     ...(options.fast ? { answerFromMemories: options.fast } : {}),
     store: async (input: unknown) => { engine.storeCalls.push(input); throw new Error("store must not be called synchronously"); },
+    getEntry: async (ref: string) => {
+      const match = /^Log\/2026-11-23\.md#\^e-(app|direct)-(.+)$/.exec(ref);
+      if (!match || match[2] !== label) throw new Error("ENOENT");
+      const app = match[1] === "app" ? "Source app: EpicTeam Chat\n" : "";
+      return {
+        evidenceRef: ref, path: "Log/2026-11-23.md", anchor: ref.split("#^")[1]!, title: 'Voice note "epicteam-chat-voice-note-2026-11-23.webm" ingested.',
+        content: `Voice note "epicteam-chat-voice-note-2026-11-23.webm" ingested.\nSource: x\n${app}\nlabelword ${label} test words for the title`,
+        source: "mcp", verbatim: true, contentType: "voice_note", capturedAt: "2026-11-23T09:00:00Z", url: `https://github.com/o/r/blob/main/${ref.split("#")[0]}`, provider: "github" as const,
+      };
+    },
     get: async (path: string) => {
       if (!path.startsWith(`Notes/${label}`)) throw new Error("ENOENT");
       return { path, frontmatter: {}, body: `# ${label}\nbody of ${path}`, url: `https://github.com/o/r/blob/main/${path}`, provider: "github" as const };
@@ -693,6 +703,16 @@ describe("console memory chat routes (E12-S1)", () => {
       expect(await response.json()).toMatchObject({ path: "Notes/alpha 1.md", body: expect.stringContaining("alpha"), provider: "github" });
       // Ada's path asked of Bob's vault is simply not there.
       expect((await t.call("GET", "/api/console/memory-note?path=Notes%2Falpha%201.md", t.bob)).status).toBe(404);
+      // EPIC-21 V9: a captured note opens as that note, with its plain label and a real title (the file name is no title).
+      const open = async (ref: string, user = t.ada) => t.call("GET", `/api/console/memory-note?path=${encodeURIComponent(ref)}`, user);
+      const app = await (await open("Log/2026-11-23.md#^e-app-alpha")).json();
+      expect(app).toMatchObject({ label: "From EpicTeam Chat", title: "labelword alpha test words for the title", evidenceRef: "Log/2026-11-23.md#^e-app-alpha" });
+      expect(app.body).toContain("labelword alpha test words");
+      const direct = await (await open("Log/2026-11-23.md#^e-direct-alpha")).json();
+      expect(direct).toMatchObject({ label: "Spoken to Zenod", title: "labelword alpha test words for the title" });
+      expect(JSON.stringify([app, direct])).not.toMatch(/\.webm"?,"?title|"title":"[^"]*\.webm/);
+      // Bob cannot read Ada's note: his vault has no such entry, so the day's file is tried and is not there either.
+      expect((await open("Log/2026-11-23.md#^e-app-alpha", t.bob)).status).toBe(404);
     } finally {
       await t.close();
     }

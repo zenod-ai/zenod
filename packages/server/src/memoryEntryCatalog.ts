@@ -1,14 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { paginateMemoryEntries, memoryEntrySummaries, type BrainEngine, type EntrySearchInput, type EntrySearchResult, type MemoryContentType, type MemoryEntry, type StoreResult, type Surface } from "zenod";
+// Type imports only: the Phylax bundle reaches this file (through the console routes) and keeps no runtime import of zenod.
+import type { BrainEngine, MemoryContentType, MemoryEntry, StoreResult, Surface } from "zenod";
 import type { TaskJob } from "./taskJobStore.js";
-
-const fallbackMemoryScopes = new WeakMap<BrainEngine, string>();
-function memoryScope(engine: BrainEngine): string {
-  if (engine.memoryScope) return engine.memoryScope;
-  let scope = fallbackMemoryScopes.get(engine);
-  if (!scope) { scope = randomUUID(); fallbackMemoryScopes.set(engine, scope); }
-  return scope;
-}
 
 function captureIdentity(idempotencyKey: string | null): { surface?: Surface; sourceId?: string } {
   if (!idempotencyKey) return {};
@@ -190,16 +182,18 @@ export async function captureReceiptsForAsync(source: CaptureReceiptSource | und
   return captureReceiptsFor(source, evidenceRef);
 }
 
-export async function searchMemoryEntryPage(engine: BrainEngine, taskJobs: CaptureReceiptSource | undefined, input: EntrySearchInput): Promise<EntrySearchResult> {
-  const vaultEntries = await engine.searchEntries({ limit: null });
-  const { jobs, loadContent } = await captureReceiptsForAsync(taskJobs);
-  const page = paginateMemoryEntries(await mergeMemoryEntriesAsync(vaultEntries, jobs, loadContent), {
-    ...input, order: input.order ?? "newest", limit: input.limit ?? 20,
-  }, memoryScope(engine), input.cursor);
-  return { entries: memoryEntrySummaries(page.entries), pagination: {
-    hasMore: page.hasMore, nextCursor: page.nextCursor, snapshot: page.snapshot,
-    matchedEntries: page.matchedEntries, scannedEntries: page.scannedEntries, scannedVaultEntries: vaultEntries.length,
-    scannedReceiptJobs: jobs.length, receiptEnrichmentAvailable: Boolean(taskJobs?.captureReceipts || taskJobs?.recent),
-    scope: "all-local-vault-evidence-and-retained-tenant-receipts",
-  } };
+/**
+ * One captured entry as get_memory shows it: the vault entry with its capture receipt merged in, so a note still
+ * being enriched carries its `Source app` too. null for a path that is not an entry or an entry that is gone.
+ */
+export async function readMergedEntry(engine: BrainEngine, taskJobs: CaptureReceiptSource | undefined, evidenceRef: string): Promise<MemoryEntry | null> {
+  if (!evidenceRef.includes("#^")) return null;
+  try {
+    const stored = await engine.getEntry(evidenceRef);
+    const receipts = await captureReceiptsForAsync(taskJobs, stored.evidenceRef);
+    return (await mergeMemoryEntriesAsync([stored], receipts.jobs, receipts.loadContent))
+      .find((candidate) => candidate.evidenceRef === stored.evidenceRef) ?? stored;
+  } catch {
+    return null;
+  }
 }

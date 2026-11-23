@@ -63,6 +63,8 @@ export type MemorySearchResult = {
   matchPercent: number
   treePath: string
   kind: "page" | "log" | "root" | "note"
+  /** EPIC-21 V9: where a voice note was spoken; null for anything else. */
+  label?: string | null
 }
 
 const FRIENDLY: Record<string, string> = {
