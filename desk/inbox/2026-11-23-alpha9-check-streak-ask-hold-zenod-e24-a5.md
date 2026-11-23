@@ -3,7 +3,7 @@ from: alpha9
 about: Alert: ask E24-A5 is held back from Jordi's inbox
 reply-to: AlfaBlok/epic-team
 status: answered
-answered: AlfaBlok/epic-team:desk/inbox/2026-11-23-zenod-re-alert-ask-e24-a5-is-held-back-from-j.md
+answered: every check it named passes again (18:13Z, check_streak.py)
 ---
 1 ask(s) to Jordi are held back from his inbox by the ask gate (E48-S154: every hold wakes its owner). Act now: fix each as its reason says, or answer or drop the ask line. Past 2 hours it reaches him anyway, marked not checked or unclear.
 - ask E24-A5 is held back from Jordi's inbox: zenod/docs/zenod-errors-now-find-fix-and-monitor-so.md: You approve: add 10 dollars of credit to the OpenAI account at https://platform.openai.com/settings/organization/billing held: it re-states something Jordi already decided (it cites his earlier answer): act on that answer, never ask him again (root L-56)
