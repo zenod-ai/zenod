@@ -1309,6 +1309,34 @@ export class PhylaxTenantSettingsStore {
     return { settings: verified, replayed: false };
   }
 
+  /**
+   * EPIC-26 E26-S3: why a message that looks like a WhatsApp link code linked nobody, for one log line that holds no
+   * number, code or account. Before this a code sent from the wrong phone, or after the 30 minutes, left no trace, so a
+   * tester stuck at "code issued" could not be told from one who never sent it. Null when the text is not code-shaped
+   * (ordinary chat from a number that is not linked).
+   */
+  explainUnmatchedCode(
+    sender: string,
+    text: string,
+    now = Date.now(),
+  ): { shape: "link" | "typed"; reason: "no_pending_code" | "expired" | "other_number" | "number_in_use" } | null {
+    const linkCode = whatsappLinkCodeIn(text);
+    if (!linkCode && !/^\d{2}-[a-z]{2,24}$/i.test(text.trim())) return null;
+    const shape = linkCode ? "link" : "typed";
+    const provided = verificationDigest(linkCode ?? text);
+    const entry = Object.values(this.load()).find((candidate) => {
+      if (!candidate.verificationHash) return false;
+      const expected = Buffer.from(candidate.verificationHash, "hex");
+      return expected.length === provided.length && timingSafeEqual(expected, provided);
+    });
+    if (!entry) return { shape, reason: "no_pending_code" };
+    if (!entry.verificationExpiresAt || entry.verificationExpiresAt < now) return { shape, reason: "expired" };
+    if (entry.phoneNumber && entry.phoneNumber !== normalizeWhatsAppIdentifier(sender)) {
+      return { shape, reason: "other_number" };
+    }
+    return { shape, reason: "number_in_use" };
+  }
+
   verifyInbound(
     sender: string,
     text: string,
