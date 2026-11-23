@@ -373,6 +373,8 @@ export interface MemoryEntry {
   contentType?: MemoryContentType;
   capturedAt: string;
   sourceId?: string;
+  /** EPIC-21 V9: the app a forwarded voice note was recorded in, when a capture receipt names it. */
+  sourceApp?: string;
   url: string;
   provider: VaultCitation["provider"];
   revisionId?: string;
@@ -387,6 +389,10 @@ export interface MemoryEntryQuery {
   contentType?: MemoryContentType;
   /** Exact stable source/provider identifier. */
   sourceId?: string;
+  /** EPIC-21 V9: the plain label a voice note shows, e.g. `From EpicTeam Chat` or `Spoken to Zenod` (any case). */
+  label?: string;
+  /** EPIC-21 V9: `app` for every note forwarded from an app, `zenod` for notes spoken straight to Zenod. */
+  origin?: "app" | "zenod";
   capturedAfter?: string;
   capturedBefore?: string;
   order?: "newest" | "oldest";

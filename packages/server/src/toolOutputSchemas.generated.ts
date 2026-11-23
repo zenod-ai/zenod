@@ -1584,6 +1584,7 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "path",
             "anchor",
             "title",
+            "label",
             "source",
             "contentType",
             "capturedAt",
@@ -1605,6 +1606,13 @@ export const TOOL_OUTPUT_SCHEMAS = (
             },
             "title": {
               "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Where a voice note was spoken: From EpicTeam Chat, From an EpicTeam card answer, From <app>, or Spoken to Zenod; null for anything that is not a voice note."
             },
             "source": {
               "type": "string"

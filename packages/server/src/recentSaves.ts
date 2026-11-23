@@ -1,4 +1,4 @@
-import type { StoreResult } from "zenod";
+import { fromAppLabel, SPOKEN_TO_ZENOD, wordsTitle, type EntryOrigin, type StoreResult } from "zenod";
 import type { MediaIngestReceipt, TaskJob, TaskJobStore } from "./taskJobStore.js";
 
 /**
@@ -24,6 +24,10 @@ export interface RecentSave {
   kind: RecentSaveKind;
   /** e.g. "WhatsApp voice", "WhatsApp text", "AI assistant". */
   channelLabel: string;
+  /** EPIC-21 V9: where a voice note was spoken: `From EpicTeam Chat`, `From an EpicTeam card answer`, `Spoken to Zenod`; null for anything that is not a voice note. */
+  label: string | null;
+  /** A real title for a voice note: its first words, never the raw file name. */
+  title: string | null;
   snippet: string;
   status: RecentSaveStatus;
   /** The receipt headline the user got back, e.g. "Saved." or "Saved — filed to Inbox; …". */
@@ -119,18 +123,28 @@ function noteOf(filing: FilingLike | null): { notePath: string | null; noteUrl: 
   return { notePath, noteUrl };
 }
 
+/** The plain label of a captured voice note, from the app the capture names (never from the note text). */
+export function saveLabel(job: TaskJob, kind: RecentSaveKind): string | null {
+  if (kind !== "voice") return null;
+  const app = job.input.sourceApp?.trim();
+  return app ? fromAppLabel(app) : SPOKEN_TO_ZENOD;
+}
+
 export function projectRecentSave(job: TaskJob, enrichment: TaskJob | null): RecentSave {
   const channel = channelOf(job);
   const kind = kindOf(job);
+  const label = saveLabel(job, kind);
   const base = {
     id: job.id,
     savedAt: new Date(job.createdAt).toISOString(),
     channel,
     kind,
     // EPIC-21 V1: a voice note forwarded from another app is labelled with that app.
-    channelLabel: job.input.sourceApp
+    channelLabel: label ?? (job.input.sourceApp
       ? `${job.input.sourceApp} ${kind}`
-      : channel === "connector" || channel === "app" ? CHANNEL_LABEL[channel] : `${CHANNEL_LABEL[channel]} ${kind}`,
+      : channel === "connector" || channel === "app" ? CHANNEL_LABEL[channel] : `${CHANNEL_LABEL[channel]} ${kind}`),
+    label,
+    title: kind === "voice" ? wordsTitle(job.input.providedTranscript ?? "") || KIND_FALLBACK.voice : null,
     snippet: snippet(job.kind === "media_ingest" ? job.input.providedTranscript : job.input.content, KIND_FALLBACK[kind]),
   };
   if (job.status === "queued" || job.status === "running") {
@@ -159,9 +173,24 @@ export function projectRecentSave(job: TaskJob, enrichment: TaskJob | null): Rec
   };
 }
 
-export function recentSaves(store: TaskJobStore, limit = RECENT_SAVES_DEFAULT_LIMIT): RecentSave[] {
+export interface RecentSavesFilter {
+  /** An exact label, any case: `From EpicTeam Chat`, `Spoken to Zenod`. */
+  label?: string;
+  /** `app`: every voice note from another app; `zenod`: every note spoken straight to Zenod. */
+  origin?: EntryOrigin;
+}
+
+export function recentSaves(store: TaskJobStore, limit = RECENT_SAVES_DEFAULT_LIMIT, filter: RecentSavesFilter = {}): RecentSave[] {
   const bounded = Math.min(Math.max(1, Math.floor(limit) || RECENT_SAVES_DEFAULT_LIMIT), RECENT_SAVES_MAX_LIMIT);
-  return store.recentCaptures(bounded).map((job) => projectCapture(store, job));
+  if (!filter.label && !filter.origin) return store.recentCaptures(bounded).map((job) => projectCapture(store, job));
+  // A filter looks through the 150 most recent captures, then keeps the page asked for.
+  const wanted = filter.label?.trim().toLowerCase();
+  return store.recentCaptures(RECENT_SAVES_MAX_LIMIT * 3)
+    .map((job) => projectCapture(store, job))
+    .filter((save) => save.label !== null
+      && (!wanted || save.label.toLowerCase() === wanted)
+      && (!filter.origin || (filter.origin === "zenod") === (save.label === SPOKEN_TO_ZENOD)))
+    .slice(0, bounded);
 }
 
 /** One capture with its follow-up filing (a media capture's enrich_memory job), as the app shows it. */
