@@ -161,6 +161,16 @@ class Folds(unittest.TestCase):
 
 
 
+class LongNoteLine(unittest.TestCase):
+    def test_phylax_long_note_line_is_kept_with_its_minutes(self):
+        p = {"lastInbound": None, "inbound": [], "lastReconnect": None, "reconn": [], "lastError": None, "errs": [],
+             "inboundTimes": []}
+        P.phylax_fold(p, [(P.parse_ts("2026-11-23T15:25:08Z"), "[voice] long_note secs=7086 eta_min=36"),
+                          (P.parse_ts("2026-11-23T15:26:00Z"), "[voice] long_note secs=abc eta_min=x"),
+                          (P.parse_ts("2026-11-23T15:27:00Z"), "[voice] queued note")])
+        self.assertEqual(p["longNotes"], [["2026-11-23T15:25:08Z", 36]])
+
+
 class CreditRefusals(unittest.TestCase):
     """E26-S8: only an HTTP 402 or a balance message counts as a credit refusal, never a token count of 402."""
 
@@ -171,6 +181,16 @@ class CreditRefusals(unittest.TestCase):
             ("[background] deepseek call failed: http 402 Insufficient Balance", "deepseek_402"),
             ("[llm-usage] operation=classify provider=deepseek feature=filing status=succeeded output=402 cost_usd=0.001", None),
             ("[llm-usage] provider=openrouter input=402 output=12", None),
+            # EPIC-24 M36: the line Phylax wrote on 23 Nov 10:43Z, 11:21Z (a 429 that says no credits is a credit refusal)
+            ("[transcribe] openai failed, falling back to whisper.cpp: openai transcription failed (429): { \"error\": { \"message\": "
+             "\"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.\", "
+             "\"type\": \"insufficient_quota\", \"param\": null, \"code\": \"insufficient_quota\" } }", "openai_429"),
+            ("[transcribe] openai failed: openai transcription failed (429): You exceeded your current quota, please check your plan and billing details", "openai_429"),
+            # a rate limit, a timeout, a 429 from another provider, and the word "credit" alone are not a dead key
+            ("[transcribe] openai failed, falling back to whisper.cpp: openai transcription failed (429): Rate limit reached for gpt-4o-mini-transcribe, try again in 20s", None),
+            ("[transcribe] openai failed, falling back to whisper.cpp: fetch failed (cause: ETIMEDOUT)", None),
+            ("[transcribe] groq failed: groq transcription failed (429): no credits remaining", None),
+            ("{\"event\":\"shared_stt.usage\",\"status\":\"failed\",\"cost_usd\":0,\"spent_usd\":0.34,\"cap_usd\":10}", None),
         ):
             got = P.credit_event(line)
             self.assertEqual(got[1] if got else None, want, line)

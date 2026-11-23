@@ -108,17 +108,34 @@ STALL_MIN = 60  # ZAL-A8: saves failing or WhatsApp messages without a "Saved" r
 CHAT_REPLY_S = 300  # ZAL-A12: a chat job finished this soon after a WhatsApp message answered it (a question, no "Saved")
 
 
+LONG_NOTE_LOG_S = 180   # EPIC-24 M36: Phylax logs the long-note line within this many seconds of the message
+LONG_NOTE_SLACK_MIN = 5  # and a long note is given its stated transcribing time plus this much before it counts as unanswered
+
+
+def long_note_wait_s(t: dt.datetime, long_notes: list | None) -> float:
+    """EPIC-24 M36: seconds a WhatsApp message at `t` may wait on top of the usual window: a voice note that Phylax
+    told the owner "transcribing it, about N min" (`[voice] long_note … eta_min=N`, logged right after the message)
+    is written out for N minutes before its "Saved" reply can come. 0 for every other message."""
+    for x in long_notes or []:
+        lt = parse_ts(x[0]) if len(x) == 2 else None
+        if lt and 0 <= (lt - t).total_seconds() <= LONG_NOTE_LOG_S and isinstance(x[1], (int, float)):
+            return (x[1] + LONG_NOTE_SLACK_MIN) * 60
+    return 0.0
+
+
 def reply_stall(inbound_times: list[str] | None, last_saved_reply: str | None, ref: dt.datetime,
-                minutes: int = STALL_MIN, chat_replies: list[str] | None = None) -> dt.datetime | None:
+                minutes: int = STALL_MIN, chat_replies: list[str] | None = None,
+                long_notes: list | None = None) -> dt.datetime | None:
     """The first WhatsApp message after the last "Saved" reply, when it is older than `minutes`: messages are
     getting no reply (2026-11-04 to 11-06 went 45 h unnoticed). None while every older message had a reply after it.
-    A message answered by a chat job within CHAT_REPLY_S was a question, not a save, and counts as replied."""
+    A message answered by a chat job within CHAT_REPLY_S was a question, not a save, and counts as replied.
+    A long voice note (`long_notes`, see long_note_wait_s) is due only after its stated transcribing time."""
     last = parse_ts(last_saved_reply)
     chats = [c for c in (parse_ts(x) for x in chat_replies or []) if c]
     waiting = [t for t in (parse_ts(x) for x in inbound_times or []) if t and (last is None or t > last)
                and not any(0 <= (c - t).total_seconds() <= CHAT_REPLY_S for c in chats)]
-    first = min(waiting, default=None)
-    return first if first and (ref - first).total_seconds() > minutes * 60 else None
+    due = [t for t in waiting if (ref - t).total_seconds() > minutes * 60 + long_note_wait_s(t, long_notes)]
+    return min(due, default=None)
 
 
 ALERT_MIN = 15  # EPIC-24 M2: a failure a person would notice turns its alert row red for this long (and alerts)
@@ -288,7 +305,8 @@ def components(d: dict) -> list[dict]:
     col, prob = "green", None
     # EPIC-24 M23: with the ledgers unread the last "Saved" reply is unknown, not absent (row 3 shows the failure)
     stall = None if ac.get("error") else reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref,
-                                                     chat_replies=(v.get("zenod_log") or {}).get("chatReplies"))
+                                                     chat_replies=(v.get("zenod_log") or {}).get("chatReplies"),
+                                                     long_notes=pl.get("longNotes"))
     if p.get("status") != 200 or pj.get("status") != "ok" or wa.get("state") != "connected":
         col, prob = "red", f"/api/health → {p.get('status')} “{pj.get('status')}”, WhatsApp {wa.get('state')}"
     elif stall:
@@ -481,7 +499,8 @@ def components(d: dict) -> list[dict]:
 
     # replies: the ZAL-A8 stall rule at 15 min instead of 60, plus staged faults
     rstall = None if ac.get("error") else reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref,
-                                                      minutes=ALERT_MIN, chat_replies=zl.get("chatReplies"))
+                                                      minutes=ALERT_MIN, chat_replies=zl.get("chatReplies"),
+                                                      long_notes=pl.get("longNotes"))
     rdrill = recent_ops(ops, ("reply",), ref)
     rprob = None
     if rstall:
@@ -523,7 +542,7 @@ def components(d: dict) -> list[dict]:
     cr = d["credit"] if "credit" in d else remember_credit(d, {}, ref)["credit"]
     parts, worst, values = [], "green", {}
     rank = {"green": 0, "amber": 1, "red": 2}
-    for prov in ("deepseek", "openrouter"):
+    for prov in ("deepseek", "openrouter", "openai"):
         x = cr.get(prov) or {}
         col_, text = credit_status(prov, x)
         values[prov] = {k: x.get(k) for k in ("state", "balanceUsd", "perDayUsd", "daysLeft", "refusals")}
@@ -531,12 +550,12 @@ def components(d: dict) -> list[dict]:
         if rank[col_] > rank[worst]:
             worst = col_
     drill = any(x.get("drill") for x in cr.values())
-    reds = [t for prov, t in zip(("deepseek", "openrouter"), parts)
+    reds = [t for prov, t in zip(("deepseek", "openrouter", "openai"), parts)
             if credit_status(prov, cr.get(prov) or {})[0] != "green"]
     prob = None
     if worst != "green":
         prob = "; ".join(reds) + (" [drill: staged low balance]" if drill else "")
-    row(id="credit", n="19", name="AI credit: DeepSeek and OpenRouter", remote=False,
+    row(id="credit", n="19", name="AI credit: DeepSeek, OpenRouter and OpenAI", remote=False,
         where="DeepSeek prepaid balance (background work) and the platform OpenRouter key (chat, voice), read by "
               "cloud.zenod.dev/api/health",
         status=worst, problem=prob,
@@ -587,7 +606,9 @@ CREDIT_SPEND_DAYS = 3                           # the daily spend is the drop ov
 CREDIT_MIN_HOURS = 6                            # with fewer hours of samples the spend is not known yet
 CREDIT_KEEP_DAYS = 8
 CREDIT_REFUSAL_HOURS = 6
+OPENAI_REFUSAL_HOURS = 48   # EPIC-24 M36: the voice-note fallback key has no balance to read; a refusal stays red this long
 TOP_UP = {
+    "openai": ("OpenAI", "Jordi tops up at https://platform.openai.com/settings/organization/billing/"),
     "deepseek": ("DeepSeek", "Jordi tops up at https://platform.deepseek.com/top_up"),
     "openrouter": ("OpenRouter", "Jordi adds credit at https://openrouter.ai/settings/credits or raises "
                                  "the key limit at https://openrouter.ai/settings/keys"),
@@ -597,6 +618,12 @@ TOP_UP = {
 def credit_status(prov: str, x: dict) -> tuple[str, str]:
     """(colour, one line) for one provider's credit summary from remember_credit()."""
     name, who = TOP_UP[prov]
+    if prov == "openai":
+        # EPIC-24 M36: only the log says (HTTP 429 "no credits remaining"); no balance is read for this key
+        if x.get("refusals"):
+            return "red", (f"{name} refused {x['refusals']} calls for credit in the last {OPENAI_REFUSAL_HOURS} h "
+                           f"(the paid voice-note fallback is dead). {who}")
+        return "green", f"{name} (voice-note fallback): no credit refusal in the last {OPENAI_REFUSAL_HOURS} h"
     bal, per, days = x.get("balanceUsd"), x.get("perDayUsd"), x.get("daysLeft")
     state = x.get("state")
     if x.get("refusals"):
@@ -678,6 +705,10 @@ def remember_credit(raw: dict, st: dict, ref: dt.datetime) -> dict:
         b = x["balanceUsd"]
         x["daysLeft"] = round(b / per, 1) if b is not None and per else None
         out[prov] = x
+    # EPIC-24 M36: OpenAI (the shared voice-note key) answers HTTP 429 "no credits remaining", read from the logs only
+    oa = recent_ops(ops, ("credit",), ref, minutes=OPENAI_REFUSAL_HOURS * 60)
+    out["openai"] = {"state": None, "balanceUsd": None, "perDayUsd": None, "daysLeft": None, "checkedAt": None, "drill": False,
+                     "refusals": sum(1 for _, r in oa if r.startswith("openai") and not r.startswith("drill_"))}
     new = json.loads(json.dumps(raw))
     new["credit"] = out
     return new

@@ -15,6 +15,7 @@ from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import aggregate as A  # noqa: E402
+import probe as P  # noqa: E402
 
 T0 = "2026-11-03T12:00:00Z"
 
@@ -180,6 +181,33 @@ class StatusRules(unittest.TestCase):
         d["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T11:31:00Z"
         d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T10:30:00Z", "2026-11-03T11:30:00Z"]
         self.assertEqual(status(d)["phylax"], "green")  # replied after every message
+
+    def test_a_long_voice_note_gets_its_transcribing_time_before_it_counts_as_unanswered(self):
+        # EPIC-24 M36: a 60 min note is told "about 18 min"; the 15 min rule must not call it unanswered while it is written out
+        ref = A.parse_ts("2026-11-23T16:00:00Z")
+        inbound = ["2026-11-23T15:25:01Z"]
+        self.assertEqual(A.reply_stall(inbound, None, ref, minutes=15), A.parse_ts("2026-11-23T15:25:01Z"))
+        notes = [["2026-11-23T15:25:08Z", 18]]                         # logged 7 s after the message
+        self.assertIsNone(A.reply_stall(inbound, None, ref, minutes=15, long_notes=notes))       # 35 min < 15 + 18 + 5
+        self.assertEqual(A.reply_stall(inbound, None, A.parse_ts("2026-11-23T16:05:00Z"), minutes=15, long_notes=notes),
+                         A.parse_ts("2026-11-23T15:25:01Z"))            # 40 min > 38: now it is stuck
+        # a note logged for another message (3 min or more apart) gives no time to this one
+        self.assertEqual(A.reply_stall(inbound, None, ref, minutes=15, long_notes=[["2026-11-23T15:40:00Z", 18]]),
+                         A.parse_ts("2026-11-23T15:25:01Z"))
+        # a later ordinary message still turns it red by itself
+        self.assertEqual(A.reply_stall(inbound + ["2026-11-23T15:30:00Z"], None, ref, minutes=15, long_notes=notes),
+                         A.parse_ts("2026-11-23T15:30:00Z"))
+
+    def test_the_long_note_time_reaches_both_reply_rows(self):
+        d = raw()
+        d["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T09:00:00Z"
+        d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T11:20:00Z"]
+        d["probedAt"] = "2026-11-03T11:50:00Z"
+        rows = lambda: {c["id"]: c["status"] for c in A.components(d)}
+        self.assertEqual(rows()["alert_replies"], "red")
+        d["vps1"]["phylax_log"]["longNotes"] = [["2026-11-03T11:20:06Z", 36]]
+        self.assertEqual(rows()["alert_replies"], "green")
+        self.assertEqual(rows()["phylax"], "green")
 
     def test_a_question_answered_by_chat_is_not_a_reply_stall(self):
         # ZAL-A12: the 2026-11-08 18:50Z WhatsApp question got its chat answer at 18:50:22Z and no "Saved" (none due)
@@ -634,6 +662,27 @@ class Credit(unittest.TestCase):
         self.assertIn("OpenRouter refused 1 calls for credit", row["problem"])
         row, _, _ = self.run_at(T0, orx=unl, phylax_ops=[("2026-11-03T05:00:00Z", "credit", "openrouter_402")])
         self.assertEqual(row["status"], "green")         # older than 6 h
+
+    def test_an_openai_no_credits_429_turns_the_row_red_for_48_hours(self):
+        """EPIC-24 M36: 23 Nov the shared voice-note key answered 429 "no credits remaining" on 12 of 14 notes and
+        the row stayed green because only 402s from OpenRouter and DeepSeek were counted."""
+        row, _, _ = self.run_at(T0)
+        self.assertEqual(row["status"], "green")
+        self.assertIn("OpenAI (voice-note fallback): no credit refusal in the last 48 h", row["signal"])
+        self.assertEqual(row["name"], "AI credit: DeepSeek, OpenRouter and OpenAI")
+        line = ('[transcribe] openai failed, falling back to whisper.cpp: openai transcription failed (429): { "error": { '
+                '"message": "You have no credits remaining. Add credits to continue using the API", "type": "insufficient_quota" } }')
+        ev = P.credit_event(line)
+        self.assertEqual(ev, ("credit", "openai_429"))
+        row, _, _ = self.run_at(T0, phylax_ops=[("2026-11-03T05:00:00Z", ev[0], ev[1]), ("2026-11-03T11:00:00Z", ev[0], ev[1])])
+        self.assertEqual(row["status"], "red")
+        self.assertIn("OpenAI refused 2 calls for credit in the last 48 h (the paid voice-note fallback is dead). "
+                      "Jordi tops up at https://platform.openai.com/settings/organization/billing/", row["problem"])
+        self.assertEqual(row["signal_value"]["openai"]["refusals"], 2)
+        row, _, _ = self.run_at(T0, phylax_ops=[("2026-11-01T11:00:00Z", "credit", "openai_429")])
+        self.assertEqual(row["status"], "green")         # older than 48 h
+        row, _, _ = self.run_at(T0, ops=[("2026-11-03T11:00:00Z", "credit", "openai_429")])
+        self.assertEqual(row["status"], "red")           # also read from zenod-mt's log
 
     def test_a_staged_low_balance_alerts_once_and_clears(self):
         st = None

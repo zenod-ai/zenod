@@ -14,8 +14,10 @@ import {
   centralFallbackAlarm,
   centralSttConfig,
   centralSttCoolingDown,
-  centralSttModelFor,
+  centralSttPlanFor,
+  chooseSegmentCuts,
   noteCentralSttResult,
+  transcribeLongWithCentral,
   transcribeWithCentral,
 } from "./centralTranscription.js";
 import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
@@ -1239,6 +1241,61 @@ export async function transcribeAudio(
   return timedResult;
 }
 
+/**
+ * EPIC-24 M36: cuts a long note into parts of about `chunkSeconds` for the central service: 16 kHz mono 32 kb/s MP3 (a
+ * 5-minute part is about 1.2 MB), cut at the middle of the pause nearest each multiple of the part length so a word is not
+ * split (silencedetect), at the part length when there is no pause. Runs at the same low priority as whisper.cpp.
+ */
+async function splitForCentral(
+  data: Buffer,
+  filename: string,
+  durationSeconds: number,
+  chunkSeconds: number,
+  signal?: AbortSignal,
+): Promise<Array<{ data: Buffer; filename: string }>> {
+  const dir = await mkdtemp(join(tmpdir(), "zenod-central-"));
+  const input = join(dir, `in${extname(filename) || ".m4a"}`);
+  try {
+    await writeFile(input, data);
+    const silences: Array<{ start: number; end: number }> = [];
+    let openStart: number | null = null;
+    await run(
+      "ffmpeg",
+      ["-nostats", "-i", input, "-vn", "-af", "silencedetect=noise=-35dB:d=0.4", "-f", "null", "-"],
+      {
+        signal,
+        niceness: WHISPER_NICE,
+        onStderrLine: (line) => {
+          const start = /silence_start: (-?[\d.]+)/.exec(line);
+          if (start) openStart = Math.max(0, Number(start[1]));
+          const end = /silence_end: ([\d.]+)/.exec(line);
+          if (end && openStart !== null) {
+            silences.push({ start: openStart, end: Number(end[1]) });
+            openStart = null;
+          }
+        },
+      },
+    );
+    const cuts = chooseSegmentCuts(silences, durationSeconds, chunkSeconds);
+    if (cuts.length === 0) return [{ data, filename }];
+    await run(
+      "ffmpeg",
+      [
+        "-y", "-i", input, "-ar", "16000", "-ac", "1", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "32k",
+        "-f", "segment", "-segment_times", cuts.join(","), "-reset_timestamps", "1",
+        join(dir, "seg%04d.mp3"),
+      ],
+      { signal, niceness: WHISPER_NICE },
+    );
+    const names = (await readdir(dir)).filter((f) => f.startsWith("seg")).sort();
+    const parts: Array<{ data: Buffer; filename: string }> = [];
+    for (const name of names) parts.push({ data: await readFile(join(dir, name)), filename: name });
+    return parts;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function runTranscription(
   data: Buffer,
   filename: string,
@@ -1280,19 +1337,28 @@ async function runTranscription(
   if (central) {
     centralDuration = (typeof options === "function" ? undefined : options.durationSeconds)
       ?? (await probeAudioDurationSeconds(data, filename, signal));
-    const centralModel = centralSttModelFor(centralDuration, central);
-    if (!centralModel) {
-      console.log(`[transcribe] central skipped: ${Math.round(centralDuration ?? 0)}s audio would not finish in ${Math.round(central.timeoutMs / 1000)}s`);
-    } else {
-      const startedAt = Date.now();
-      const attempt = centralSttCoolingDown()
-        ? centralCooldownResult()
+    const plan = centralSttPlanFor(centralDuration, central);
+    const centralModel = plan.model;
+    const startedAt = Date.now();
+    const attempt = centralSttCoolingDown()
+      ? centralCooldownResult()
+      : plan.long && centralDuration
+        ? await transcribeLongWithCentral(central, {
+            data,
+            filename,
+            model: centralModel,
+            language: LANGUAGE,
+            durationSeconds: centralDuration,
+            deadlineMs: plan.deadlineMs,
+            split: splitForCentral,
+            ...(onProgress ? { onProgress } : {}),
+            ...(signal ? { signal } : {}),
+          })
         : await transcribeWithCentral(central, { data, filename, model: centralModel, language: LANGUAGE, ...(signal ? { signal } : {}) });
-      if (!signal?.aborted) noteCentralSttResult(central, attempt);
-      if (attempt.success || signal?.aborted) return attempt;
-      centralFallbackAlarm(attempt, centralModel, centralDuration);
-      console.warn(`[transcribe] central failed after ${Math.round((Date.now() - startedAt) / 1000)}s (${attempt.providerCode}), using the next provider`);
-    }
+    if (!signal?.aborted) noteCentralSttResult(central, attempt);
+    if (attempt.success || signal?.aborted) return attempt;
+    centralFallbackAlarm(attempt, centralModel, centralDuration);
+    console.warn(`[transcribe] central failed after ${Math.round((Date.now() - startedAt) / 1000)}s (${attempt.providerCode}), using the next provider`);
   }
   const needsDuration = Boolean(groqApiKey || (longProvider === "openrouter" && openrouterApiKey) || (longProvider === "openai" && openaiApiKey));
   const durationSeconds =

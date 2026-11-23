@@ -9,6 +9,11 @@ import type { TranscriptionEnvelope } from "./transcribe.js";
  * (60 s) or on any error the caller continues down today's paid cascade, and every fallback writes one
  * `[ops-alert] transcribe central_fallback` line that the health page counts. A note is never lost to it.
  *
+ * EPIC-24 M36: a note longer than that 60 s window is no longer sent to the paid provider. It goes to the same service as a
+ * long job: cut at pauses into parts of about 5 minutes, sent one after another on the small model, with a time limit that
+ * grows with the note (120 s plus 0.6 s per second of audio). Measured on vps3: small takes about 0.2 s per second of audio,
+ * and a part of 5 minutes holds the service for about a minute, so other callers' short notes are not starved for an hour.
+ *
  * Off switch: ZENOD_CENTRAL_STT=0. Tests never reach the network unless ZENOD_CENTRAL_STT_URL is set.
  */
 export const CENTRAL_STT_DEFAULT_URL = "http://vps3.taild81fbb.ts.net:18946/v1/audio/transcriptions";
@@ -27,12 +32,28 @@ export const CENTRAL_STT_SMALL_MODEL = "small";
  */
 export const CENTRAL_STT_TURBO_MAX_SECONDS = 45;
 export const CENTRAL_STT_SMALL_MAX_SECONDS = 90;
+/** M36: model, part length, and the time allowed for a long note: base + factor x audio seconds (measured: about 0.2 s per second). */
+export const CENTRAL_STT_LONG_MODEL = "small";
+export const CENTRAL_STT_CHUNK_SECONDS = 300;
+export const CENTRAL_STT_LONG_BASE_MS = 120_000;
+export const CENTRAL_STT_LONG_FACTOR = 0.6;
+export const CENTRAL_STT_PART_TIMEOUT_MS = 240_000;
+export const CENTRAL_STT_PART_RETRY_DELAY_MS = 10_000;
+/** M36: what the owner is told: about this many seconds of waiting per second of audio, and the length from which the note counts as long. */
+export const LONG_NOTE_ETA_FACTOR = 0.3;
+export const LONG_NOTE_NOTICE_SECONDS = 180;
 
 export interface CentralSttConfig {
   url: string;
   timeoutMs: number;
   turboMaxSeconds: number;
   smallMaxSeconds: number;
+  /** M36: long notes (over smallMaxSeconds) are cut into parts of about this many seconds. */
+  chunkSeconds: number;
+  longBaseMs: number;
+  longFactor: number;
+  partTimeoutMs: number;
+  retryDelayMs: number;
   /** Model forced for every note (ZENOD_CENTRAL_STT_MODEL); unset = turbo for short notes, small for longer ones. */
   model: string | null;
   caller: string;
@@ -55,6 +76,11 @@ export function centralSttConfig(env: NodeJS.ProcessEnv = process.env): CentralS
     timeoutMs: positive(env.ZENOD_CENTRAL_STT_TIMEOUT_MS, CENTRAL_STT_TIMEOUT_MS),
     turboMaxSeconds: positive(env.ZENOD_CENTRAL_STT_TURBO_MAX_SECONDS, CENTRAL_STT_TURBO_MAX_SECONDS),
     smallMaxSeconds: positive(env.ZENOD_CENTRAL_STT_SMALL_MAX_SECONDS, CENTRAL_STT_SMALL_MAX_SECONDS),
+    chunkSeconds: positive(env.ZENOD_CENTRAL_STT_CHUNK_SECONDS, CENTRAL_STT_CHUNK_SECONDS),
+    longBaseMs: positive(env.ZENOD_CENTRAL_STT_LONG_BASE_MS, CENTRAL_STT_LONG_BASE_MS),
+    longFactor: positive(env.ZENOD_CENTRAL_STT_LONG_FACTOR, CENTRAL_STT_LONG_FACTOR),
+    partTimeoutMs: positive(env.ZENOD_CENTRAL_STT_PART_TIMEOUT_MS, CENTRAL_STT_PART_TIMEOUT_MS),
+    retryDelayMs: env.ZENOD_CENTRAL_STT_RETRY_DELAY_MS === "0" ? 0 : positive(env.ZENOD_CENTRAL_STT_RETRY_DELAY_MS, CENTRAL_STT_PART_RETRY_DELAY_MS),
     model: env.ZENOD_CENTRAL_STT_MODEL?.trim() || null,
     caller: env.ZENOD_CENTRAL_STT_CALLER?.trim() || "zenod",
     cooldownMs: env.ZENOD_CENTRAL_STT_COOLDOWN_MS === "0" ? 0 : positive(env.ZENOD_CENTRAL_STT_COOLDOWN_MS, CENTRAL_STT_COOLDOWN_MS),
@@ -78,19 +104,81 @@ export function noteCentralSttResult(cfg: CentralSttConfig, result: Transcriptio
   else if (["timeout", "network", "http_5xx"].includes(result.providerCode ?? "")) downUntil = now + cfg.cooldownMs;
 }
 
-/**
- * The model for a note of this length, or null when it would not finish inside the timeout (the note then goes
- * straight to the paid provider instead of waiting 60 s for nothing). An unknown length tries turbo.
- */
-export function centralSttModelFor(durationSeconds: number | null | undefined, cfg: CentralSttConfig): string | null {
-  if (cfg.model) return cfg.model;
-  if (durationSeconds === null || durationSeconds === undefined) return CENTRAL_STT_TURBO_MODEL;
-  if (durationSeconds <= cfg.turboMaxSeconds) return CENTRAL_STT_TURBO_MODEL;
-  if (durationSeconds <= cfg.smallMaxSeconds) return CENTRAL_STT_SMALL_MODEL;
-  return null;
+export interface CentralSttPlan {
+  model: string;
+  /** Longer than the 60 s window: cut into parts and sent one after another with a time limit scaled to its length. */
+  long: boolean;
+  /** For a long note: the time allowed for all of it. */
+  deadlineMs: number;
 }
 
-export type CentralSttFailureWord = "cooldown" | "timeout" | "network" | "http_4xx" | "http_5xx" | "empty" | "bad_reply";
+/**
+ * How a note of this length is sent: one request on turbo (up to 45 s) or small (up to 90 s) inside the 60 s timeout, or, longer
+ * than that (EPIC-24 M36), as a long job on small with a time limit scaled to the audio. An unknown length tries turbo.
+ */
+export function centralSttPlanFor(durationSeconds: number | null | undefined, cfg: CentralSttConfig): CentralSttPlan {
+  const long = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > cfg.smallMaxSeconds;
+  if (long) {
+    return {
+      model: cfg.model ?? CENTRAL_STT_LONG_MODEL,
+      long: true,
+      deadlineMs: Math.round(cfg.longBaseMs + cfg.longFactor * durationSeconds * 1000),
+    };
+  }
+  if (cfg.model) return { model: cfg.model, long: false, deadlineMs: cfg.timeoutMs };
+  if (durationSeconds === null || durationSeconds === undefined || durationSeconds <= cfg.turboMaxSeconds) {
+    return { model: CENTRAL_STT_TURBO_MODEL, long: false, deadlineMs: cfg.timeoutMs };
+  }
+  return { model: CENTRAL_STT_SMALL_MODEL, long: false, deadlineMs: cfg.timeoutMs };
+}
+
+/** The model for a note of this length (see centralSttPlanFor). */
+export function centralSttModelFor(durationSeconds: number | null | undefined, cfg: CentralSttConfig): string {
+  return centralSttPlanFor(durationSeconds, cfg).model;
+}
+
+/** M36: the minutes the owner is told a note of this length will take (at least one). */
+export function longNoteEstimateMinutes(durationSeconds: number): number {
+  return Math.max(1, Math.ceil((durationSeconds * LONG_NOTE_ETA_FACTOR) / 60));
+}
+
+/** M36: the one plain reply a long note gets at once; the saved reply follows when it is written out. */
+export function longNoteNotice(durationSeconds: number): string {
+  return `Long voice note, transcribing it, about ${longNoteEstimateMinutes(durationSeconds)} min. I will reply here once it is saved. Send “cancel transcription” to stop it.`;
+}
+
+/**
+ * M36: where to cut a long note into parts of about `chunkSeconds`: at the middle of the pause nearest each multiple of
+ * the part length (within `windowSeconds`), so a word is not split; the part length itself when there is no pause. The
+ * last part is never longer than 1.2 parts. `silences` are ffmpeg silencedetect intervals in seconds.
+ */
+export function chooseSegmentCuts(
+  silences: Array<{ start: number; end: number }>,
+  durationSeconds: number,
+  chunkSeconds: number,
+  windowSeconds = 45,
+): number[] {
+  const cuts: number[] = [];
+  let last = 0;
+  while (durationSeconds - last > chunkSeconds * 1.2) {
+    const target = last + chunkSeconds;
+    let best = target;
+    let bestDistance = Infinity;
+    for (const gap of silences) {
+      const mid = (gap.start + gap.end) / 2;
+      const distance = Math.abs(mid - target);
+      if (mid > last + chunkSeconds / 2 && distance <= windowSeconds && distance < bestDistance) {
+        best = mid;
+        bestDistance = distance;
+      }
+    }
+    cuts.push(Math.round(best * 100) / 100);
+    last = best;
+  }
+  return cuts;
+}
+
+export type CentralSttFailureWord = "cooldown" | "timeout" | "network" | "http_4xx" | "http_5xx" | "empty" | "bad_reply" | "split_failed";
 
 function failure(reason: CentralSttFailureWord, error: string, httpStatus?: number, cause?: string): TranscriptionEnvelope & { cause?: string } {
   return {
@@ -157,6 +245,75 @@ export async function transcribeWithCentral(cfg: CentralSttConfig, call: Central
     const cause = networkCauseCode(err);
     return failure("network", `central transcription unreachable: ${cause}`, undefined, cause);
   }
+}
+
+export interface CentralLongCall extends Omit<CentralSttCall, "model" | "filename"> {
+  filename: string;
+  model: string;
+  durationSeconds: number;
+  /** The time allowed for the whole note (centralSttPlanFor). */
+  deadlineMs: number;
+  /** Cuts the note into parts of about `chunkSeconds` (ffmpeg in the server; a fake in tests). */
+  split: (data: Buffer, filename: string, durationSeconds: number, chunkSeconds: number, signal?: AbortSignal) => Promise<Array<{ data: Buffer; filename: string }>>;
+  onProgress?: (percent: number) => void;
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (ms <= 0 || signal?.aborted) return resolve();
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
+}
+
+/**
+ * EPIC-24 M36: a note longer than the 60 s window as one long job. Parts are sent one after another (the service takes one
+ * at a time, so each is about a minute of its time), each with the smaller of the part timeout and what is left of the
+ * note's time limit. A part that finds the service down or restarting is tried once more; a silent part adds no words.
+ * Never throws: any problem comes back as a failed envelope and the note continues down the cascade.
+ */
+export async function transcribeLongWithCentral(cfg: CentralSttConfig, call: CentralLongCall): Promise<TranscriptionEnvelope> {
+  const startedAt = Date.now();
+  const timeLeft = () => call.deadlineMs - (Date.now() - startedAt);
+  let parts: Array<{ data: Buffer; filename: string }>;
+  if (call.durationSeconds <= cfg.chunkSeconds * 1.2) {
+    parts = [{ data: call.data, filename: call.filename }];
+  } else {
+    try {
+      parts = await call.split(call.data, call.filename, call.durationSeconds, cfg.chunkSeconds, call.signal);
+    } catch (err) {
+      if (call.signal?.aborted) return failure("network", "transcription was cancelled");
+      return failure("split_failed", `could not cut the note into parts: ${(err as Error).message.slice(0, 120)}`);
+    }
+    if (parts.length === 0) return failure("split_failed", "cutting the note produced no parts");
+  }
+  console.log(`[transcribe] central long job: ${Math.round(call.durationSeconds)}s audio, ${parts.length} part(s) on ${call.model}, up to ${Math.round(call.deadlineMs / 1000)}s`);
+  const texts: string[] = [];
+  for (const [index, part] of parts.entries()) {
+    let result: TranscriptionEnvelope | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const left = timeLeft();
+      if (left <= 1_000) {
+        return failure("timeout", `central transcription did not finish the note within ${Math.round(call.deadlineMs / 1000)} s`);
+      }
+      result = await transcribeWithCentral(
+        { ...cfg, timeoutMs: Math.min(cfg.partTimeoutMs, left) },
+        { data: part.data, filename: part.filename, model: call.model, language: call.language, ...(call.signal ? { signal: call.signal } : {}), ...(call.fetchImpl ? { fetchImpl: call.fetchImpl } : {}) },
+      );
+      const retryable = !result.success && (result.providerCode === "network" || result.providerCode === "http_5xx") && !call.signal?.aborted;
+      if (!retryable) break;
+      await wait(cfg.retryDelayMs, call.signal);
+    }
+    if (!result) return failure("network", "central transcription gave no result");
+    if (result.success) texts.push(result.transcript ?? "");
+    else if (result.providerCode === "empty") texts.push("");
+    else return result;
+    call.onProgress?.(Math.round(((index + 1) / parts.length) * 100));
+  }
+  const transcript = texts.map((t) => t.trim()).filter(Boolean).join(" ");
+  if (!transcript) return failure("empty", "central transcription returned empty text");
+  console.log(`[transcribe] central long job done: ${Math.round(call.durationSeconds)}s audio in ${Math.round((Date.now() - startedAt) / 1000)}s, ${parts.length} part(s)`);
+  return { success: true, transcript, provider: `central faster-whisper ${call.model}` };
 }
 
 /** The result of a note that skipped the service because of the cooldown (still one alarm line, it pays again). */
