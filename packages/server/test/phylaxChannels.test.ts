@@ -3983,7 +3983,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
       expect(aborted).toBe(false);
       expect(sent).toEqual([
-        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        "Long voice note, transcribing it, about 6 min. I will reply here once it is saved. Send “cancel transcription” to stop it.",
         "Long voice saved.",
       ]);
       expect(calls).toHaveLength(1);
