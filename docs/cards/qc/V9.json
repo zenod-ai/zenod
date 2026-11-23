@@ -1,40 +1,40 @@
 {
   "row": "V9",
   "card": "docs/cards/V9.md",
-  "cardSha": "d3cc234f1b73df94",
+  "cardSha": "cb782c013ae3023a",
   "inputs": {
-    "card": "d3cc234f1b73df94",
+    "card": "cb782c013ae3023a",
     "page": "94fc5fab58509461",
     "rules": "c1a7854c21d10fb4",
     "words": "d97299e28fe837ba"
   },
-  "checkedAt": "2026-11-23T11:57:58Z",
+  "checkedAt": "2026-11-23T12:15:36Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "memories that are happening within an app are different than memories that are originated directly in Zenod",
       "where": "vn_42bc4eb9",
       "status": "met",
-      "how": "Evidence shows list labels 'From EpicTeam Chat' and 'Spoken to Zenod', opened note with label and real title, and search results with labels."
+      "how": "Evidence shows list labels 'From EpicTeam Chat' and 'Spoken to Zenod', an opened note with its label and real title, and search results carrying the label."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box under the title, show the list, opened note and search with labels, and do not scroll sideways."
+    "summary": "At 390 px and 1280 px the page opens with the punchline box, then a sequence diagram, and shows the list, opened note and search results with labels; no sideways scroll and nothing cut off."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the voice-note labels (From an app vs Spoken to Zenod) across the list, opened note and search tell app notes from spoken ones everywhere you look.",
+    "asked": "Decide whether the card's labelling of voice notes (app versus spoken to Zenod) tells app notes from spoken ones everywhere you look, and recommend yes or no.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "94fc5fab58509461",
-    "walkedAt": "2026-11-23T11:57:58Z",
+    "walkedAt": "2026-11-23T12:15:36Z",
     "steps": [
       {
         "n": 1,
