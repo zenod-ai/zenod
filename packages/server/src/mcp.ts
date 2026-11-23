@@ -1,4 +1,5 @@
-import { captureReceiptsForAsync, mergeMemoryEntriesAsync, readMergedEntry, searchMemoryEntryPage } from "./memoryEntryCatalog.js";
+import { captureReceiptsForAsync, mergeMemoryEntriesAsync, readMergedEntry } from "./memoryEntryCatalog.js";
+import { searchMemoryEntryPage } from "./memoryEntrySearch.js";
 import { labelRankedMemories } from "./rankedMemory.js";
 import { readAsLine, readAsNote, shownReadings, type ReadAs } from "./quickIndexRead.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

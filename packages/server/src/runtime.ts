@@ -1,4 +1,4 @@
-import { searchMemoryEntryPage } from "./memoryEntryCatalog.js";
+import { searchMemoryEntryPage } from "./memoryEntrySearch.js";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
