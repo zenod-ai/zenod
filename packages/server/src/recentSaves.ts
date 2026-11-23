@@ -1,4 +1,5 @@
-import { fromAppLabel, SPOKEN_TO_ZENOD, wordsTitle, type EntryOrigin, type StoreResult } from "zenod";
+import { fromAppLabel, SPOKEN_TO_ZENOD, wordsTitle, type EntryOrigin } from "zenod/entry-label";
+import type { StoreResult } from "zenod";
 import type { MediaIngestReceipt, TaskJob, TaskJobStore } from "./taskJobStore.js";
 
 /**

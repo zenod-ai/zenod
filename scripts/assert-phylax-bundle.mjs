@@ -34,6 +34,8 @@ const allowedCoreInputs = new Set([
   "llm/askNonAnswer.ts",
   // The one Send button's rules and guard for the web chat (E16-B1): no imports, no I/O.
   "llm/sendRoute.ts",
+  // The plain label and title of a voice note for the recent saves list (EPIC-21 V9): no imports, no I/O.
+  "engine/entryLabel.ts",
 ]);
 const reachedCoreInputs = inputs
   .filter((input) => input.includes("/core/src/"))

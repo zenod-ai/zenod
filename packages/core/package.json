@@ -26,6 +26,10 @@
       "types": "./dist/evidenceContext.d.ts",
       "default": "./dist/evidenceContext.js"
     },
+    "./entry-label": {
+      "types": "./dist/engine/entryLabel.d.ts",
+      "default": "./dist/engine/entryLabel.js"
+    },
     "./match-percent": {
       "types": "./dist/vault/matchPercent.d.ts",
       "default": "./dist/vault/matchPercent.js"

@@ -1,9 +1,11 @@
-import { isVoiceCapture } from "../vault/recentIntent.js";
-
 /**
  * EPIC-21 V9: where a voice note was spoken, in a plain label, and a real title for it.
  * Read only from what an entry stores (the `Source app:` line the media seam writes into its
  * body, and its content type), so old notes are labelled too and no note text is ever rewritten.
+ */
+
+/**
+ * No imports and no I/O: the Phylax-only bundle reaches this file (recent saves), and its guard allows only pure modules.
  */
 
 /** Notes spoken straight to Zenod: WhatsApp, the web app, a call. */
@@ -35,11 +37,18 @@ export function fromAppLabel(sourceApp: string): string {
   return /\bcard answer$/i.test(app) ? `From an ${app}` : `From ${app}`;
 }
 
+/** A voice note: recorded as one, or an older entry whose words say so (the same rule as vault/recentIntent.ts isVoiceCapture). */
+function isVoice(entry: LabelInput): boolean {
+  const type = (entry.contentType ?? "").toLowerCase();
+  if (type) return type === "voice_note" || type.startsWith("audio");
+  return /^voice note\b/i.test(entry.title ?? "") || /^voice note\b/i.test(entry.content.trimStart());
+}
+
 /** The label an entry shows: from its app, spoken to Zenod, or null for anything that is not a voice note. */
 export function originLabel(entry: LabelInput): string | null {
   const app = entry.sourceApp?.trim() || sourceAppOf(entry.content);
   if (app) return fromAppLabel(app);
-  return isVoiceCapture(entry.contentType, entry.title ?? "", entry.content) ? SPOKEN_TO_ZENOD : null;
+  return isVoice(entry) ? SPOKEN_TO_ZENOD : null;
 }
 
 export function originOf(label: string | null): EntryOrigin | null {
