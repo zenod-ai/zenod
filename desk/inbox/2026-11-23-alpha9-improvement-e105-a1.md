@@ -3,14 +3,14 @@ from: alpha9
 about: Improvement request: the filer grows the nearest topic before it makes a new leaf; fold this week's 459 leaves into their topics
 reply-to: AlfaBlok/epic-team
 status: answered
-answered: AlfaBlok/epic-team:desk/inbox/2026-11-23-zenod-re-improvement-request-the-filer-grows.md
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-23-zenod-re-improvement-request-the-filer-grows-2.md
 kind: improvement-request
 ask: agent_team/E105-A1
 to: zenod
 unblocks: E105 key result 5, Most of my notes deepen a topic we already have (44%, target 80%), plan step 5.2
 done-means: his notes that deepen a topic we already have reach 80% over 7 days (scripts/knowledge_compounding.py measure), and no new provisional leaf is made when a topic within reach fits
 approved: vn_8e8b0693, 2026-11-23: "Compounding as opposed to diluting, meaning is it kind of growing vertically or is it kind of spreading horizontally?"
-request: taken
+request: done
 row: E22-S5
 ---
 Jordi, 23 Nov 17:15Z (vn_8e8b0693): "Compounding as opposed to diluting, meaning is it kind of growing vertically or is it kind of spreading horizontally?" His own example: his Frankfurt and Zurich notes should grow the house topic, not make five new files.
