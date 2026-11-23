@@ -387,6 +387,27 @@ describe("PhylaxTenantSettingsStore", () => {
     });
   });
 
+  it("E26-S3: says why a code-shaped message linked nobody, and stays silent on ordinary chat", async () => {
+    const { store } = await setup();
+    const registration = store.registerPhone("alpha", "+34 611 111 111", "number-1", 1_000);
+    const typed = registration.keyword;
+
+    // sent from another phone, or from a @lid sender that carries no phone number
+    expect(store.explainUnmatchedCode("34622222222@s.whatsapp.net", typed, 2_000)).toEqual({ shape: "typed", reason: "other_number" });
+    expect(store.explainUnmatchedCode("110771719696610@lid", typed, 2_000)).toEqual({ shape: "typed", reason: "other_number" });
+    // after the 30 minutes
+    expect(store.explainUnmatchedCode("34611111111@s.whatsapp.net", typed, 1_000 + 31 * 60_000)).toEqual({ shape: "typed", reason: "expired" });
+    // a code nobody issued, and a link code nobody issued
+    expect(store.explainUnmatchedCode("34611111111@s.whatsapp.net", "99-wrong", 2_000)).toEqual({ shape: "typed", reason: "no_pending_code" });
+    expect(store.explainUnmatchedCode("34611111111@s.whatsapp.net", "Link my WhatsApp to Zenod: ZEN-ABCDEFGH", 2_000)).toEqual({ shape: "link", reason: "no_pending_code" });
+    // a pending link code is read from inside the one-tap message and matches by text, not by number
+    store.registerLinkCode("beta", 1_000, "ZEN-ABCDEFGH");
+    expect(store.explainUnmatchedCode("34633333333@s.whatsapp.net", "Link my WhatsApp to Zenod: ZEN-ABCDEFGH", 1_000 + 31 * 60_000)).toEqual({ shape: "link", reason: "expired" });
+    // ordinary chat from a number that is not linked says nothing
+    expect(store.explainUnmatchedCode("34622222222@s.whatsapp.net", "hello, are you there?", 2_000)).toBeNull();
+    expect(store.explainUnmatchedCode("34622222222@s.whatsapp.net", "remember to call mum", 2_000)).toBeNull();
+  });
+
   it("keeps Telegram pending until the exact identity proves ownership", async () => {
     const { store } = await setup();
     store.update("alpha", {

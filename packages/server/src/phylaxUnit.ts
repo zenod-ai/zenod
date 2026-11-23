@@ -249,6 +249,15 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         channel === "whatsapp"
           ? tenantSettings.verifyInboundReceipt(sender, text)
           : tenantSettings.verifyTelegramInbound(sender, text, username);
+      if (!verified && channel === "whatsapp") {
+        // E26-S3: a code that linked nobody leaves one line (no number, code or account), so "never sent" and "sent
+        // from another phone, or late" can be told apart; the sender form shows a @lid sender with no phone number.
+        const why = tenantSettings.explainUnmatchedCode(sender, text);
+        if (why) {
+          const form = /@lid$/i.test(sender) ? "lid" : /@s\.whatsapp\.net$/i.test(sender) ? "phone" : "other";
+          console.log(`[whatsapp][link] code message not matched: shape=${why.shape} reason=${why.reason} sender=${form}`);
+        }
+      }
       if (verified && !verified.replayed) {
         hostedChannelAudit.recordVerification(
           channel,
