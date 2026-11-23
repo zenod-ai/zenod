@@ -52,12 +52,12 @@ Phase: tester invites are open on production e0100de1 (2026-11-12): a stranger a
 - [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
 - [EPIC-10](zenod-in-every-mcp-directory-listing-spr.md) MCP directory listings (active): in the official MCP Registry and on Glama; E10-S4 waits on an awesome-mcp-servers maintainer, R9 on 2026-12-07.
 - [EPIC-11](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) WebMCP on zenod.dev (active, own Delivery Manager): tools shipped; S2 trial token is its own Delivery Manager's.
-Last attempted: 2026-11-23T18:20Z DM: EPIC-24 M36 done (run_c150d16d, PRs #1754 and #1755, live 2965d75 on Phylax 18:03Z): long WhatsApp voice notes go to the free central service in 5-minute parts with a 'transcribing, about N min' reply, and a deploy mid-note now requeues it; the 15:45-16:58Z health alerts all came from this ; earlier roll-ups 0382870 and 5b8e29c
+Last attempted: 2026-11-23T19:00Z DM: E26-S3 done (run_077e027c, PR #1756 dfa30347): of the three outside testers, A stopped on our 503 at the WhatsApp code on 13 Nov (fixed 14 Nov, never retried), B got a code twice and never linked (cause unknown; Phylax now logs why an unmatched code links nobody, live at the next Phylax roll), C linked and has sent no note; none opened the app since 22 Nov ; ask E7-A39 (one question to stuck testers 25 Nov) ; M36 done (long voice notes, Phylax 2965d75)
 Result: production zenod-mt 49f5ca5c healthy, Phylax 2965d75; 3 sign-ups, 1 WhatsApp linked, 0 notes, over_cap 0; Jordi's 2-hour voice note of 15:25Z never got a transcript (the deploy stopped it at 17:13Z): sending it again takes about 36 min now; cards in his review list: V9, E7-S27, E26-S38
-Waiting on: the testers' first notes ; E7-A39 (one question to stuck testers on 25 Nov) ; E26-S3 (run_077e027c, where each tester stopped) ; a short real WhatsApp voice note for EPIC-20 A7 ; agent_team resetting the console's zenod checkout after the rewrite
+Waiting on: the testers' first notes ; E7-A39 (one question to stuck testers on 25 Nov) ; a short real WhatsApp voice note for EPIC-20 A7 ; agent_team resetting the console's zenod checkout after the rewrite
 Monitoring: zenod-mt takes M36's code at the next hourly promote: one voice note over 90 s in its log as `central long job` · next check 2026-11-24T09:30Z ; EPIC-20 A7 waits for a note under 45 s ; Jordi's cards V9, E7-S27, E26-S38 in review ; EPIC-7 E7-S30 checks 2026-11-25
 Next action: after the next promote: confirm zenod-mt runs M36 (health sha) ; 25 Nov: E7-S30, ask each still-stuck tester what stopped them (text to Jordi first) ; close A7 on the next short real voice note
-Verified at: 2026-11-23T18:20Z (M36 handoff, PRs #1754 #1755 merged, Phylax log 17:17-18:03Z read-only)
+Verified at: 2026-11-23T19:00Z (E26-S3 evidence docs/evidence/e26-s3-2026-11-23.md, PR #1756 merged; M36 handoff)
 
 ## Spine Map
 
