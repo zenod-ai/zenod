@@ -148,7 +148,7 @@ def log_spans(cont: dict | None, past: list[dict], since: dt.datetime, until: dt
 # ZAL-A18: what the last run already read lives on VPS1 (0600; counts and timestamps only), so each run reads only
 # new access-log bytes, container logs since the last run and journals since the last run. Re-reading the whole
 # day's Traefik log (265 MB by afternoon) and 7 days of container logs every 5 min cost VPS1 ~25 s of CPU a run.
-CACHE_VERSION = 1
+CACHE_VERSION = 2   # EPIC-24 M36: 2 re-reads the 7 days of logs once so the OpenAI 429 lines and long-note lines are seen
 TRAEFIK_LOG = "/etc/dokploy/traefik/dynamic/access.log"
 
 
