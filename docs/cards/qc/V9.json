@@ -1,40 +1,40 @@
 {
   "row": "V9",
   "card": "docs/cards/V9.md",
-  "cardSha": "64546b38fb1f0bb4",
+  "cardSha": "d3cc234f1b73df94",
   "inputs": {
-    "card": "64546b38fb1f0bb4",
+    "card": "d3cc234f1b73df94",
     "page": "94fc5fab58509461",
     "rules": "c1a7854c21d10fb4",
     "words": "d97299e28fe837ba"
   },
-  "checkedAt": "2026-11-23T11:57:35Z",
+  "checkedAt": "2026-11-23T11:57:58Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "memories that are happening within an app are different than memories that are originated directly in Zenod",
       "where": "vn_42bc4eb9",
       "status": "met",
-      "how": "Evidence page shows list labels 'From EpicTeam Chat' and 'Spoken to Zenod', opened note with label and real title, and search hits with labels."
+      "how": "Evidence shows list labels 'From EpicTeam Chat' and 'Spoken to Zenod', opened note with label and real title, and search results with labels."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 and 1280 px the page opens with the punchline box and a three-box sequence, the list, opened note and search screens all show labels, and there is no sideways overflow."
+    "summary": "Both widths open with the punchline box under the title, show the list, opened note and search with labels, and do not scroll sideways."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Asks Jordi to confirm whether labelling each voice note by where it was spoken, shown in the list, opened note and search, does tell app notes from notes spoken to Zenod everywhere he looks.",
+    "asked": "Decide whether the voice-note labels (From an app vs Spoken to Zenod) across the list, opened note and search tell app notes from spoken ones everywhere you look.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "94fc5fab58509461",
-    "walkedAt": "2026-11-23T11:57:35Z",
+    "walkedAt": "2026-11-23T11:57:58Z",
     "steps": [
       {
         "n": 1,
