@@ -821,6 +821,10 @@ export class PhylaxPortedRuntime {
               stopLeaseMaintenance?.();
             }
           }
+          // EPIC-24 M36: a stop (a deploy, a restart) aborts the running transcription, and the transcriber answers an abort
+          // with a failure receipt instead of throwing. Treated as a failed note, the owner got "could not finish
+          // transcribing" and the note was lost (a 2 hour note, 23 Nov). A stop puts the job back in the queue instead.
+          if (controller.signal.aborted && this.voiceWorkerClosed) throw new Error("voice worker stopped while transcribing");
           if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") {
             if (usageClaim) {
               this.completeVoiceTranscriptionUsage?.(

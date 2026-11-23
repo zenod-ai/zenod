@@ -3449,6 +3449,69 @@ describe("ported gateway integration", () => {
     }
   });
 
+  it("EPIC-24 M36: stopping Phylax during a long transcription puts the note back in the queue and tells the owner nothing", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-stop-long-"));
+    dirs.push(dataDir);
+    const path = phylaxWhatsAppPaths(dataDir).store;
+    const sent: string[] = [];
+    let started = false;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "alpha-token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        // like phylaxUnit's transcriber: an abort comes back as a failure receipt, not a throw
+        async transcribe({ signal }) {
+          started = true;
+          await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+          return { transcription_failed: { code: "timeout", reason: "timeout", message: "aborted" } };
+        },
+      },
+      async callDownstream() {
+        return { content: [{ type: "text", text: "Voice handled." }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 7086,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `stop-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    await runtime.whatsapp.handleEvent({
+      messageId: "long-note-stopped",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: "long-note-stopped" },
+    });
+    await vi.waitFor(() => expect(started).toBe(true));
+    await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("long-note-stopped")?.state).toBe("transcribing"));
+    await runtime.close();
+    const reopened = new WhatsAppStore(path);
+    try {
+      // after the stop the boot puts a job that was transcribing back in the queue; it is never failed or answered
+      expect(reopened.voiceJob("long-note-stopped")?.state).toBe("queued");
+      expect(sent.filter((text) => text.includes("could not finish transcribing"))).toEqual([]);
+      expect(sent[0]).toContain("Long voice note, transcribing it, about 36 min.");
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("notifies explicitly when restart interrupted media before the Ring boundary", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-restart-notice-"));
     dirs.push(dataDir);
