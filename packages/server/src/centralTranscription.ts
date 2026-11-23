@@ -20,8 +20,12 @@ export const CENTRAL_STT_SMALL_MODEL = "small";
  * Measured on vps3 at load 12 (22 Nov): turbo takes 27 to 36 s even for a 5 s note and 33 s for a 30 s one; small takes 6 to 9 s
  * for 5 s and 11 to 26 s for 30 s. So turbo is only tried for notes up to 30 s and small up to 90 s; longer ones would not
  * finish in 60 s and go straight to the paid provider.
+ * Re-measured 23 Nov on 27 of the team's own recordings (docs/evidence/e20-a7-stt-compare-2026-11-23.md): turbo disagreed with
+ * the stored text less than small on 12 of 21 notes (small on 4), 7.7 against 9.0 percent on notes of 30 to 90 s and clearly
+ * better on noisy Spanish, and finished a 30 to 90 s note in 43 s (median) and 52 s (longest) at load 17 to 22, so turbo now
+ * covers notes up to 45 s (about 33 s of work) and small the rest up to 90 s.
  */
-export const CENTRAL_STT_TURBO_MAX_SECONDS = 30;
+export const CENTRAL_STT_TURBO_MAX_SECONDS = 45;
 export const CENTRAL_STT_SMALL_MAX_SECONDS = 90;
 
 export interface CentralSttConfig {
