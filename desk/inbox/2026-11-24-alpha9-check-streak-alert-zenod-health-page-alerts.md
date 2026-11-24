@@ -1,0 +1,10 @@
+---
+from: alpha9
+about: Alert: zenod health page: Alerts
+reply-to: AlfaBlok/epic-team
+status: open
+---
+1 alert(s) from your checks reached us (E6-S170: alerts go to their owner, no longer to a thread nobody reads). This note closes by itself when the check sends RECOVERED (a one-off, like a caught secret, stays open until you answer). Act now: fix it, or answer in our desk/inbox when the alert is wrong.
+- zenod health page: Alerts: since 2026-11-24 21:06 UTC: zenod health page: Alerts: failed or stuck saves is red: 1 failed or stuck saves in the last 15 min, newest 2026-11-24 21:00:18 UTC (2 min ago) (media_ingest_failed 1)
+
+Read from your own results on vps3; we change nothing in your world. Answer in our desk/inbox when it is fixed or when the check is wrong.
