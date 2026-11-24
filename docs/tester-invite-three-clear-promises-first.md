@@ -29,14 +29,14 @@ Goal sentence: The tester page and invite say plainly what testers get, and the 
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-23T19:10Z Ticket worker run_077e027c: E26-S3 named where each of the three testers stopped (A our 503 on 13 Nov, fixed; B a code and no trace of why; C linked, no note) and added a log line for unmatched code messages (PR #1756, [evidence](evidence/e26-s3-2026-11-23.md)) ; 2026-11-23T18:35Z DM run_87182dee started E26-S3 ; 2026-11-22T12:55Z Ticket worker run_4fa57feb: E26-S38 iteration 2 (one sample week, no switch) confirmed live on production 2c12217a at 390 and 1280 px on zenod.dev and /testers; card back in Jordi's review ; E26-S37 approved by Jordi ; 2026-11-24T03:10Z T2 worker run_1685353c started: map the three tester emails, then fold T2 or ask to switch it on
-Result: production 49f5ca5c: apply with only an email, the sample memory, 30 free memories, welcome, stuck alert, the one-tap next-day email, thank-you email; E26-S37 and E26-S38 approved by Jordi 22 Nov; 3 applications, 3 sign-ups, 1 WhatsApp linked, 0 first notes; where each tester stopped is known (E26-S3)
+Last attempted: 2026-11-24T19:45Z DM roll-up (run_1dc96fcf): T2 done 24 Nov 04:05Z (run_1685353c): the welcome after checkout folded into the sign-up welcome E26-S33, so a new tester gets one welcome email, six tester messages mapped (0e95e7c4) ; E26-S3 done 23 Nov (where each tester stopped) ; its log line for unmatched WhatsApp codes is live with the Phylax roll of 24 Nov 19:33Z (sha-bb5a670)
+Result: production 9a7f17c5: apply with only an email, sample memory, 30 free memories, one welcome email, stuck alert, next-day email, thank-you email, and now an Obsidian import; 3 sign-ups, 1 WhatsApp linked, 0 saved memories
 Evidence: [tester welcome](http://vps3.taild81fbb.ts.net:9002/) · [tester link on screen](http://vps3.taild81fbb.ts.net:9352/) · [quick start](http://vps3.taild81fbb.ts.net:8921/e26-s15/) · [phone setup review](evidence/e26-s23-2026-11-14.md) · [WhatsApp setup words](http://vps3.taild81fbb.ts.net:9001/)
-Waiting on: the three testers sending a first note ; EPIC-7 E7-A39 (one question to the stuck testers 25 Nov) ; the next stranger to apply (zenod-social recruits)
+Waiting on: the three testers sending a first note ; EPIC-7 E7-S30 (their replies, read 25 Nov 16:00Z) ; the next stranger to apply (zenod-social recruits)
 Approved work: none
-Next action: the next Phylax roll carries the E26-S3 log line (read `[whatsapp][link]` in the next stuck tester's window) ; on E7-A39 yes, EPIC-7 asks the testers what stopped them and this epic fixes the step they name
+Next action: read `[whatsapp][link]` in the next stuck tester's window (log line live on Phylax sha-bb5a670) ; when E7-S30 names what stopped the testers, this epic fixes that step
 Source revision: main (staging 57ea1252 and later; production d9ebdd6)
-Verified at: 2026-11-23T19:05Z (production 49f5ca5c via /api/health; E26-S3 evidence and row statuses read)
+Verified at: 2026-11-24T19:45Z (production 9a7f17c5 via /api/health; Phylax sha-bb5a670 per docs/DEPLOYMENTS.md; T2 and E26-S3 rows read)
 
 ## Waiting on
 - [answered E26-A18 2026-11-19 @Delivery-Manager · done 2026-11-19 c68f23f] The next-day WhatsApp email (approved by you as E26-A17) now names the new one-tap button: only its middle sentence changes, to "It takes one tap: open cloud.zenod.dev on your phone, tap Open WhatsApp, and press send."; the rest stays word for word — answer: decided by Delivery Manager under your E26-A17 yes (the console's ask gate: act on that answer) — why: the old sentence told testers to type their number and make a code, which the app no longer needs since E7-S16 — rollback: the old sentence returns, one commit
