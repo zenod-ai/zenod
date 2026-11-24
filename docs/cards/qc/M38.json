@@ -1,46 +1,46 @@
 {
   "row": "M38",
   "card": "docs/cards/M38.md",
-  "cardSha": "bd8b8b630b360b53",
+  "cardSha": "2742c837376128f7",
   "inputs": {
-    "card": "bd8b8b630b360b53",
+    "card": "2742c837376128f7",
     "page": "53f03800b09a6806",
     "rules": "c1a7854c21d10fb4",
     "words": "5f26c029b49bfb4c"
   },
-  "checkedAt": "2026-11-24T20:19:36Z",
+  "checkedAt": "2026-11-24T20:30:06Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?",
       "where": "vn_d197f642",
       "status": "met",
-      "how": "Evidence shows a 2 h 5 min, 30 MB test note landing as one transcript of 16,147 words; card line 1 says so."
+      "how": "Evidence shows a 2 h 5 min, 30 MB test note landing as one transcript of 16,147 words, and the card's first line says so."
     },
     {
       "said": "at least get the whatsapp thing done ASAP ... I want to dispatch as much as possible please",
       "where": "vn_d197f642",
       "status": "declared",
-      "how": "Card's ✗ line says the WhatsApp path was not sent, no test number; evidence says WhatsApp connected on Phylax."
+      "how": "Card's ✗ line says the WhatsApp path was not sent, with no test number; evidence says WhatsApp connected on Phylax."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The 390 px first screen opens with the punchline, a sequence in one scrolling row with a cut edge, and the live test block; no sideways page overflow, text readable, and the 1280 px layout is clean."
+    "summary": "The evidence page opens with the punchline box and shows the flow as boxes with arrows; it fits at 390 px with the code block scrolling inside its own box, and the shell is intact."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "He is asked whether he will send Zenod one long voice note himself to test it, and recommends yes.",
+    "asked": "Will you send Zenod one long voice note yourself to try it?",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "53f03800b09a6806",
-    "walkedAt": "2026-11-24T20:19:36Z",
+    "walkedAt": "2026-11-24T20:30:06Z",
     "steps": [
       {
         "n": 1,
