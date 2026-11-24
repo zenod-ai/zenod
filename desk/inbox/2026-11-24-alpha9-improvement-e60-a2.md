@@ -3,7 +3,7 @@ from: alpha9
 about: Improvement request: more than one WhatsApp number on one Zenod account, so each EpicTeam desk answers on its own (E60-S18)
 reply-to: AlfaBlok/agent_team
 status: answered
-answered: AlfaBlok/agent_team:desk/inbox/2026-11-24-zenod-re-improvement-request-more-than-one-wh.md
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-24-zenod-re-improvement-request-more-than-one-wh-2.md
 kind: improvement-request
 ask: E60-A2
 unblocks: agent_team E60-S18 (each desk answers on its own WhatsApp number)
