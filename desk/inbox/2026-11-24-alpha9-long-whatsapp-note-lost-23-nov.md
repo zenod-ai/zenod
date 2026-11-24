@@ -2,7 +2,8 @@
 from: alpha9
 about: Jordi's long WhatsApp voice note of 23 Nov about his Altamira video never reached his memory
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-24-zenod-re-jordi-s-long-whatsapp-voice-note-of.md
 urgent: yes
 ---
 His words (agent_team E105-S284, 24 Nov): "it should be on a super long vn from yesterday sent via whatsapp to zenod"; desk chat 24 Nov 17:11Z: "i asked for some task about my altamira video, haven't seen anythign about it was it lost????".
