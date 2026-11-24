@@ -1,0 +1,83 @@
+{
+  "row": "M38",
+  "card": "docs/cards/M38.md",
+  "cardSha": "652a203e2ab05bde",
+  "inputs": {
+    "card": "652a203e2ab05bde",
+    "page": "53f03800b09a6806",
+    "rules": "c1a7854c21d10fb4",
+    "words": "5f26c029b49bfb4c"
+  },
+  "checkedAt": "2026-11-24T20:18:46Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?",
+      "where": "vn_d197f642",
+      "status": "met",
+      "how": "Evidence shows a 2 h 5 min, 30 MB test note landing as one transcript of 16,147 words; card line 1 says so."
+    },
+    {
+      "said": "at least get the whatsapp thing done ASAP ... I want to dispatch as much as possible please",
+      "where": "vn_d197f642",
+      "status": "met",
+      "how": "Card's delivered line says a deploy midway keeps parts and the next try finishes; evidence shows this too, but his point was about resend and the error message. (shown on the evidence page: the card's three short lines need not hold it)"
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The evidence page loads at both widths with the punchline first, a sequence strip, and the live test panel; no page-level breach is visible."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether to send a long voice note to test the fix, with the recommendation that he should say yes.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "53f03800b09a6806",
+    "walkedAt": "2026-11-24T20:18:46Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9903/#test",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages ›'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'PR 1763'",
+        "url": "https://github.com/zenod-ai/zenod/pull/1763",
+        "result": "answered 200 (another site)"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9903/#test",
+      "file": "M38-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9903/#test",
+      "file": "M38-1280.webp"
+    }
+  ]
+}
