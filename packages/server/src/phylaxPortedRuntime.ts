@@ -9,7 +9,11 @@ import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
 import {
   CAPTURE_NOT_SAVED_REPLY,
   CAPTURE_RETRY_NOTICE,
+  MAX_TRANSCRIPTION_ATTEMPTS,
+  TRANSCRIPTION_RETRY_DELAYS_MS,
   WhatsAppStore,
+  isRetryableTranscriptionFailure,
+  type WhatsAppVoiceFailureDetail,
 } from "./whatsappStore.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { TelegramGateway } from "./telegramGateway.js";
@@ -129,7 +133,7 @@ export function safeVoiceTranscriptionFailure(
     case "provider_unavailable":
       return `⚠️ Voice transcription failed (code ${code} · transcription provider is temporarily down). Please try again later.`;
     case "timeout":
-      return "⚠️ Zenod could not finish transcribing that voice note. Please try a shorter note or try again.";
+      return "⚠️ Zenod could not finish transcribing that voice note in time (code ZT-TIMEOUT). The audio is kept.";
     case "no_speech":
       return "⚠️ Zenod could not find speech in that voice note. Please try again.";
     case "disabled":
@@ -139,6 +143,45 @@ export function safeVoiceTranscriptionFailure(
     default:
       return "⚠️ Voice transcription is unavailable right now. Please try again later.";
   }
+}
+
+/** EPIC-24 M37: the failed step in plain words, for the owner's reply and the not-transcribed Log entry. */
+export function transcriptionFailureWords(failure: Pick<PhylaxTranscriptionFailure, "code" | "reason"> | null | undefined): string {
+  switch ((failure?.reason ?? failure?.code ?? "unavailable").trim().toLowerCase()) {
+    case "timeout": return "transcription ran out of time";
+    case "provider_credit_exhausted": return "the transcription credit is used up";
+    case "provider_auth_failed": return "the transcription key was rejected";
+    case "provider_rate_limited": return "the transcription service was busy";
+    case "provider_unavailable": return "the transcription service was down";
+    case "network_error": return "the transcription service could not be reached";
+    case "no_speech": return "no speech was found in it";
+    case "disabled": return "voice transcription is turned off";
+    case "not_configured": return "no transcription service is set up";
+    default: return "transcription was unavailable";
+  }
+}
+
+/** EPIC-24 M37: sent once when a transcription fails and will be tried again by itself. */
+export function voiceTranscriptionRetryReply(failure: PhylaxTranscriptionFailure, retryInMs: number): string {
+  const minutes = Math.max(1, Math.round(retryInMs / 60_000));
+  const when = minutes >= 90 ? `about ${Math.round(minutes / 60)} h` : `about ${minutes} min`;
+  return `⚠️ Your voice note is not transcribed yet: ${transcriptionFailureWords(failure)} `
+    + `(code ${transcriptionFailureCode(failure.reason ?? failure.code)}). The audio is kept and Zenod tries again `
+    + `by itself in ${when}, so there is no need to send it again.`;
+}
+
+/** EPIC-24 M37: heads the reply when a note is filed as not transcribed. */
+export function voiceNotTranscribedReply(failure: PhylaxTranscriptionFailure): string {
+  const tries = failure.attempts && failure.attempts > 1 ? ` after ${failure.attempts} tries` : "";
+  return `⚠️ Not transcribed: ${transcriptionFailureWords(failure)}${tries} `
+    + `(code ${transcriptionFailureCode(failure.reason ?? failure.code)}). The audio is kept and filed in your memory as a note pointing to it.`;
+}
+
+/** EPIC-24 M37: the transcription source a not-transcribed note is filed with (it heads its Log entry). */
+export function notTranscribedSource(failure: PhylaxTranscriptionFailure, attempts: number): string {
+  const tries = attempts > 1 ? ` after ${attempts} tries` : "";
+  const provider = failure.provider ? `, last ${failure.provider}` : "";
+  return `not transcribed: ${transcriptionFailureWords(failure)}${tries}${provider}`;
 }
 
 /** Concise owner/admin notice, distinct from the customer copy. */
@@ -768,7 +811,7 @@ export class PhylaxPortedRuntime {
           // transcription allowance before its first forward. Settling again
           // can only pause it for good, and the oldest job would block the rest.
           const retriedCapture = this.whatsappStore.voiceCaptureRetryCount(job.providerMessageId) > 0;
-          if (!retriedCapture && transcription.transcription_failed?.code !== "duration_limit") {
+          if (!retriedCapture && !transcription.transcription_failed) {
             usageClaim = this.beginVoiceTranscriptionUsage?.({
               tenantId: job.tenantId,
               providerMessageId: job.providerMessageId,
@@ -836,6 +879,7 @@ export class PhylaxPortedRuntime {
             continue;
           }
           const skippedForDuration = transcription.transcription_failed?.code === "duration_limit";
+          let notTranscribed: WhatsAppVoiceFailureDetail | undefined;
           if (!skippedForDuration && (transcription.transcription_failed || !transcription.text_transcript?.trim())) {
             if (usageClaim) {
               this.completeVoiceTranscriptionUsage?.(usageClaim, false);
@@ -846,24 +890,55 @@ export class PhylaxPortedRuntime {
               reason: "unknown",
               message: "transcription returned empty text",
             };
-            this.whatsappStore.queueVoiceFailureReply(
-              job.providerMessageId,
-              safeVoiceTranscriptionFailure(failure),
-              Date.now(),
-              {
-                reason: failure.reason ?? failure.code,
-                provider: failure.provider ?? null,
-                httpStatus: failure.http_status ?? null,
-                providerCode: failure.provider_code ?? null,
-                message: failure.message,
-              },
-            );
-            await this.whatsapp.drainMediaRecovery();
-            continue;
+            const detail: WhatsAppVoiceFailureDetail = {
+              reason: failure.reason ?? failure.code,
+              provider: failure.provider ?? null,
+              httpStatus: failure.http_status ?? null,
+              providerCode: failure.provider_code ?? null,
+              message: failure.message,
+            };
+            // EPIC-24 M37: a failure that can pass is tried again by itself (bounded, growing waits; the
+            // capture retry tick requeues it) and the owner is told once what failed and that the audio is
+            // kept. Any other failure, or the last try, files the note as not transcribed, pointing to its audio.
+            const now = Date.now();
+            if (isRetryableTranscriptionFailure(detail.reason) && job.attempts < MAX_TRANSCRIPTION_ATTEMPTS) {
+              const waitMs = TRANSCRIPTION_RETRY_DELAYS_MS[Math.min(Math.max(job.attempts, 1), TRANSCRIPTION_RETRY_DELAYS_MS.length) - 1]!;
+              console.log(JSON.stringify({
+                event: "transcription.retry_scheduled",
+                provider_message_id: job.providerMessageId,
+                attempt: job.attempts,
+                reason: detail.reason,
+                provider: detail.provider,
+                retry_in_min: Math.round(waitMs / 60_000),
+              }));
+              this.whatsappStore.queueVoiceFailureReply(
+                job.providerMessageId,
+                voiceTranscriptionRetryReply(failure, waitMs),
+                now,
+                detail,
+              );
+              await this.whatsapp.drainMediaRecovery();
+              continue;
+            }
+            notTranscribed = detail;
+            transcription = {
+              duration_seconds: job.durationSeconds,
+              transcription_source: notTranscribedSource(failure, job.attempts),
+              transcription_failed: { ...failure, attempts: job.attempts },
+            } as PhylaxTranscriptionReceipt;
+            console.log(JSON.stringify({
+              event: "transcription.filed_not_transcribed",
+              provider_message_id: job.providerMessageId,
+              attempts: job.attempts,
+              reason: detail.reason,
+              provider: detail.provider,
+            }));
           }
           if (!this.whatsappStore.persistVoiceTranscript(
             job.providerMessageId,
             transcription as unknown as Record<string, unknown>,
+            Date.now(),
+            notTranscribed,
           )) {
             if (usageClaim) {
               this.completeVoiceTranscriptionUsage?.(usageClaim, true);
@@ -876,7 +951,7 @@ export class PhylaxPortedRuntime {
             usageSettled = true;
           }
         }
-        if (!transcription.text_transcript?.trim() && transcription.transcription_failed?.code !== "duration_limit") {
+        if (!transcription.text_transcript?.trim() && !transcription.transcription_failed) {
           this.whatsappStore.queueVoiceFailureReply(
             job.providerMessageId,
             "⚠️ I could not process the persisted voice transcript because it was empty.",
@@ -928,7 +1003,13 @@ export class PhylaxPortedRuntime {
           },
         });
         this.whatsappStore.reconcileVoiceCoalescedFollowers(job.providerMessageId);
-        this.whatsappStore.completeVoiceRingHandoff(job.providerMessageId, result.replyText);
+        const failedNote = transcription.transcription_failed && transcription.transcription_failed.code !== "duration_limit"
+          ? transcription.transcription_failed
+          : null;
+        this.whatsappStore.completeVoiceRingHandoff(
+          job.providerMessageId,
+          failedNote ? `${voiceNotTranscribedReply(failedNote)}\n\n${result.replyText}` : result.replyText,
+        );
         await this.whatsapp.drainMediaRecovery();
         result.afterReply?.();
       } catch (error) {
@@ -985,11 +1066,12 @@ export class PhylaxPortedRuntime {
   }
 
   /**
-   * ZAL-A15: voice notes of the last 7 days that a paid transcription provider refused are
-   * transcribed again (the local whisper fallback makes this succeed without credit).
+   * ZAL-A15 + EPIC-24 M37: voice notes of the last 7 days whose transcription failed for a reason that can
+   * pass are transcribed again when their next try is due (at boot and on every capture retry tick).
    */
   retryFailedTranscriptions(now = Date.now()): number {
-    const requeued = this.whatsappStore.requeueProviderFailedTranscriptions(
+    if (this.voiceWorkerClosed) return 0;
+    const requeued = this.whatsappStore.requeueDueFailedTranscriptions(
       now - 7 * 24 * 60 * 60_000,
       (path) => existsSync(path),
       now,
@@ -1014,6 +1096,7 @@ export class PhylaxPortedRuntime {
     this.captureRetryTimer = setInterval(() => {
       try {
         this.retryDueVoiceCaptures();
+        this.retryFailedTranscriptions();
       } catch (error) {
         console.error("[phylax] voice capture retry tick failed:", error);
       }

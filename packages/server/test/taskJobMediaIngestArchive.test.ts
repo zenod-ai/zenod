@@ -431,6 +431,27 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0]!.content).toContain("authenticated channel reported transcription unavailable");
     expect(stored[0]!.content).not.toContain("This second transcription must never run.");
+
+    // EPIC-24 M37: Phylax gives up after its retries and says why; the entry says it and points to the audio.
+    const failed = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("raw audio that timed out").toString("base64")}`,
+      filename: "voice.ogg",
+      sourceHint: "WhatsApp voice note",
+      providedTranscript: "",
+      transcriptionProvider: "not transcribed: transcription ran out of time after 5 tries, last central faster-whisper small",
+      audioDurationSeconds: 7086,
+      transcriptionDisposition: "skip_unavailable",
+    });
+    let failedDone = store.get(failed.id);
+    for (let i = 0; i < 50 && failedDone?.status !== "done"; i += 1) {
+      await sleep(10);
+      failedDone = store.get(failed.id);
+    }
+    expect(failedDone?.status).toBe("done");
+    expect(stored[1]!.content).toContain("Transcription: skipped, not transcribed (transcription ran out of time after 5 tries, last central faster-whisper small).");
+    expect(stored[1]!.content).toContain("Not transcribed: transcription ran out of time after 5 tries, last central faster-whisper small. The audio is kept at the raw audio archive link");
+    expect(stored[1]!.content).toMatch(/Raw artifact: \S+/);
     await queue.close();
     store.close();
   });

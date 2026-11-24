@@ -369,6 +369,20 @@ export const CAPTURE_NOT_SAVED_REPLY =
  * Waits between automatic save retries of a kept voice note (about 24 h in all).
  * After the last one fails the note is given up and the user gets CAPTURE_NOT_SAVED_REPLY.
  */
+/**
+ * EPIC-24 M37: waits before the 2nd, 3rd, 4th and 5th try of a voice note whose transcription failed for a reason
+ * that can pass; after MAX_TRANSCRIPTION_ATTEMPTS tries it is filed as not transcribed, its audio kept.
+ */
+export const TRANSCRIPTION_RETRY_DELAYS_MS = [5 * 60_000, 30 * 60_000, 2 * 60 * 60_000, 6 * 60 * 60_000] as const;
+export const MAX_TRANSCRIPTION_ATTEMPTS = TRANSCRIPTION_RETRY_DELAYS_MS.length + 1;
+export const RETRYABLE_TRANSCRIPTION_FAILURES = [
+  "timeout", "unavailable", "unknown", "provider_credit_exhausted", "provider_auth_failed", "provider_unavailable",
+  "provider_rate_limited", "network_error",
+] as const;
+export function isRetryableTranscriptionFailure(reason: string | null | undefined): boolean {
+  return (RETRYABLE_TRANSCRIPTION_FAILURES as readonly string[]).includes((reason ?? "").trim().toLowerCase());
+}
+
 export const CAPTURE_RETRY_DELAYS_MS: readonly number[] = [
   60_000,
   2 * 60_000,
@@ -1193,46 +1207,76 @@ export class WhatsAppStore {
     providerMessageId: string,
     transcription: Record<string, unknown>,
     now = Date.now(),
+    /** EPIC-24 M37: a note filed as not transcribed keeps why on its row. */
+    failure?: WhatsAppVoiceFailureDetail,
   ): boolean {
     return Boolean(this.db.prepare(
       `UPDATE whatsapp_voice_jobs
-       SET job_state = 'transcribed', transcription_json = ?, error_text = NULL,
-           failure_reason = NULL, failure_provider = NULL,
-           failure_http_status = NULL, failure_provider_code = NULL,
+       SET job_state = 'transcribed', transcription_json = ?, error_text = ?,
+           failure_reason = ?, failure_provider = ?,
+           failure_http_status = ?, failure_provider_code = ?,
            updated_at = ?
        WHERE provider_message_id = ? AND job_state = 'transcribing'`,
-    ).run(safeJson(transcription), now, providerMessageId).changes);
+    ).run(
+      safeJson(transcription),
+      failure?.message?.slice(0, 2_000) ?? null,
+      failure?.reason ?? null,
+      failure?.provider ?? null,
+      failure?.httpStatus ?? null,
+      failure?.providerCode ?? null,
+      now,
+      providerMessageId,
+    ).changes);
   }
 
   /**
-   * ZAL-A15: voice notes whose transcription failed for a provider reason (out of credit, rejected
-   * key, outage, rate limit, network) while their audio is still kept go back to the queue, to be
-   * transcribed again (now with the local whisper fallback). Returns the requeued message ids.
+   * ZAL-A15 + EPIC-24 M37: a voice note whose transcription failed for a reason that can pass (a provider
+   * refusal or outage, a network error, a time limit, a stop) goes back to the queue by itself while its
+   * audio is kept, with growing waits (TRANSCRIPTION_RETRY_DELAYS_MS after the 1st, 2nd... try) and at most
+   * MAX_TRANSCRIPTION_ATTEMPTS tries in all. The failure reason stays on the row until a try succeeds, so it is
+   * readable after a deploy (M37: a 2 h note of 23 Nov failed once on a deploy and was never tried again).
+   * Returns the requeued message ids.
    */
-  requeueProviderFailedTranscriptions(
+  requeueDueFailedTranscriptions(
     since: number,
     artifactExists: (path: string) => boolean,
     now = Date.now(),
   ): string[] {
+    const reasons = RETRYABLE_TRANSCRIPTION_FAILURES.map(() => "?").join(", ");
     const rows = this.db.prepare(
-      `SELECT provider_message_id AS id, artifact_path AS path FROM whatsapp_voice_jobs
-       WHERE job_state = 'failed' AND created_at >= ?
-         AND failure_reason IN ('provider_credit_exhausted', 'provider_auth_failed', 'provider_unavailable',
-                                'provider_rate_limited', 'network_error')`,
-    ).all(since) as Array<{ id: string; path: string }>;
+      `SELECT provider_message_id AS id, artifact_path AS path, attempts, updated_at AS updatedAt
+       FROM whatsapp_voice_jobs
+       WHERE job_state = 'failed' AND created_at >= ? AND attempts < ?
+         AND failure_reason IN (${reasons})
+       ORDER BY created_at ASC`,
+    ).all(since, MAX_TRANSCRIPTION_ATTEMPTS, ...RETRYABLE_TRANSCRIPTION_FAILURES) as Array<{
+      id: string; path: string; attempts: number; updatedAt: number;
+    }>;
     const requeued: string[] = [];
     for (const row of rows) {
+      const tries = Math.max(1, Number(row.attempts) || 0);
+      const wait = TRANSCRIPTION_RETRY_DELAYS_MS[Math.min(tries, TRANSCRIPTION_RETRY_DELAYS_MS.length) - 1]!;
+      if (Number(row.updatedAt) + wait > now) continue;
       if (!artifactExists(row.path)) continue;
       const changed = this.db.prepare(
-        `UPDATE whatsapp_voice_jobs
-         SET job_state = 'queued', error_text = NULL, transcription_json = NULL,
-             failure_reason = NULL, failure_provider = NULL, failure_http_status = NULL,
-             failure_provider_code = NULL, updated_at = ?
+        `UPDATE whatsapp_voice_jobs SET job_state = 'queued', updated_at = ?
          WHERE provider_message_id = ? AND job_state = 'failed'`,
       ).run(now, row.id).changes;
       if (changed) requeued.push(row.id);
     }
     return requeued;
+  }
+
+  /** EPIC-24 M37: when a failed transcription may be tried again (null: no further try). */
+  nextTranscriptionRetryAt(providerMessageId: string): number | null {
+    const row = this.db.prepare(
+      `SELECT attempts, failure_reason AS reason, updated_at AS updatedAt FROM whatsapp_voice_jobs
+       WHERE provider_message_id = ?`,
+    ).get(providerMessageId) as { attempts: number; reason: string | null; updatedAt: number } | undefined;
+    if (!row || !isRetryableTranscriptionFailure(row.reason)) return null;
+    const tries = Math.max(1, Number(row.attempts) || 0);
+    if (tries >= MAX_TRANSCRIPTION_ATTEMPTS) return null;
+    return Number(row.updatedAt) + TRANSCRIPTION_RETRY_DELAYS_MS[Math.min(tries, TRANSCRIPTION_RETRY_DELAYS_MS.length) - 1]!;
   }
 
   requeueInterruptedVoiceJob(providerMessageId: string, now = Date.now()): boolean {

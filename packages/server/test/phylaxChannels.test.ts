@@ -2762,7 +2762,7 @@ describe("PhylaxChannelsOrgan", () => {
     }
   });
 
-  it("requeues voice notes a paid provider refused, with their audio kept, for a new transcription (ZAL-A15)", async () => {
+  it("requeues a failed transcription with its audio kept, after a growing wait, at most 5 tries, reason kept (ZAL-A15, EPIC-24 M37)", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-requeue-"));
     dirs.push(dataDir);
     const store = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
@@ -2772,20 +2772,42 @@ describe("PhylaxChannelsOrgan", () => {
       artifactSha256: id.padEnd(64, "a").slice(0, 64), mimeType: "audio/ogg", fileName: `${id}.ogg`, captionText: "",
       durationSeconds: 10, state: "queued",
     }, createdAt);
-    for (const [id, at] of [["credit", 1_000], ["speech", 1_001], ["gone", 1_002], ["old", 10]] as const) {
+    const reasons: Record<string, string> = { credit: "provider_credit_exhausted", timeout: "timeout", speech: "no_speech", gone: "network_error", old: "timeout" };
+    for (const [id, at] of [["credit", 1_000], ["timeout", 1_001], ["speech", 1_002], ["gone", 1_003], ["old", 10]] as const) {
       create(id, at);
-      expect(store.claimNextVoiceJob(null)?.providerMessageId).toBe(id);
-      store.queueVoiceFailureReply(id, "warned", at, { reason: id === "speech" ? "no_speech" : "provider_credit_exhausted", provider: "openrouter", httpStatus: 402 });
+      expect(store.claimNextVoiceJob(null, at)?.providerMessageId).toBe(id);
+      store.queueVoiceFailureReply(id, "warned", at, { reason: reasons[id], provider: "whisper.cpp" });
     }
-    expect(store.voiceJob("credit")?.state).toBe("failed");
-    const requeued = store.requeueProviderFailedTranscriptions(500, (path) => !path.endsWith("gone.ogg"), 2_000);
-    expect(requeued).toEqual(["credit"]);
-    expect(store.voiceJob("credit")?.state).toBe("queued");
+    const minute = 60_000;
+    // Not due before the first wait (5 min) has passed.
+    expect(store.requeueDueFailedTranscriptions(500, () => true, 1_000 + 4 * minute)).toEqual([]);
+    const requeued = store.requeueDueFailedTranscriptions(500, (path) => !path.endsWith("gone.ogg"), 1_003 + 5 * minute);
+    expect(requeued).toEqual(["credit", "timeout"]);
+    expect(store.voiceJob("timeout")).toMatchObject({ state: "queued", failureReason: "timeout" });
     expect(store.voiceJob("speech")?.state).toBe("failed");
     expect(store.voiceJob("gone")?.state).toBe("failed");
     expect(store.voiceJob("old")?.state).toBe("failed");
-    expect(store.claimNextVoiceJob(null)?.providerMessageId).toBe("credit");
-    expect(store.requeueProviderFailedTranscriptions(500, () => true, 3_000)).toEqual(["gone"]);
+    expect(store.nextTranscriptionRetryAt("speech")).toBeNull();
+    // Tries 2 to 5 wait 30 min, 2 h, 6 h after the failed try; after the 5th try nothing more is queued.
+    let now = 1_003 + 5 * minute;
+    expect(store.claimNextVoiceJob(null, now)?.providerMessageId).toBe("credit");
+    store.queueVoiceFailureReply("credit", "warned", now, { reason: "no_speech", provider: "central" });
+    expect(store.claimNextVoiceJob(null, now)?.providerMessageId).toBe("timeout");
+    store.queueVoiceFailureReply("timeout", "warned", now, { reason: "timeout", provider: "central" });
+    for (const wait of [30 * minute, 120 * minute, 360 * minute]) {
+      expect(store.nextTranscriptionRetryAt("timeout")).toBe(now + wait);
+      expect(store.requeueDueFailedTranscriptions(500, () => true, now + wait - 1)).not.toContain("timeout");
+      expect(store.requeueDueFailedTranscriptions(500, () => true, now + wait)).toContain("timeout");
+      now += wait;
+      while (store.voiceJob("timeout")?.state !== "transcribing") store.claimNextVoiceJob(null, now);
+      store.queueVoiceFailureReply("timeout", "warned", now, { reason: "timeout", provider: "central" });
+    }
+    expect(store.voiceJob("timeout")?.attempts).toBe(5);
+    expect(store.nextTranscriptionRetryAt("timeout")).toBeNull();
+    expect(store.requeueDueFailedTranscriptions(500, () => true, now + 1_000 * minute)).not.toContain("timeout");
+    expect(store.voiceJob("timeout")).toMatchObject({ state: "failed", failureReason: "timeout" });
+    // The note whose audio came back was picked up by a later tick.
+    expect(store.voiceJob("gone")?.state).toBe("queued");
     store.close();
   });
 
@@ -4062,6 +4084,89 @@ describe("ported gateway integration", () => {
     }
   });
 
+  it("EPIC-24 M37: a note that cannot be transcribed is filed as not transcribed, pointing to its kept audio, and the reply names why", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-not-transcribed-"));
+    dirs.push(dataDir);
+    const sent: string[] = [];
+    const downstreamCalls: PhylaxDownstreamCall[] = [];
+    let failure: { code: string; reason: string; message: string; provider: string } = { code: "no_speech", reason: "no_speech", message: "empty", provider: "central faster-whisper small" };
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "alpha-token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          return { transcription_failed: failure };
+        },
+      },
+      async callDownstream(call) {
+        downstreamCalls.push(call);
+        return { content: [{ type: "text", text: "Voice handled." }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 60,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `not-transcribed-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const voice = (messageId: string): WhatsAppInboundEvent => ({
+      messageId,
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: messageId },
+    });
+    try {
+      // A failure that cannot pass is filed at once.
+      await runtime.whatsapp.handleEvent(voice("silent-note"));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("silent-note")?.state).toBe("completed"));
+      expect(downstreamCalls).toHaveLength(1);
+      expect(JSON.stringify(downstreamCalls[0])).toContain("not transcribed: no speech was found in it");
+      const job = runtime.whatsappStore.voiceJob("silent-note")!;
+      expect(job).toMatchObject({ failureReason: "no_speech", failureProvider: "central faster-whisper small" });
+      await vi.waitFor(() => expect(sent.some((text) => text.startsWith("⚠️ Not transcribed: no speech was found in it (code ZT-SPEECH)."))).toBe(true));
+      expect(sent.find((text) => text.startsWith("⚠️ Not transcribed"))).toContain("Voice handled.");
+
+      // A failure that can pass is retried; on the 5th try it is filed the same way.
+      failure = { code: "timeout", reason: "timeout", message: "aborted", provider: "central faster-whisper small" };
+      await runtime.whatsapp.handleEvent(voice("slow-note"));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("slow-note")?.state).toBe("failed"));
+      expect(downstreamCalls).toHaveLength(1);
+      expect(sent.some((text) => text.includes("not transcribed yet: transcription ran out of time"))).toBe(true);
+      let now = Date.now();
+      for (let attempt = 2; attempt <= 5; attempt += 1) {
+        now += 7 * 60 * 60_000;
+        expect(runtime.retryFailedTranscriptions(now)).toBe(1);
+        if (attempt < 5) {
+          await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("slow-note")).toMatchObject({ state: "failed", attempts: attempt }));
+        }
+      }
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("slow-note")?.state).toBe("completed"));
+      expect(downstreamCalls).toHaveLength(2);
+      expect(JSON.stringify(downstreamCalls[1])).toContain("not transcribed: transcription ran out of time after 5 tries");
+      // One "not yet" reply for the whole note, then one final reply.
+      expect(sent.filter((text) => text.includes("not transcribed yet"))).toHaveLength(1);
+      await vi.waitFor(() => expect(sent.some((text) => text.startsWith("⚠️ Not transcribed: transcription ran out of time after 5 tries"))).toBe(true));
+    } finally {
+      await runtime.close();
+    }
+  });
+
   it("automatically handles voice notes through two hours, skips longer transcription, and keeps cancellation scoped", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-controls-"));
     dirs.push(dataDir);
@@ -4263,7 +4368,10 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-safety-bound")?.state).toBe("failed"));
       expect(downstreamCalls).toBe(0);
       expect(sent[0]).toContain("queued it for transcription");
-      expect(sent[1]).toBe("⚠️ Zenod could not finish transcribing that voice note. Please try a shorter note or try again.");
+      // EPIC-24 M37: the owner hears what failed, that the audio is kept and retried, and never to send it again.
+      expect(sent[1]).toBe("⚠️ Your voice note is not transcribed yet: transcription ran out of time (code ZT-TIMEOUT). The audio is kept and Zenod tries again by itself in about 5 min, so there is no need to send it again.");
+      expect(runtime.whatsappStore.voiceJob("voice-safety-bound")).toMatchObject({ failureReason: "timeout", attempts: 1 });
+      expect(runtime.whatsappStore.nextTranscriptionRetryAt("voice-safety-bound")).not.toBeNull();
       expect(sent.join("\n")).not.toMatch(/100ms|deadline|provider|MCP|Ring|Phylax|https?:\/\//i);
     } finally {
       await runtime.close();

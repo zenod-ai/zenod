@@ -812,7 +812,7 @@ async function processMediaIngest(
     ...(extraction.transcriptionStatus === "skipped_duration_limit"
       ? ["Transcription: skipped because the audio exceeds Zenod's 2-hour transcription limit."]
       : extraction.transcriptionStatus === "skipped_unavailable"
-        ? ["Transcription: skipped because the authenticated channel reported it unavailable."]
+        ? [`Transcription: skipped, ${extraction.provider}.`]
       : [`${extraction.kind === "audio" ? "Transcribed" : "Extracted"} by ${extraction.provider}.`]),
     `Extraction artifact: ${extractionHandle.uri}`,
     ...(input.contentHint ? [`User context: ${input.contentHint}`] : []),
@@ -955,13 +955,18 @@ function skippedDurationLimitExtraction(input: TaskJobInput, archived: ArchivedM
   };
 }
 
-function skippedUnavailableExtraction(_input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
+function skippedUnavailableExtraction(input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
+  // EPIC-24 M37: Phylax files a note it could not transcribe (after its retries) with the reason as its
+  // transcription provider, "not transcribed: <reason> after N tries, last <provider>".
+  const reason = input.transcriptionProvider?.trim().match(/^not transcribed: (.{1,300})$/i)?.[1];
   return {
     body: [
-      "This voice note was archived without another transcription attempt because the authenticated channel reported transcription unavailable.",
+      reason
+        ? `Not transcribed: ${reason}. The audio is kept at the raw audio archive link in this evidence entry.`
+        : "This voice note was archived without another transcription attempt because the authenticated channel reported transcription unavailable.",
       "Use the raw audio archive link in this evidence entry for separate processing.",
     ].join("\n"),
-    provider: "not transcribed (channel unavailable)",
+    provider: reason ? `not transcribed (${reason})` : "not transcribed (channel unavailable)",
     kind: "audio",
     filename: `${stripKnownExtension(archived.filename)}.archive-note.txt`,
     label: "Voice note",
