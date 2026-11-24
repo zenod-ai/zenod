@@ -45,6 +45,16 @@ describe("EPIC-20 A4: Phylax shared OpenAI transcription with a monthly stop", (
     expect(restarted.snapshot()).toMatchObject({ month: "2026-12", spentUsd: 0, notes: 0 });
   });
 
+  it("EPIC-20 A10: ElevenLabs calls are not counted against the shared OpenAI cap", () => {
+    const budget = new PhylaxSharedTranscriptionBudget(join(dir, "eleven"), { PHYLAX_SHARED_OPENAI_API_KEY: "sk-shared" });
+    const options = phylaxTranscriptionOptions({ provider: "local", model: null, key: null }, {}, new AbortController().signal, budget.route());
+    const row = { operation: "transcribe", model: "m", inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0, status: "succeeded", estimatedCostUsd: 0.05 } as const;
+    options.onUsage!({ ...row, provider: "elevenlabs" });
+    expect(budget.snapshot().spentUsd).toBe(0);
+    options.onUsage!({ ...row, provider: "openai" });
+    expect(budget.snapshot().spentUsd).toBeCloseTo(0.05, 9);
+  });
+
   it("routes local and platform-OpenRouter tenants to the shared key; own Groq/OpenAI keys stay", () => {
     const budget = new PhylaxSharedTranscriptionBudget(join(dir, "route"), { PHYLAX_SHARED_OPENAI_API_KEY: "sk-shared" });
     const signal = new AbortController().signal;

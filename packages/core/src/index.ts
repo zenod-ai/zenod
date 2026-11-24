@@ -195,6 +195,7 @@ export {
   type LlmOperation,
   type LlmUsageReport,
   type Provider,
+  type UsageProvider,
 } from "./llm/aisdk.js";
 export { DEEPSEEK_BASE_URL, DEEPSEEK_PRICES, deepseekCostUsd, isDeepseekPeak } from "./llm/deepseek.js";
 export { withBackgroundRoute, type BackgroundRouteOptions } from "./llm/backgroundRoute.js";

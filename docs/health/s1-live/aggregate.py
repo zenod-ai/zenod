@@ -566,7 +566,7 @@ def components(d: dict) -> list[dict]:
     cr = d["credit"] if "credit" in d else remember_credit(d, {}, ref)["credit"]
     parts, worst, values = [], "green", {}
     rank = {"green": 0, "amber": 1, "red": 2}
-    for prov in ("deepseek", "openrouter", "openai"):
+    for prov in CREDIT_PROVIDERS:
         x = cr.get(prov) or {}
         col_, text = credit_status(prov, x)
         values[prov] = {k: x.get(k) for k in ("state", "balanceUsd", "perDayUsd", "daysLeft", "refusals")}
@@ -574,14 +574,14 @@ def components(d: dict) -> list[dict]:
         if rank[col_] > rank[worst]:
             worst = col_
     drill = any(x.get("drill") for x in cr.values())
-    reds = [t for prov, t in zip(("deepseek", "openrouter", "openai"), parts)
+    reds = [t for prov, t in zip(CREDIT_PROVIDERS, parts)
             if credit_status(prov, cr.get(prov) or {})[0] != "green"]
     prob = None
     if worst != "green":
         prob = "; ".join(reds) + (" [drill: staged low balance]" if drill else "")
-    row(id="credit", n="19", name="AI credit: DeepSeek, OpenRouter and OpenAI", remote=False,
+    row(id="credit", n="19", name="AI credit: DeepSeek, OpenRouter, ElevenLabs and OpenAI", remote=False,
         where="DeepSeek prepaid balance (background work) and the platform OpenRouter key (chat, voice), read by "
-              "cloud.zenod.dev/api/health",
+              "cloud.zenod.dev/api/health; ElevenLabs (first for voice notes, EPIC-20 A10) and OpenAI from the logs",
         status=worst, problem=prob,
         signal="; ".join(parts),
         signal_value=values,
@@ -623,6 +623,7 @@ def components(d: dict) -> list[dict]:
     return R
 
 
+CREDIT_PROVIDERS = ("deepseek", "openrouter", "elevenlabs", "openai")   # row 19, in this order
 TRANSCRIBE_RED_COUNT = 5                        # E20-A7: fallbacks in 15 min that turn row 21 red
 CREDIT_RED_DAYS, CREDIT_AMBER_DAYS = 5, 10      # E26-S8: days left at the current daily spend
 CREDIT_RED_USD, CREDIT_AMBER_USD = 2.0, 5.0     # and a floor for when the spend is not known yet
@@ -632,6 +633,7 @@ CREDIT_KEEP_DAYS = 8
 CREDIT_REFUSAL_HOURS = 6
 OPENAI_REFUSAL_HOURS = 48   # EPIC-24 M36: the voice-note fallback key has no balance to read; a refusal stays red this long
 TOP_UP = {
+    "elevenlabs": ("ElevenLabs", "Jordi checks the plan and the key at https://elevenlabs.io/app/subscription"),
     "openai": ("OpenAI", "Jordi tops up at https://platform.openai.com/settings/organization/billing/"),
     "deepseek": ("DeepSeek", "Jordi tops up at https://platform.deepseek.com/top_up"),
     "openrouter": ("OpenRouter", "Jordi adds credit at https://openrouter.ai/settings/credits or raises "
@@ -642,6 +644,12 @@ TOP_UP = {
 def credit_status(prov: str, x: dict) -> tuple[str, str]:
     """(colour, one line) for one provider's credit summary from remember_credit()."""
     name, who = TOP_UP[prov]
+    if prov == "elevenlabs":
+        # EPIC-20 A10: the shared key has no balance to read; a quota or key refusal (notes then fall back) is red
+        if x.get("refusals"):
+            return "red", (f"{name} refused {x['refusals']} voice notes for quota or key in the last "
+                           f"{CREDIT_REFUSAL_HOURS} h (they fell back to the next provider). {who}")
+        return "green", f"{name} (first for voice notes): no refusal in the last {CREDIT_REFUSAL_HOURS} h"
     if prov == "openai":
         # EPIC-24 M36: only the log says (HTTP 429 "no credits remaining"); no balance is read for this key
         if x.get("refusals"):
@@ -729,6 +737,8 @@ def remember_credit(raw: dict, st: dict, ref: dt.datetime) -> dict:
         b = x["balanceUsd"]
         x["daysLeft"] = round(b / per, 1) if b is not None and per else None
         out[prov] = x
+    out["elevenlabs"] = {"state": None, "balanceUsd": None, "perDayUsd": None, "daysLeft": None, "checkedAt": None, "drill": False,
+                         "refusals": sum(1 for _, r in refusals if r.startswith("elevenlabs"))}
     # EPIC-24 M36: OpenAI (the shared voice-note key) answers HTTP 429 "no credits remaining", read from the logs only
     oa = recent_ops(ops, ("credit",), ref, minutes=OPENAI_REFUSAL_HOURS * 60)
     out["openai"] = {"state": None, "balanceUsd": None, "perDayUsd": None, "daysLeft": None, "checkedAt": None, "drill": False,

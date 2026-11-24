@@ -94,9 +94,12 @@ export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extract
  * result, not estimated. The cache split matters for cost: reads bill at
  * ~0.1x the input rate, writes at ~1.25x, so they're tracked separately.
  */
+/** Who billed a usage row: an LLM provider, or a speech-to-text-only one (EPIC-20 A10: ElevenLabs). */
+export type UsageProvider = Provider | "elevenlabs";
+
 export interface LlmUsageReport {
   operation: LlmOperation;
-  provider: Provider;
+  provider: UsageProvider;
   model: string;
   /** Uncached input tokens, billed at the standard input rate. */
   inputTokens: number;

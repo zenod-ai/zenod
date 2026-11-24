@@ -1085,8 +1085,9 @@ function createTenantOrgan(
             configured: transcription.provider,
             provider: result.provider ?? null,
             central: String(result.provider ?? "").startsWith("central"),
+            elevenlabs: String(result.provider ?? "").startsWith("elevenlabs"),
             shared_openai:
-              usesSharedTranscription(transcription.provider, shared) && !String(result.provider ?? "").startsWith("central"),
+              usesSharedTranscription(transcription.provider, shared) && String(result.provider ?? "").startsWith("openai"),
             local_fallback:
               (transcription.provider !== "local" || usesSharedTranscription(transcription.provider, shared)) &&
               String(result.provider ?? "").startsWith("whisper.cpp"),
@@ -1221,7 +1222,8 @@ export function phylaxTranscriptionOptions(
       openaiModel: shared.model,
       openrouterApiKey: "",
       longTranscriptionProvider: "openai",
-      onUsage: (report) => shared.record({
+      // EPIC-20 A10: ElevenLabs (first when its shared key is set) is not this OpenAI key's spend.
+      onUsage: (report) => report.provider !== "elevenlabs" && shared.record({
         estimatedCostUsd: report.estimatedCostUsd ?? 0,
         status: report.status === "succeeded" ? "succeeded" : "failed",
       }),
