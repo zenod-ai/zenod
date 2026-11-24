@@ -1,0 +1,93 @@
+{
+  "row": "M37",
+  "card": "docs/cards/M37.md",
+  "cardSha": "dfda0b9465d1d26e",
+  "inputs": {
+    "card": "dfda0b9465d1d26e",
+    "page": "13f6a239231e76f9",
+    "rules": "c1a7854c21d10fb4",
+    "words": "1507435402a736e1"
+  },
+  "checkedAt": "2026-11-24T19:37:37Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "it should be on a super long vn from yesterday sent via whatsapp to zenod",
+      "where": "2026-11-24",
+      "status": "met",
+      "how": "Card line says the 23 November note is filed in your Log with all 13,036 words."
+    },
+    {
+      "said": "i asked for some task about my altamira video, haven't seen anythign about it was it lost????",
+      "where": "2026-11-24",
+      "status": "met",
+      "how": "Card answers 'was it lost' with the filed note and the 23 November source line."
+    },
+    {
+      "said": "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?",
+      "where": "vn_d197f642",
+      "status": "met",
+      "how": "Card line says a failed transcription now retries by itself and tells you why."
+    },
+    {
+      "said": "at least get the whatsapp thing done ASAP ... I want to dispatch as much as possible please",
+      "where": "vn_d197f642",
+      "status": "met",
+      "how": "WhatsApp failure handling is delivered; the two-hour split is declared undone with a ✗ line."
+    }
+  ],
+  "visual": {
+    "pass": false,
+    "problems": [
+      "at 390 px: The evidence link opens a Google sign-in page, not the delivered note, Log entry or retry result. (rule 6)",
+      "at 1280 px: The evidence link at laptop width also shows only the Google sign-in form, so the delivered result is never shown. (rule 6)"
+    ],
+    "breaches": [
+      {
+        "rule": 6,
+        "width": 390,
+        "what": "The evidence link opens a Google sign-in page, not the delivered note, Log entry or retry result."
+      },
+      {
+        "rule": 6,
+        "width": 1280,
+        "what": "The evidence link at laptop width also shows only the Google sign-in form, so the delivered result is never shown."
+      }
+    ],
+    "summary": "Both widths show the Google sign-in screen with an empty email field instead of the filed note or the retry result, so the card's claims cannot be seen."
+  },
+  "pass": false,
+  "held": [
+    "failed the visual check: at 390 px: The evidence link opens a Google sign-in page, not the delivered note, Log entry or retry result. (rule 6); at 1280 px: The evidence link at laptop width also shows only the Google sign-in form, so the delivered result is never shown. (rule 6)"
+  ],
+  "reader": {
+    "asked": "Confirm whether the 23 November two-hour voice note filed in your Log is the one you meant (we recommend yes).",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a sign-in",
+    "page": "13f6a239231e76f9",
+    "walkedAt": "2026-11-24T19:37:37Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "https://drive.google.com/file/d/1MmgOA-9pTkvbH0vPXRHQeNjhfmciR1RI/view",
+        "result": "his screen: a sign-in (nothing of his pressed)"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "https://drive.google.com/file/d/1MmgOA-9pTkvbH0vPXRHQeNjhfmciR1RI/view",
+      "file": "M37-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "https://drive.google.com/file/d/1MmgOA-9pTkvbH0vPXRHQeNjhfmciR1RI/view",
+      "file": "M37-1280.webp"
+    }
+  ]
+}
