@@ -1,0 +1,77 @@
+{
+  "row": "E7-S31",
+  "card": "docs/cards/E7-S31.md",
+  "cardSha": "01dfe3108e1a4524",
+  "inputs": {
+    "card": "01dfe3108e1a4524",
+    "page": "d3340a94b4cb885c",
+    "rules": "c1a7854c21d10fb4",
+    "words": "167564d6ec33d802"
+  },
+  "checkedAt": "2026-11-24T15:31:30Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Measure whether each Zenod tester has connected MCP, as a step in the tester table. Core: reuses wheel: His voice note vn_aa7447c3 on E7-A42 (24 Nov): MCP connected is not measured; add it beside storage, Google Drive, repo and WhatsApp, and count reads and writes to the memory from WhatsApp and from agents.",
+      "where": "the row's ask (no quote of his found)",
+      "status": "met",
+      "how": "Tester table shows an MCP connected column after GitHub set up for each of the 3 testers, grey as not yet."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The 1280 and 390 px screens show the punchline box first, then a tester table with MCP connected and count columns; the 390 px layout stacks cleanly with no sideways page scroll."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether these columns (MCP connected and memory use counts in the tester table) show where testers get stuck, answering Recommend yes.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "d3340a94b4cb885c",
+    "walkedAt": "2026-11-24T15:31:30Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9008/?focus=MCP%20connected",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'today's picture'",
+        "url": "http://vps3.taild81fbb.ts.net:9008/tester-table.png",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9008/?focus=MCP%20connected",
+      "file": "E7-S31-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9008/?focus=MCP%20connected",
+      "file": "E7-S31-1280.webp"
+    }
+  ]
+}
