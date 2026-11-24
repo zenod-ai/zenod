@@ -46,12 +46,14 @@ import type {
   TreeSweepInput,
   TreeSweepResult,
   PersonaNotesInput,
+  NotesImportInput,
+  NotesImportResult,
   UnpublishedHeadRecovery,
   SetAsideAbandonedChanges,
   WorkInput,
   WorkResult,
 } from "../types.js";
-import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "../types.js";
+import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN, NOTES_IMPORT_LIMITS } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault, newLintErrors } from "../vault/lint.js";
@@ -2453,6 +2455,72 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }, "background");
   }
 
+  /** Folder-relative Markdown path, or throws `<code>_bad_path` (no `..`, no absolute, no empty parts). */
+  function notePathIn(folder: string, rawName: string, code: string): string {
+    const name = rawName.replaceAll("\\", "/");
+    if (!name || name.startsWith("/") || name.split("/").some((part) => !part || part === "." || part === "..") || !name.endsWith(".md")) {
+      throw new Error(`${code}_bad_path`);
+    }
+    return `${folder}${name}`;
+  }
+
+  /** Write files under ONE folder as ONE revision on the background lane; anything outside the folder puts the tree back. */
+  async function writeFolderRevision(folder: string, files: Array<{ path: string; content: string }>, message: string, code: string): Promise<VaultRevision | null> {
+    assertVault(repo);
+    const vault = repo;
+    return queue.run(async (): Promise<VaultRevision | null> => {
+      await assertNoInterruptedFiling();
+      if ((await vault.pendingChanges()).length > 0) throw new Error(`${code}_dirty_worktree`);
+      await vault.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      try {
+        for (const file of files) {
+          await mkdir(dirname(join(vaultPath, file.path)), { recursive: true });
+          await writeFile(join(vaultPath, file.path), file.content);
+        }
+        const changes = await vault.pendingChanges();
+        if (changes.length === 0) return null;
+        if (changes.some((change) => !change.path.startsWith(folder))) throw new Error(`${code}_outside_folder`);
+        return await vault.commitAndPublish(message.split("\n")[0]!.slice(0, 200));
+      } catch (error) {
+        await vault.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+  }
+
+  /**
+   * E7-S32: a tester's existing Obsidian vault, brought in as it is: every note unchanged (frontmatter and
+   * [[links]] kept; links resolve by note name, so they still work one folder down) under `Imported/<vault>/`,
+   * as ONE revision. No model call, so it spends no AI credit. Size limits are NOTES_IMPORT_LIMITS.
+   */
+  async function importNotes(input: NotesImportInput): Promise<NotesImportResult> {
+    assertVault(repo);
+    const vaultName = input.vaultName.normalize("NFC").replace(/[^\p{L}\p{N} ._-]+/gu, " ").replace(/\s+/g, " ").trim().replace(/^[.\s]+/, "").slice(0, 60).trim() || "Obsidian";
+    const folder = `Imported/${vaultName}/`;
+    if (input.files.length === 0) throw new Error("notes_import_empty");
+    if (input.files.length > NOTES_IMPORT_LIMITS.maxFiles) throw new Error("notes_import_too_many");
+    let total = 0;
+    const seen = new Set<string>();
+    const files = input.files.map((file) => {
+      const bytes = Buffer.byteLength(file.content, "utf8");
+      if (bytes > NOTES_IMPORT_LIMITS.maxFileBytes) throw new Error("notes_import_file_too_big");
+      total += bytes;
+      const path = notePathIn(folder, file.name, "notes_import");
+      if (file.name.replaceAll("\\", "/").split("/").some((part) => part.startsWith("."))) throw new Error("notes_import_bad_path");
+      if (seen.has(path)) throw new Error("notes_import_duplicate_path");
+      seen.add(path);
+      return { path, content: file.content };
+    });
+    if (total > NOTES_IMPORT_LIMITS.maxTotalBytes) throw new Error("notes_import_too_big");
+    let unchanged = 0;
+    for (const file of files) {
+      if ((await readFile(join(vaultPath, file.path), "utf8").catch(() => null)) === file.content) unchanged++;
+    }
+    const revision = await writeFolderRevision(folder, files, `memory: import ${files.length} note${files.length === 1 ? "" : "s"} from the Obsidian vault ${vaultName}`, "notes_import");
+    return { folder, written: revision ? files.length - unchanged : 0, unchanged: revision ? unchanged : files.length, revision };
+  }
+
   /**
    * EPIC-14 S4: one persona run's notes, into `Personas/<personaId>/` only, as ONE revision on the
    * background lane (behind any live filing, like the tree sweep). Any path outside the folder, or a
@@ -2462,33 +2530,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     assertVault(repo);
     if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.personaId)) throw new Error("persona_notes_bad_id");
     const folder = `Personas/${input.personaId}/`;
-    const files = input.files.map((file) => {
-      const name = file.name.replaceAll("\\", "/");
-      if (!name || name.startsWith("/") || name.split("/").some((part) => !part || part === "." || part === "..") || !name.endsWith(".md")) {
-        throw new Error("persona_notes_bad_path");
-      }
-      return { path: `${folder}${name}`, content: file.content };
-    });
+    const files = input.files.map((file) => ({ path: notePathIn(folder, file.name, "persona_notes"), content: file.content }));
     if (files.length === 0) return null;
-    return queue.run(async (): Promise<VaultRevision | null> => {
-      await assertNoInterruptedFiling();
-      if ((await repo.pendingChanges()).length > 0) throw new Error("persona_notes_dirty_worktree");
-      await repo.pull().catch(() => {});
-      lastSyncMs = now().getTime();
-      try {
-        for (const file of files) {
-          await mkdir(dirname(join(vaultPath, file.path)), { recursive: true });
-          await writeFile(join(vaultPath, file.path), file.content);
-        }
-        const changes = await repo.pendingChanges();
-        if (changes.length === 0) return null;
-        if (changes.some((change) => !change.path.startsWith(folder))) throw new Error("persona_notes_outside_folder");
-        return await repo.commitAndPublish(input.message.split("\n")[0]!.slice(0, 200));
-      } catch (error) {
-        await repo.discardChanges().catch(() => {});
-        throw error;
-      }
-    }, "background");
+    return writeFolderRevision(folder, files, input.message, "persona_notes");
   }
 
   async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
@@ -4284,6 +4328,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     },
     sweepTree,
     writePersonaNotes,
+    importNotes,
     memoryTree: async () => {
       assertVault(repo);
       await syncForRead();

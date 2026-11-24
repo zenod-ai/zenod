@@ -12,6 +12,7 @@ import {
   conversationId,
   isTrustedConnectionProfile,
   NoteNotFoundError,
+  NOTES_IMPORT_LIMITS,
   VERSION,
   type CleanSlateResult,
 } from "zenod";
@@ -2712,6 +2713,46 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.get("/api/vault/lint", async (c) => c.json(await runtime.lint()));
+
+  // E7-S32: a tester brings an existing Obsidian vault in. The browser reads the folder or .zip and sends only
+  // the Markdown notes; they are written unchanged under Imported/<vault>/ as one revision. No AI, no credit.
+  const NOTES_IMPORT_ERRORS: Record<string, [number, string]> = {
+    notes_import_empty: [400, "No Markdown notes were found in that vault."],
+    notes_import_too_many: [413, `A vault import takes up to ${NOTES_IMPORT_LIMITS.maxFiles} notes at a time.`],
+    notes_import_file_too_big: [413, `One note is over ${NOTES_IMPORT_LIMITS.maxFileBytes / 1024} KB.`],
+    notes_import_too_big: [413, `A vault import takes up to ${NOTES_IMPORT_LIMITS.maxTotalBytes / 1024 / 1024} MB of notes at a time.`],
+    notes_import_bad_path: [400, "One note has a path Zenod cannot keep."],
+    notes_import_duplicate_path: [400, "Two notes have the same path."],
+    notes_import_dirty_worktree: [409, "Your memory is busy saving something else. Try again in a minute."],
+    notes_import_unavailable: [409, "This memory cannot take an import yet. Connect your storage first."],
+  };
+  app.post(
+    "/api/vault/import",
+    bodyLimit({
+      maxSize: NOTES_IMPORT_LIMITS.maxTotalBytes + 8 * 1024 * 1024,
+      onError: (c) => c.json({ error: { code: "notes_import_too_big", message: NOTES_IMPORT_ERRORS.notes_import_too_big![1] } }, 413),
+    }),
+    async (c) => {
+      const body = await c.req.json<{ vaultName?: unknown; files?: unknown }>().catch(() => null);
+      const files = Array.isArray(body?.files) ? body.files : null;
+      if (!body || !files || !files.every((file) =>
+        file && typeof file === "object" && typeof (file as { name?: unknown }).name === "string" && typeof (file as { content?: unknown }).content === "string")) {
+        return c.json({ error: { code: "bad_request", message: "Send { vaultName, files: [{ name, content }] }." } }, 400);
+      }
+      try {
+        const result = await runtime.importNotes({
+          vaultName: typeof body.vaultName === "string" ? body.vaultName : "",
+          files: files as Array<{ name: string; content: string }>,
+        });
+        return c.json({ ok: true, folder: result.folder, written: result.written, unchanged: result.unchanged, headSha: result.revision?.commitSha ?? null });
+      } catch (error) {
+        const code = (error as Error).message;
+        const known = NOTES_IMPORT_ERRORS[code];
+        if (known) return c.json({ error: { code, message: known[1] } }, known[0] as 400);
+        return c.json({ error: { code: "notes_import_failed", message: "The import stopped before anything changed. Try again in a minute." } }, 500);
+      }
+    },
+  );
 
   app.post("/api/vault/clean-slate", async (c) => c.json(await runtime.cleanSlate()));
 

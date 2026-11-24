@@ -47,12 +47,14 @@ export type {
   TreeSweepInput,
   TreeSweepResult,
   PersonaNotesInput,
+  NotesImportInput,
+  NotesImportResult,
   UnpublishedHeadRecovery,
   SetAsideAbandonedChanges,
   WorkInput,
   WorkResult,
 } from "./types.js";
-export { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "./types.js";
+export { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN, NOTES_IMPORT_LIMITS } from "./types.js";
 
 export { loadBrainConfig, ConfigError, CONFIG_PATH, type BrainConfig } from "./vault/config.js";
 export { parseNote, serializeNote, type ParsedNote } from "./vault/frontmatter.js";

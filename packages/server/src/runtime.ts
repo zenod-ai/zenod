@@ -3032,6 +3032,13 @@ export class Runtime {
     };
   }
 
+  /** E7-S32: bring an existing Obsidian vault's notes into this memory, unchanged, under `Imported/<vault>/`. No LLM. */
+  async importNotes(input: import("zenod").NotesImportInput): Promise<import("zenod").NotesImportResult> {
+    const engine = await this.getEngine();
+    if (!engine.importNotes) throw new Error("notes_import_unavailable");
+    return engine.importNotes(input);
+  }
+
   /** Lint the vault — deterministic, needs only the repo (no Anthropic key). */
   async lint(): Promise<LintReport> {
     const repo = await this.getRepo();
