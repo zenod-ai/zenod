@@ -764,8 +764,9 @@ async function processMediaIngest(
   if (input.transcriptionDisposition === "skip_duration_limit"
     && !(typeof input.audioDurationSeconds === "number"
       && Number.isFinite(input.audioDurationSeconds)
-      && input.audioDurationSeconds > 2 * 60 * 60)) {
-    throw new Error("skip_duration_limit requires a reported audio duration over 2 hours");
+      && input.audioDurationSeconds > 0)) {
+    // EPIC-24 M38: the limit is the sender's (Phylax: 12 hours since M38, 2 hours before); it must say how long the note was.
+    throw new Error("skip_duration_limit requires a reported audio duration");
   }
 
   const engine = await getEngine();
@@ -810,7 +811,7 @@ async function processMediaIngest(
     ...(input.sourceApp ? [`Source app: ${input.sourceApp}`] : []),
     ...(input.senderTimestamp ? [`Source timestamp: ${input.senderTimestamp}`] : []),
     ...(extraction.transcriptionStatus === "skipped_duration_limit"
-      ? ["Transcription: skipped because the audio exceeds Zenod's 2-hour transcription limit."]
+      ? ["Transcription: skipped because the audio exceeds Zenod's transcription length limit."]
       : extraction.transcriptionStatus === "skipped_unavailable"
         ? [`Transcription: skipped, ${extraction.provider}.`]
       : [`${extraction.kind === "audio" ? "Transcribed" : "Extracted"} by ${extraction.provider}.`]),
@@ -855,7 +856,7 @@ async function processMediaIngest(
   return {
     status: "done",
     message: extraction.transcriptionStatus === "skipped_duration_limit"
-      ? "Audio archived without transcription because it exceeds the 2-hour limit; a Zenod entry pointing to the audio was filed."
+      ? "Audio archived without transcription because it exceeds the transcription length limit; a Zenod entry pointing to the audio was filed."
       : extraction.transcriptionStatus === "skipped_unavailable"
         ? "Audio archived without another transcription attempt; a Zenod entry pointing to the audio was filed."
       : enrichment
@@ -940,14 +941,14 @@ function suppliedTranscriptExtraction(input: TaskJobInput, archived: ArchivedMed
 function skippedDurationLimitExtraction(input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
   const duration = typeof input.audioDurationSeconds === "number" && Number.isFinite(input.audioDurationSeconds)
     ? `${Math.round(input.audioDurationSeconds)} seconds`
-    : "more than 2 hours";
+    : "unknown";
   return {
     body: [
-      "This voice note was archived without transcription because it exceeds Zenod's 2-hour transcription limit.",
+      "This voice note was archived without transcription because it exceeds Zenod's transcription length limit.",
       `Reported audio duration: ${duration}.`,
       "Use the raw audio archive link in this evidence entry for separate processing.",
     ].join("\n"),
-    provider: "not transcribed (2-hour duration limit)",
+    provider: "not transcribed (duration limit)",
     kind: "audio",
     filename: `${stripKnownExtension(archived.filename)}.archive-note.txt`,
     label: "Voice note",

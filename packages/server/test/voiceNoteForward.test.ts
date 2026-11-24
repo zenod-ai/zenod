@@ -267,6 +267,27 @@ describe("ingest_voice_note", () => {
     await client.close();
   });
 
+  it("EPIC-24 M38: a note over 16 MB is taken, not refused, and lands as one Log entry with its whole transcript", async () => {
+    const h = await harness();
+    const client = await h.connect(await h.signIn("voice_notes.write"));
+    const big = Buffer.alloc(17 * 1024 * 1024, 7);
+    // the transcriber cuts it into parts and joins them; what reaches the Log is the joined text, once
+    transcribeAudio.mockImplementation(async () => ({ success: true, transcript: "part one. part two. part three.", provider: "central faster-whisper small" }));
+    const result = structured(await client.callTool({ name: "ingest_voice_note", arguments: { sourceApp: "EpicTeam Chat", idempotencyKey: "vn_big", audioBase64: big.toString("base64"), mimeType: "audio/ogg" } }));
+    expect(result).toMatchObject({ duplicate: false, transcript: "zenod" });
+    await h.settle(String(result.jobId));
+    expect(transcribeAudio).toHaveBeenCalledTimes(1);
+    expect((transcribeAudio.mock.calls[0]![0] as Buffer).length).toBe(big.length);
+    expect(h.log).toHaveLength(1);
+    expect(h.log[0]!.content).toContain("part one. part two. part three.");
+    // the same size from a link is taken too; past 64 MB is still refused, in plain words
+    h.audioFetch.mockImplementationOnce(async () => new Response(big, { status: 200, headers: { "content-type": "audio/ogg" } }));
+    expect(structured(await client.callTool({ name: "ingest_voice_note", arguments: { sourceApp: "EpicTeam Chat", idempotencyKey: "vn_big_url", audioUrl: "https://files.example.com/big.ogg" } }))).toMatchObject({ duplicate: false });
+    h.audioFetch.mockImplementationOnce(async () => new Response(null, { status: 200, headers: { "content-type": "audio/ogg", "content-length": String(65 * 1024 * 1024) } }));
+    expect(structured(await client.callTool({ name: "ingest_voice_note", arguments: { sourceApp: "EpicTeam Chat", idempotencyKey: "vn_huge", audioUrl: "https://files.example.com/huge.ogg" } }))).toMatchObject({ code: "audio_too_large", message: "The audio is larger than 64 MB." });
+    await client.close();
+  }, 60_000);
+
   it("fetches audio from a public HTTPS link, refuses private addresses, and checks its input", async () => {
     const h = await harness();
     const client = await h.connect(await h.signIn("voice_notes.write"));

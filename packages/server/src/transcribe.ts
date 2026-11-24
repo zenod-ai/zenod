@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { availableParallelism, setPriority, tmpdir } from "node:os";
@@ -19,6 +20,8 @@ import {
   noteCentralSttResult,
   transcribeLongWithCentral,
   transcribeWithCentral,
+  CENTRAL_STT_CHUNK_SECONDS,
+  type TranscriptPartCache,
 } from "./centralTranscription.js";
 import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
 
@@ -867,6 +870,9 @@ export const TRANSCRIPT_MIN_WORDS_PER_MINUTE = positiveNumberFromEnv("ZENOD_TRAN
 /** Below this length a few quiet seconds swing the rate too much to judge coverage. */
 export const TRANSCRIPT_COVERAGE_MIN_SECONDS = 120;
 export const OPENROUTER_SEGMENT_SECONDS = positiveNumberFromEnv("ZENOD_OPENROUTER_SEGMENT_SECONDS", 600);
+/** M38: above 30 minutes (or 8 MB) an mp3 is never sent to OpenRouter in one request: it goes in segments from the start. */
+const OPENROUTER_MAX_ONE_SHOT_SECONDS = 1800;
+const OPENROUTER_MAX_ONE_SHOT_BYTES = 8_000_000;
 
 function positiveNumberFromEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -999,6 +1005,10 @@ async function transcribeWithOpenRouter(
     );
     const audio = await readFile(mp3);
     seconds = (await probeFileDurationSeconds(mp3, signal)) ?? audio.length / 4_000; // 32 kbps mono mp3
+    // EPIC-24 M38: a long note goes in parts from the start, never as one upload (a 2 h note is a 29 MB mp3).
+    if (seconds > OPENROUTER_MAX_ONE_SHOT_SECONDS || audio.length > OPENROUTER_MAX_ONE_SHOT_BYTES) {
+      return await transcribeOpenRouterSegments(mp3, dir, apiKey, model, signal, user, onUsage);
+    }
     const whole = await openRouterTranscribeMp3(audio, seconds, apiKey, model, signal, user, onUsage);
     if (!whole.success) return whole;
     const coverage = transcriptCoverage(whole.transcript ?? "", seconds);
@@ -1241,6 +1251,54 @@ export async function transcribeAudio(
   return timedResult;
 }
 
+/** M38: where transcribed parts wait for the rest of their note (the data volume, so they outlive a deploy). */
+function transcriptPartDir(): string | null {
+  const explicit = process.env.ZENOD_STT_PART_DIR?.trim();
+  if (explicit) return explicit;
+  // Tests share audio bytes across cases: they get a cache only when they ask for one.
+  if (process.env.VITEST || process.env.NODE_ENV === "test") return null;
+  const dataDir = process.env.ZENOD_DATA_DIR?.trim();
+  return dataDir ? join(dataDir, "stt-parts") : null;
+}
+
+const PART_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * EPIC-24 M38: one note's transcribed parts on disk, keyed by the audio's sha256, the engine and the part count (the cut
+ * points come from the same audio, so the same note always cuts the same way). Never throws to its caller's harm: a
+ * cache that cannot write only means a later try starts over, as before.
+ */
+export function transcriptPartCache(data: Buffer, engine: string, root: string | null = transcriptPartDir()): TranscriptPartCache | undefined {
+  if (!root) return undefined;
+  const key = createHash("sha256").update(data).digest("hex").slice(0, 32);
+  const dir = join(root, `${key}-${engine.replace(/[^a-z0-9.-]+/gi, "_")}`);
+  const file = (index: number, count: number) => join(dir, `${count}-${String(index).padStart(4, "0")}.txt`);
+  return {
+    async get(index, count) {
+      try {
+        return await readFile(file(index, count), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    async put(index, count, text) {
+      await mkdir(dir, { recursive: true });
+      const target = file(index, count);
+      await writeFile(`${target}.tmp`, text, "utf8");
+      await rename(`${target}.tmp`, target);
+      // Notes abandoned for good (cancelled, filed as not transcribed) leave parts behind: drop any over a week old.
+      for (const name of await readdir(root).catch(() => [] as string[])) {
+        const path = join(root, name);
+        const info = await stat(path).catch(() => null);
+        if (info && Date.now() - info.mtimeMs > PART_CACHE_MAX_AGE_MS) await rm(path, { recursive: true, force: true }).catch(() => undefined);
+      }
+    },
+    async clear() {
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
 /**
  * EPIC-24 M36: cuts a long note into parts of about `chunkSeconds` for the central service: 16 kHz mono 32 kb/s MP3 (a
  * 5-minute part is about 1.2 MB), cut at the middle of the pause nearest each multiple of the part length so a word is not
@@ -1339,6 +1397,7 @@ async function runTranscription(
       ?? (await probeAudioDurationSeconds(data, filename, signal));
     const plan = centralSttPlanFor(centralDuration, central);
     const centralModel = plan.model;
+    const centralParts = plan.long ? transcriptPartCache(data, `central-${centralModel}`) : undefined;
     const startedAt = Date.now();
     const attempt = centralSttCoolingDown()
       ? centralCooldownResult()
@@ -1351,6 +1410,7 @@ async function runTranscription(
             durationSeconds: centralDuration,
             deadlineMs: plan.deadlineMs,
             split: splitForCentral,
+            ...(centralParts ? { partCache: centralParts } : {}),
             ...(onProgress ? { onProgress } : {}),
             ...(signal ? { signal } : {}),
           })
@@ -1499,21 +1559,21 @@ async function runTranscription(
 
   let queueWaitMs: number | null = null;
   let runtimeStartedAt: number | null = null;
-  const result = await runLocalTranscriptionSerialized(async () => {
+  const localOnce = async (partData: Buffer, partName: string, partProgress?: (percent: number) => void): Promise<TranscriptionEnvelope> => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whisper-"));
-    const input = join(dir, `in${extname(filename) || ".m4a"}`);
+    const input = join(dir, `in${extname(partName) || ".m4a"}`);
     const wav = join(dir, "audio.wav");
     const outBase = join(dir, "out");
     try {
-      await writeFile(input, data);
+      await writeFile(input, partData);
       await run("ffmpeg", ["-y", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], { signal, niceness: WHISPER_NICE });
       await run(WHISPER_BINARY, ["-m", model, "-f", wav, "-l", LANGUAGE, "-t", WHISPER_THREADS, "-pp", "-otxt", "-of", outBase], {
         signal,
         niceness: WHISPER_NICE,
-        onStderrLine: onProgress
+        onStderrLine: partProgress
           ? (line) => {
               const pct = parseWhisperProgress(line);
-              if (pct !== null) onProgress(pct);
+              if (pct !== null) partProgress(pct);
             }
           : undefined,
       });
@@ -1527,6 +1587,42 @@ async function runTranscription(
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  };
+  const result = await runLocalTranscriptionSerialized(async () => {
+    // EPIC-24 M38: a long note runs in the same ~5 min parts as the central job, each kept on the data volume once done,
+    // so a deploy in the middle of a 2 h note costs one part, not the hours already spent (23 Nov: 1 h 47 min lost).
+    const localSeconds = durationSeconds ?? (await probeAudioDurationSeconds(data, filename, signal));
+    if (!localSeconds || localSeconds <= CENTRAL_STT_CHUNK_SECONDS * 1.2) return localOnce(data, filename, onProgress);
+    let parts: Array<{ data: Buffer; filename: string }>;
+    try {
+      parts = await splitForCentral(data, filename, localSeconds, CENTRAL_STT_CHUNK_SECONDS, signal);
+    } catch (err) {
+      if (signal?.aborted) return { success: false, provider: "whisper.cpp", error: "transcription was cancelled" };
+      console.warn(`[transcribe] could not cut the note into parts for whisper.cpp, running it whole: ${(err as Error).message}`);
+      return localOnce(data, filename, onProgress);
+    }
+    const cache = transcriptPartCache(data, `whisper-${modelName}`);
+    console.log(`[transcribe] whisper.cpp long job: ${Math.round(localSeconds)}s audio, ${parts.length} part(s) on ${modelName}`);
+    const texts: string[] = [];
+    for (const [index, part] of parts.entries()) {
+      const cached = await cache?.get(index, parts.length);
+      if (cached !== null && cached !== undefined) {
+        texts.push(cached);
+        continue;
+      }
+      const partResult = await localOnce(part.data, part.filename, onProgress
+        ? (pct) => onProgress(Math.round(((index + pct / 100) / parts.length) * 100))
+        : undefined);
+      // A silent part writes no text: it adds no words, like the central job.
+      const text = partResult.success ? partResult.transcript ?? "" : partResult.error === "transcription returned empty text" ? "" : null;
+      if (text === null) return partResult;
+      texts.push(text);
+      await cache?.put(index, parts.length, text).catch(() => undefined);
+    }
+    const transcript = texts.map((t) => t.trim()).filter(Boolean).join(" ");
+    if (!transcript) return { success: false, provider: "whisper.cpp", error: "transcription returned empty text" };
+    await cache?.clear().catch(() => undefined);
+    return { success: true, transcript, provider: `whisper.cpp ${modelName}` };
   }, signal, (waitMs) => {
     queueWaitMs = waitMs;
     runtimeStartedAt = Date.now();
