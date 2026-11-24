@@ -1,380 +1,380 @@
 {
-  "_about": "Zenod's feature list (same shape as agent_team docs/features/epicteam.json and epicsocial.json; started by EPIC-14 S8's worker 2026-11-08). Each line is true today and names the rows that built it. Habit: when Jordi closes a row done (approved) for something new a Zenod user can see, add it here in the same change or the next wake. `title` and `text` are public words: no row codes, no file paths. A line drafted for a row still in review has \"draft\": true until he closes it.",
-  "service": "Zenod",
-  "title": "What Zenod does for you",
-  "updated": "2026-11-23",
-  "groups": [
+ "_about": "Zenod's feature list (same shape as agent_team docs/features/epicteam.json and epicsocial.json; started by EPIC-14 S8's worker 2026-11-08). Each line is true today and names the rows that built it. Habit: when Jordi closes a row done (approved) for something new a Zenod user can see, add it here in the same change or the next wake. `title` and `text` are public words: no row codes, no file paths. A line drafted for a row still in review has \"draft\": true until he closes it.",
+ "service": "Zenod",
+ "title": "What Zenod does for you",
+ "updated": "2026-11-24",
+ "groups": [
+  {
+   "id": "talk-to-your-memory",
+   "title": "Talk to your memory",
+   "intro": "Ask, tell and call your memory from the web app.",
+   "features": [
     {
-      "id": "talk-to-your-memory",
-      "title": "Talk to your memory",
-      "intro": "Ask, tell and call your memory from the web app.",
-      "features": [
-        {
-          "id": "librarian-four-modes",
-          "title": "One box, four modes",
-          "text": "Write or speak to your librarian in one box. Zenod keeps it, looks it up, talks it over or makes it a job for the memory desk, and labels each reply. Tap the label to redo it another way.",
-          "rows": [
-            "E22-L2"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "talk-it-over",
-          "title": "Talk it over",
-          "text": "Think something through with Zenod or one of your personas. It reads the memories that match, says what they show and asks one question back. Nothing is saved or changed. Start it from the chat, a persona or an inbox note.",
-          "rows": [
-            "E22-L2"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "call-your-memory",
-          "title": "Call your memory",
-          "text": "Press the phone button in the chat and ask your memory out loud. It answers from your own notes and passes jobs to the memory desk. Nothing from a call is saved unless you keep it.",
-          "rows": [
-            "E14-S8"
-          ],
-          "since": "2026-11-08",
-          "draft": true
-        },
-        {
-          "id": "answer-lights-up",
-          "title": "See where an answer came from",
-          "text": "Press Show in graph under any chat answer. The memories it used light up in your memory graph with how well each matched, then the links between them turn green. Open any of them.",
-          "rows": [
-            "E12-S13"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "ask-zenod-about-itself",
-          "title": "Ask Zenod who it is",
-          "text": "Ask the chat who it is or what it can do and it tells you directly. Weak matches stay out of the memories it shows, and so do notes on family, health or money, which Zenod marks private as it files them.",
-          "rows": [
-            "E15-S1",
-            "E15-S2"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "read-as",
-          "title": "Zenod knows which one you mean",
-          "text": "Ask about the flat, Ana's thing or that cello thing and Zenod reads your words through what it knows you mean before it looks. A grey Read as line shows how it read you. Tap it to pick another place, and it reads your words that way from then on. Works in the chat, in Talk it over, on calls and for the AI apps you connect.",
-          "rows": [
-            "E14-S28",
-            "E14-S29"
-          ],
-          "since": "2026-11-11",
-          "draft": true
-        },
-        {
-          "id": "tester-welcome",
-          "title": "A welcome on WhatsApp the moment you link it",
-          "text": "When a tester links WhatsApp, Zenod answers with one message: thanks, a link to a one-minute video of five things to try at zenod.dev/start, and an invitation to send the first voice note right there. Each tester gets it once.",
-          "rows": [
-            "E26-S26"
-          ],
-          "since": "2026-11-14",
-          "draft": true
-        },
-        {
-          "id": "tester-thank-you-email",
-          "title": "A personal thank-you email when you link WhatsApp",
-          "text": "Within minutes of linking WhatsApp, each tester gets one short thank-you email from Jordi, Zenod's founder, with a few useful links and an open offer of a quick call. It comes once, and replies reach him directly.",
-          "rows": [
-            "E26-S28"
-          ],
-          "since": "2026-11-15",
-          "draft": true
-        },
-        {
-          "id": "whatsapp-one-tap-link",
-          "title": "Link WhatsApp in one tap",
-          "text": "Right after sign-up, Open WhatsApp opens a chat with Zenod with your code already typed. Press send and your phone is linked, no number to type. On a laptop, scan the QR with your phone.",
-          "rows": [
-            "E7-S16"
-          ],
-          "since": "2026-11-19",
-          "draft": true
-        },
-        {
-          "id": "voice-notes-any-length",
-          "title": "Voice notes of any length, up to 12 hours",
-          "text": "Send a WhatsApp voice note as long as you like. Zenod writes it out in five minute parts and files it as one entry. If a step fails, it tells you which one, keeps the audio and tries again by itself.",
-          "rows": [
-            "M36",
-            "M37",
-            "M38"
-          ],
-          "since": "2026-11-24",
-          "draft": true
-        }
-      ]
+     "id": "librarian-four-modes",
+     "title": "One box, four modes",
+     "text": "Write or speak to your librarian in one box. Zenod keeps it, looks it up, talks it over or makes it a job for the memory desk, and labels each reply. Tap the label to redo it another way.",
+     "rows": [
+      "E22-L2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
     },
     {
-      "id": "your-plan",
-      "title": "Your plan",
-      "intro": "What your plan includes and where it goes.",
-      "features": [
-        {
-          "id": "usage-by-feature",
-          "title": "See where your AI allowance goes",
-          "text": "The Usage tab shows this month's spend on filing, answers, personas, desk jobs and calls, what each costs, and what happens when the allowance runs out. Your notes are always kept.",
-          "rows": [
-            "E14-S10"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "become-a-tester",
-          "title": "Apply to test Zenod",
-          "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: their first 30 memories free, with no card.",
-          "rows": [
-            "ZAL-A13",
-            "E26-S2"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "sample-memory",
-          "title": "Try a sample memory before you apply",
-          "text": "The home page and the testers page show one person's week of voice notes as a cloud of linked thoughts. Tap a thought to read the note it came from, no sign-in needed.",
-          "rows": [
-            "E26-S35",
-            "E26-S37"
-          ],
-          "since": "2026-11-19",
-          "draft": true
-        },
-        {
-          "id": "tester-invite-link",
-          "title": "Join with one invite link",
-          "text": "A tester's invite is one link with their code inside. They sign in with Google or GitHub, checkout opens with the code applied at €0 and no card, and a You're in page shows the two next steps.",
-          "rows": [
-            "E26-T1"
-          ],
-          "since": "2026-11-10",
-          "draft": true
-        },
-        {
-          "id": "tester-first-memories-free",
-          "title": "Your first 30 memories free, never charged",
-          "text": "A tester's first 30 saved memories are free, with no card and no time limit, and the Zenod app shows how many are left. When you reach 30, Zenod stays free until the end of that month. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
-          "rows": [
-            "E26-S5",
-            "E26-S29"
-          ],
-          "since": "2026-11-15",
-          "draft": true
-        },
-        {
-          "id": "end-of-test-offer",
-          "title": "Keep Zenod in one click when your free test ends",
-          "text": "When your free test is about to end, the app and your account page show what you keep, which is your notes in your own Drive or repository, and what 9 euros a month gives. One button opens checkout for your own account, with nothing charged before the free test is over. If you do not pay, Zenod pauses and your notes stay yours.",
-          "rows": [
-            "E26-S13"
-          ],
-          "since": "2026-11-11",
-          "draft": true
-        },
-        {
-          "id": "tester-link-on-screen",
-          "title": "Get your tester link the moment you apply",
-          "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside, ready to open or copy. Nothing to wait for by email: come back to the page in the same browser and the link is still there. Open it, sign in, and checkout shows 0 euros with no card.",
-          "rows": [
-            "U7",
-            "E26-S14",
-            "E26-S11"
-          ],
-          "since": "2026-11-11",
-          "draft": true
-        },
-        {
-          "id": "tester-quick-start",
-          "title": "A quick start that ticks itself off",
-          "text": "New testers see one card above Chat with the few things that make Zenod theirs: send a WhatsApp, add Zenod to Claude or Codex, give it something to keep, ask for it back and choose one helper. Each step ticks off by itself when Zenod sees it happen, and a score in the header shows how far you are.",
-          "rows": [
-            "E26-S15",
-            "E26-S18"
-          ],
-          "since": "2026-11-12",
-          "draft": true
-        },
-        {
-          "id": "tell-us-what-you-think",
-          "title": "Tell us what you think with a voice note",
-          "text": "Testers see one quiet Tell us what you think link at the top of the app. It opens their own feedback page: tap, talk for a minute, send. Nobody listens to the audio: it is turned into text for the team and thrown away, and every note lands under their name so nothing they say gets lost.",
-          "rows": [
-            "E7-S9"
-          ],
-          "since": "2026-11-16",
-          "draft": true
-        }
-      ]
+     "id": "talk-it-over",
+     "title": "Talk it over",
+     "text": "Think something through with Zenod or one of your personas. It reads the memories that match, says what they show and asks one question back. Nothing is saved or changed. Start it from the chat, a persona or an inbox note.",
+     "rows": [
+      "E22-L2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
     },
     {
-      "id": "your-memory-tree",
-      "title": "Your memory tree",
-      "intro": "How Zenod keeps your notes in order.",
-      "features": [
-        {
-          "id": "memory-at-a-glance",
-          "title": "Your memory at a glance",
-          "text": "The Memory tab opens on your totals, how much you kept each week, your strongest places and where your memories come from, next to your recent saves.",
-          "rows": [
-            "E22-L2"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "tree-tidies-itself",
-          "title": "Your tree tidies itself",
-          "text": "Each week, small pages on the same subject as a page beside them join it, word for word, and topics such as Markets get their own branch.",
-          "rows": [
-            "E12-S24",
-            "E12-S25"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "check-where-it-landed",
-          "title": "Check where Zenod filed things",
-          "text": "Each new memory says how sure Zenod was of its place, and the least sure come first in the Memory tab. Say it is in the right place, or open any page on your tree, press Wrong place and pick where it belongs. Undo puts it back.",
-          "rows": [
-            "E12-S27"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "knows-what-you-mean",
-          "title": "See what Zenod knows you mean",
-          "text": "Memory, At a glance lists every part of your memory with a one-line summary, the nicknames you use for it, how many notes it holds, when you last added to it and what you added to in the past 7 days. Zenod picks up a nickname only when you said it yourself, keeps the list fresh after each note and once a night, and shows what keeping it cost.",
-          "rows": [
-            "E14-S28"
-          ],
-          "since": "2026-11-10",
-          "draft": true
-        },
-        {
-          "id": "label-where-spoken",
-          "title": "See where each voice note was spoken",
-          "text": "Every voice note says where it came from: From EpicTeam Chat, From an EpicTeam card answer, another app by name, or Spoken to Zenod for WhatsApp, the web and calls. The label shows in Recent saves, on an opened note next to a readable title, and in search results, and you can search by it.",
-          "rows": [
-            "V9"
-          ],
-          "since": "2026-11-23",
-          "draft": true
-        },
-        {
-          "id": "obsidian-import",
-          "title": "Bring your Obsidian vault in one step",
-          "text": "Already keep notes in Obsidian? Pick your vault folder, or a zip of it, and press Import. Your notes arrive as they are, links and properties kept, and Zenod can find them from day one. Importing uses no AI credit.",
-          "rows": [
-            "E7-S32"
-          ],
-          "since": "2026-11-24",
-          "draft": true
-        }
-      ]
+     "id": "call-your-memory",
+     "title": "Call your memory",
+     "text": "Press the phone button in the chat and ask your memory out loud. It answers from your own notes and passes jobs to the memory desk. Nothing from a call is saved unless you keep it.",
+     "rows": [
+      "E14-S8"
+     ],
+     "since": "2026-11-08",
+     "draft": true
     },
     {
-      "id": "helpers-and-inbox",
-      "title": "Helpers and your inbox",
-      "intro": "Helpers read your memory and leave cards you act on.",
-      "features": [
-        {
-          "id": "memory-personas",
-          "title": "Five memory personas you switch on",
-          "text": "Remind me, Your ideas, New possibilities and Reflect each read your memory and leave cards in your inbox. Make it easier is coming soon. One switch each, and one quiet switch keeps your memory tidy. Open any of them to see the helpers inside.",
-          "rows": [
-            "E14-S47"
-          ],
-          "since": "2026-11-18",
-          "draft": true
-        },
-        {
-          "id": "suggestion-cards",
-          "title": "Act on a helper's suggestion with one tap",
-          "text": "Helpers read your memory on their own schedule and leave suggestions in your inbox. Press Do it and the change is made as one job you can undo, change the words first, say not now with a reason, talk it over, or leave feedback by typing or with a voice note that the helper reads on its next run.",
-          "rows": [
-            "E14-S25",
-            "E14-S26"
-          ],
-          "since": "2026-11-09",
-          "draft": true
-        },
-        {
-          "id": "helpers-suggest",
-          "title": "Let a helper find one change your memory needs",
-          "text": "Open loops finder, People and follow-ups, Topic gardener, Ideas digest and Health of your memory read your recent notes and your tree on their own schedule and leave at most one suggestion a run, like moving a page where it belongs or linking two notes. Each is a change the memory desk can make and undo. A helper reads why you said not now and your feedback before its next run, and never offers the same change twice. Helpers work on your own memory and life only, never on your projects' work, and anything put away can be brought back with one tap.",
-          "rows": [
-            "E14-S27",
-            "E14-S1"
-          ],
-          "since": "2026-11-10",
-          "draft": true
-        },
-        {
-          "id": "helpers-ask-the-team",
-          "title": "Let a helper ask your team how things connect",
-          "text": "Switch it on for a helper and, when knowing how a note connects to your plans would change its suggestion, it asks your EpicTeam desk one question that run. The desk only reads and answers in words. The helper uses the answer as context and its card says what it asked and what the team said. It never picks or starts work.",
-          "rows": [
-            "E14-S35"
-          ],
-          "since": "2026-11-10",
-          "draft": true
-        },
-        {
-          "id": "something-to-try",
-          "title": "Get one small thing to try each day",
-          "text": "Switch on Something to try and once a day it reads what you said in the last few days, your voice notes first, and leaves one small thing you could try because of it in your inbox, with the notes it comes from. It never gives you project work, and it reads your feedback before its next run.",
-          "rows": [
-            "E14-S38"
-          ],
-          "since": "2026-11-11",
-          "draft": true
-        },
-        {
-          "id": "clarifier",
-          "title": "Get asked when a note could mean two things",
-          "text": "Switch on the Clarifier and each night it reads what you said in the last three days. When a note could mean two people, places or things, it asks you in your inbox which one you meant, with a button for each meaning or room for your own words. Your answer is saved to your memory like any note. At most two questions a night, never the same note twice, and never in a chat.",
-          "rows": [
-            "E14-S37"
-          ],
-          "since": "2026-11-11",
-          "draft": true
-        },
-        {
-          "id": "helper-cards",
-          "title": "Helper cards you can judge at a glance",
-          "text": "Every helper card in your inbox shows a small picture of the two ideas it joins, one line on why you might want it, one line on why you might not, and leaves the call to you. Suggestions, things to try and clarifying questions all read the same way.",
-          "rows": [
-            "E14-S36"
-          ],
-          "since": "2026-11-11",
-          "draft": true
-        },
-        {
-          "id": "helpers-for-testers",
-          "title": "Helpers are open for testers too",
-          "text": "Testers can switch on a helper, like a weekly recap of what they saved, from the Helpers tab. Every helper starts off, runs inside the tester's monthly allowance with a small limit of its own, and switching one on ticks the last step of the quick start.",
-          "rows": [
-            "E7-A21",
-            "E26-S18"
-          ],
-          "since": "2026-11-12",
-          "draft": true
-        }
-      ]
+     "id": "answer-lights-up",
+     "title": "See where an answer came from",
+     "text": "Press Show in graph under any chat answer. The memories it used light up in your memory graph with how well each matched, then the links between them turn green. Open any of them.",
+     "rows": [
+      "E12-S13"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "ask-zenod-about-itself",
+     "title": "Ask Zenod who it is",
+     "text": "Ask the chat who it is or what it can do and it tells you directly. Weak matches stay out of the memories it shows, and so do notes on family, health or money, which Zenod marks private as it files them.",
+     "rows": [
+      "E15-S1",
+      "E15-S2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "read-as",
+     "title": "Zenod knows which one you mean",
+     "text": "Ask about the flat, Ana's thing or that cello thing and Zenod reads your words through what it knows you mean before it looks. A grey Read as line shows how it read you. Tap it to pick another place, and it reads your words that way from then on. Works in the chat, in Talk it over, on calls and for the AI apps you connect.",
+     "rows": [
+      "E14-S28",
+      "E14-S29"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "tester-welcome",
+     "title": "A welcome on WhatsApp the moment you link it",
+     "text": "When a tester links WhatsApp, Zenod answers with one message: thanks, a link to a one-minute video of five things to try at zenod.dev/start, and an invitation to send the first voice note right there. Each tester gets it once.",
+     "rows": [
+      "E26-S26"
+     ],
+     "since": "2026-11-14",
+     "draft": true
+    },
+    {
+     "id": "tester-thank-you-email",
+     "title": "A personal thank-you email when you link WhatsApp",
+     "text": "Within minutes of linking WhatsApp, each tester gets one short thank-you email from Jordi, Zenod's founder, with a few useful links and an open offer of a quick call. It comes once, and replies reach him directly.",
+     "rows": [
+      "E26-S28"
+     ],
+     "since": "2026-11-15",
+     "draft": true
+    },
+    {
+     "id": "whatsapp-one-tap-link",
+     "title": "Link WhatsApp in one tap",
+     "text": "Right after sign-up, Open WhatsApp opens a chat with Zenod with your code already typed. Press send and your phone is linked, no number to type. On a laptop, scan the QR with your phone.",
+     "rows": [
+      "E7-S16"
+     ],
+     "since": "2026-11-19",
+     "draft": true
+    },
+    {
+     "id": "voice-notes-any-length",
+     "title": "Voice notes of any length, up to 12 hours",
+     "text": "Send a WhatsApp voice note as long as you like. Zenod writes it out in five minute parts and files it as one entry. If a step fails, it tells you which one, keeps the audio and tries again by itself.",
+     "rows": [
+      "M36",
+      "M37",
+      "M38"
+     ],
+     "since": "2026-11-24",
+     "draft": true
     }
-  ]
+   ]
+  },
+  {
+   "id": "your-plan",
+   "title": "Your plan",
+   "intro": "What your plan includes and where it goes.",
+   "features": [
+    {
+     "id": "usage-by-feature",
+     "title": "See where your AI allowance goes",
+     "text": "The Usage tab shows this month's spend on filing, answers, personas, desk jobs and calls, what each costs, and what happens when the allowance runs out. Your notes are always kept.",
+     "rows": [
+      "E14-S10"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "become-a-tester",
+     "title": "Apply to test Zenod",
+     "text": "Tell us how you would use Zenod and leave your email on the testers page. The first ten are in straight away, each with a personal link and a code made only for them: their first 30 memories free, with no card.",
+     "rows": [
+      "ZAL-A13",
+      "E26-S2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "sample-memory",
+     "title": "Try a sample memory before you apply",
+     "text": "The home page and the testers page show one person's week of voice notes as a cloud of linked thoughts. Tap a thought to read the note it came from, no sign-in needed.",
+     "rows": [
+      "E26-S35",
+      "E26-S37"
+     ],
+     "since": "2026-11-19",
+     "draft": true
+    },
+    {
+     "id": "tester-invite-link",
+     "title": "Join with one invite link",
+     "text": "A tester's invite is one link with their code inside. They sign in with Google or GitHub, checkout opens with the code applied at €0 and no card, and a You're in page shows the two next steps.",
+     "rows": [
+      "E26-T1"
+     ],
+     "since": "2026-11-10",
+     "draft": true
+    },
+    {
+     "id": "tester-first-memories-free",
+     "title": "Your first 30 memories free, never charged",
+     "text": "A tester's first 30 saved memories are free, with no card and no time limit, and the Zenod app shows how many are left. When you reach 30, Zenod stays free until the end of that month. Nothing is ever charged unless you choose to pay, and usage is capped each month.",
+     "rows": [
+      "E26-S5",
+      "E26-S29"
+     ],
+     "since": "2026-11-15",
+     "draft": true
+    },
+    {
+     "id": "end-of-test-offer",
+     "title": "Keep Zenod in one click when your free test ends",
+     "text": "When your free test is about to end, the app and your account page show what you keep, which is your notes in your own Drive or repository, and what 9 euros a month gives. One button opens checkout for your own account, with nothing charged before the free test is over. If you do not pay, Zenod pauses and your notes stay yours.",
+     "rows": [
+      "E26-S13"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "tester-link-on-screen",
+     "title": "Get your tester link the moment you apply",
+     "text": "Apply on zenod.dev/testers and, while places are open, your personal link appears right away with your one-time code inside, ready to open or copy. Nothing to wait for by email: come back to the page in the same browser and the link is still there. Open it, sign in, and checkout shows 0 euros with no card.",
+     "rows": [
+      "U7",
+      "E26-S14",
+      "E26-S11"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "tester-quick-start",
+     "title": "A quick start that ticks itself off",
+     "text": "New testers see one card above Chat with the few things that make Zenod theirs: send a WhatsApp, add Zenod to Claude or Codex, give it something to keep, ask for it back and choose one helper. Each step ticks off by itself when Zenod sees it happen, and a score in the header shows how far you are.",
+     "rows": [
+      "E26-S15",
+      "E26-S18"
+     ],
+     "since": "2026-11-12",
+     "draft": true
+    },
+    {
+     "id": "tell-us-what-you-think",
+     "title": "Tell us what you think with a voice note",
+     "text": "Testers see one quiet Tell us what you think link at the top of the app. It opens their own feedback page: tap, talk for a minute, send. Nobody listens to the audio: it is turned into text for the team and thrown away, and every note lands under their name so nothing they say gets lost.",
+     "rows": [
+      "E7-S9"
+     ],
+     "since": "2026-11-16",
+     "draft": true
+    }
+   ]
+  },
+  {
+   "id": "your-memory-tree",
+   "title": "Your memory tree",
+   "intro": "How Zenod keeps your notes in order.",
+   "features": [
+    {
+     "id": "memory-at-a-glance",
+     "title": "Your memory at a glance",
+     "text": "The Memory tab opens on your totals, how much you kept each week, your strongest places and where your memories come from, next to your recent saves.",
+     "rows": [
+      "E22-L2"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "tree-tidies-itself",
+     "title": "Your tree tidies itself",
+     "text": "Each week, small pages on the same subject as a page beside them join it, word for word, and topics such as Markets get their own branch.",
+     "rows": [
+      "E12-S24",
+      "E12-S25"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "check-where-it-landed",
+     "title": "Check where Zenod filed things",
+     "text": "Each new memory says how sure Zenod was of its place, and the least sure come first in the Memory tab. Say it is in the right place, or open any page on your tree, press Wrong place and pick where it belongs. Undo puts it back.",
+     "rows": [
+      "E12-S27"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "knows-what-you-mean",
+     "title": "See what Zenod knows you mean",
+     "text": "Memory, At a glance lists every part of your memory with a one-line summary, the nicknames you use for it, how many notes it holds, when you last added to it and what you added to in the past 7 days. Zenod picks up a nickname only when you said it yourself, keeps the list fresh after each note and once a night, and shows what keeping it cost.",
+     "rows": [
+      "E14-S28"
+     ],
+     "since": "2026-11-10",
+     "draft": true
+    },
+    {
+     "id": "label-where-spoken",
+     "title": "See where each voice note was spoken",
+     "text": "Every voice note says where it came from: From EpicTeam Chat, From an EpicTeam card answer, another app by name, or Spoken to Zenod for WhatsApp, the web and calls. The label shows in Recent saves, on an opened note next to a readable title, and in search results, and you can search by it.",
+     "rows": [
+      "V9"
+     ],
+     "since": "2026-11-23",
+     "draft": true
+    },
+    {
+     "id": "obsidian-import",
+     "title": "Bring your Obsidian vault in one step",
+     "text": "Already keep notes in Obsidian? Pick your vault folder, or a zip of it, and press Import. Your notes arrive as they are, links and properties kept, and Zenod can find them from day one. Importing uses no AI credit.",
+     "rows": [
+      "E7-S32"
+     ],
+     "since": "2026-11-24",
+     "draft": true
+    }
+   ]
+  },
+  {
+   "id": "helpers-and-inbox",
+   "title": "Helpers and your inbox",
+   "intro": "Helpers read your memory and leave cards you act on.",
+   "features": [
+    {
+     "id": "memory-personas",
+     "title": "Five memory personas you switch on",
+     "text": "Remind me, Your ideas, New possibilities and Reflect each read your memory and leave cards in your inbox. Make it easier is coming soon. One switch each, and one quiet switch keeps your memory tidy. Open any of them to see the helpers inside.",
+     "rows": [
+      "E14-S47"
+     ],
+     "since": "2026-11-18",
+     "draft": true
+    },
+    {
+     "id": "suggestion-cards",
+     "title": "Act on a helper's suggestion with one tap",
+     "text": "Helpers read your memory on their own schedule and leave suggestions in your inbox. Press Do it and the change is made as one job you can undo, change the words first, say not now with a reason, talk it over, or leave feedback by typing or with a voice note that the helper reads on its next run.",
+     "rows": [
+      "E14-S25",
+      "E14-S26"
+     ],
+     "since": "2026-11-09",
+     "draft": true
+    },
+    {
+     "id": "helpers-suggest",
+     "title": "Let a helper find one change your memory needs",
+     "text": "Open loops finder, People and follow-ups, Topic gardener, Ideas digest and Health of your memory read your recent notes and your tree on their own schedule and leave at most one suggestion a run, like moving a page where it belongs or linking two notes. Each is a change the memory desk can make and undo. A helper reads why you said not now and your feedback before its next run, and never offers the same change twice. Helpers work on your own memory and life only, never on your projects' work, and anything put away can be brought back with one tap.",
+     "rows": [
+      "E14-S27",
+      "E14-S1"
+     ],
+     "since": "2026-11-10",
+     "draft": true
+    },
+    {
+     "id": "helpers-ask-the-team",
+     "title": "Let a helper ask your team how things connect",
+     "text": "Switch it on for a helper and, when knowing how a note connects to your plans would change its suggestion, it asks your EpicTeam desk one question that run. The desk only reads and answers in words. The helper uses the answer as context and its card says what it asked and what the team said. It never picks or starts work.",
+     "rows": [
+      "E14-S35"
+     ],
+     "since": "2026-11-10",
+     "draft": true
+    },
+    {
+     "id": "something-to-try",
+     "title": "Get one small thing to try each day",
+     "text": "Switch on Something to try and once a day it reads what you said in the last few days, your voice notes first, and leaves one small thing you could try because of it in your inbox, with the notes it comes from. It never gives you project work, and it reads your feedback before its next run.",
+     "rows": [
+      "E14-S38"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "clarifier",
+     "title": "Get asked when a note could mean two things",
+     "text": "Switch on the Clarifier and each night it reads what you said in the last three days. When a note could mean two people, places or things, it asks you in your inbox which one you meant, with a button for each meaning or room for your own words. Your answer is saved to your memory like any note. At most two questions a night, never the same note twice, and never in a chat.",
+     "rows": [
+      "E14-S37"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "helper-cards",
+     "title": "Helper cards you can judge at a glance",
+     "text": "Every helper card in your inbox shows a small picture of the two ideas it joins, one line on why you might want it, one line on why you might not, and leaves the call to you. Suggestions, things to try and clarifying questions all read the same way.",
+     "rows": [
+      "E14-S36"
+     ],
+     "since": "2026-11-11",
+     "draft": true
+    },
+    {
+     "id": "helpers-for-testers",
+     "title": "Helpers are open for testers too",
+     "text": "Testers can switch on a helper, like a weekly recap of what they saved, from the Helpers tab. Every helper starts off, runs inside the tester's monthly allowance with a small limit of its own, and switching one on ticks the last step of the quick start.",
+     "rows": [
+      "E7-A21",
+      "E26-S18"
+     ],
+     "since": "2026-11-12",
+     "draft": true
+    }
+   ]
+  }
+ ]
 }
