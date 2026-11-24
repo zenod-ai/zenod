@@ -1,21 +1,21 @@
 {
   "row": "E7-S35",
   "card": "docs/cards/E7-S35.md",
-  "cardSha": "321768d3622874b7",
+  "cardSha": "7bfa1ba4514021c5",
   "inputs": {
-    "card": "321768d3622874b7",
+    "card": "7bfa1ba4514021c5",
     "page": "d8bf35c445862243",
     "rules": "c1a7854c21d10fb4",
     "words": "ecb5c679ea8c530f"
   },
-  "checkedAt": "2026-11-24T22:10:30Z",
+  "checkedAt": "2026-11-24T22:21:22Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Start E7-S35: his WhatsApp replies to voice notes become one short line (got it, on it) plus a link to the full transcript",
       "where": "WhatsApp voice note 24 Nov 20:37Z",
       "status": "met",
-      "how": "Evidence page shows voice-note replies cut to 'Got it, on it.' plus a 'Saved ✓ Full text' link line, and the before/after table covers each reply kind."
+      "how": "Evidence page shows voice-note replies cut to 'Got it, on it.' plus a 'Saved ✓ Full text' link line, with before/after."
     },
     {
       "said": "I get a lot of long messages ... just give me a link",
@@ -28,19 +28,19 @@
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the page opening with the punchline box, a before/after diagram and a table; the 390 px layout stacks the table into narrow columns but stays readable with no sideways scroll; no real house-rule breach is visible."
+    "summary": "Both widths render cleanly with no sideways overflow; the punchline comes first, the before/after comparison and the reply table are readable, and no real look breach is visible."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the short reply line plus full-text link is short enough, by sending a voice note back.",
+    "asked": "He must decide whether the voice note replies are short enough, answering yes or no.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "d8bf35c445862243",
-    "walkedAt": "2026-11-24T22:10:30Z",
+    "walkedAt": "2026-11-24T22:21:22Z",
     "steps": [
       {
         "n": 1,
