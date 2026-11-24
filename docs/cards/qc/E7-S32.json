@@ -1,0 +1,71 @@
+{
+  "row": "E7-S32",
+  "card": "docs/cards/E7-S32.md",
+  "cardSha": "861cc9a35495204c",
+  "inputs": {
+    "card": "861cc9a35495204c",
+    "page": "54a5ad7378b4f567",
+    "rules": "c1a7854c21d10fb4",
+    "words": "f8c367efa38dcf19"
+  },
+  "checkedAt": "2026-11-24T15:31:54Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Zenod testers can import an existing Obsidian brain into their memory. Core: changes app: His voice note vn_aa7447c3 on E7-A42 (24 Nov): a tester may already have an Obsidian vault; today the UX does not help them import it. Add an import path and show it.",
+      "where": "the row's ask (no quote of his found)",
+      "status": "met",
+      "how": "Evidence page shows an import card on Memory, vault folder pick, 3 notes imported, and an imported note opening with links; quick start shows the import button."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths show the import flow with readable screens, no sideways overflow, and a clear step sequence with arrows; the card itself is a plain evidence page needing no feedback block."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Confirm whether this Obsidian vault import is the import he meant for testers (recommend yes).",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "54a5ad7378b4f567",
+    "walkedAt": "2026-11-24T15:31:54Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9900/?focus=done",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › docs/EPIC-7-REAL-USER-TEST.md'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/docs/EPIC-7-REAL-USER-TEST.md",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9900/?focus=done",
+      "file": "E7-S32-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9900/?focus=done",
+      "file": "E7-S32-1280.webp"
+    }
+  ]
+}
