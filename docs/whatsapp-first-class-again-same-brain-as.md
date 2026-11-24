@@ -30,14 +30,14 @@ Goal sentence: WhatsApp answers with the cloud chat's brain: it saves, answers o
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: 2026-11-23T03:55Z A7 worker run_ad3ed359: Jordi's test run on 27 of the team's own recordings (free service within 2.6 to 7.7% of stored text on turbo; small worse on Spanish), turbo cut-off 30 to 45 s (PR 1752 merged), the service found dead since 00:02Z and made to restart itself, comparison page :9372 ; earlier: A4 done ; A5 done ; A6 done ; A8 merged (live at the next promote) ; A3 monitoring ; A2 draft
-Result: Phylax cc23c626 healthy, WhatsApp connected; the first-note nudge (EPIC-7 E7-S26) is on and sends through Phylax from 23 Nov 06:05Z
+Last attempted: 2026-11-24T03:15Z Delivery Manager roll-up (run_83382912) ; A1 done (approved by Jordi 9 Nov) ; A2 draft, parked by Jordi ; A3 active, live, waits for the console's first picture alert ; A4, A5, A6 done ; A7 active, the free central transcription is live on production and reachable, waits for the next real WhatsApp voice note to show it used ; A8 done, live d4aa9560, EpicTeam sets its reply word 'now'
+Result: WhatsApp answers with the same brain as the chat; Phylax 2965d75 healthy and production dfa3034 healthy on 24 Nov 03:15Z; the first-note nudge sends through Phylax; long voice notes go to the central service in parts (M36)
 Evidence: [e20-a1-2026-11-08](evidence/e20-a1-2026-11-08.md), [card](cards/E20-A1.md), [review (private)](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/)
-Waiting on: the promote after 09:00Z (1752 merged, ci green) for A7's production proof (needs a team-owned production tenant: ask-tier proposed) ; the next promote for A8 ; EpicTeam setting its reply word 'now' once A8 is live
+Waiting on: a real WhatsApp voice note for A7's proof in the log ; the console's first picture alert for A3 ; EpicTeam setting reply word 'now' on its subscription (A8 is live)
 Approved work: L-6 mandate (vn_14cb0d46)
-Next action: A7: after 1752 is live check zenod-mt's boot probe, one team test note, then close ; A8: close after the promote
-Source revision: main `468ee50` live
-Verified at: 2026-11-23T01:50Z (phylax.zenod.dev health cc23c626 connected; production cc23c626; rows A1 to A8 read)
+Next action: A7: read the log after the next real voice note (central or fallback), then close done (no confirm: plumbing) ; A3: close once a picture alert goes out ; nothing ready to dispatch
+Source revision: main `dfa3034` live on production, Phylax `2965d75`
+Verified at: 2026-11-24T03:15Z (cloud.zenod.dev/api/health sha dfa3034 ok; phylax.zenod.dev/api/health sha 2965d75 ok; rows A1 to A8 read)
 
 ## Waiting on
 
