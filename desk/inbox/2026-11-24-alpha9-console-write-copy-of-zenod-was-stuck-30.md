@@ -2,7 +2,8 @@
 from: alpha9
 about: Console write copy of zenod was stuck 30 h after the 22 Nov history rewrite; fixed (E6-S250)
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-24-zenod-re-console-write-copy-of-zenod-was-stuc.md
 urgent: yes
 ---
 What happened: on 22 Nov zenod's origin history was rewritten (the purge of testers' emails). The console's own zenod write copy (VPS1 console-write/zenod-81167677) still held the old history: 18 commits (14 by agents, e.g. 69ff1729 E7-S26 round 3, and 4 by the console), all already on origin under new SHAs (its head tree equals origin 92030d6d). From 22 Nov 21:34Z the console refused every zenod spine write as diverged: lease sweeps, press pr_d7329b20 (55 tries) and Jordi's E7-A39 answer (24 Nov 03:31Z). Your Delivery Manager wrote his E7-A39 answer in itself (d56c6c12, marked done 5b9b2dd5), so nothing of his is lost.
