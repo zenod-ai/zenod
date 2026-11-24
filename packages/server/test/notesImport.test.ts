@@ -157,6 +157,18 @@ describe("POST /api/vault/import end to end (E7-S32)", { timeout: 60_000 }, () =
     expect(await bad.json()).toEqual({ error: { code: "notes_import_bad_path", message: "One note has a path Zenod cannot keep." } });
   });
 
+  it("tells a tester with no storage connected to connect it first", async () => {
+    const runtime = new Runtime(join(dir, "data-empty"));
+    const app = createApp(runtime);
+    const res = await app.request("/api/vault/import", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${runtime.settings.apiToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ vaultName: "x", files: [{ name: "a.md", content: "a" }] }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: "notes_import_unavailable", message: "This memory cannot take an import yet. Connect your storage first." } });
+  });
+
   it("is open to a signed-in hosted tester", () => {
     expect(hostedCapabilityViolation("POST", "/api/vault/import")).toBeNull();
   });

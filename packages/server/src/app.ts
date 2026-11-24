@@ -2746,7 +2746,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         });
         return c.json({ ok: true, folder: result.folder, written: result.written, unchanged: result.unchanged, headSha: result.revision?.commitSha ?? null });
       } catch (error) {
-        const code = (error as Error).message;
+        // No storage connected yet (NotConfiguredError): say so, never "try again".
+        const code = (error as Error | null)?.name === "NotConfiguredError" ? "notes_import_unavailable" : (error as Error).message;
         const known = NOTES_IMPORT_ERRORS[code];
         if (known) return c.json({ error: { code, message: known[1] } }, known[0] as 400);
         return c.json({ error: { code: "notes_import_failed", message: "The import stopped before anything changed. Try again in a minute." } }, 500);
