@@ -1,58 +1,58 @@
 {
   "row": "M37",
   "card": "docs/cards/M37.md",
-  "cardSha": "d16774246104ca59",
+  "cardSha": "343c3bb8bfdb40c4",
   "inputs": {
-    "card": "d16774246104ca59",
+    "card": "343c3bb8bfdb40c4",
     "page": "3232840fd2808f18",
     "rules": "c1a7854c21d10fb4",
     "words": "1507435402a736e1"
   },
-  "checkedAt": "2026-11-24T19:39:22Z",
+  "checkedAt": "2026-11-24T19:45:27Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "it should be on a super long vn from yesterday sent via whatsapp to zenod",
       "where": "2026-11-24",
       "status": "met",
-      "how": "Evidence page shows the 23 Nov note filed in memory, entry e-8b9fa2, 13,036 words; card line says so."
+      "how": "Evidence page shows the 23 Nov note filed in memory, entry e-8b9fa2, 13,036 words; card's first line says so."
     },
     {
       "said": "i asked for some task about my altamira video, haven't seen anythign about it was it lost????",
       "where": "2026-11-24",
       "status": "met",
-      "how": "Card answers 'was it lost' with the filed note and the 23 November source line."
+      "how": "Card title and first delivered line say the lost note is in memory; source line quotes his 'was it lost' question."
     },
     {
       "said": "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?",
       "where": "vn_d197f642",
       "status": "met",
-      "how": "Card line says a failed transcription retries by itself and says why; page shows retry schedule and Log entry."
+      "how": "Card says a failed transcription now retries by itself and says why; page shows retry schedule and Log 'Not transcribed' entry with audio link."
     },
     {
       "said": "at least get the whatsapp thing done ASAP ... I want to dispatch as much as possible please",
       "where": "vn_d197f642",
       "status": "declared",
-      "how": "WhatsApp failure handling delivered; two-hour split marked with a ✗ line as not done yet."
+      "how": "WhatsApp fix delivered; the two-hour split is marked with a ✗ line as not done yet, with the next task named."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box under the title, the filed note and the changes table are readable, and no sideways scroll shows; the page is a plain evidence page with no feedback row needed."
+    "summary": "Both widths open with the punchline box under the title, show the filed note fields, the retry table and the not-split line; no sideways overflow and text fits at 390 px."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "He is asked to confirm whether the 23 November note he meant is the one filed, by answering the decision question.",
+    "asked": "Confirm whether the filed 23 November two-hour WhatsApp note is the note he meant, answering yes or no.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "3232840fd2808f18",
-    "walkedAt": "2026-11-24T19:39:22Z",
+    "walkedAt": "2026-11-24T19:45:27Z",
     "steps": [
       {
         "n": 1,
