@@ -35,7 +35,8 @@ Status: active
 Last attempted: 2026-11-24T06:05Z Delivery Manager roll-up (run_89c27b44) ; E7-S30 active: Jordi's 'what stopped you' email sent once to each of the 3 testers 24 Nov 04:04Z (from jordi@alpha9.io: the team cannot send as jordi@zenod.dev yet, desk note to agent_team), watching replies ; E7-S27 done, approved by Jordi 24 Nov (daily tester table kept) ; E7-S26 done, first-note WhatsApp nudge live, sent 1 ; E7-S28 done, setup email sent 22 Nov, 48 h default live ; E7-S25 done ; E7-S17 blocked on agent_team placing the daily tester picture
 Result: production dfa30347: 3 sign-ups, 1 WhatsApp linked (the 21 Nov tester), 0 first notes, over_cap 0 (public counts 24 Nov 06:03Z)
 Evidence: [E7-S15](evidence/e7-s15-2026-11-19.md) · [E7-S12](evidence/e7-s12-2026-11-18.md) · [public counts](https://cloud.zenod.dev/api/public/counts) · [E7-S9 feedback link](http://vps3.taild81fbb.ts.net:8921/e7-s9/)
-Waiting on: the 3 testers' replies to 'A quick question about Zenod' (Jordi's inbox, or voice notes on their feedback links) ; agent_team placing the daily tester picture (E7-S17) ; agent_team letting the team send as jordi@zenod.dev
+Waiting on: agent_team: the daily tester picture (E7-S17) and a jordi@zenod.dev sender for the team (desk notes) ; nothing waits on the owner here
+Monitoring: the 3 testers' replies to 'A quick question about Zenod' since 2026-11-24T04:04Z until 2026-11-27T16:00Z · next check 2026-11-25T16:00Z read the replies (the founder's inbox, agent_team feedback/voice/) · then fix the first thing they name
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: E7-S30: on 25 Nov 16:00Z read replies (search Jordi's inbox for 'Re: A quick question about Zenod', agent_team feedback/voice/) and fix the first thing they name before other product work
 Source revision: see git log
