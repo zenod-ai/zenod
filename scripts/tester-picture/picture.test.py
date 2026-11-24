@@ -22,6 +22,10 @@ def tester(key, **kw):
     return t
 
 
+MCP_ON = {"connected": True, "via": "oauth", "at": "2026-11-20T10:00:00.000Z"}
+MCP_OFF = {"connected": False, "via": None, "at": None}
+
+
 def progress(*testers, since="2026-11-19T00:00:00Z"):
     return {"generatedAt": "x", "lastSeenSince": since, "testers": list(testers)}
 
@@ -34,11 +38,11 @@ def build(*testers, emails=None, **kw):
 class Model(unittest.TestCase):
     def test_two_stuck_at_whatsapp(self):
         p = build(tester("aaaa1111"), tester("bbbb2222"))
-        self.assertEqual(p["punchline"], "2 testers: 0 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
+        self.assertEqual(p["punchline"], "2 testers: 0 set up a vault, MCP not readable yet, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
         # vault is the first step in his order; with a vault the stuck step is WhatsApp
         ok = {"set": True, "provider": "github", "status": "ready"}
         p = build(tester("aaaa1111", vault=ok), tester("bbbb2222", vault=ok))
-        self.assertEqual(p["punchline"], "2 testers: 2 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
+        self.assertEqual(p["punchline"], "2 testers: 2 set up a vault, MCP not readable yet, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
         self.assertEqual(p["signed_up"], 2)
         self.assertEqual(p["applied"], 3)
         self.assertEqual(p["testers"][0]["stuck_at"], "whatsapp")
@@ -55,7 +59,7 @@ class Model(unittest.TestCase):
         self.assertEqual(p["testers"][0]["stuck_at"], "memory")
         self.assertTrue(p["testers"][1]["fully_set_up"])
         self.assertEqual(p["testers"][1]["next"], "none: keep watching their use")
-        self.assertEqual(p["punchline"], "2 testers: 2 set up a vault, 2 linked WhatsApp, 1 saved a memory, 0 sent a voice note")
+        self.assertEqual(p["punchline"], "2 testers: 2 set up a vault, MCP not readable yet, 2 linked WhatsApp, 1 saved a memory, 0 sent a voice note")
 
     def test_mixed_stuck_steps(self):
         ok = {"set": True, "provider": "github", "status": "ready"}
@@ -98,10 +102,60 @@ class Model(unittest.TestCase):
         self.assertEqual(p["unread_steps"], ["vault"])
         self.assertIsNone(p["logged_in_24h"])
         self.assertIn("Google Drive set up", p["caveat"])
-        self.assertEqual(p["punchline"], "1 tester: 0 set up a vault, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
-        self.assertEqual(p["unread_cells"], ["drive", "github", "voice", "welcome"])
+        self.assertEqual(p["punchline"], "1 tester: 0 set up a vault, MCP not readable yet, 0 linked WhatsApp, 0 saved a memory, 0 sent a voice note")
+        self.assertEqual(p["unread_cells"], ["drive", "github", "mcp", "voice", "welcome"])
         self.assertEqual(t["email"], "ann@example.com")
         self.assertEqual(t["label"], "ann@example.com")
+
+
+class McpAndUse(unittest.TestCase):
+    """E7-S31 (Jordi, vn_aa7447c3): MCP connected beside the setup steps, and reads and writes from WhatsApp and from agents."""
+
+    USE = {"whatsapp": {"reads": 2, "writes": 5}, "agents": {"reads": 7, "writes": 1}, "agentReadsSince": "2026-11-25T00:00:00.000Z"}
+
+    def test_mcp_column_sits_with_the_setup_steps(self):
+        ids = [c["id"] for c in build(tester("aaaa1111"))["columns"]]
+        self.assertEqual(ids[:5], ["signup", "drive", "github", "mcp", "whatsapp"])
+
+    def test_mcp_cell_follows_the_route_and_is_counted_in_the_headline(self):
+        p = build(tester("aaaa1111", mcp=MCP_ON), tester("bbbb2222", mcp={"connected": True, "via": "activity", "at": None}),
+                  tester("cccc3333", mcp=MCP_OFF))
+        by = {t["tester"]: t["cells"]["mcp"] for t in p["testers"]}
+        self.assertEqual(by, {"…1111": True, "…2222": True, "…3333": False})
+        self.assertEqual(p["column_counts"]["mcp"], 2)
+        self.assertIn("2 connected MCP", p["punchline"])
+        self.assertNotIn("mcp", p["unread_cells"])
+
+    def test_reads_and_writes_per_tester_and_in_total(self):
+        p = build(tester("aaaa1111", mcp=MCP_ON, memoryUse=self.USE),
+                  tester("bbbb2222", mcp=MCP_OFF, memoryUse={"whatsapp": {"reads": 0, "writes": 0}, "agents": {"reads": 0, "writes": 0}, "agentReadsSince": None}))
+        by = {t["tester"]: t["use"] for t in p["testers"]}
+        self.assertEqual(by["…1111"], {"wa_writes": 5, "wa_reads": 2, "agent_writes": 1, "agent_reads": 7})
+        self.assertEqual(by["…2222"], {"wa_writes": 0, "wa_reads": 0, "agent_writes": 0, "agent_reads": 0})
+        self.assertEqual(p["use_totals"], {"wa_writes": 5, "wa_reads": 2, "agent_writes": 1, "agent_reads": 7})
+        self.assertEqual([c["title"] for c in p["use_columns"]], ["WhatsApp writes", "WhatsApp reads", "Agent writes", "Agent reads"])
+        self.assertIn("5 saved from WhatsApp", p["use_line"])
+        self.assertIn("7 agent reads over MCP", p["use_line"])
+        self.assertIn("Agent searches are counted from 24 Nov", p["use_line"])  # 25 Nov 00:00Z is 24 Nov in Mexico City
+        self.assertIn("never what was said", p["use_line"])
+
+    def test_counts_the_running_release_cannot_give_show_a_dash_never_a_zero(self):
+        p = build(tester("aaaa1111"))
+        self.assertEqual(p["testers"][0]["use"], {"wa_writes": None, "wa_reads": None, "agent_writes": None, "agent_reads": None})
+        self.assertIsNone(p["use_totals"])
+        self.assertIn("next release", p["use_line"])
+        page = picture.render_page(p)
+        self.assertEqual(page.count('<td class="n"'), 4)
+        self.assertEqual(page.count(">–</td>"), 4)
+
+    def test_page_and_picture_show_the_numbers(self):
+        p = build(tester("aaaa1111", mcp=MCP_ON, memoryUse=self.USE, voiceNotes=0, welcomeSentAt=None))
+        page = picture.render_page(p)
+        for word in ("MCP connected", "WhatsApp writes", "WhatsApp reads", "Agent writes", "Agent reads", p["use_line"]):
+            self.assertIn(word, page)
+        self.assertIn('data-label="Agent reads">7</td>', page)
+        self.assertIn('data-label="WhatsApp writes">5</td>', page)
+        self.assertIn(p["use_line"], picture.render_html(p, picture.load_house()))
 
 
 class Table(unittest.TestCase):
@@ -110,29 +164,29 @@ class Table(unittest.TestCase):
     def test_seven_columns_in_his_order(self):
         p = build(tester("aaaa1111"))
         self.assertEqual([c["title"] for c in p["columns"]], [
-            "Signed up", "Google Drive set up", "GitHub set up", "WhatsApp code confirmed", "One memory saved", "One voice note sent", "Welcome WhatsApp sent"])
+            "Signed up", "Google Drive set up", "GitHub set up", "MCP connected", "WhatsApp code confirmed", "One memory saved", "One voice note sent", "Welcome WhatsApp sent"])
 
     def test_cells_are_green_or_grey_per_provider(self):
-        drive = tester("aaaa1111", vault={"set": True, "provider": "google_drive", "status": "ready"})
+        drive = tester("aaaa1111", vault={"set": True, "provider": "google_drive", "status": "ready"}, mcp=MCP_OFF)
         gh = tester("bbbb2222", vault={"set": True, "provider": "github", "status": "ready"},
                     whatsapp={"linked": True, "step": "linked", "text": "ok", "ourBug": False},
-                    memoriesSaved=3, voiceNotes=1, welcomeSentAt="2026-11-21T06:05:00Z")
-        none = tester("cccc3333", voiceNotes=0, welcomeSentAt=None)
+                    memoriesSaved=3, voiceNotes=1, welcomeSentAt="2026-11-21T06:05:00Z", mcp=MCP_ON)
+        none = tester("cccc3333", voiceNotes=0, welcomeSentAt=None, mcp=MCP_OFF)
         p = build(drive, gh, none)
         by = {t["tester"]: t["cells"] for t in p["testers"]}
-        self.assertEqual(by["…1111"], {"signup": True, "drive": True, "github": False, "whatsapp": False, "memory": False, "voice": False, "welcome": False})
-        self.assertEqual(by["…2222"], {"signup": True, "drive": False, "github": True, "whatsapp": True, "memory": True, "voice": True, "welcome": True})
-        self.assertEqual(by["…3333"], {"signup": True, "drive": False, "github": False, "whatsapp": False, "memory": False, "voice": False, "welcome": False})
+        self.assertEqual(by["…1111"], {"signup": True, "drive": True, "github": False, "mcp": False, "whatsapp": False, "memory": False, "voice": False, "welcome": False})
+        self.assertEqual(by["…2222"], {"signup": True, "drive": False, "github": True, "mcp": True, "whatsapp": True, "memory": True, "voice": True, "welcome": True})
+        self.assertEqual(by["…3333"], {"signup": True, "drive": False, "github": False, "mcp": False, "whatsapp": False, "memory": False, "voice": False, "welcome": False})
         for t in p["testers"]:
             self.assertTrue(all(v is True or v is False for v in t["cells"].values()))  # never a third state
 
     def test_cells_the_running_release_cannot_read_are_grey_and_named(self):
-        p = build(tester("aaaa1111"))  # no voiceNotes / welcomeSentAt in the payload
-        self.assertEqual(p["unread_cells"], ["voice", "welcome"])
+        p = build(tester("aaaa1111"))  # no voiceNotes / welcomeSentAt / mcp in the payload
+        self.assertEqual(p["unread_cells"], ["mcp", "voice", "welcome"])
         self.assertFalse(p["testers"][0]["cells"]["voice"])
         self.assertIn("One voice note sent", p["caveat"])
         self.assertIn("grey", p["caveat"])
-        ready = build(tester("aaaa1111", voiceNotes=0, welcomeSentAt=None))
+        ready = build(tester("aaaa1111", voiceNotes=0, welcomeSentAt=None, mcp=MCP_OFF))
         self.assertEqual(ready["unread_cells"], [])
         self.assertIsNone(ready["caveat"])
 
@@ -161,8 +215,10 @@ class Table(unittest.TestCase):
     def test_headline_when_everyone_is_set_up(self):
         ok = {"set": True, "provider": "github", "status": "ready"}
         done = tester("aaaa1111", vault=ok, whatsapp={"linked": True, "step": "linked", "text": "ok", "ourBug": False},
-                      memoriesSaved=1, voiceNotes=1, welcomeSentAt="2026-11-21T06:05:00Z", whatsappNotes=1)
+                      memoriesSaved=1, voiceNotes=1, welcomeSentAt="2026-11-21T06:05:00Z", whatsappNotes=1, mcp=MCP_ON)
         self.assertEqual(build(done)["punchline"], "1 tester, all set up")
+        # E7-S31: without MCP connected the tester is not all set up
+        self.assertNotEqual(build({**done, "mcp": MCP_OFF})["punchline"], "1 tester, all set up")
 
     def test_phone_line_answers_his_question_and_never_holds_a_number(self):
         self.assertIn("none yet", picture.phone_line(2, 0))
@@ -189,7 +245,7 @@ class Table(unittest.TestCase):
         self.assertNotRegex(page, r"\+?\d{7,}")
         self.assertIn("tailnet only", page)
         self.assertEqual(page.count('class="dot on"'), 3)   # two signed up + one drive
-        self.assertEqual(page.count('class="dot off"'), 11)  # 14 cells, 3 green
+        self.assertEqual(page.count('class="dot off"'), 13)  # 16 cells, 3 green
         for word in ("Google Drive set up", "GitHub set up", "WhatsApp code confirmed", "One memory saved", "One voice note sent", "Welcome WhatsApp sent"):
             self.assertIn(word, page)
         house = picture.load_house()

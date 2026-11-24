@@ -1,4 +1,4 @@
-# Daily tester picture (EPIC-7 E7-S17) and tester table (E7-S27)
+# Daily tester picture (EPIC-7 E7-S17) and tester table (E7-S27, E7-S31)
 
 **E7-S27 (Jordi, vn_40b9ff8f, 22 Nov): "rows, and each row is a tester, and each column is like a sign up, Google Drive set up,
 GitHub set up, one memory created, one voice note sent ... each tester having a color ... welcome WhatsApp sent."** The picture
@@ -11,6 +11,23 @@ running release cannot read yet (voice note and welcome need the E7-S27 producti
 The JSON is `zenod-tester-picture/v2`: the v1 fields plus `columns`, `column_counts`, `unread_cells`, `phone_line`, `page_url` and
 per tester `label` and `cells` (seven true/false values).
 
+**E7-S31 (Jordi, vn_aa7447c3, 24 Nov): "there is something that we're not measuring, which is that they have MCP connected ...
+the flow that we want to see is them reading and writing into the memory. They can write from the WhatsApp voice notes or from
+the agents. And then the reads can also be like reads from WhatsApp or reads from the agents."** A green-or-grey `MCP connected`
+column sits with the setup steps (after GitHub, before WhatsApp), and four count columns follow the dots: `WhatsApp writes`,
+`WhatsApp reads`, `Agent writes`, `Agent reads` (since sign-up, numbers, a dash while production cannot give them). The route's
+per tester `mcp` (`connected`, `via` = `oauth` | `token` | `activity`, `at`) and `memoryUse` (`whatsapp` and `agents`, each
+`reads`/`writes`, plus `agentReadsSince`) feed them:
+
+| Number | Read from (production, read only, counts only) |
+|---|---|
+| MCP connected | the first OAuth sign-in to the tenant (chassis `oauth_tokens`), a personal `zmt_` MCP token used, or any agent read or write |
+| WhatsApp writes | finished `store`/`media_ingest` jobs on the WhatsApp channel (`tasks.sqlite`) |
+| WhatsApp reads | finished WhatsApp `chat` jobs whose outcome was `answer` or `both` (Zenod answered from the memory) |
+| Agent writes | finished `store`/`media_ingest` jobs on the connector channel (not WhatsApp, Telegram or the web app; recentSaves.ts `channelOf`) |
+| Agent reads | finished `chat` jobs from agents, plus MCP read-tool calls (`search_memory`, `get_memory`, `memory_cloud`, `ask_brain`, `get_raw_artifact`) named on the chassis usage rows from this release on |
+
+JSON adds `use_columns`, `use_totals`, `use_line` and per tester `use` and `mcp_via`; `columns` gains `mcp`.
 
 **Iteration 2 (Jordi, vn_c2e56f5c, 22 Nov): "can we just have a fucking email, bro? ... I cannot even see the tester ... can this be a
 tracker inside the objective ... and part of the daily briefing?"** Each tester is their sign-in email (small sign-up date under

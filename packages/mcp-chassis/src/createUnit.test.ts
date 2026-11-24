@@ -2482,6 +2482,8 @@ describe("createUnit", () => {
       ]),
     });
     expect(usageStore.summary({ id: "tenant_b" })).toMatchObject({ events: 1, units: 2 });
+    // Zenod E7-S31: the row names the called tools (names only, never arguments) so a read can be told from a write.
+    expect(usageStore.timeline({ id: "tenant_b" }).map((event) => event.metadata)).toEqual([{ tools: ["noop", "noop"] }]);
     usageStore.close();
   });
 
