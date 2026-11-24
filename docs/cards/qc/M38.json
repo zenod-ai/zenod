@@ -1,14 +1,14 @@
 {
   "row": "M38",
   "card": "docs/cards/M38.md",
-  "cardSha": "652a203e2ab05bde",
+  "cardSha": "29939e64f5135924",
   "inputs": {
-    "card": "652a203e2ab05bde",
+    "card": "29939e64f5135924",
     "page": "53f03800b09a6806",
     "rules": "c1a7854c21d10fb4",
     "words": "5f26c029b49bfb4c"
   },
-  "checkedAt": "2026-11-24T20:18:46Z",
+  "checkedAt": "2026-11-24T20:19:15Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
@@ -20,27 +20,29 @@
     {
       "said": "at least get the whatsapp thing done ASAP ... I want to dispatch as much as possible please",
       "where": "vn_d197f642",
-      "status": "met",
-      "how": "Card's delivered line says a deploy midway keeps parts and the next try finishes; evidence shows this too, but his point was about resend and the error message. (shown on the evidence page: the card's three short lines need not hold it)"
+      "status": "declared",
+      "how": "Card's ✗ line says the WhatsApp path was not sent, with no test number; the evidence says WhatsApp is connected on Phylax."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The evidence page loads at both widths with the punchline first, a sequence strip, and the live test panel; no page-level breach is visible."
+    "summary": "At 390 px the punchline box, the sequence strip (scrolling inside its box with a cut-off next step), the live test table and the before-and-after table all fit without sideways page scroll; at 1280 px the layout is clean and the sequence is drawn as boxes with arrows."
   },
-  "pass": true,
-  "held": [],
+  "pass": false,
+  "held": [
+    "ambiguous: \"Send a long note to try it?\" could mean you send a real WhatsApp note yourself, or the team sends a test note; the card's own ✗ line says no WhatsApp test number exists, so you could not tell whose job it is."
+  ],
   "reader": {
-    "asked": "Decide whether to send a long voice note to test the fix, with the recommendation that he should say yes.",
-    "ambiguous": ""
+    "asked": "Decide whether to send a long WhatsApp voice note yourself to try the fix, as the team recommends.",
+    "ambiguous": "\"Send a long note to try it?\" could mean you send a real WhatsApp note yourself, or the team sends a test note; the card's own ✗ line says no WhatsApp test number exists, so you could not tell whose job it is."
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "53f03800b09a6806",
-    "walkedAt": "2026-11-24T20:18:46Z",
+    "walkedAt": "2026-11-24T20:19:15Z",
     "steps": [
       {
         "n": 1,
