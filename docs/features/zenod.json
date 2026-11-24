@@ -261,6 +261,16 @@
      ],
      "since": "2026-11-23",
      "draft": true
+    },
+    {
+     "id": "obsidian-import",
+     "title": "Bring your Obsidian vault in one step",
+     "text": "Already keep notes in Obsidian? Pick your vault folder, or a zip of it, and press Import. Your notes arrive as they are, links and properties kept, and Zenod can find them from day one. Importing uses no AI credit.",
+     "rows": [
+      "E7-S32"
+     ],
+     "since": "2026-11-24",
+     "draft": true
     }
    ]
   },
