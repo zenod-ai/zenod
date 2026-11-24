@@ -112,6 +112,16 @@
      ],
      "since": "2026-11-24",
      "draft": true
+    },
+    {
+     "id": "short-voice-replies",
+     "title": "Short replies to your voice notes",
+     "text": "Send a voice note and Zenod answers in one short line. The saved reply carries a link that opens the full transcript in your Zenod app.",
+     "rows": [
+      "E7-S35"
+     ],
+     "since": "2026-11-24",
+     "draft": true
     }
    ]
   },
