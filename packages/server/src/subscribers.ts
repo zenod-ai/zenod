@@ -26,8 +26,14 @@ export const FORWARD_SCOPE = "voice_notes.write";
 export type GrantScope = (typeof SUBSCRIBER_SCOPES)[number] | typeof FORWARD_SCOPE;
 export const SUBSCRIBER_TOKEN_PREFIX = "zvn_";
 export const DELIVERY_LOG_DAYS = 7;
+/** A test delivery (POST …/test) is awaited by the person who pressed it: one short try. */
 export const DELIVERY_TIMEOUT_MS = 5_000;
-export const DELIVERY_RETRY_MS = [2_000, 10_000] as const;
+/**
+ * EPIC-24 M37: a receiver may read the note before it answers, and a long note (a 6151-word one, 24 Nov) took
+ * longer than 5 s three times in a row, so it was never told. A real note gets 30 s a try and a 4th try after 2 min.
+ */
+export const NOTE_DELIVERY_TIMEOUT_MS = 30_000;
+export const DELIVERY_RETRY_MS = [2_000, 10_000, 120_000] as const;
 /** EPIC-20 A8: a subscription may declare up to this many one-word replies, each at most this long. */
 export const REPLY_WORDS_MAX = 5;
 export const REPLY_WORD_MAX_CHARS = 32;
@@ -750,7 +756,7 @@ export class SubscriberDispatcher {
             "x-zenod-signature": signSubscriberEvent(body, secret, Math.floor(this.now() / 1000)),
           },
           body,
-          signal: AbortSignal.timeout(this.options.timeoutMs ?? DELIVERY_TIMEOUT_MS),
+          signal: AbortSignal.timeout(this.options.timeoutMs ?? (event.test ? DELIVERY_TIMEOUT_MS : NOTE_DELIVERY_TIMEOUT_MS)),
         });
         await response.body?.cancel().catch(() => undefined);
         record.httpStatus = response.status;
