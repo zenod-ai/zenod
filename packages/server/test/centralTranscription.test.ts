@@ -72,7 +72,7 @@ describe("EPIC-24 M36: a long note is a long job on the central service", () => 
     expect(longNoteEstimateMinutes(600)).toBe(3);
     expect(longNoteEstimateMinutes(3600)).toBe(18);
     expect(longNoteEstimateMinutes(7086)).toBe(36);
-    expect(longNoteNotice(600)).toBe("Long voice note, transcribing it, about 3 min. I will reply here once it is saved. Send “cancel transcription” to stop it.");
+    expect(longNoteNotice(600)).toBe("Got it, long note, about 3 min.");
   });
 
   it("cuts at the middle of the pause nearest each 5 minutes, at 5 minutes without a pause, and keeps the last part under 6", () => {

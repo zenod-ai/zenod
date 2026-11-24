@@ -14,7 +14,7 @@ import {
 } from "./peerClient.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
-import { appendPhylaxCaptureReceiptInvitation } from "./phylaxCaptureReceipt.js";
+import { entryLink, voiceArchivedReply, voiceSavedReply } from "./voiceReplyWords.js";
 import { CAPTURE_NOT_SAVED_REPLY } from "./whatsappStore.js";
 import { MAX_VOICE_NOTE_SECONDS, maxVoiceNoteWords, voiceJobDeadlineForMs } from "./centralTranscription.js";
 import {
@@ -510,7 +510,7 @@ const DEFAULT_CHAT_FOREGROUND_DEADLINE_MS = 45_000;
 const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
 // EPIC-24 M38: the shared limit (12 hours); a long note is transcribed in parts, so length only sets the job's time.
 const MAX_CHANNEL_TRANSCRIPTION_SECONDS = MAX_VOICE_NOTE_SECONDS;
-const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
+const CAPTURE_PENDING_REPLY = "Still saving, I will confirm here.";
 const CHAT_PENDING_REPLY = "I’m still working on that — I’ll reply here when it is finished.";
 
 interface PhylaxCaptureJob {
@@ -1014,19 +1014,6 @@ function jobState(result: PeerToolResult): string | null {
   return typeof candidate === "string" ? candidate.toLowerCase() : null;
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
-    : [];
-}
-
-function transcriptPreview(value: string): string {
-  const maxChars = 3_500;
-  return value.length <= maxChars
-    ? value
-    : `${value.slice(0, maxChars).trimEnd()} […continues in the filed Zenod memory]`;
-}
-
 export function terminalCaptureReceipt(
   result: PeerToolResult,
   expectedJobId: string,
@@ -1080,58 +1067,20 @@ export function terminalCaptureReceipt(
     };
   }
   const digest = objectValue(payload.digest);
-  const rawArtifact = objectValue(payload.rawArtifact);
   const extraction = objectValue(payload.extraction);
-  const archiveUrl = typeof rawArtifact?.archiveUrl === "string" && rawArtifact.archiveUrl.trim()
-    ? rawArtifact.archiveUrl.trim()
-    : null;
-  const transcriptionStatus = extraction?.transcriptionStatus;
-  const transcriptText = typeof handoff?.text_transcript === "string"
-    ? handoff.text_transcript.trim()
-    : "";
   const evidenceValue = payload.evidenceRef ?? digest?.evidenceRef;
   const evidenceRef = typeof evidenceValue === "string" && evidenceValue.trim()
     ? evidenceValue.trim()
     : null;
-  const pages = stringArray(payload.pagesTouched ?? digest?.pagesTouched);
-  const filingValue = payload.filing ?? digest?.filing;
-  const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(filingValue))
-    ? String(filingValue)
-    : typeof payload.question === "string"
-      ? "inbox"
-      : "filed";
-  const recap = typeof payload.recap === "string" && payload.recap.trim()
-    ? payload.recap.trim()
-    : typeof payload.message === "string" && payload.message.trim()
-      ? payload.message.trim()
-    : "Your memory has been filed.";
+  // E7-S35: one short line plus a link to the note's full text; the transcript, recap, archive and filing stay in the note.
+  const link = entryLink(evidenceRef);
   return {
     state: "done",
     evidenceRef,
-    text: sanitizePhylaxCustomerReply(appendPhylaxCaptureReceiptInvitation([
-      filing === "pending" ? "Captured ✓" : "Saved ✓",
-      `Recap: ${recap}`,
-      ...(archiveUrl
-        ? [`${archiveUrl.includes("drive.google.com")
-          ? transcriptionStatus ? "Google Drive audio" : "Google Drive media"
-          : transcriptionStatus ? "Audio archive" : "Media archive"}: ${archiveUrl}`]
-        : rawArtifact ? ["Media: archived"] : []),
-      ...(transcriptionStatus === "skipped_duration_limit"
-        ? [`Transcription: skipped because the audio is over ${maxVoiceNoteWords()}.`]
-        : transcriptionStatus === "transcribed"
-          ? [
-              "Transcription: completed.",
-              ...(transcriptText ? [`Transcript: ${transcriptPreview(transcriptText)}`] : []),
-            ]
-          : extraction?.provider ? ["Media extraction: completed."] : []),
-      ...(pages.length > 0 ? [`Filed: ${pages.join(", ")}`] : []),
-      ...(filing === "pending" ? ["Semantic filing: continuing safely in the background."] : []),
-      ...(filing === "uncertain"
-        ? [`Filing: saved to ${pages[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
-        : filing === "inbox"
-          ? ["Filing: saved to Inbox; the filing question is logged in the note."]
-          : []),
-    ].join("\n"))),
+    text: sanitizePhylaxCustomerReply(extraction?.transcriptionStatus === "skipped_duration_limit"
+      ? voiceArchivedReply(maxVoiceNoteWords(), link)
+      // "Full text" for a voice note or a text; "Open" for an image or a file, which have no text of their own to read.
+      : voiceSavedReply(link, !handoff?.artifact_mime_type || handoff.artifact_mime_type.toLowerCase().startsWith("audio/"))),
   };
 }
 

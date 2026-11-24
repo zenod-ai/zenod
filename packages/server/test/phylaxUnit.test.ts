@@ -565,14 +565,11 @@ describe("Phylax customer unit mount", () => {
         { ticket_id: "voice-job" },
       ]);
       expect(voice.replyText).toContain("Saved ✓");
-      expect(voice.replyText).toContain("Google Drive audio: https://drive.google.com/file/d/voice-production/view");
-      expect(voice.replyText).toContain("Transcription: completed.");
-      expect(voice.replyText).toContain("Transcript: Remember the launch sequence.");
+      // E7-S35: one line and a link that opens the full transcript in the app.
+      expect(voice.replyText).toBe("Saved ✓ Full text: https://cloud.zenod.dev/#memory?path=Log%2F2026-07-29.md%23%5Evoice-production");
       expect(voice.replyText).not.toContain("Log/2026-07-29.md#^voice-production");
       expect(voice.replyText).not.toContain("abc1234");
-      expect(voice.replyText).toMatch(
-        /\nreply to this message to discuss or act on it$/,
-      );
+      expect(voice.replyText).not.toContain("\n");
 
       const media = await unit.phylaxRuntime.organ.receive({
         channel: "whatsapp",
@@ -607,13 +604,8 @@ describe("Phylax customer unit mount", () => {
         { ticket_id: "media-job" },
       ]);
       expect(media.replyText).toContain("Saved ✓");
-      expect(media.replyText).toContain("Screenshot filed.");
-      expect(media.replyText).toContain("Inbox/Media.md");
-      expect(media.replyText).not.toContain("Log/2026-07-29.md#^media-production");
+      expect(media.replyText).toBe("Saved ✓ Open: https://cloud.zenod.dev/#memory?path=Log%2F2026-07-29.md%23%5Emedia-production");
       expect(media.replyText).not.toContain("feed123");
-      expect(media.replyText).toMatch(
-        /\nreply to this message to discuss or act on it$/,
-      );
       expect(unit.phylaxRuntime.organ.lastCaptureEvidenceRef(
         "tenant-alpha",
         "whatsapp:34611111111",

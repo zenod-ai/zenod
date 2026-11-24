@@ -1,4 +1,13 @@
 import { join } from "node:path";
+import {
+  entryLinkIn,
+  VOICE_EMPTY_TRANSCRIPT_REPLY,
+  VOICE_RECEIVED_REPLY,
+  VOICE_STILL_WORKING_REPLY,
+  voiceNotTranscribedLine,
+  voiceOverLimitReply,
+  voiceRetryReply,
+} from "./voiceReplyWords.js";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -173,16 +182,17 @@ export function transcriptionFailureWords(failure: Pick<PhylaxTranscriptionFailu
 export function voiceTranscriptionRetryReply(failure: PhylaxTranscriptionFailure, retryInMs: number): string {
   const minutes = Math.max(1, Math.round(retryInMs / 60_000));
   const when = minutes >= 90 ? `about ${Math.round(minutes / 60)} h` : `about ${minutes} min`;
-  return `⚠️ Your voice note is not transcribed yet: ${transcriptionFailureWords(failure)} `
-    + `(code ${transcriptionFailureCode(failure.reason ?? failure.code)}). The audio is kept and Zenod tries again `
-    + `by itself in ${when}, so there is no need to send it again.`;
+  return voiceRetryReply(transcriptionFailureWords(failure), transcriptionFailureCode(failure.reason ?? failure.code), when);
 }
 
 /** EPIC-24 M37: heads the reply when a note is filed as not transcribed. */
-export function voiceNotTranscribedReply(failure: PhylaxTranscriptionFailure): string {
+export function voiceNotTranscribedReply(failure: PhylaxTranscriptionFailure, link: string | null = null): string {
   const tries = failure.attempts && failure.attempts > 1 ? ` after ${failure.attempts} tries` : "";
-  return `⚠️ Not transcribed: ${transcriptionFailureWords(failure)}${tries} `
-    + `(code ${transcriptionFailureCode(failure.reason ?? failure.code)}). The audio is kept and filed in your memory as a note pointing to it.`;
+  return voiceNotTranscribedLine(
+    `${transcriptionFailureWords(failure)}${tries}`,
+    transcriptionFailureCode(failure.reason ?? failure.code),
+    link,
+  );
 }
 
 /** EPIC-24 M37: the transcription source a not-transcribed note is filed with (it heads its Log entry). */
@@ -603,11 +613,11 @@ export class PhylaxPortedRuntime {
           return {
             deferred: true,
             replyText: durationSeconds !== null && durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS
-              ? `I received your voice note. It is over ${maxVoiceNoteWords()}, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.`
+              ? voiceOverLimitReply(maxVoiceNoteWords())
               : durationSeconds !== null && durationSeconds > LONG_NOTE_NOTICE_SECONDS
                 // EPIC-24 M36: a long note says so at once, with the minutes to wait, instead of "usually quick"
                 ? longNoteNotice(durationSeconds)
-                : 'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+                : VOICE_RECEIVED_REPLY,
             afterReply: () => this.kickVoiceWorker(),
             timing: { mediaDownloadMs: timing.mediaDownloadMs },
           };
@@ -677,7 +687,7 @@ export class PhylaxPortedRuntime {
         const progressTimer = mediaClaim?.role === "owner" && isVoice
           ? setTimeout(() => {
               if (forwardingSettled) return;
-              progressPromise = progress("I received your voice note and I’m still processing it.")
+              progressPromise = progress(VOICE_STILL_WORKING_REPLY)
                 .catch((error) => console.warn("[phylax] voice progress receipt failed:", error));
             }, this.voiceProgressDelayMs)
           : null;
@@ -977,7 +987,7 @@ export class PhylaxPortedRuntime {
         if (!transcription.text_transcript?.trim() && !transcription.transcription_failed) {
           this.whatsappStore.queueVoiceFailureReply(
             job.providerMessageId,
-            "⚠️ I could not process the persisted voice transcript because it was empty.",
+            VOICE_EMPTY_TRANSCRIPT_REPLY,
           );
           await this.whatsapp.drainMediaRecovery();
           continue;
@@ -1032,7 +1042,8 @@ export class PhylaxPortedRuntime {
           : null;
         this.whatsappStore.completeVoiceRingHandoff(
           job.providerMessageId,
-          failedNote ? `${voiceNotTranscribedReply(failedNote)}\n\n${result.replyText}` : result.replyText,
+          // E7-S35: one line, what failed and the link to the note that keeps the audio.
+          failedNote ? voiceNotTranscribedReply(failedNote, entryLinkIn(result.replyText)) : result.replyText,
         );
         await this.whatsapp.drainMediaRecovery();
         result.afterReply?.();

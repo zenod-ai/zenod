@@ -2,6 +2,7 @@ import { useEffect } from "react"
 
 import { Button } from "@/components/ui/button"
 import { countLeavingStep, countStep } from "@/lib/signup-counter"
+import { keepReturnHash } from "@/lib/return-hash"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx @ 6bdb318.
 function GithubMark({ className }: { className?: string }) {
@@ -70,7 +71,10 @@ export function HostedLogin({
               >
                 <a
                   href="/auth/google/start"
-                  onClick={() => countLeavingStep("oauth_google")}
+                  onClick={() => {
+                    keepReturnHash()
+                    countLeavingStep("oauth_google")
+                  }}
                 >
                   <GoogleMark className="size-5" />
                   Continue with Google
@@ -85,7 +89,10 @@ export function HostedLogin({
               >
                 <a
                   href="/auth/github/start"
-                  onClick={() => countLeavingStep("oauth_github")}
+                  onClick={() => {
+                    keepReturnHash()
+                    countLeavingStep("oauth_github")
+                  }}
                 >
                   <GithubMark className="size-5" />
                   Continue with GitHub
