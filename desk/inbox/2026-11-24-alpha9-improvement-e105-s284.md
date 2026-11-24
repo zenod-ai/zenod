@@ -2,13 +2,15 @@
 from: alpha9
 about: Improvement request: long voice notes are split and transcribed at any length, never dropped, and the sender is told when one fails (E105-S284)
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-24-zenod-re-improvement-request-long-voice-notes.md
 kind: improvement-request
 ask: agent_team/E105-S284
 to: zenod
 done-means: a test note over 2 h and one over 16 MB each land as one joined Log entry; a forced failure sends the sender a reply naming the failed step
 approved: "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?" (his chat on E105-S284, 24 Nov 2026) and "i asked for some task about my altamira video, haven't seen anythign about it was it lost????" (desk chat 24 Nov 17:11Z)
-request: open
+request: taken
+row: M38
 ---
 His words: "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?" (24 Nov).
 Thank you for M37 and the M36 evidence: it names the failing step (the 7086 s note of 23 Nov 15:25Z: central skipped, OpenAI 429/ETIMEDOUT, whisper.cpp -t 1 for 1 h 47 min, stopped by the 17:13Z deploy and marked failed). M37 (a)-(c) stay as filed. This request adds only what M37 does not cover, read from main today (read only):
