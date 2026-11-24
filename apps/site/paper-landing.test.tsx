@@ -65,17 +65,16 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
 
   it("renders screenshots whose replies and tool calls match production word for word (root L-6)", () => {
     const shot = (name: string) => readFileSync(new URL(`./shots/${name}.html`, import.meta.url), "utf8");
-    const runtime = readFileSync(new URL("../../packages/server/src/phylaxPortedRuntime.ts", import.meta.url), "utf8");
-    const receipt = readFileSync(new URL("../../packages/server/src/phylaxCaptureReceipt.ts", import.meta.url), "utf8");
+    const words = readFileSync(new URL("../../packages/server/src/voiceReplyWords.ts", import.meta.url), "utf8");
     const mcp = readFileSync(new URL("../../packages/server/src/mcp.ts", import.meta.url), "utf8");
     const evidence = readFileSync(new URL("../../packages/core/src/engine/evidence.ts", import.meta.url), "utf8");
     const files = readFileSync(new URL("../../packages/core/src/vault/files.ts", import.meta.url), "utf8");
-    // The WhatsApp acknowledgement and invitation are the exact strings the voice path sends.
+    // The WhatsApp acknowledgement and saved reply are the exact strings the voice path sends (E7-S35: one line each).
     const whatsapp = shot("whatsapp");
-    const ack = whatsapp.match(/<div class="msg">(I received your voice note[^<]+)</)![1];
-    expect(runtime).toContain(`'${ack}'`);
-    expect(receipt).toContain('"reply to this message to discuss or act on it"');
-    expect(whatsapp).toContain("reply to this message to discuss or act on it");
+    const ack = whatsapp.match(/<div class="msg">(Got it[^<]+)</)![1];
+    expect(words).toContain(`VOICE_RECEIVED_REPLY = "${ack}"`);
+    expect(words).toContain("`Saved ✓ ${transcribed ? \"Full text\" : \"Open\"}: ${link}`");
+    expect(whatsapp).toContain("Saved ✓ Full text: ");
     // Every tool shown is a real customer tool, and the queued text is the server's.
     const agents = shot("learn") + shot("recall");
     for (const tool of ["search_memory", "get_memory", "store_memory", "get_task_result"]) {
@@ -126,15 +125,13 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
   });
   it("plays the WhatsApp scene with production's replies word for word (root L-6)", () => {
     const scene = readFileSync(new URL("./src/scenes/whatsapp.html", import.meta.url), "utf8");
-    const runtime = readFileSync(new URL("../../packages/server/src/phylaxPortedRuntime.ts", import.meta.url), "utf8");
-    const channels = readFileSync(new URL("../../packages/server/src/phylaxChannels.ts", import.meta.url), "utf8");
+    const words = readFileSync(new URL("../../packages/server/src/voiceReplyWords.ts", import.meta.url), "utf8");
     const files = readFileSync(new URL("../../packages/core/src/vault/files.ts", import.meta.url), "utf8");
-    const ack = scene.match(/data-at="2900">(I received your voice note[^<]+)</)![1];
-    expect(runtime).toContain(`'${ack}'`);
-    for (const line of ['"Saved ✓"', "`Recap: ${recap}`", '"Google Drive audio"', '"Transcription: completed."', "`Transcript: ${", "`Filed: ${"])
-      expect(channels).toContain(line);
-    for (const line of ["Saved ✓", "Recap: ", "Google Drive audio: ", "Transcription: completed.", "Transcript: ", "Filed: ", "reply to this message to discuss or act on it"])
-      expect(scene).toContain(line);
+    const ack = scene.match(/data-at="2900">(Got it[^<]+)</)![1];
+    expect(words).toContain(`VOICE_RECEIVED_REPLY = "${ack}"`);
+    expect(words).toContain("`Saved ✓ ${transcribed ? \"Full text\" : \"Open\"}: ${link}`");
+    expect(scene).toContain("Saved ✓ Full text: ");
+    expect(scene).not.toContain("Transcript: ");
     for (const folder of [...scene.matchAll(/(\w+)\/[\w ]+\.md/g)].map((match) => match[1])) expect(files).toContain(`${folder}: "`);
   });
 

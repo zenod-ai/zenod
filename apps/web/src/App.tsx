@@ -30,6 +30,7 @@ import { SetupWizard } from "@/views/SetupWizard"
 import type { ZenodEdition } from "@/views/zenod-edition"
 import type { UsageFeatureId } from "@/components/usage-by-feature"
 import { usd } from "@/lib/usage"
+import { restoreReturnHash } from "@/lib/return-hash"
 
 type View =
   | { kind: "loading" }
@@ -39,6 +40,9 @@ type View =
   | { kind: "hosted-account" }
   | { kind: "settings"; settings: SettingsValues; edition: ZenodEdition }
   | { kind: "error"; message: string }
+
+// E7-S35: a note link opened while signed out comes back here after sign-in.
+restoreReturnHash()
 
 function consumeGithubReturn(): boolean {
   const params = new URLSearchParams(window.location.search)

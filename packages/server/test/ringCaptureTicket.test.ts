@@ -566,7 +566,7 @@ describe("Ring capture context ticket", () => {
         } | undefined;
         expect(structured?.state).toBe("accepted");
         expect(typeof structured?.ticket_id).toBe("string");
-        expect(receipt.replyText).toContain("still filing");
+        expect(receipt.replyText).toContain("Still saving");
         expect(receipt.afterReply).toBeTypeOf("function");
         expect(await ringRuntime.state.recentWindow(cid)).toEqual([]);
 
@@ -590,14 +590,14 @@ describe("Ring capture context ticket", () => {
       expect(whatsappSend).toHaveBeenCalledTimes(1);
       expect(whatsappSend).toHaveBeenCalledWith(
         "34611111111",
-        expect.stringContaining("Areas/Production WhatsApp.md"),
+        expect.stringMatching(/^Saved ✓/),
         "wa-production-capture",
         "tenant-alpha",
       );
       expect(telegramSend).toHaveBeenCalledTimes(1);
       expect(telegramSend).toHaveBeenCalledWith(
         "7711",
-        expect.stringContaining("Areas/Production Telegram.md"),
+        expect.stringMatching(/^Saved ✓/),
         "tenant-alpha",
         "tg-production-capture",
       );

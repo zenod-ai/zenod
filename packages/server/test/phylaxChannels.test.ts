@@ -475,10 +475,10 @@ describe("PhylaxChannelsOrgan", () => {
       },
     });
     expect(receipt.replyText).toContain("Saved ✓");
-    expect(receipt.replyText).toContain("Projects/Launch.md");
+    // E7-S35: one line and a link to the note's full text; filing details stay in the note.
+    expect(receipt.replyText).toBe("Saved ✓ Full text: https://cloud.zenod.dev/#memory?path=Log%2F2026-07-29.md%23%5Evoice-1");
     expect(receipt.replyText).not.toContain("abc1234");
     expect(receipt.replyText).not.toContain("job-alpha-1");
-    expect(receipt.replyText).toContain("saved to Inbox");
     expect(receipt.replyText).not.toContain("Which owner should be listed?");
     expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
       .toBe("Log/2026-07-29.md#^voice-1");
@@ -885,7 +885,8 @@ describe("PhylaxChannelsOrgan", () => {
     });
     expect(calls[0]?.arguments.idempotencyKey).toEqual(expect.any(String));
     expect(receipt.replyText).toContain("Saved ✓");
-    expect(receipt.replyText).toContain("Draft-07 catalog capture.");
+    expect(receipt.replyText).toContain("https://cloud.zenod.dev/#memory?path=");
+    expect(receipt.replyText).not.toContain("Draft-07 catalog capture.");
     await organ.close();
   });
 
@@ -1155,7 +1156,7 @@ describe("PhylaxChannelsOrgan", () => {
       repaired = true;
       const receipt = await organ.receive(input);
       expect(receipt.replyText).toContain("Saved ✓");
-      expect(receipt.replyText).toContain(`Google Drive audio: https://drive.google.com/file/d/${failureMode}/view`);
+      expect(receipt.replyText).not.toContain("drive.google.com");
       expect(new Set(ingestKeys)).toEqual(new Set([`alpha:whatsapp:provider-${failureMode}`]));
       expect(ingestKeys).toHaveLength(failureMode === "discovery" ? 1 : 2);
       await organ.close();
@@ -1257,7 +1258,7 @@ describe("PhylaxChannelsOrgan", () => {
 
     expect(pollAttempts).toBe(2);
     expect(receipt.replyText).toContain("Saved ✓");
-    expect(receipt.replyText).toContain("Recovered after a transient poll outage.");
+    expect(receipt.replyText).toBe("Saved ✓ Full text: https://cloud.zenod.dev/#memory?path=Log%2F2026-07-29.md%23%5Etransient-poll");
     expect(receipt.replyText).not.toContain("could not save");
     expect(organ.lastCaptureEvidenceRef("alpha", "whatsapp:34611111111"))
       .toBe("Log/2026-07-29.md#^transient-poll");
@@ -1359,9 +1360,7 @@ describe("PhylaxChannelsOrgan", () => {
       await vi.advanceTimersByTimeAsync(1);
       const receipt = await receiptPromise;
 
-      expect(receipt.replyText).toBe(
-        "I’m still filing this memory — I’ll confirm here when it is saved.",
-      );
+      expect(receipt.replyText).toBe("Still saving, I will confirm here.");
       expect(pollCalls).toBeGreaterThanOrEqual(1);
       const db = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"), { readOnly: true });
       const persisted = db.prepare(
@@ -1634,7 +1633,7 @@ describe("PhylaxChannelsOrgan", () => {
       messageId: "provider-restart-1",
       transcription: { text_transcript: "capture across restart" },
     });
-    expect(pending.replyText).toContain("still filing");
+    expect(pending.replyText).toContain("Still saving");
     expect(pending.replyText).not.toContain("Saved");
     await first.close();
 
@@ -3529,7 +3528,7 @@ describe("ported gateway integration", () => {
       // after the stop the boot puts a job that was transcribing back in the queue; it is never failed or answered
       expect(reopened.voiceJob("long-note-stopped")?.state).toBe("queued");
       expect(sent.filter((text) => text.includes("could not finish transcribing"))).toEqual([]);
-      expect(sent[0]).toContain("Long voice note, transcribing it, about 36 min.");
+      expect(sent[0]).toBe("Got it, long note, about 36 min.");
     } finally {
       reopened.close();
     }
@@ -3896,7 +3895,7 @@ describe("ported gateway integration", () => {
       })]);
       expect(usageSettlements).toEqual([true]);
       expect(sent.map((entry) => entry.text)).toEqual([
-        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        "Got it, on it.",
         "strawberry banana",
       ]);
       const deliveriesBeforeTranscript = deliveryBegins.length;
@@ -4069,7 +4068,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
       expect(aborted).toBe(false);
       expect(sent).toEqual([
-        "Long voice note, transcribing it, about 6 min. I will reply here once it is saved. Send “cancel transcription” to stop it.",
+        "Got it, long note, about 6 min.",
         "Long voice saved.",
       ]);
       expect(calls).toHaveLength(1);
@@ -4140,15 +4139,16 @@ describe("ported gateway integration", () => {
       expect(JSON.stringify(downstreamCalls[0])).toContain("not transcribed: no speech was found in it");
       const job = runtime.whatsappStore.voiceJob("silent-note")!;
       expect(job).toMatchObject({ failureReason: "no_speech", failureProvider: "central faster-whisper small" });
-      await vi.waitFor(() => expect(sent.some((text) => text.startsWith("⚠️ Not transcribed: no speech was found in it (code ZT-SPEECH)."))).toBe(true));
-      expect(sent.find((text) => text.startsWith("⚠️ Not transcribed"))).toContain("Voice handled.");
+      // E7-S35: one line, what failed and that the audio is kept; the downstream reply is not appended.
+      await vi.waitFor(() => expect(sent).toContain("⚠️ Not transcribed: no speech was found in it (ZT-SPEECH). Audio kept."));
+      expect(sent.find((text) => text.startsWith("⚠️ Not transcribed"))).not.toContain("Voice handled.");
 
       // A failure that can pass is retried; on the 5th try it is filed the same way.
       failure = { code: "timeout", reason: "timeout", message: "aborted", provider: "central faster-whisper small" };
       await runtime.whatsapp.handleEvent(voice("slow-note"));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("slow-note")?.state).toBe("failed"));
       expect(downstreamCalls).toHaveLength(1);
-      expect(sent.some((text) => text.includes("not transcribed yet: transcription ran out of time"))).toBe(true);
+      expect(sent.some((text) => text.startsWith("⚠️ Not transcribed yet: transcription ran out of time (ZT-TIMEOUT). Audio kept"))).toBe(true);
       let now = Date.now();
       for (let attempt = 2; attempt <= 5; attempt += 1) {
         now += 7 * 60 * 60_000;
@@ -4161,7 +4161,7 @@ describe("ported gateway integration", () => {
       expect(downstreamCalls).toHaveLength(2);
       expect(JSON.stringify(downstreamCalls[1])).toContain("not transcribed: transcription ran out of time after 5 tries");
       // One "not yet" reply for the whole note, then one final reply.
-      expect(sent.filter((text) => text.includes("not transcribed yet"))).toHaveLength(1);
+      expect(sent.filter((text) => text.includes("Not transcribed yet"))).toHaveLength(1);
       await vi.waitFor(() => expect(sent.some((text) => text.startsWith("⚠️ Not transcribed: transcription ran out of time after 5 tries"))).toBe(true));
     } finally {
       await runtime.close();
@@ -4265,9 +4265,9 @@ describe("ported gateway integration", () => {
       expect(transcriptionCalls).toBe(2);
       expect(downstreamCalls).toHaveLength(2);
       // EPIC-24 M36: a long note says so at once with the minutes to wait (not "usually quick"), then the saved reply follows.
-      expect(sent).toContain("Long voice note, transcribing it, about 10 min. I will reply here once it is saved. Send “cancel transcription” to stop it.");
-      expect(sent.filter((text) => text.startsWith("Long voice note")).length).toBe(1);
-      expect(sent.filter((text) => text.includes("queued it for transcription")).length).toBe(1);
+      expect(sent).toContain("Got it, long note, about 10 min.");
+      expect(sent.filter((text) => text.startsWith("Got it, long note")).length).toBe(1);
+      expect(sent.filter((text) => text === "Got it, on it.").length).toBe(1);
 
       await runtime.whatsapp.handleEvent(event("beta-confirm", "34622222222", "confirm transcription"));
       expect(sent).toContain("No confirmation is required. Zenod starts voice-note processing automatically.");
@@ -4300,8 +4300,8 @@ describe("ported gateway integration", () => {
       }));
       expect(downstreamCalls).toHaveLength(4);
       expect(sent).toEqual(expect.arrayContaining([
-        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
-        "I received your voice note. It is over 12 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.",
+        "Got it, on it.",
+        "Got it. Over 12 hours, so the audio is saved, not transcribed.",
         "Voice handled.",
         "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
       ]));
@@ -4369,9 +4369,9 @@ describe("ported gateway integration", () => {
       });
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-safety-bound")?.state).toBe("failed"));
       expect(downstreamCalls).toBe(0);
-      expect(sent[0]).toContain("queued it for transcription");
+      expect(sent[0]).toBe("Got it, on it.");
       // EPIC-24 M37: the owner hears what failed, that the audio is kept and retried, and never to send it again.
-      expect(sent[1]).toBe("⚠️ Your voice note is not transcribed yet: transcription ran out of time (code ZT-TIMEOUT). The audio is kept and Zenod tries again by itself in about 5 min, so there is no need to send it again.");
+      expect(sent[1]).toBe("⚠️ Not transcribed yet: transcription ran out of time (ZT-TIMEOUT). Audio kept, retrying in about 5 min.");
       expect(runtime.whatsappStore.voiceJob("voice-safety-bound")).toMatchObject({ failureReason: "timeout", attempts: 1 });
       expect(runtime.whatsappStore.nextTranscriptionRetryAt("voice-safety-bound")).not.toBeNull();
       // EPIC-24 M38: /api/health reads the job's state, failure and tries from the database (no ids, no text).
@@ -4496,7 +4496,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() =>
         expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
       expect(sent).toEqual([
-        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        "Got it, on it.",
         "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.",
       ]);
       expect(sent.join("\n")).not.toMatch(/Ring|Phylax/i);
@@ -5093,12 +5093,10 @@ describe("ported gateway integration", () => {
       expect([...storeKeys].sort()).toEqual([...expectedKeys].sort());
       expect(storeAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 1])));
       expect(pollAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 3])));
-      expect(sent.filter((text) => text.includes("still filing this memory"))).toHaveLength(3);
-      expect(sent.filter((text) => text.includes("Saved ✓"))).toHaveLength(3);
-      expect(sent.filter((text) => text.includes("Google Drive audio:"))).toHaveLength(3);
-      expect(sent.filter((text) => text.includes("Transcription: completed."))).toHaveLength(3);
-      expect(sent.filter((text) => text.includes("Transcript: transcript for voice-overlap-")))
-        .toHaveLength(3);
+      expect(sent.filter((text) => text.includes("Still saving"))).toHaveLength(3);
+      expect(sent.filter((text) => text.startsWith("Saved ✓"))).toHaveLength(3);
+      // E7-S35: the transcript is never echoed back; it opens from the link.
+      expect(sent.filter((text) => text.includes("transcript for voice-overlap-"))).toHaveLength(0);
       expect(sent.filter((text) => text.includes("couldn't save this"))).toHaveLength(0);
       for (const messageId of messageIds) {
         expect(runtime.whatsappStore.voiceJob(messageId)?.state).not.toBe("ring_outcome_unknown");
@@ -5309,7 +5307,7 @@ describe("ported gateway integration", () => {
       },
     });
     expect(result.replyText).toContain("Saved ✓");
-    expect(result.replyText).toContain("Google Drive media: https://drive.google.com/file/d/image-1/view");
+    expect(result.replyText).toBe("Saved ✓ Open: https://cloud.zenod.dev/#memory?path=Log%2F2026-07-31.md%23%5Ee-image1");
     expect(result.replyText).not.toContain("Log/2026-07-31.md#^e-image1");
     await organ.close();
   });

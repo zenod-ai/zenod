@@ -1,4 +1,5 @@
 import { opsAlert } from "./opsAlert.js";
+import { voiceLongNoteReply } from "./voiceReplyWords.js";
 import type { TranscriptionEnvelope } from "./transcribe.js";
 
 /**
@@ -177,7 +178,7 @@ export function longNoteEstimateMinutes(durationSeconds: number): number {
 
 /** M36: the one plain reply a long note gets at once; the saved reply follows when it is written out. */
 export function longNoteNotice(durationSeconds: number): string {
-  return `Long voice note, transcribing it, about ${longNoteEstimateMinutes(durationSeconds)} min. I will reply here once it is saved. Send “cancel transcription” to stop it.`;
+  return voiceLongNoteReply(longNoteEstimateMinutes(durationSeconds));
 }
 
 /**
