@@ -1,48 +1,46 @@
 {
   "row": "E7-S35",
   "card": "docs/cards/E7-S35.md",
-  "cardSha": "83f443e288e27520",
+  "cardSha": "321768d3622874b7",
   "inputs": {
-    "card": "83f443e288e27520",
-    "page": "a9a07faf5533e835",
+    "card": "321768d3622874b7",
+    "page": "d8bf35c445862243",
     "rules": "c1a7854c21d10fb4",
     "words": "ecb5c679ea8c530f"
   },
-  "checkedAt": "2026-11-24T22:09:55Z",
+  "checkedAt": "2026-11-24T22:10:30Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Start E7-S35: his WhatsApp replies to voice notes become one short line (got it, on it) plus a link to the full transcript",
       "where": "WhatsApp voice note 24 Nov 20:37Z",
       "status": "met",
-      "how": "Evidence page shows voice note replies cut to one line (Got it, on it.) plus a Saved link line; before/after table shows all reply kinds shortened."
+      "how": "Evidence page shows voice-note replies cut to 'Got it, on it.' plus a 'Saved ✓ Full text' link line, and the before/after table covers each reply kind."
     },
     {
       "said": "I get a lot of long messages ... just give me a link",
       "where": "2026-11-24",
       "status": "met",
-      "how": "Page explains the link opens the whole transcript in the Zenod app for the signed-in owner; the 'I get a lot of long messages' point is addressed by the one-line replies and link."
+      "how": "Page says the link opens the whole transcript in the Zenod app for the signed-in owner, and explains signed-out behaviour."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Desktop and phone pages open with the punchline box, a before/after diagram and a table; the phone table is cramped but readable with no sideways scroll."
+    "summary": "Both widths show the page opening with the punchline box, a before/after diagram and a table; the 390 px layout stacks the table into narrow columns but stays readable with no sideways scroll; no real house-rule breach is visible."
   },
-  "pass": false,
-  "held": [
-    "dead end: step 4, the link 'https://drive.google.com/…' on http://vps3.taild81fbb.ts.net:9904/#before-after answers 404 (https://drive.google.com/%E2%80%A6)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether the short voice-note reply (one line plus a link to the full transcript) is short enough, and send him a voice note saying yes or no.",
+    "asked": "Decide whether the short reply line plus full-text link is short enough, by sending a voice note back.",
     "ambiguous": ""
   },
   "clicks": {
-    "dead": "step 4, the link 'https://drive.google.com/…' on http://vps3.taild81fbb.ts.net:9904/#before-after answers 404 (https://drive.google.com/%E2%80%A6)",
+    "dead": null,
     "end": "a page to read",
-    "page": "a9a07faf5533e835",
-    "walkedAt": "2026-11-24T22:09:55Z",
+    "page": "d8bf35c445862243",
+    "walkedAt": "2026-11-24T22:10:30Z",
     "steps": [
       {
         "n": 1,
@@ -61,15 +59,8 @@
         "what": "open the link 'Epic deck'",
         "url": "https://team.alpha9.io/deck/zenod/docs/EPIC-7-REAL-USER-TEST.md",
         "result": "answered 200"
-      },
-      {
-        "n": 4,
-        "what": "open the link 'https://drive.google.com/…'",
-        "url": "https://drive.google.com/%E2%80%A6",
-        "result": "answered 404"
       }
-    ],
-    "shot": "E7-S35-dead.webp"
+    ]
   },
   "shots": [
     {
