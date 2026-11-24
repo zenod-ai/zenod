@@ -669,7 +669,7 @@ class Credit(unittest.TestCase):
         row, _, _ = self.run_at(T0)
         self.assertEqual(row["status"], "green")
         self.assertIn("OpenAI (voice-note fallback): no credit refusal in the last 48 h", row["signal"])
-        self.assertEqual(row["name"], "AI credit: DeepSeek, OpenRouter and OpenAI")
+        self.assertEqual(row["name"], "AI credit: DeepSeek, OpenRouter, ElevenLabs and OpenAI")
         line = ('[transcribe] openai failed, falling back to whisper.cpp: openai transcription failed (429): { "error": { '
                 '"message": "You have no credits remaining. Add credits to continue using the API", "type": "insufficient_quota" } }')
         ev = P.credit_event(line)
@@ -683,6 +683,22 @@ class Credit(unittest.TestCase):
         self.assertEqual(row["status"], "green")         # older than 48 h
         row, _, _ = self.run_at(T0, ops=[("2026-11-03T11:00:00Z", "credit", "openai_429")])
         self.assertEqual(row["status"], "red")           # also read from zenod-mt's log
+
+    def test_an_elevenlabs_quota_or_key_refusal_turns_the_row_red_for_6_hours(self):
+        """EPIC-20 A10: ElevenLabs is first for every voice note once its key is set; its refusals show here."""
+        row, _, _ = self.run_at(T0)
+        self.assertEqual(row["status"], "green")
+        self.assertIn("ElevenLabs (first for voice notes): no refusal in the last 6 h", row["signal"])
+        line = ("[transcribe] elevenlabs transcription failed (401 quota_exceeded): This request exceeds your quota. "
+                "(30s note), using the next provider")
+        ev = P.credit_event(line)
+        self.assertEqual(ev, ("credit", "elevenlabs_refused"))
+        row, _, _ = self.run_at(T0, phylax_ops=[("2026-11-03T10:00:00Z", ev[0], ev[1])])
+        self.assertEqual(row["status"], "red")
+        self.assertIn("ElevenLabs refused 1 voice notes for quota or key", row["problem"])
+        self.assertIn("https://elevenlabs.io/app/subscription", row["problem"])
+        row, _, _ = self.run_at(T0, ops=[("2026-11-03T05:00:00Z", "credit", "elevenlabs_refused")])
+        self.assertEqual(row["status"], "green")         # older than 6 h
 
     def test_a_staged_low_balance_alerts_once_and_clears(self):
         st = None

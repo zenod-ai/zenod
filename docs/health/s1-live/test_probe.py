@@ -190,6 +190,11 @@ class CreditRefusals(unittest.TestCase):
             ("[transcribe] openai failed, falling back to whisper.cpp: openai transcription failed (429): Rate limit reached for gpt-4o-mini-transcribe, try again in 20s", None),
             ("[transcribe] openai failed, falling back to whisper.cpp: fetch failed (cause: ETIMEDOUT)", None),
             ("[transcribe] groq failed: groq transcription failed (429): no credits remaining", None),
+            # EPIC-20 A10: ElevenLabs quota or key refusals; its 5xx and plain 429 are outages, not credit
+            ("[transcribe] elevenlabs transcription failed (401 quota_exceeded): This request exceeds your quota. (30s note), using the next provider", "elevenlabs_refused"),
+            ("[transcribe] elevenlabs transcription failed (401 invalid_api_key): Invalid API key (note), using the next provider", "elevenlabs_refused"),
+            ("[transcribe] elevenlabs transcription failed (503): busy (part 2 of 3), using the next provider", None),
+            ("[transcribe] elevenlabs transcription failed (429 too_many_concurrent_requests): slow down (note), using the next provider", None),
             ("{\"event\":\"shared_stt.usage\",\"status\":\"failed\",\"cost_usd\":0,\"spent_usd\":0.34,\"cap_usd\":10}", None),
         ):
             got = P.credit_event(line)

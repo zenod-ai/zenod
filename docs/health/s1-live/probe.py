@@ -237,7 +237,16 @@ OPENAI_CREDIT_RX = re.compile(r"\bopenai\b.*?\b429\b.*?(no credits remaining|ins
                               r"check your plan and billing)", re.I)
 
 
+# EPIC-20 A10: ElevenLabs (first for every voice note once its shared key is set) refusing for quota or a dead key, from
+# the `[transcribe] elevenlabs transcription failed (<status> <code>): …` line zenod-mt and Phylax write. A 5xx or a 429
+# rate limit is an outage, not credit: the note falls back and row 19 stays green.
+ELEVENLABS_CREDIT_RX = re.compile(r"\belevenlabs transcription failed \((?:40[123]\b|\d{3} (?:quota_exceeded|insufficient_credits|"
+                                  r"payment_required|subscription_inactive|invalid_api_key)\b)", re.I)
+
+
 def credit_event(rest: str) -> tuple[str, str] | None:
+    if ELEVENLABS_CREDIT_RX.search(rest):
+        return ("credit", "elevenlabs_refused")
     m = CREDIT_RX.search(rest)
     if m:
         return ("credit", m.group(1).lower() + "_402")

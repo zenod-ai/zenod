@@ -23,6 +23,7 @@ import {
   CENTRAL_STT_CHUNK_SECONDS,
   type TranscriptPartCache,
 } from "./centralTranscription.js";
+import { elevenLabsSttConfig, transcribeElevenLabsFirst } from "./elevenlabsTranscription.js";
 import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
 
 /**
@@ -46,7 +47,11 @@ import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
  *    local_whisper service, run in-process. The model is downloaded once to
  *    the persistent /data volume so it survives redeploys.
  *
+ * 0. ElevenLabs (EPIC-20 A10) — first for every tenant when the shared ELEVENLABS_API_KEY is set; the central
+ *    service and engines 1 to 3 run as its fallback (elevenlabsTranscription.ts). Unset: exactly that chain.
+ *
  * All knobs are env-overridable for self-hosters on smaller boxes:
+ *   ELEVENLABS_API_KEY     (unset: off; shared by every tenant, ZENOD_ELEVENLABS_STT=0 switches it off)
  *   GROQ_API_KEY           (unset: local-only)
  *   ZENOD_GROQ_STT_MODEL   (default: whisper-large-v3-turbo)
  *   OPENROUTER_API_KEY     (optional: paid fallback/long-note STT)
@@ -1354,7 +1359,48 @@ async function splitForCentral(
   }
 }
 
+/**
+ * EPIC-20 A10: ElevenLabs first for every tenant when the shared ELEVENLABS_API_KEY is set; today's chain (central,
+ * then the tenant's providers, then whisper.cpp) behind it for the whole note or for one failed part. Unset: today's
+ * chain exactly as before.
+ */
 async function runTranscription(
+  data: Buffer,
+  filename: string,
+  options: TranscribeOptions = {},
+): Promise<TranscriptionEnvelope> {
+  const eleven = elevenLabsSttConfig();
+  if (!eleven) return runTodayChain(data, filename, options);
+  const opts = typeof options === "function" ? { onProgress: options } : options;
+  const durationSeconds = opts.durationSeconds ?? (await probeAudioDurationSeconds(data, filename, opts.signal));
+  if (opts.signal?.aborted) return { success: false, provider: "elevenlabs", error: "transcription was cancelled", failureReason: "timeout" };
+  const long = Boolean(durationSeconds && durationSeconds > CENTRAL_STT_CHUNK_SECONDS * 1.2);
+  const partCache = long ? transcriptPartCache(data, `elevenlabs-${eleven.model}`) : undefined;
+  return transcribeElevenLabsFirst(eleven, {
+    data,
+    filename,
+    language: LANGUAGE,
+    durationSeconds,
+    chunkSeconds: CENTRAL_STT_CHUNK_SECONDS,
+    split: splitForCentral,
+    // A whole note keeps its progress; a single part's progress would jump the bar, so parts report only on finish.
+    fallback: (partData, partName, partSeconds) => {
+      const whole = partData === data;
+      const { onProgress: _drop, durationSeconds: _d, ...rest } = opts;
+      return runTodayChain(partData, partName, {
+        ...rest,
+        ...(whole && opts.onProgress ? { onProgress: opts.onProgress } : {}),
+        ...(partSeconds ? { durationSeconds: partSeconds } : {}),
+      });
+    },
+    ...(partCache ? { partCache } : {}),
+    ...(opts.onUsage ? { onUsage: opts.onUsage } : {}),
+    ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+}
+
+async function runTodayChain(
   data: Buffer,
   filename: string,
   options: TranscribeOptions = {},
