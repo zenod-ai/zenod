@@ -669,6 +669,8 @@ export interface BrainEngine {
    * write lane. Null when nothing changed. No LLM.
    */
   writePersonaNotes?(input: PersonaNotesInput): Promise<VaultRevision | null>;
+  /** E7-S32: bring an existing Obsidian vault's notes in, as they are, under `Imported/<vault>/`. No LLM. */
+  importNotes?(input: NotesImportInput): Promise<NotesImportResult>;
   /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
   memoryTreeOutline?(options?: { listUnplaced?: boolean }): Promise<MemoryTreeOutline | null>;
   /** EPIC-14 S28: the quick index's model-free part (places, summaries, counts, this week); null without a Tree.md. No LLM. */
@@ -796,6 +798,27 @@ export interface TreeSweepInput {
 }
 
 /** EPIC-14 S4: the files one persona run writes into its own folder. */
+/** E7-S32: the limits one vault import respects (the browser checks the same numbers first). */
+export const NOTES_IMPORT_LIMITS = Object.freeze({ maxFiles: 2000, maxFileBytes: 512 * 1024, maxTotalBytes: 20 * 1024 * 1024 });
+
+export interface NotesImportInput {
+  /** The vault's name; its notes land in `Imported/<vaultName>/` (cleaned to letters, digits, spaces, `-`, `_`, `.`). */
+  vaultName: string;
+  /** Paths inside the vault (`Projects/Garden.md`) with their whole content, written unchanged. */
+  files: Array<{ name: string; content: string }>;
+}
+
+export interface NotesImportResult {
+  /** `Imported/<vault>/`. */
+  folder: string;
+  /** Notes new or changed by this import. */
+  written: number;
+  /** Notes already there with the same content. */
+  unchanged: number;
+  /** The one revision holding the import; null when nothing changed. */
+  revision: VaultRevision | null;
+}
+
 export interface PersonaNotesInput {
   /** The persona's id, a lower-case slug: its folder is `Personas/<personaId>/`. */
   personaId: string;

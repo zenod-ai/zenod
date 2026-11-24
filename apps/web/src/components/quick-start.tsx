@@ -11,6 +11,7 @@ import {
 import { readPersonas, setPersonaEnabled, type Persona } from "@/lib/personas"
 import type { DashboardPlace } from "@/views/dashboard-navigation"
 import { WhatsAppOneTap } from "@/components/whatsapp-one-tap"
+import { showObsidianImport } from "@/components/obsidian-import"
 
 // EPIC-26 S15 (Jordi's E26-A8, "build as shown", mockup E26-S12): one card every new tester sees above
 // Chat, five steps that tick off by themselves from what Zenod stores, and a score. Hidden at the end or
@@ -191,6 +192,21 @@ function StepBody({ id, go, ai, setAi }: { id: QuickStartStepId; go: Go; ai: "cl
             tell Claude “save this to Zenod”, or type it in Chat below.
           </p>
           <div className="qs-tick">Ticks itself when Zenod has filed it. A voice note counts too.</div>
+          {/* E7-S32: a tester who already keeps notes in Obsidian brings the whole vault in. */}
+          <p className="qs-after">Already keep notes in Obsidian? Bring the whole vault in, links and all.</p>
+          <div className="qs-row">
+            <button
+              type="button"
+              className="qs-btn ghost"
+              data-testid="quick-start-obsidian"
+              onClick={() => {
+                go({ section: "memory", memory: "glance" })
+                showObsidianImport()
+              }}
+            >
+              Import my Obsidian vault
+            </button>
+          </div>
         </>
       )
     case "found":

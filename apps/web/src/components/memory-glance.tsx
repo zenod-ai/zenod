@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RecentSavesPanel } from "@/views/ZenodPortalPanels"
 import { QuickIndexPanel } from "@/components/quick-index"
+import { ObsidianImportCard } from "@/components/obsidian-import"
 
 // EPIC-22 E22-2, Memory › At a glance: totals, memories kept each week, the strongest places in the
 // tree, where memories come from, and the recent saves. Drawn from data Zenod already stores
@@ -46,11 +47,13 @@ export function MemoryGlanceView({ onOpenTree }: { onOpenTree?: () => void }) {
         ) : (
           <p className="zp-hint">
             {state.status === "empty"
-              ? "Nothing in your memory yet. Tell Zenod something in the chat or on WhatsApp and it shows here."
+              ? "Nothing in your memory yet. Tell Zenod something in the chat or on WhatsApp, or bring your Obsidian vault below, and it shows here."
               : "Zenod could not count your memory just now. Try again in a moment."}
           </p>
         )}
       </section>
+      {/* E7-S32: bring an existing Obsidian vault in. First under the totals, where a new tester looks. */}
+      <ObsidianImportCard onOpenTree={onOpenTree} />
       <QuickIndexPanel />
       <RecentSavesPanel />
     </div>

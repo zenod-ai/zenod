@@ -532,6 +532,7 @@ const HOSTED_CUSTOMER_HTTP_OPERATIONS = new Set([
   "POST /api/vault/sync",
   "POST /api/vault/reclone",
   "GET /api/vault/lint",
+  "POST /api/vault/import",
   "PUT /api/vault/repository",
   "POST /api/store",
   "POST /api/ask",
