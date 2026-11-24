@@ -604,10 +604,11 @@ export function buildMcpServer(
         conversationKey: z.string().min(1).optional().describe("Stable key that keeps one multi-turn conversation separate from others"),
         testRunId: z.string().min(1).optional().describe("Caller-supplied id that groups related turns in the chat audit"),
         idempotencyKey: z.string().min(1).max(512).optional().describe("Stable message key from a messaging channel; when present, the turn runs as a background job and get_task_result returns its reply"),
+        toNumber: z.string().min(1).max(32).optional().describe("Messaging channels: the account's own number the message was sent TO (+<digits>); kept with a note a subscriber is told about"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ message, surface, conversationKey, testRunId, idempotencyKey }) => {
+    async ({ message, surface, conversationKey, testRunId, idempotencyKey, toNumber }) => {
       if (!recordChatTestRun) throw new Error("chat test audit store is not configured");
       if (idempotencyKey) {
         if (!taskJobs) {
@@ -623,6 +624,7 @@ export function buildMcpServer(
           text: message,
           source: surface ?? "mcp",
           ...(conversationKey ? { conversationKey } : {}),
+          ...(toNumber ? { toNumber } : {}),
         };
         return enqueuedResponse(taskJobs.enqueue("chat", input, idempotencyKey));
       }
@@ -1240,6 +1242,7 @@ export function buildMcpServer(
       audioDurationSeconds,
       transcriptionDisposition,
       senderTimestamp,
+      toNumber,
       hints,
       idempotencyKey,
     }) => {
@@ -1273,6 +1276,7 @@ export function buildMcpServer(
         ...(audioDurationSeconds !== undefined ? { audioDurationSeconds } : {}),
         ...(transcriptionDisposition ? { transcriptionDisposition } : {}),
         ...(senderTimestamp ? { senderTimestamp } : {}),
+        ...(toNumber ? { toNumber } : {}),
         ...(hints ? { mediaHints: hints } : {}),
       };
       const rejection = taskJobs?.admit?.("media_ingest", input);

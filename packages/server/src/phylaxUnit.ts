@@ -60,11 +60,15 @@ import {
   PhylaxChannelsOrgan,
   phylaxWhatsAppPaths,
   registerPhylaxChannelTools,
+  registerPhylaxNumberPairingTools,
   type PhylaxFixedProductAdapter,
+  type PhylaxTenantDelivery,
+  type PhylaxWhatsAppNumberView,
   type PhylaxNotifyImage,
   type PhylaxPortedChannel,
   type PhylaxTranscriptionFailure,
 } from "./phylaxChannels.js";
+import { WhatsAppSessionError } from "./whatsappSessions.js";
 import {
   mountPhylaxAdminChannelRoutes,
   PhylaxPortedRuntime,
@@ -99,7 +103,7 @@ export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
  * the agent_team console to send Jordi his alerts from the Zenod number.
  */
 export const PHYLAX_NOTIFY_PROFILE = "phylax-notify-v1";
-export const PHYLAX_NOTIFY_TOOL_NAMES = ["notify", "channel_status", "notify_receipt"] as const;
+export const PHYLAX_NOTIFY_TOOL_NAMES = ["notify", "channel_status", "notify_receipt", "whatsapp_numbers"] as const;
 export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
 export const ZENOD_WHATSAPP_VERIFICATION_REPLY =
@@ -322,6 +326,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         read: [
           "channel_status",
           "notify_receipt",
+          "whatsapp_numbers",
           "get_recent_conversation_transcript",
           "phylax_management_v1_capabilities",
           "phylax_management_v1_channel_status",
@@ -1301,17 +1306,68 @@ function registerTenantChannelTools(
   const tenantId = context.tenant?.id;
   if (!tenantId) throw new Error("Phylax channel tools require a tenant");
   const delivery = runtime.delivery(tenantId);
-  const send = async (channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage) => {
+  const send = async (channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage, from?: string) => {
     if (!settings.ownsRecipient(tenantId, channel, recipient)) {
       throw new PhylaxChannelError("delivery_error", "That recipient is not connected to this Zenod account.");
     }
+    if (from) return delivery.send(channel, recipient, text, image, from);
     return image ? delivery.send(channel, recipient, text, image) : delivery.send(channel, recipient, text);
   };
-  registerPhylaxChannelTools(server, {
+  // EPIC-20 A9: the account's extra WhatsApp numbers, each its own session beside the default Zenod number.
+  const sessions = runtime.whatsapp.sessions;
+  const whatsappNumbers: PhylaxTenantDelivery["whatsappNumbers"] = sessions
+    ? {
+        list() {
+          const shared = runtime.whatsapp.status();
+          const defaultNumber: PhylaxWhatsAppNumberView = {
+            sessionId: null,
+            label: "Zenod",
+            state: shared.state,
+            number: runtime.whatsapp.sharedNumber(),
+            isDefault: true,
+          };
+          return [defaultNumber, ...sessions.list(tenantId).map((view) => ({
+            sessionId: view.sessionId,
+            label: view.label,
+            state: view.state,
+            number: view.number,
+            qr: view.qr,
+            lastError: view.lastError,
+            isDefault: false,
+          }))];
+        },
+        async pair(input) {
+          try {
+            const view = await sessions.pair(tenantId, input);
+            return { sessionId: view.sessionId, label: view.label, state: view.state, number: view.number, qr: view.qr, lastError: view.lastError, isDefault: false };
+          } catch (error) {
+            if (error instanceof WhatsAppSessionError) throw new PhylaxChannelError("invalid_input", error.message);
+            throw error;
+          }
+        },
+        async remove(sessionId) {
+          try {
+            await sessions.remove(tenantId, sessionId);
+          } catch (error) {
+            if (error instanceof WhatsAppSessionError) throw new PhylaxChannelError("invalid_input", error.message);
+            throw error;
+          }
+        },
+      }
+    : undefined;
+  const tenantDelivery: PhylaxTenantDelivery = {
     send,
-    async notify(text, image) {
+    ...(whatsappNumbers ? { whatsappNumbers } : {}),
+    async notify(text, image, from) {
       const tenant = settings.get(tenantId);
       const requests: Array<Promise<Awaited<ReturnType<typeof send>>>> = [];
+      if (from) {
+        // EPIC-20 A9: a notify from one of the account's extra numbers goes to its verified WhatsApp only.
+        if (!tenant.verified || !tenant.phoneNumber) {
+          throw new PhylaxChannelError("delivery_error", "This Zenod account has no verified WhatsApp number to notify.");
+        }
+        return [await send("whatsapp", tenant.phoneNumber, text, image, from)];
+      }
       if (tenant.notificationPrefs.whatsapp && tenant.verified && tenant.phoneNumber) {
         // EPIC-20 A3: only WhatsApp carries the picture; Telegram keeps the text.
         requests.push(send("whatsapp", tenant.phoneNumber, text, image));
@@ -1333,5 +1389,7 @@ function registerTenantChannelTools(
     deliveryReceipt(sentMessageId) {
       return runtime.whatsappStore.outboundDeliveryReceipt(tenantId, sentMessageId);
     },
-  });
+  };
+  registerPhylaxChannelTools(server, tenantDelivery);
+  registerPhylaxNumberPairingTools(server, tenantDelivery);
 }

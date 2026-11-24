@@ -602,6 +602,8 @@ export interface StoredEntry {
   forwardedBy?: string;
   /** EPIC-20 A8: a typed message kept because a subscription's reply word matched it; only these subscriptions are told. */
   announceTo?: string[];
+  /** EPIC-20 A9: the account's WhatsApp number the note was sent TO (`+<digits>`); null when it came another way. */
+  toNumber?: string;
 }
 
 export type EntryStoredListener = (entry: StoredEntry) => void;
@@ -626,7 +628,7 @@ export const TEST_NOTE_ID = "test";
 interface DeliveryEvent {
   eventId: string;
   test: boolean;
-  note: { id: string; capturedAt: string; source: string | null; contentType?: "voice_note" | "text" };
+  note: { id: string; capturedAt: string; source: string | null; contentType?: "voice_note" | "text"; toNumber?: string | null };
 }
 
 export class SubscriberDispatcher {
@@ -660,7 +662,7 @@ export class SubscriberDispatcher {
       this.track(this.deliver(sub, {
         eventId: shortId("evt_"),
         test: false,
-        note: { id: entry.evidenceRef, capturedAt, source: entry.source ?? null, contentType: typed ? "text" : "voice_note" },
+        note: { id: entry.evidenceRef, capturedAt, source: entry.source ?? null, contentType: typed ? "text" : "voice_note", toNumber: entry.toNumber ?? null },
       }, { retries: true }).catch(() => undefined));
     }
   };
@@ -707,6 +709,8 @@ export class SubscriberDispatcher {
         captured_at: event.note.capturedAt,
         source: event.note.source,
         content_type: event.note.contentType ?? "voice_note",
+        // EPIC-20 A9: which of the account's WhatsApp numbers the note was sent TO; null when not a WhatsApp note.
+        to_number: event.note.toNumber ?? null,
         url: noteUrl.toString(),
       },
     });

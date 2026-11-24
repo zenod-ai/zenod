@@ -5,7 +5,8 @@ import { readFile } from "node:fs/promises";
 import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod/state/sqlite";
 import { Settings } from "./settings.js";
-import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
+import { WhatsAppGateway, defaultSocketFactory, type SocketFactory } from "./whatsappGateway.js";
+import { WhatsAppSessionError, WhatsAppSessionPool } from "./whatsappSessions.js";
 import {
   CAPTURE_NOT_SAVED_REPLY,
   CAPTURE_RETRY_NOTICE,
@@ -328,6 +329,8 @@ export class PhylaxPortedRuntime {
     env: NodeJS.ProcessEnv = process.env,
     adapters: {
       whatsappSocketFactory?: SocketFactory;
+      /** EPIC-20 A9: socket factory for extra numbers' sessions (tests); defaults to the default number's factory. */
+      whatsappSessionSocketFactory?: SocketFactory;
       telegramFetch?: typeof fetch;
       verifyInbound?: (input: {
         channel: "whatsapp" | "telegram";
@@ -508,6 +511,7 @@ export class PhylaxPortedRuntime {
           chatId: event.chatId,
           messageId: event.messageId,
           ...(senderTimestamp ? { senderTimestamp } : {}),
+          ...(event.toNumber ? { toNumber: event.toNumber } : {}),
           ...(event.replyToMessageId ? { replyToMessageId: event.replyToMessageId } : {}),
           text,
           ...(media ? { media: {
@@ -693,6 +697,17 @@ export class PhylaxPortedRuntime {
         };
       },
       ...(adapters.whatsappSocketFactory ? { socketFactory: adapters.whatsappSocketFactory } : {}),
+      extraNumberSenderAllowed: async (event, sessionTenantId) =>
+        (await this.organ.tenantIdFor("whatsapp", event.senderId, event.chatId)) === sessionTenantId,
+      // EPIC-20 A9: more numbers on one account (agent_team E60-S18); off with PHYLAX_WHATSAPP_EXTRA_NUMBERS=0.
+      ...(process.env.PHYLAX_WHATSAPP_EXTRA_NUMBERS === "0"
+        ? {}
+        : {
+            sessions: new WhatsAppSessionPool({
+              root: whatsappPaths.root,
+              socketFactory: adapters.whatsappSessionSocketFactory ?? adapters.whatsappSocketFactory ?? defaultSocketFactory,
+            }),
+          }),
     });
     this.telegram = new TelegramGateway({
       settings: this.settings,
@@ -963,6 +978,7 @@ export class PhylaxPortedRuntime {
         const source = this.whatsappStore.inboundMediaIdentity(job.providerMessageId);
         const staged: PhylaxStagedVoice = {
           senderTimestamp: source?.senderTimestamp,
+          ...(source?.toNumber ? { toNumber: source.toNumber } : {}),
           ...(source?.mediaType === "ptt" || source?.mediaType === "audio"
             ? { isVoiceNote: source.mediaType === "ptt" }
             : {}),
@@ -1146,6 +1162,10 @@ export class PhylaxPortedRuntime {
   async start(): Promise<void> {
     this.startEventLoopHeartbeat();
     await this.whatsapp.startIfEnabled();
+    // EPIC-20 A9: reconnect the extra numbers paired before; a failure there never holds the default number.
+    void this.whatsapp.sessions?.startAll().catch((error: unknown) => {
+      console.error("[whatsapp] extra numbers could not start:", error);
+    });
     await this.telegram.startIfEnabled();
     await this.organ.resumePendingCaptures();
     const resumed = this.retryDueVoiceCaptures();
@@ -1177,16 +1197,31 @@ export class PhylaxPortedRuntime {
 
   delivery(tenantId?: string): PhylaxTenantDelivery {
     return {
-      send: async (channel, recipient, text, image) => {
-        const sent = channel === "whatsapp"
-          ? await this.whatsapp.sendText(recipient, text, undefined, tenantId, image)
-          : await this.telegram.sendText(recipient, text, tenantId);
+      send: async (channel, recipient, text, image, from) => {
+        if (from && channel !== "whatsapp") {
+          throw new PhylaxChannelError("invalid_input", "from applies to WhatsApp only");
+        }
+        let fromNumber: string | null = null;
+        let sentMessageId: string;
+        if (channel === "whatsapp") {
+          try {
+            const sent = await this.whatsapp.sendText(recipient, text, undefined, tenantId, image, from);
+            sentMessageId = sent.sentMessageId;
+            fromNumber = sent.fromNumber ?? this.whatsapp.sharedNumber();
+          } catch (error) {
+            if (error instanceof WhatsAppSessionError) throw new PhylaxChannelError("invalid_input", error.message);
+            throw error;
+          }
+        } else {
+          sentMessageId = (await this.telegram.sendText(recipient, text, tenantId)).sentMessageId;
+        }
         return {
           channel,
           recipient,
-          sentMessageId: sent.sentMessageId,
+          sentMessageId,
           status: "sent",
           at: new Date().toISOString(),
+          ...(channel === "whatsapp" ? { from: fromNumber } : {}),
         } satisfies PhylaxDeliveryReceipt;
       },
       status: () => ({ whatsapp: this.whatsapp.status(), telegram: this.telegram.status() }),
@@ -1218,6 +1253,7 @@ export class PhylaxPortedRuntime {
     for (
       const result of await Promise.allSettled([
         this.whatsapp.close(),
+        this.whatsapp.sessions?.close() ?? Promise.resolve(),
         this.telegram.close(),
         voiceDrain,
       ])

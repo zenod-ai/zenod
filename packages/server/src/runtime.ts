@@ -530,6 +530,7 @@ export class Runtime {
             content: text, source: "whatsapp", contentType: "text",
             ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
             announceTo: subs.map((sub) => sub.id),
+            ...(job.input.toNumber ? { toNumber: job.input.toNumber } : {}),
           }, `whatsapp-keep:${job.idempotencyKey ?? job.id}`);
         } catch {
           return false; // could not keep it: the message goes the normal way and gets its normal reply

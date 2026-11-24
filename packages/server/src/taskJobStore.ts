@@ -61,6 +61,8 @@ export interface TaskJobInput {
   sourceId?: string;
   /** store (EPIC-20 A8): ids of the subscriptions a typed reply word matched; once kept, only they are told (subscribers.ts). */
   announceTo?: string[];
+  /** chat, store, media_ingest (EPIC-20 A9): the account's WhatsApp number the message was sent TO; told to subscribers as note.to_number. */
+  toNumber?: string;
   /** media_ingest: artifact class. */
   mediaType?: "audio" | "screenshot" | "image" | "pdf" | "document" | "link";
   /** media_ingest: fetchable raw artifact URL. */
