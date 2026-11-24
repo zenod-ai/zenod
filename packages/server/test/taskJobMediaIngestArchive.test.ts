@@ -373,7 +373,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
       durationSeconds: 7_201,
     });
     expect(stored).toHaveLength(1);
-    expect(stored[0]!.content).toContain("exceeds Zenod's 2-hour transcription limit");
+    expect(stored[0]!.content).toContain("exceeds Zenod's transcription length limit");
     expect(stored[0]!.content).toContain("Raw artifact:");
     expect(stored[0]!.content).not.toContain("This transcription path must not run.");
     await queue.close();

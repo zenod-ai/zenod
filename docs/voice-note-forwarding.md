@@ -44,7 +44,7 @@ Any MCP client works (point it at the URL with the bearer header). It has two to
 | `recordedAt` | no | When it was recorded, ISO-8601 with a zone. Defaults to now. This is the time the note has in the memory. |
 | `durationSeconds` | no | Its length, if you know it. |
 
-Formats: webm, ogg or opus, mp4 or m4a, aac, mp3, wav. Largest audio: 16 MB (about an hour of speech at 32 kbit/s).
+Formats: webm, ogg or opus, mp4 or m4a, aac, mp3, wav. Largest audio: 64 MB (about 4.5 hours at 32 kbit/s, 9 hours of WhatsApp Opus); Zenod cuts any note into parts of about 5 minutes before it transcribes, so length is never refused below 12 hours.
 
 The answer comes at once: `{ jobId, status: "queued", duplicate: false, sourceApp, transcript: "supplied" | "zenod", … }`. On a repeat forward, `duplicate` is `true` and `jobId` is the first one.
 

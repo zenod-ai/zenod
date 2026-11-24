@@ -1545,6 +1545,50 @@ export class WhatsAppStore {
    * and not finished yet, saved after at least one retry, ended in the try-again text after a
    * retry (Zenod said the save failed), and given up after the last retry.
    */
+  /**
+   * EPIC-24 M38: each voice job's state, last error and tries, read from this database (the phylax-data volume), so the
+   * health page and a later reader see them after a deploy, when the old container's log is gone. Counts, lengths,
+   * reasons and times only: no ids, numbers or text.
+   */
+  voiceJobHealth(now = Date.now(), recentMs = 7 * 24 * 60 * 60_000): {
+    open: Record<string, number>;
+    oldestOpenAt: number | null;
+    longestOpenSeconds: number | null;
+    recent: Array<{ state: string; durationSeconds: number | null; attempts: number; reason: string | null; provider: string | null; updatedAt: number }>;
+  } {
+    const openRows = this.db.prepare(
+      `SELECT job_state AS state, COUNT(*) AS n, MIN(created_at) AS oldest, MAX(duration_seconds) AS longest
+       FROM whatsapp_voice_jobs
+       WHERE job_state IN ('queued', 'transcribing', 'transcribed', 'forwarding', 'capture_retry_pending')
+       GROUP BY job_state`,
+    ).all() as Array<{ state: string; n: number; oldest: number | null; longest: number | null }>;
+    const open: Record<string, number> = {};
+    let oldestOpenAt: number | null = null;
+    let longestOpenSeconds: number | null = null;
+    for (const row of openRows) {
+      open[row.state] = Number(row.n);
+      if (row.oldest !== null) oldestOpenAt = oldestOpenAt === null ? Number(row.oldest) : Math.min(oldestOpenAt, Number(row.oldest));
+      if (row.longest !== null) longestOpenSeconds = Math.max(longestOpenSeconds ?? 0, Math.round(Number(row.longest)));
+    }
+    const recent = (this.db.prepare(
+      `SELECT job_state AS state, duration_seconds AS durationSeconds, attempts,
+         failure_reason AS reason, failure_provider AS provider, updated_at AS updatedAt
+       FROM whatsapp_voice_jobs
+       WHERE updated_at >= ? AND (failure_reason IS NOT NULL OR job_state = 'failed')
+       ORDER BY updated_at DESC
+       LIMIT 10`,
+    ).all(now - recentMs) as Array<{ state: string; durationSeconds: number | null; attempts: number; reason: string | null; provider: string | null; updatedAt: number }>)
+      .map((row) => ({
+        state: row.state,
+        durationSeconds: row.durationSeconds === null ? null : Math.round(Number(row.durationSeconds)),
+        attempts: Number(row.attempts),
+        reason: row.reason,
+        provider: row.provider,
+        updatedAt: Number(row.updatedAt),
+      }));
+    return { open, oldestOpenAt, longestOpenSeconds, recent };
+  }
+
   voiceCaptureRetryCounts(): {
     pending: number;
     inFlight: number;

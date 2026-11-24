@@ -464,6 +464,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       worker,
       // ZAL-A10: kept voice notes and their automatic save retries (counts only).
       captureRetries: runtime.whatsappStore.voiceCaptureRetryCounts(),
+      // EPIC-24 M38: voice jobs from the database (state, last failure reason, tries), readable after a deploy.
+      voiceJobs: runtime.whatsappStore.voiceJobHealth(now),
       eventLoop: eventLoopHealth(),
       restart: {
         required: restartRequired,

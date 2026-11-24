@@ -646,7 +646,7 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
   // EPIC-21 V1: the forwarding door, a stateless MCP server holding only ingest_voice_note and its receipt.
   app.post(`${API_PREFIX}/mcp`, bodyLimit({
     maxSize: FORWARD_MAX_BODY_BYTES,
-    onError: (c) => apiError(c, 413, "too_large", "The request is larger than the 16 MB audio limit allows."),
+    onError: (c) => apiError(c, 413, "too_large", "The request is larger than the 64 MB audio limit allows."),
   }), async (c) => {
     const auth = authenticate(c, FORWARD_SCOPE);
     if (auth instanceof Response) return auth;

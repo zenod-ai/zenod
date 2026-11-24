@@ -123,6 +123,29 @@ def long_note_wait_s(t: dt.datetime, long_notes: list | None) -> float:
     return 0.0
 
 
+def voice_jobs_words(vj: dict | None, ref: dt.datetime) -> list[str]:
+    """EPIC-24 M38: Phylax's voice jobs read from its database by /api/health (state, last failure, tries), so a long
+    note's progress and the reason it failed are still on this page after a deploy replaced the container and its log."""
+    if not isinstance(vj, dict):
+        return []
+    out = []
+    open_ = {k: v for k, v in (vj.get("open") or {}).items() if v}
+    if open_:
+        longest = vj.get("longestOpenSeconds")
+        since = vj.get("oldestOpenAt")
+        out.append("voice notes in progress: " + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in sorted(open_.items()))
+                   + (f", longest {round(longest / 60)} min" if longest else "")
+                   + (f", oldest since {ago(iso(dt.datetime.fromtimestamp(since / 1000, dt.timezone.utc)), ref)}" if since else ""))
+    recent = vj.get("recent") or []
+    if recent:
+        r = recent[0]
+        at = iso(dt.datetime.fromtimestamp(r["updatedAt"] / 1000, dt.timezone.utc)) if r.get("updatedAt") else None
+        mins = f"{round(r['durationSeconds'] / 60)} min " if r.get("durationSeconds") else ""
+        out.append(f"last voice note failure {ago(at, ref)}: {mins}note, {r.get('reason') or r.get('state')}"
+                   f" after {r.get('attempts', 0)} tries ({len(recent)} in 7 days)")
+    return out
+
+
 def reply_stall(inbound_times: list[str] | None, last_saved_reply: str | None, ref: dt.datetime,
                 minutes: int = STALL_MIN, chat_replies: list[str] | None = None,
                 long_notes: list | None = None) -> dt.datetime | None:
@@ -330,7 +353,8 @@ def components(d: dict) -> list[dict]:
         error="; ".join([
             f"last WhatsApp drop {ago(lr.get('at'), ref)} ({lr.get('reason')}), reconnected; {pl.get('reconnects24h', 0)} drops in 24 h"
             if lr else "no WhatsApp drop since the container started",
-            f"last error log line {ago(pl['lastError']['at'], ref)}" if pl.get("lastError") else "0 error log lines"]),
+            f"last error log line {ago(pl['lastError']['at'], ref)}" if pl.get("lastError") else "0 error log lines",
+            *voice_jobs_words(pj.get("voiceJobs"), ref)]),
         events=[ev(lr.get("at"), f"WhatsApp drop ({lr.get('reason')}), reconnected", "container log"),
                 ev((pl.get("lastError") or {}).get("at"), (pl.get("lastError") or {}).get("what", ""), "container log")],
         source="GET /api/health from VPS3; phylax container log on VPS1",

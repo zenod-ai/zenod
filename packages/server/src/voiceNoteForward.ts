@@ -30,8 +30,13 @@ const FORWARD_EXTENSIONS: Record<string, string> = {
   "audio/wav": "wav",
   "audio/x-wav": "wav",
 };
-/** About an hour of speech at 32 kbit/s; base64 in JSON makes the request a third larger. */
-export const FORWARD_MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+/**
+ * EPIC-24 M38: about 4.5 hours at 32 kbit/s, or 9 hours of WhatsApp-style Opus (it was 16 MB, which a 2 hour note can pass).
+ * Zenod cuts the audio into ~5 min parts before any transcription upload, so the size only bounds this one request; base64
+ * in JSON makes it a third larger. A bigger note goes as audioUrl.
+ */
+export const FORWARD_MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+const TOO_LARGE = `The audio is larger than ${FORWARD_MAX_AUDIO_BYTES / 1024 / 1024} MB.`;
 export const FORWARD_MAX_BODY_BYTES = Math.ceil(FORWARD_MAX_AUDIO_BYTES * 4 / 3) + 1024 * 1024;
 const FETCH_TIMEOUT_MS = 30_000;
 
@@ -112,9 +117,9 @@ async function fetchAudio(rawUrl: string, options: { tenantId: string; policy: S
   }
   if (!response.ok) throw new ForwardAudioError("audio_fetch_failed", `The audio URL answered ${response.status}.`);
   const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > FORWARD_MAX_AUDIO_BYTES) throw new ForwardAudioError("audio_too_large", "The audio is larger than 16 MB.");
+  if (Number.isFinite(declared) && declared > FORWARD_MAX_AUDIO_BYTES) throw new ForwardAudioError("audio_too_large", TOO_LARGE);
   const data = Buffer.from(await response.arrayBuffer());
-  if (data.length > FORWARD_MAX_AUDIO_BYTES) throw new ForwardAudioError("audio_too_large", "The audio is larger than 16 MB.");
+  if (data.length > FORWARD_MAX_AUDIO_BYTES) throw new ForwardAudioError("audio_too_large", TOO_LARGE);
   return { data, contentType: response.headers.get("content-type") };
 }
 
@@ -195,9 +200,9 @@ export function createVoiceNoteForwardServer(options: ForwardServerOptions): Mcp
       try {
         if (args.audioBase64) {
           if (!args.mimeType) return failure("invalid_input", "mimeType is required with audioBase64.");
-          if (args.audioBase64.length > FORWARD_MAX_BODY_BYTES) throw new ForwardAudioError("audio_too_large", "The audio is larger than 16 MB.");
+          if (args.audioBase64.length > FORWARD_MAX_BODY_BYTES) throw new ForwardAudioError("audio_too_large", TOO_LARGE);
           audio = Buffer.from(args.audioBase64, "base64");
-          if (audio.length > FORWARD_MAX_AUDIO_BYTES) throw new ForwardAudioError("audio_too_large", "The audio is larger than 16 MB.");
+          if (audio.length > FORWARD_MAX_AUDIO_BYTES) throw new ForwardAudioError("audio_too_large", TOO_LARGE);
         } else {
           const fetched = await fetchAudio(args.audioUrl!, { tenantId, policy: options.policy, lookup: options.lookup, fetch: options.fetch });
           audio = fetched.data;

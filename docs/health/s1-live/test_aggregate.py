@@ -702,6 +702,26 @@ class Credit(unittest.TestCase):
         self.assertTrue(all(b != 1.0 for _, b in st["credit"]["deepseek"]))   # the staged balance is never sampled
 
 
+
+class VoiceJobsFromTheDatabase(unittest.TestCase):
+    """EPIC-24 M38: Phylax's voice jobs come from its database through /api/health, so they outlive a deploy."""
+
+    def test_words_name_the_open_jobs_and_the_last_failure_with_its_tries(self):
+        import datetime as dt
+        ref = dt.datetime(2026, 11, 24, 20, 0, tzinfo=dt.timezone.utc)
+        at = int(dt.datetime(2026, 11, 24, 19, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
+        words = A.voice_jobs_words({
+            "open": {"transcribing": 1, "queued": 2, "forwarding": 0},
+            "oldestOpenAt": at, "longestOpenSeconds": 7086,
+            "recent": [{"state": "failed", "durationSeconds": 7086, "attempts": 5, "reason": "timeout", "provider": None, "updatedAt": at}],
+        }, ref)
+        self.assertEqual(len(words), 2)
+        self.assertTrue(words[0].startswith("voice notes in progress: 2 queued, 1 transcribing, longest 118 min, oldest since "))
+        self.assertTrue(words[1].startswith("last voice note failure "))
+        self.assertIn(": 118 min note, timeout after 5 tries (1 in 7 days)", words[1])
+        self.assertEqual(A.voice_jobs_words(None, ref), [])
+        self.assertEqual(A.voice_jobs_words({"open": {}, "recent": []}, ref), [])
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -2608,6 +2608,7 @@ describe("PhylaxChannelsOrgan", () => {
     ]);
   });
 
+  // EPIC-24 M38: the limit is now twelve hours (the name is pinned by the ZPF-1 baseline contract).
   it("archives Telegram audio over two hours and forwards its pointer without calling STT", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-telegram-duration-limit-"));
     dirs.push(dataDir);
@@ -2633,12 +2634,12 @@ describe("PhylaxChannelsOrgan", () => {
         bytes: Buffer.from("long-telegram-audio"),
         fileName: "long.ogg",
         mimeType: "audio/ogg",
-        durationSeconds: 2 * 60 * 60 + 1,
+        durationSeconds: 12 * 60 * 60 + 1,
       },
     });
     expect(transcriptionCalls).toBe(0);
     expect(result.handoff).toMatchObject({
-      duration_seconds: 2 * 60 * 60 + 1,
+      duration_seconds: 12 * 60 * 60 + 1,
       transcription_failed: { code: "duration_limit" },
       artifact_ref: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
     });
@@ -4167,6 +4168,7 @@ describe("ported gateway integration", () => {
     }
   });
 
+  // EPIC-24 M38: the limit is now twelve hours (the name is pinned by the ZPF-1 baseline contract).
   it("automatically handles voice notes through two hours, skips longer transcription, and keeps cancellation scoped", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-controls-"));
     dirs.push(dataDir);
@@ -4270,19 +4272,19 @@ describe("ported gateway integration", () => {
       await runtime.whatsapp.handleEvent(event("beta-confirm", "34622222222", "confirm transcription"));
       expect(sent).toContain("No confirmation is required. Zenod starts voice-note processing automatically.");
 
-      durationSeconds = 2 * 60 * 60;
+      durationSeconds = 12 * 60 * 60;
       await runtime.whatsapp.handleEvent(event("alpha-exactly-two-hours", "34611111111", "", true));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-exactly-two-hours")?.state).toBe("completed"));
       expect(transcriptionCalls).toBe(3);
       expect(downstreamCalls).toHaveLength(3);
 
-      durationSeconds = 2 * 60 * 60 + 1;
+      durationSeconds = 12 * 60 * 60 + 1;
       await runtime.whatsapp.handleEvent(event("alpha-over-two-hours", "34611111111", "", true));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-over-two-hours")?.state).toBe("completed"));
       expect(transcriptionCalls).toBe(3);
       expect(downstreamCalls).toHaveLength(4);
       expect(downstreamCalls[3]!.handoff).toMatchObject({
-        duration_seconds: 2 * 60 * 60 + 1,
+        duration_seconds: 12 * 60 * 60 + 1,
         transcription_failed: { code: "duration_limit" },
       });
 
@@ -4299,7 +4301,7 @@ describe("ported gateway integration", () => {
       expect(downstreamCalls).toHaveLength(4);
       expect(sent).toEqual(expect.arrayContaining([
         'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
-        "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.",
+        "I received your voice note. It is over 12 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.",
         "Voice handled.",
         "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
       ]));
@@ -4372,6 +4374,9 @@ describe("ported gateway integration", () => {
       expect(sent[1]).toBe("⚠️ Your voice note is not transcribed yet: transcription ran out of time (code ZT-TIMEOUT). The audio is kept and Zenod tries again by itself in about 5 min, so there is no need to send it again.");
       expect(runtime.whatsappStore.voiceJob("voice-safety-bound")).toMatchObject({ failureReason: "timeout", attempts: 1 });
       expect(runtime.whatsappStore.nextTranscriptionRetryAt("voice-safety-bound")).not.toBeNull();
+      // EPIC-24 M38: /api/health reads the job's state, failure and tries from the database (no ids, no text).
+      expect(runtime.whatsappStore.voiceJobHealth().recent[0]).toMatchObject({ reason: "timeout", attempts: 1, durationSeconds: 60 });
+      expect(JSON.stringify(runtime.whatsappStore.voiceJobHealth())).not.toMatch(/voice-safety-bound|34611111111/);
       expect(sent.join("\n")).not.toMatch(/100ms|deadline|provider|MCP|Ring|Phylax|https?:\/\//i);
     } finally {
       await runtime.close();

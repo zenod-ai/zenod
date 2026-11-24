@@ -42,6 +42,39 @@ export const CENTRAL_STT_PART_RETRY_DELAY_MS = 10_000;
 /** M36: what the owner is told: about this many seconds of waiting per second of audio, and the length from which the note counts as long. */
 export const LONG_NOTE_ETA_FACTOR = 0.3;
 export const LONG_NOTE_NOTICE_SECONDS = 180;
+/**
+ * EPIC-24 M38: the longest voice note Zenod transcribes. It was 2 hours, and a 1 h 58 min note (23 Nov) came 2 min from
+ * being archived untranscribed. Every long note is cut into parts of about 5 minutes, so the length only sets how long the
+ * job may run: 12 hours covers any real note (ZENOD_MAX_VOICE_NOTE_SECONDS overrides it).
+ */
+export const MAX_VOICE_NOTE_SECONDS = positive(process.env.ZENOD_MAX_VOICE_NOTE_SECONDS, 12 * 60 * 60);
+/** The same limit in plain words, for replies and Log entries ("12 hours"). */
+export function maxVoiceNoteWords(seconds: number = MAX_VOICE_NOTE_SECONDS): string {
+  const hours = seconds / 3600;
+  return Number.isInteger(hours) ? `${hours} hour${hours === 1 ? "" : "s"}` : `${Math.round(seconds / 60)} minutes`;
+}
+
+/**
+ * M38: the safety deadline for one voice job of this length: the configured one, or for a long note (over 90 s) twice the central long
+ * job's own limit (so a fallback still has time), whichever is longer. An unknown length keeps the configured deadline.
+ */
+export function voiceJobDeadlineForMs(configuredMs: number, durationSeconds: number | null | undefined): number {
+  if (durationSeconds === null || durationSeconds === undefined || !Number.isFinite(durationSeconds) || durationSeconds <= CENTRAL_STT_SMALL_MAX_SECONDS) {
+    return configuredMs;
+  }
+  return Math.max(configuredMs, 2 * Math.round(CENTRAL_STT_LONG_BASE_MS + CENTRAL_STT_LONG_FACTOR * durationSeconds * 1000));
+}
+
+/**
+ * M38: transcribed parts of a long note kept on the data volume, keyed by the audio's hash, the model and the part. A stop
+ * (a deploy) or a failed later part no longer throws away the parts already done: the next try, or a resend of the same
+ * audio, starts at the first part not yet kept. Cleared when the whole note is done.
+ */
+export interface TranscriptPartCache {
+  get(index: number, count: number): Promise<string | null>;
+  put(index: number, count: number, text: string): Promise<void>;
+  clear(): Promise<void>;
+}
 
 export interface CentralSttConfig {
   url: string;
@@ -256,6 +289,8 @@ export interface CentralLongCall extends Omit<CentralSttCall, "model" | "filenam
   /** Cuts the note into parts of about `chunkSeconds` (ffmpeg in the server; a fake in tests). */
   split: (data: Buffer, filename: string, durationSeconds: number, chunkSeconds: number, signal?: AbortSignal) => Promise<Array<{ data: Buffer; filename: string }>>;
   onProgress?: (percent: number) => void;
+  /** M38: parts already transcribed by an earlier try of the same audio. */
+  partCache?: TranscriptPartCache;
 }
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
@@ -289,7 +324,15 @@ export async function transcribeLongWithCentral(cfg: CentralSttConfig, call: Cen
   }
   console.log(`[transcribe] central long job: ${Math.round(call.durationSeconds)}s audio, ${parts.length} part(s) on ${call.model}, up to ${Math.round(call.deadlineMs / 1000)}s`);
   const texts: string[] = [];
+  let kept = 0;
   for (const [index, part] of parts.entries()) {
+    const cached = await call.partCache?.get(index, parts.length).catch(() => null);
+    if (cached !== null && cached !== undefined) {
+      texts.push(cached);
+      kept += 1;
+      call.onProgress?.(Math.round(((index + 1) / parts.length) * 100));
+      continue;
+    }
     let result: TranscriptionEnvelope | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const left = timeLeft();
@@ -308,11 +351,13 @@ export async function transcribeLongWithCentral(cfg: CentralSttConfig, call: Cen
     if (result.success) texts.push(result.transcript ?? "");
     else if (result.providerCode === "empty") texts.push("");
     else return result;
+    await call.partCache?.put(index, parts.length, texts[texts.length - 1]!).catch(() => undefined);
     call.onProgress?.(Math.round(((index + 1) / parts.length) * 100));
   }
   const transcript = texts.map((t) => t.trim()).filter(Boolean).join(" ");
   if (!transcript) return failure("empty", "central transcription returned empty text");
-  console.log(`[transcribe] central long job done: ${Math.round(call.durationSeconds)}s audio in ${Math.round((Date.now() - startedAt) / 1000)}s, ${parts.length} part(s)`);
+  console.log(`[transcribe] central long job done: ${Math.round(call.durationSeconds)}s audio in ${Math.round((Date.now() - startedAt) / 1000)}s, ${parts.length} part(s)${kept ? `, ${kept} kept from an earlier try` : ""}`);
+  await call.partCache?.clear().catch(() => undefined);
   return { success: true, transcript, provider: `central faster-whisper ${call.model}` };
 }
 

@@ -16,6 +16,7 @@ import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
 import { appendPhylaxCaptureReceiptInvitation } from "./phylaxCaptureReceipt.js";
 import { CAPTURE_NOT_SAVED_REPLY } from "./whatsappStore.js";
+import { MAX_VOICE_NOTE_SECONDS, maxVoiceNoteWords, voiceJobDeadlineForMs } from "./centralTranscription.js";
 import {
   formatConversationTranscript,
   transcriptQueryFromToolArgs,
@@ -507,7 +508,8 @@ const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 8_000;
 // confusing "still working" acknowledgement immediately followed by the answer.
 const DEFAULT_CHAT_FOREGROUND_DEADLINE_MS = 45_000;
 const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
-const MAX_CHANNEL_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
+// EPIC-24 M38: the shared limit (12 hours); a long note is transcribed in parts, so length only sets the job's time.
+const MAX_CHANNEL_TRANSCRIPTION_SECONDS = MAX_VOICE_NOTE_SECONDS;
 const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
 const CHAT_PENDING_REPLY = "I’m still working on that — I’ll reply here when it is finished.";
 
@@ -1115,7 +1117,7 @@ export function terminalCaptureReceipt(
           : transcriptionStatus ? "Audio archive" : "Media archive"}: ${archiveUrl}`]
         : rawArtifact ? ["Media: archived"] : []),
       ...(transcriptionStatus === "skipped_duration_limit"
-        ? ["Transcription: skipped because the audio exceeds the 2-hour limit."]
+        ? [`Transcription: skipped because the audio is over ${maxVoiceNoteWords()}.`]
         : transcriptionStatus === "transcribed"
           ? [
               "Transcription: completed.",
@@ -1604,7 +1606,7 @@ export class PhylaxChannelsOrgan {
   }
 
   async transcribeStagedVoice(
-    voice: Pick<PhylaxStagedVoice, "tenantId" | "mimeType" | "fileName"> & { bytes: Uint8Array },
+    voice: Pick<PhylaxStagedVoice, "tenantId" | "mimeType" | "fileName"> & { bytes: Uint8Array; durationSeconds?: number | null },
     signal: AbortSignal,
   ): Promise<PhylaxTranscriptionReceipt> {
     if (!this.options.transcriber) {
@@ -1617,7 +1619,8 @@ export class PhylaxChannelsOrgan {
       };
     }
     if (signal.aborted) throw signal.reason ?? new Error("voice transcription cancelled");
-    const deadlineMs = normalizePhylaxVoiceJobDeadlineMs(this.options.voiceJobDeadlineMs);
+    // EPIC-24 M38: a long note gets time in step with its length (a 6 h note would never fit the 2 h default).
+    const deadlineMs = voiceJobDeadlineForMs(normalizePhylaxVoiceJobDeadlineMs(this.options.voiceJobDeadlineMs), voice.durationSeconds);
     const controller = new AbortController();
     const externalAbort = () => controller.abort(signal.reason);
     signal.addEventListener("abort", externalAbort, { once: true });
@@ -1697,7 +1700,7 @@ export class PhylaxChannelsOrgan {
           duration_seconds: durationSeconds,
           transcription_failed: {
             code: "duration_limit",
-            message: "audio exceeds Phylax's 2-hour transcription limit",
+            message: `audio exceeds Phylax's ${maxVoiceNoteWords()} transcription limit`,
           },
         };
       } else {

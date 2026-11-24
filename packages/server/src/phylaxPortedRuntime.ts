@@ -31,14 +31,21 @@ import {
   type PhylaxTranscriptionReceipt,
 } from "./phylaxChannels.js";
 import { probeAudioDurationSeconds } from "./transcribe.js";
-import { LONG_NOTE_NOTICE_SECONDS, longNoteEstimateMinutes, longNoteNotice } from "./centralTranscription.js";
+import {
+  LONG_NOTE_NOTICE_SECONDS,
+  MAX_VOICE_NOTE_SECONDS,
+  longNoteEstimateMinutes,
+  longNoteNotice,
+  maxVoiceNoteWords,
+} from "./centralTranscription.js";
 import type {
   PhylaxDeliveryUsageInput,
   PhylaxTranscriptionUsageInput,
   PhylaxUsageClaim,
 } from "./phylaxUsageMeter.js";
 
-const MAX_VOICE_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
+// EPIC-24 M38: 12 hours (was 2); every long note is cut into ~5 min parts and joined into one Log entry.
+const MAX_VOICE_TRANSCRIPTION_SECONDS = MAX_VOICE_NOTE_SECONDS;
 
 function normalizedWhatsAppSenderTimestamp(value: unknown): string | undefined {
   let numeric: number;
@@ -596,7 +603,7 @@ export class PhylaxPortedRuntime {
           return {
             deferred: true,
             replyText: durationSeconds !== null && durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS
-              ? "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it."
+              ? `I received your voice note. It is over ${maxVoiceNoteWords()}, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.`
               : durationSeconds !== null && durationSeconds > LONG_NOTE_NOTICE_SECONDS
                 // EPIC-24 M36: a long note says so at once, with the minutes to wait, instead of "usually quick"
                 ? longNoteNotice(durationSeconds)
@@ -847,7 +854,7 @@ export class PhylaxPortedRuntime {
               duration_seconds: job.durationSeconds,
               transcription_failed: {
                 code: "duration_limit",
-                message: "audio exceeds Zenod's 2-hour transcription limit",
+                message: `audio exceeds Zenod's ${maxVoiceNoteWords()} transcription limit`,
               },
             };
           } else {
@@ -872,6 +879,7 @@ export class PhylaxPortedRuntime {
                   bytes,
                   mimeType: job.mimeType,
                   fileName: job.fileName,
+                  durationSeconds: job.durationSeconds,
                 }, controller.signal)),
                 duration_seconds: job.durationSeconds,
               };
