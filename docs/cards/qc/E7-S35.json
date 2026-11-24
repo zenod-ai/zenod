@@ -1,0 +1,86 @@
+{
+  "row": "E7-S35",
+  "card": "docs/cards/E7-S35.md",
+  "cardSha": "83f443e288e27520",
+  "inputs": {
+    "card": "83f443e288e27520",
+    "page": "a9a07faf5533e835",
+    "rules": "c1a7854c21d10fb4",
+    "words": "ecb5c679ea8c530f"
+  },
+  "checkedAt": "2026-11-24T22:09:55Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Start E7-S35: his WhatsApp replies to voice notes become one short line (got it, on it) plus a link to the full transcript",
+      "where": "WhatsApp voice note 24 Nov 20:37Z",
+      "status": "met",
+      "how": "Evidence page shows voice note replies cut to one line (Got it, on it.) plus a Saved link line; before/after table shows all reply kinds shortened."
+    },
+    {
+      "said": "I get a lot of long messages ... just give me a link",
+      "where": "2026-11-24",
+      "status": "met",
+      "how": "Page explains the link opens the whole transcript in the Zenod app for the signed-in owner; the 'I get a lot of long messages' point is addressed by the one-line replies and link."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Desktop and phone pages open with the punchline box, a before/after diagram and a table; the phone table is cramped but readable with no sideways scroll."
+  },
+  "pass": false,
+  "held": [
+    "dead end: step 4, the link 'https://drive.google.com/…' on http://vps3.taild81fbb.ts.net:9904/#before-after answers 404 (https://drive.google.com/%E2%80%A6)"
+  ],
+  "reader": {
+    "asked": "Decide whether the short voice-note reply (one line plus a link to the full transcript) is short enough, and send him a voice note saying yes or no.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": "step 4, the link 'https://drive.google.com/…' on http://vps3.taild81fbb.ts.net:9904/#before-after answers 404 (https://drive.google.com/%E2%80%A6)",
+    "end": "a page to read",
+    "page": "a9a07faf5533e835",
+    "walkedAt": "2026-11-24T22:09:55Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9904/#before-after",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › docs/EPIC-7-REAL-USER-TEST.md'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/docs/EPIC-7-REAL-USER-TEST.md",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'https://drive.google.com/…'",
+        "url": "https://drive.google.com/%E2%80%A6",
+        "result": "answered 404"
+      }
+    ],
+    "shot": "E7-S35-dead.webp"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9904/#before-after",
+      "file": "E7-S35-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9904/#before-after",
+      "file": "E7-S35-1280.webp"
+    }
+  ]
+}
