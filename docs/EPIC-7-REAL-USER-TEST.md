@@ -312,6 +312,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-24 | accepted | E7-S32 ready on Jordi's ask (L-37, Team desk: "[console lines] held while you were busy: 2 lines, oldest first. Handle each as its own text says, in this one turn; rep") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-24 | accepted | E7-S34 ready on Jordi's answer to E7-A43 (L-37): "APPROVED" — one private test notes repo plus a token scoped to it, for zenod-staging only | Jordi's yes is his ready stamp; rollback: delete the token and the repo | b8c30744 | — |
 | 2026-11-24 | accepted | E7-S35 ready on Jordi's ask (L-37, console note and his WhatsApp voice note 24 Nov 20:37Z, Log/2026-11-24.md#^e-798779): "Start E7-S35: his WhatsApp replies to voice notes become one short line (got it, on it) plus a link to the full transcript" | Jordi's ask is his ready stamp | console note run_ddabc29d | — |
+| 2026-11-24 | refused | E7-S35 ready notice REFUSED at 22:24Z: the ready allowance is spent (6 in 24 h) | You asked for it; the card leads its section of his inbox (E48-S125) | https://team.alpha9.io/api/notify/ready | never |
 
 ## Operating Learnings
 
