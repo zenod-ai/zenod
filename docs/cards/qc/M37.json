@@ -1,21 +1,21 @@
 {
   "row": "M37",
   "card": "docs/cards/M37.md",
-  "cardSha": "dfda0b9465d1d26e",
+  "cardSha": "d16774246104ca59",
   "inputs": {
-    "card": "dfda0b9465d1d26e",
-    "page": "13f6a239231e76f9",
+    "card": "d16774246104ca59",
+    "page": "3232840fd2808f18",
     "rules": "c1a7854c21d10fb4",
     "words": "1507435402a736e1"
   },
-  "checkedAt": "2026-11-24T19:37:37Z",
+  "checkedAt": "2026-11-24T19:39:22Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "it should be on a super long vn from yesterday sent via whatsapp to zenod",
       "where": "2026-11-24",
       "status": "met",
-      "how": "Card line says the 23 November note is filed in your Log with all 13,036 words."
+      "how": "Evidence page shows the 23 Nov note filed in memory, entry e-8b9fa2, 13,036 words; card line says so."
     },
     {
       "said": "i asked for some task about my altamira video, haven't seen anythign about it was it lost????",
@@ -27,66 +27,62 @@
       "said": "it was a nearly 2h vn, I see in whatsapp there was an error messsage... shall I resend? can you see error in logs?",
       "where": "vn_d197f642",
       "status": "met",
-      "how": "Card line says a failed transcription now retries by itself and tells you why."
+      "how": "Card line says a failed transcription retries by itself and says why; page shows retry schedule and Log entry."
     },
     {
       "said": "at least get the whatsapp thing done ASAP ... I want to dispatch as much as possible please",
       "where": "vn_d197f642",
-      "status": "met",
-      "how": "WhatsApp failure handling is delivered; the two-hour split is declared undone with a ✗ line."
+      "status": "declared",
+      "how": "WhatsApp failure handling delivered; two-hour split marked with a ✗ line as not done yet."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 390 px: The evidence link opens a Google sign-in page, not the delivered note, Log entry or retry result. (rule 6)",
-      "at 1280 px: The evidence link at laptop width also shows only the Google sign-in form, so the delivered result is never shown. (rule 6)"
-    ],
-    "breaches": [
-      {
-        "rule": 6,
-        "width": 390,
-        "what": "The evidence link opens a Google sign-in page, not the delivered note, Log entry or retry result."
-      },
-      {
-        "rule": 6,
-        "width": 1280,
-        "what": "The evidence link at laptop width also shows only the Google sign-in form, so the delivered result is never shown."
-      }
-    ],
-    "summary": "Both widths show the Google sign-in screen with an empty email field instead of the filed note or the retry result, so the card's claims cannot be seen."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the punchline box under the title, the filed note and the changes table are readable, and no sideways scroll shows; the page is a plain evidence page with no feedback row needed."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: at 390 px: The evidence link opens a Google sign-in page, not the delivered note, Log entry or retry result. (rule 6); at 1280 px: The evidence link at laptop width also shows only the Google sign-in form, so the delivered result is never shown. (rule 6)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Confirm whether the 23 November two-hour voice note filed in your Log is the one you meant (we recommend yes).",
+    "asked": "He is asked to confirm whether the 23 November note he meant is the one filed, by answering the decision question.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
-    "end": "a sign-in",
-    "page": "13f6a239231e76f9",
-    "walkedAt": "2026-11-24T19:37:37Z",
+    "end": "a page to read",
+    "page": "3232840fd2808f18",
+    "walkedAt": "2026-11-24T19:39:22Z",
     "steps": [
       {
         "n": 1,
         "what": "open the card's link",
-        "url": "https://drive.google.com/file/d/1MmgOA-9pTkvbH0vPXRHQeNjhfmciR1RI/view",
-        "result": "his screen: a sign-in (nothing of his pressed)"
+        "url": "http://vps3.taild81fbb.ts.net:9902/#note",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-24'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-24",
+        "result": "answered 200"
       }
     ]
   },
   "shots": [
     {
       "width": 390,
-      "url": "https://drive.google.com/file/d/1MmgOA-9pTkvbH0vPXRHQeNjhfmciR1RI/view",
+      "url": "http://vps3.taild81fbb.ts.net:9902/#note",
       "file": "M37-390.webp"
     },
     {
       "width": 1280,
-      "url": "https://drive.google.com/file/d/1MmgOA-9pTkvbH0vPXRHQeNjhfmciR1RI/view",
+      "url": "http://vps3.taild81fbb.ts.net:9902/#note",
       "file": "M37-1280.webp"
     }
   ]
