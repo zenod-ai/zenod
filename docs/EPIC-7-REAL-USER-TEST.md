@@ -32,15 +32,15 @@ Goal sentence before agent_team E40-A5 (Jordi 2026-11-13, "A yes, build as shown
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-24T06:05Z Delivery Manager roll-up (run_89c27b44) ; E7-S30 active: Jordi's 'what stopped you' email sent once to each of the 3 testers 24 Nov 04:04Z (from jordi@alpha9.io: the team cannot send as jordi@zenod.dev yet, desk note to agent_team), watching replies ; E7-S27 done, approved by Jordi 24 Nov (daily tester table kept) ; E7-S26 done, first-note WhatsApp nudge live, sent 1 ; E7-S28 done, setup email sent 22 Nov, 48 h default live ; E7-S25 done ; E7-S17 blocked on agent_team placing the daily tester picture
-Result: production dfa30347: 3 sign-ups, 1 WhatsApp linked (the 21 Nov tester), 0 first notes, over_cap 0 (public counts 24 Nov 06:03Z)
+Last attempted: 2026-11-24T16:19Z Delivery Manager (run_a0fc4106) ; E7-S32 Obsidian vault import live on production 9a7f17c5 (promote 24 Nov 14:58Z), closed by Jordi ; E7-S31 MCP connected plus memory reads and writes per tester live on production and in review ; E7-S34 staging test vault (Jordi's yes on E7-A43) worker run_7477ee29 running ; E7-S30 watching tester replies until 25 Nov 16:00Z
+Result: production 9a7f17c5: 3 testers, 2 set up a vault, 1 WhatsApp linked, 0 connected MCP, 0 saved a memory (tester table rebuilt 24 Nov 15:11Z)
 Evidence: [E7-S31](evidence/e7-s31-2026-11-24.md) · [E7-S15](evidence/e7-s15-2026-11-19.md) · [E7-S12](evidence/e7-s12-2026-11-18.md) · [public counts](https://cloud.zenod.dev/api/public/counts) · [E7-S9 feedback link](http://vps3.taild81fbb.ts.net:8921/e7-s9/)
 Waiting on: agent_team: the daily tester picture (E7-S17) and a jordi@zenod.dev sender for the team (desk notes) ; nothing waits on the owner here — about: tester picture brief and team sender
 Monitoring: the 3 testers' replies to 'A quick question about Zenod' since 2026-11-24T04:04Z until 2026-11-27T16:00Z · next check 2026-11-25T16:00Z read the replies (the founder's inbox, agent_team feedback/voice/) · then fix the first thing they name
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
-Next action: E7-S30: on 25 Nov 16:00Z read replies (search Jordi's inbox for 'Re: A quick question about Zenod', agent_team feedback/voice/) and fix the first thing they name before other product work
+Next action: E7-S34: staging gets a test vault and proves the import end to end ; E7-S30: on 25 Nov 16:00Z read the testers' replies and fix the first thing they name
 Source revision: see git log
-Verified at: 2026-11-24T06:05Z (cloud.zenod.dev/api/health sha dfa30347; public counts read; rows E7-S17 to E7-S30 read)
+Verified at: 2026-11-24T16:19Z (cloud.zenod.dev/api/health sha 9a7f17c5; tester table :9008 read; rows E7-S30 to E7-S34 read)
 
 ## Waiting on
 - [answered E7-A43 2026-11-24 @Jordi · done 2026-11-24 b8c30744] (fed E7-S34) You approve: one private test notes repo and a token for it, used only by our staging copy of Zenod. Why: today staging has no storage, so we cannot try memory changes like the Obsidian import end to end before they reach testers. — context: the import was proven on a copy of the build on our server, not on staging itself — impact: every memory change gets real proof before production; without it each card leans on a local copy — risk: one new staging-only credential; rollback is deleting the token and the repo — recommend: yes, a private repo under the zenod-ai account with a token scoped to that one repo — why Jordi: it creates a new key and widens access — unblocks: E7-S32 followup Staging test vault — details: http://vps3.taild81fbb.ts.net:9900/#staging — look: the part saying staging has no storage to import into — about: a test notes repo for staging — answer: APPROVED
