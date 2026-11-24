@@ -223,7 +223,11 @@ describe("dedicated Phylax deployment islands", () => {
         "install_operating_directive",
         "notify",
         "notify_receipt",
+        // EPIC-20 A9: more WhatsApp numbers on one account.
+        "pair_whatsapp_number",
         "send_message",
+        "unpair_whatsapp_number",
+        "whatsapp_numbers",
       ]);
       for (const forbidden of [
         "ask_brain",

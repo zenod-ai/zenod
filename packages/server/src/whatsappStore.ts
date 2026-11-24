@@ -20,6 +20,10 @@ export interface WhatsAppInboundEvent {
   fileName: string | null;
   mediaRaw?: unknown;
   raw?: unknown;
+  /** EPIC-20 A9: the account number the message was sent TO (`+<digits>`), when known. */
+  toNumber?: string | null;
+  /** EPIC-20 A9: the extra number's session it arrived on; null or absent for the default Zenod number. */
+  sessionId?: string | null;
 }
 
 export interface RecordInboundResult {
@@ -685,6 +689,14 @@ export class WhatsAppStore {
     if (!auditColumns.some((column) => column.name === "failure_code")) {
       this.db.exec("ALTER TABLE whatsapp_channel_audit ADD COLUMN failure_code TEXT");
     }
+    // EPIC-20 A9: the number an inbound message was sent TO, and the extra number's session it arrived on.
+    const messageColumns = this.db.prepare("PRAGMA table_info(whatsapp_messages)").all() as unknown as Array<{ name: string }>;
+    if (!messageColumns.some((column) => column.name === "to_number")) {
+      this.db.exec("ALTER TABLE whatsapp_messages ADD COLUMN to_number TEXT");
+    }
+    if (!messageColumns.some((column) => column.name === "session_id")) {
+      this.db.exec("ALTER TABLE whatsapp_messages ADD COLUMN session_id TEXT");
+    }
     // EPIC-20 A6: WhatsApp's own delivered/read receipts for each outbound intent.
     const intentColumns = this.db.prepare("PRAGMA table_info(whatsapp_outbound_intents)").all() as unknown as Array<{ name: string }>;
     if (!intentColumns.some((column) => column.name === "delivery_status")) {
@@ -976,15 +988,27 @@ export class WhatsAppStore {
   }
 
   /** Durable source metadata survives audio queue retries and process restarts. */
-  inboundMediaIdentity(providerMessageId: string): { mediaType: string | null; senderTimestamp: string | undefined } | null {
+  inboundMediaIdentity(providerMessageId: string): {
+    mediaType: string | null;
+    senderTimestamp: string | undefined;
+    toNumber?: string;
+    sessionId?: string;
+  } | null {
     const row = this.db.prepare(
-      `SELECT media_type AS mediaType, message_timestamp AS timestamp
+      `SELECT media_type AS mediaType, message_timestamp AS timestamp, to_number AS toNumber, session_id AS sessionId
        FROM whatsapp_messages WHERE message_id = ? AND direction = 'inbound'`,
-    ).get(providerMessageId) as { mediaType: string | null; timestamp: number | null } | undefined;
+    ).get(providerMessageId) as {
+      mediaType: string | null;
+      timestamp: number | null;
+      toNumber: string | null;
+      sessionId: string | null;
+    } | undefined;
     if (!row) return null;
     return {
       mediaType: row.mediaType,
       senderTimestamp: row.timestamp === null ? undefined : new Date(row.timestamp).toISOString(),
+      ...(row.toNumber ? { toNumber: row.toNumber } : {}),
+      ...(row.sessionId ? { sessionId: row.sessionId } : {}),
     };
   }
 
@@ -1656,9 +1680,9 @@ export class WhatsAppStore {
         .prepare(
           `INSERT OR IGNORE INTO whatsapp_messages (
              message_id, chat_id, contact_id, direction, message_timestamp, body_text,
-             has_media, media_type, received_at, raw_json
+             has_media, media_type, received_at, raw_json, to_number, session_id
            )
-           VALUES (?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           event.messageId,
@@ -1670,6 +1694,8 @@ export class WhatsAppStore {
           event.mediaType,
           now,
           safeJson(event.raw),
+          event.toNumber ?? null,
+          event.sessionId ?? null,
         ).changes;
 
       if (inserted) {

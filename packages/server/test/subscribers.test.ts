@@ -128,6 +128,17 @@ describe("signed delivery", () => {
     return { store, dispatcher, calls, fetch, lines };
   }
 
+  it("tells the subscriber which of the account's WhatsApp numbers a note was sent TO (EPIC-20 A9)", async () => {
+    const { store, dispatcher, calls } = await setup(async () => new Response("ok", { status: 200 }));
+    store.create({ name: "Epic Team", kind: "agent_team", url: "https://team.alpha9.io/api/hooks/zenod/c1", event: "voice_note.captured", via: "manual", replyWords: ["now"] });
+    const team = store.list()[0]!;
+    dispatcher.onEntryStored({ evidenceRef: "Log/2026-11-24.md#^e-000001", contentType: "voice_note", source: "whatsapp", toNumber: "+34600000002" });
+    dispatcher.onEntryStored({ evidenceRef: "Log/2026-11-24.md#^e-000002", contentType: "text", source: "whatsapp", announceTo: [team.id], toNumber: "+34600000003" });
+    await dispatcher.idle();
+    const notes = calls.map((c) => JSON.parse(String(c.init.body)).note).sort((a, b) => a.id.localeCompare(b.id));
+    expect(notes.map((n) => [n.content_type, n.to_number])).toEqual([["voice_note", "+34600000002"], ["text", "+34600000003"]]);
+  });
+
   it("posts a signed pointer (never the words) to every enabled subscriber, and logs it", async () => {
     const { store, dispatcher, calls, lines } = await setup(async () => new Response("ok", { status: 200 }));
     const a = store.create({ name: "Epic Team", kind: "agent_team", url: "https://team.alpha9.io/api/hooks/zenod/c1", event: "voice_note.captured", via: "manual" });
@@ -148,7 +159,8 @@ describe("signed delivery", () => {
       note: { id: "Log/2026-11-02.md#^e-c927b7", captured_at: "2026-11-02T16:12:01.000Z", source: "whatsapp", content_type: "voice_note", url: "https://cloud.zenod.dev/api/subscribers/v1/notes?id=Log%2F2026-11-02.md%23%5Ee-c927b7" },
     });
     expect(event.id).toMatch(/^evt_/);
-    expect(Object.keys(event.note).sort()).toEqual(["captured_at", "content_type", "id", "source", "url"]);
+    expect(Object.keys(event.note).sort()).toEqual(["captured_at", "content_type", "id", "source", "to_number", "url"]);
+    expect(event.note.to_number).toBeNull();
     const headers = call.init.headers as Record<string, string>;
     expect(headers["x-zenod-signature"]).toBe(`t=1800000000,v1=${createHmac("sha256", a.signingSecret).update(`1800000000.${body}`).digest("hex")}`);
     expect(headers["x-zenod-signature"]).toBe(signSubscriberEvent(body, a.signingSecret, 1_800_000_000));

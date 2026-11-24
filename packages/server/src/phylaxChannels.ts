@@ -64,6 +64,8 @@ export interface PhylaxChannelInbound {
   messageId?: string;
   /** Original provider timestamp normalized by the transport adapter. */
   senderTimestamp?: string;
+  /** EPIC-20 A9: the account number the message was sent TO (`+<digits>`), when the transport knows it. */
+  toNumber?: string;
   /** Provider message ID quoted by structural reply metadata; never inferred from text. */
   replyToMessageId?: string;
   text?: string;
@@ -128,6 +130,8 @@ export function normalizePhylaxVoiceJobDeadlineMs(value: number | undefined): nu
 
 export interface PhylaxStagedVoice {
   senderTimestamp?: string;
+  /** EPIC-20 A9: the number the voice note was sent TO. */
+  toNumber?: string;
   isVoiceNote?: boolean;
   tenantId: string;
   sender: string;
@@ -1324,7 +1328,7 @@ export class PhylaxChannelsOrgan {
     return (this.options.discoverDownstream ?? discoverConfiguredPeer)(route);
   }
 
-  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<{ supportsIdempotencyKey: boolean }> {
+  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<{ supportsIdempotencyKey: boolean; supportsToNumber: boolean }> {
     const discovery = await this.discoverDownstream(call.route);
     if (discovery.tools !== "ready") {
       throw new Error(`downstream schema discovery failed: ${discovery.error ?? "tools/list unavailable"}`);
@@ -1380,7 +1384,7 @@ export class PhylaxChannelsOrgan {
       }
     }
     const properties = objectValue(schema.properties);
-    return { supportsIdempotencyKey: Boolean(properties?.idempotencyKey) };
+    return { supportsIdempotencyKey: Boolean(properties?.idempotencyKey), supportsToNumber: Boolean(properties?.toNumber) };
   }
 
   /** Foreground wait before returning a truthful pending acknowledgement. */
@@ -1586,6 +1590,7 @@ export class PhylaxChannelsOrgan {
       chatId: input.chatId,
       messageId: input.messageId.trim(),
       senderTimestamp: input.senderTimestamp,
+      ...(input.toNumber ? { toNumber: input.toNumber } : {}),
       isVoiceNote: input.media.isVoiceNote,
       replyToMessageId: input.replyToMessageId?.trim() || null,
       conversationKey: `whatsapp:${sender}`,
@@ -1653,6 +1658,7 @@ export class PhylaxChannelsOrgan {
       chatId: voice.chatId,
       messageId: voice.messageId,
       senderTimestamp: voice.senderTimestamp,
+      ...(voice.toNumber ? { toNumber: voice.toNumber } : {}),
       ...(voice.replyToMessageId ? { replyToMessageId: voice.replyToMessageId } : {}),
       text: voice.text,
       media: {
@@ -2044,6 +2050,11 @@ export class PhylaxChannelsOrgan {
             call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
             durableChat = true;
           }
+          // EPIC-20 A9: the number the note was sent TO, only to a Zenod that advertises it (an older schema
+          // rejects unknown arguments), so subscribers can tell which of the account's numbers received it.
+          if (validation.supportsToNumber && input.toNumber && call.arguments.toNumber === undefined) {
+            call.arguments.toNumber = input.toNumber;
+          }
         } catch (error) {
           throw new PhylaxChannelError(
             "downstream_error",
@@ -2331,6 +2342,8 @@ export interface PhylaxDeliveryReceipt {
   sentMessageId: string;
   status: "sent" | "delivered" | "read" | "queued";
   at: string;
+  /** EPIC-20 A9: WhatsApp only: the account number it went out from (`+<digits>`), when known. */
+  from?: string | null;
 }
 
 /** EPIC-20 A3: a decoded notify picture; only WhatsApp sends it (as one image with the text as caption). */
@@ -2373,10 +2386,30 @@ export function decodeNotifyImage(imageBase64: string | undefined, imageMimeType
   return { data, mimetype };
 }
 
+/** EPIC-20 A9: one of the account's own WhatsApp numbers (the shared default or an extra paired one). */
+export interface PhylaxWhatsAppNumberView {
+  sessionId: string | null;
+  label: string | null;
+  state: string;
+  number: string | null;
+  qr?: string | null;
+  lastError?: string | null;
+  isDefault: boolean;
+}
+
+/** EPIC-20 A9: pair, list and remove the account's extra WhatsApp numbers. */
+export interface PhylaxWhatsAppNumbers {
+  list(): PhylaxWhatsAppNumberView[];
+  pair(input: { label?: string; sessionId?: string }): Promise<PhylaxWhatsAppNumberView>;
+  remove(sessionId: string): Promise<void>;
+}
+
 export interface PhylaxTenantDelivery {
-  send(channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage): Promise<PhylaxDeliveryReceipt>;
+  send(channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage, from?: string): Promise<PhylaxDeliveryReceipt>;
   status(): Promise<Record<string, unknown>> | Record<string, unknown>;
-  notify?(text: string, image?: PhylaxNotifyImage): Promise<PhylaxDeliveryReceipt[]>;
+  notify?(text: string, image?: PhylaxNotifyImage, from?: string): Promise<PhylaxDeliveryReceipt[]>;
+  /** EPIC-20 A9: the account's own WhatsApp numbers; absent when extra numbers are off. */
+  whatsappNumbers?: PhylaxWhatsAppNumbers;
   /** Tenant-filtered reader backed by Phylax's authoritative transport store. */
   readConversationTranscript?: ConversationTranscriptReader;
   /** EPIC-20 A6: tenant-scoped delivery state of one sent message; null when it is not this tenant's. */
@@ -2419,6 +2452,20 @@ function deliveryToolResult(receipts: PhylaxDeliveryReceipt[]) {
   };
 }
 
+function channelToolError(error: unknown) {
+  if (!(error instanceof PhylaxChannelError)) throw error;
+  // A clear, caller-fixable message; the chassis would mask a thrown error.
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: `${error.code}: ${error.message}` }],
+    structuredContent: { status: "error", error: { code: error.code, message: error.message } },
+  };
+}
+
+const fromNumberArg = () => z.string().trim().min(1).max(40).optional().describe(
+  "WhatsApp only: send from one of this account's extra numbers (its number, e.g. +34600000000, or its sessionId from whatsapp_numbers). Leave out to send from the default Zenod number.",
+);
+
 /** Register through createUnit's instrumented server; never bypass conduct middleware. */
 export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTenantDelivery): void {
   server.registerTool(
@@ -2430,10 +2477,17 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
         channel: z.enum(["whatsapp", "telegram"]),
         recipient: z.string().min(1),
         text: z.string().min(1),
+        from: fromNumberArg(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ channel, recipient, text }) => deliveryToolResult([await delivery.send(channel, recipient, text)]),
+    async ({ channel, recipient, text, from }) => {
+      try {
+        return deliveryToolResult([await (from ? delivery.send(channel, recipient, text, undefined, from) : delivery.send(channel, recipient, text))]);
+      } catch (error) {
+        return channelToolError(error);
+      }
+    },
   );
   server.registerTool(
     "notify",
@@ -2446,26 +2500,40 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
           "Optional picture, base64 (no data: prefix), up to 1 MB decoded. WhatsApp sends it as one image message with text as the caption; other channels send text only.",
         ),
         imageMimeType: z.string().optional().describe("MIME type of imageBase64: image/png (default), image/jpeg or image/webp."),
+        from: fromNumberArg(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ text, imageBase64, imageMimeType }) => {
+    async ({ text, imageBase64, imageMimeType, from }) => {
       if (!delivery.notify) throw new PhylaxChannelError("delivery_error", "tenant notification preferences are not configured");
-      let image: PhylaxNotifyImage | undefined;
       try {
-        image = decodeNotifyImage(imageBase64, imageMimeType);
+        const image = decodeNotifyImage(imageBase64, imageMimeType);
+        if (from) return deliveryToolResult(await delivery.notify(text, image, from));
+        return deliveryToolResult(await (image ? delivery.notify(text, image) : delivery.notify(text)));
       } catch (error) {
-        // A clear, caller-fixable message; the chassis would mask a thrown error.
-        if (!(error instanceof PhylaxChannelError)) throw error;
-        return {
-          isError: true,
-          content: [{ type: "text" as const, text: `${error.code}: ${error.message}` }],
-          structuredContent: { status: "error", error: { code: error.code, message: error.message } },
-        };
+        return channelToolError(error);
       }
-      return deliveryToolResult(await (image ? delivery.notify(text, image) : delivery.notify(text)));
     },
   );
+  const numbers = delivery.whatsappNumbers;
+  if (numbers) {
+    server.registerTool(
+      "whatsapp_numbers",
+      {
+        title: "List this account's WhatsApp numbers",
+        description: "List the WhatsApp numbers this account receives on and can send from: the default Zenod number and every extra number paired to this account, each with its sessionId, label and state (pairing, connected, disconnected, logged_out). A number in pairing carries its QR payload.",
+        inputSchema: {},
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      async () => {
+        const list = numbers.list();
+        return {
+          content: [{ type: "text" as const, text: list.map((item) => `${item.isDefault ? "default" : item.sessionId}: ${item.number ?? "(not paired)"} ${item.state}${item.label ? ` (${item.label})` : ""}`).join("\n") }],
+          structuredContent: { numbers: list },
+        };
+      },
+    );
+  }
   server.registerTool(
     "channel_status",
     {
@@ -2524,4 +2592,55 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
       },
     );
   }
+}
+
+/**
+ * EPIC-20 A9: pairing and unpairing extra WhatsApp numbers. Only on the account's own full connection, never on
+ * the notify-only service profile.
+ */
+export function registerPhylaxNumberPairingTools(server: McpServer, delivery: PhylaxTenantDelivery): void {
+  const numbers = delivery.whatsappNumbers;
+  if (!numbers) return;
+  server.registerTool(
+    "pair_whatsapp_number",
+    {
+      title: "Pair another WhatsApp number",
+      description: "Start pairing one more WhatsApp number to this account, beside the default Zenod number, as its own session. Returns its sessionId and, while pairing, the QR payload: render it as a QR code and scan it on the phone that holds the number (WhatsApp > Linked devices > Link a device). A QR lasts about a minute; call again with the same sessionId for a fresh one. Once connected, notes sent to that number arrive with its to_number, and notify/send_message can send from it.",
+      inputSchema: {
+        label: z.string().trim().min(1).max(60).optional().describe("A name for the number, e.g. 'EpicTeam desk'."),
+        sessionId: z.string().trim().min(1).max(40).optional().describe("Restart pairing for this not-yet-connected number instead of adding a new one."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async ({ label, sessionId }) => {
+      try {
+        const view = await numbers.pair({ ...(label ? { label } : {}), ...(sessionId ? { sessionId } : {}) });
+        return {
+          content: [{ type: "text" as const, text: view.qr ? `${view.sessionId}: ${view.state}. Scan this QR payload: ${view.qr}` : `${view.sessionId}: ${view.state}${view.number ? ` ${view.number}` : ""}${view.lastError ? ` (${view.lastError})` : ""}` }],
+          structuredContent: { number: view },
+        };
+      } catch (error) {
+        return channelToolError(error);
+      }
+    },
+  );
+  server.registerTool(
+    "unpair_whatsapp_number",
+    {
+      title: "Unpair an extra WhatsApp number",
+      description: "Log out one extra WhatsApp number this account paired and delete its session. The default Zenod number cannot be removed here.",
+      inputSchema: {
+        sessionId: z.string().trim().min(1).max(40).describe("The sessionId from whatsapp_numbers."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ sessionId }) => {
+      try {
+        await numbers.remove(sessionId);
+        return { content: [{ type: "text" as const, text: `${sessionId}: removed` }], structuredContent: { status: "ok", sessionId } };
+      } catch (error) {
+        return channelToolError(error);
+      }
+    },
+  );
 }

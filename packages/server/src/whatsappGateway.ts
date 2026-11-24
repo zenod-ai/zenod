@@ -46,6 +46,7 @@ import {
 } from "./whatsappStore.js";
 import { PhylaxUsagePausedError, type PhylaxUsageClaim } from "./phylaxUsageMeter.js";
 import { linkifyGithubRefs } from "./githubLinks.js";
+import { WhatsAppSessionError, type WhatsAppSessionOrigin, type WhatsAppSessionPool } from "./whatsappSessions.js";
 
 const NO_CREDIT_NOTICE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const NO_CREDIT_NOTICE_TEXT =
@@ -624,7 +625,8 @@ export function createWhatsAppCredentialSaveQueue(
   };
 }
 
-async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
+/** EPIC-20 A9: also used for each extra number's session (whatsappSessions.ts). */
+export async function defaultSocketFactory(sessionDir: string): Promise<SocketLike> {
   installBaileysSessionLogRedaction();
   if ((await prepareWhatsAppCredentials(sessionDir)) === "restored") {
     console.warn("[whatsapp] restored interrupted credential write from protected backup");
@@ -731,6 +733,13 @@ export class WhatsAppGateway {
       }) => PhylaxUsageClaim;
       completePortedDeliveryUsage?: (claim: PhylaxUsageClaim, providerReceiptId: string | null) => void;
       socketFactory?: SocketFactory;
+      /** EPIC-20 A9: extra numbers paired to one account; each its own session beside the default number. */
+      sessions?: WhatsAppSessionPool;
+      /**
+       * EPIC-20 A9: whether a message that came in on an extra number may be handled: only senders of the account that
+       * paired that number. Anything else is recorded and dropped without a reply. Absent: every sender is refused.
+       */
+      extraNumberSenderAllowed?: (event: WhatsAppInboundEvent, sessionTenantId: string) => Promise<boolean>;
       portedInboundHandler?: WhatsAppPortedInboundHandler;
       lifecycle?: {
         startupTimeoutMs?: number;
@@ -741,7 +750,40 @@ export class WhatsAppGateway {
         maxReconnectDelayMs?: number;
       };
     },
-  ) {}
+  ) {
+    options.sessions?.attach({
+      onMessages: (origin, messages, type) => this.trackSocketWork(this.handleMessages(messages, type, origin)),
+      onReceipts: (updates) => this.recordDeliveryReceipts(updates),
+    });
+  }
+
+  /** EPIC-20 A9: the extra numbers' sessions, when this gateway has any. */
+  get sessions(): WhatsAppSessionPool | undefined {
+    return this.options.sessions;
+  }
+
+  /**
+   * EPIC-20 A9: the socket that answers an inbound message: the extra number it came in on while that number is
+   * connected, otherwise the default number.
+   */
+  private socketFor(event: Pick<WhatsAppInboundEvent, "sessionId">): SocketLike | null {
+    return (event.sessionId ? this.options.sessions?.socket(event.sessionId) : null) ?? this.socket;
+  }
+
+  /**
+   * EPIC-20 A9: the extra number's socket for a reply to the inbound message `sourceMessageId`, when that message came
+   * in on an extra number that is connected now; null otherwise (callers then use the default number).
+   */
+  private socketForSource(sourceMessageId: string): SocketLike | null {
+    if (!this.options.sessions) return null;
+    const sessionId = this.options.store.inboundMediaIdentity(sourceMessageId)?.sessionId;
+    return sessionId ? this.options.sessions.socket(sessionId) : null;
+  }
+
+  /** A send error resets the default link only when it came from the default socket. */
+  private recoverFromSocketSendError(socket: SocketLike, err: unknown): void {
+    if (socket === this.socket) this.recoverFromSendError(err);
+  }
 
   private get sessionDir(): string {
     return join(this.options.dataDir, "session");
@@ -1432,8 +1474,19 @@ export class WhatsAppGateway {
     auditMessageId?: string,
     tenantId?: string,
     image?: WhatsAppOutboundImage,
-  ): Promise<{ sentMessageId: string }> {
-    const socket = this.socket;
+    /** EPIC-20 A9: send from one of the tenant's extra numbers (its session id or number); default number when absent. */
+    from?: string,
+  ): Promise<{ sentMessageId: string; fromNumber?: string | null }> {
+    let socket = this.socket;
+    let fromNumber: string | null = null;
+    if (from?.trim()) {
+      if (!this.options.sessions || !tenantId?.trim()) {
+        throw new WhatsAppSessionError("not_found", "That WhatsApp number is not paired to this Zenod account.");
+      }
+      const resolved = this.options.sessions.resolve(tenantId.trim(), from);
+      socket = resolved.socket;
+      fromNumber = resolved.number;
+    }
     if (!socket) throw new Error("WhatsApp is not connected");
     const normalized = normalizeWhatsAppIdentifier(recipient);
     if (!normalized || !text.trim()) throw new Error("WhatsApp recipient and text are required");
@@ -1455,7 +1508,7 @@ export class WhatsAppGateway {
       if (intent.receiptEligible) {
         this.options.store.recordPortedReceiptDelivery(sourceMessageId, sentMessageId, "sent");
       }
-      return { sentMessageId };
+      return { sentMessageId, ...(from?.trim() ? { fromNumber } : {}) };
     }
     try {
       const delivery = await this.sendOutboundIntent(socket, intent, image);
@@ -1463,7 +1516,7 @@ export class WhatsAppGateway {
       if (intent.receiptEligible) {
         this.options.store.recordPortedReceiptDelivery(sourceMessageId, delivery.sentMessageId, "sent");
       }
-      return { sentMessageId: delivery.sentMessageId };
+      return { sentMessageId: delivery.sentMessageId, ...(from?.trim() ? { fromNumber } : {}) };
     } catch (error) {
       this.options.store.recordOutboundIntentFailure(
         intent,
@@ -1504,7 +1557,7 @@ export class WhatsAppGateway {
       this.options.store.recordPortedReceiptDelivery(sourceMessageId, sentMessageId, "recovery_sent");
       return sentMessageId;
     }
-    const socket = this.socket;
+    const socket = this.socketForSource(sourceMessageId) ?? this.socket;
     // ZAL-A16: before the link opens a send fails with "Connection Closed" and
     // tears down the socket that is still connecting. Leave the intent pending;
     // the open handler recovers it.
@@ -1633,7 +1686,7 @@ export class WhatsAppGateway {
   private async markRead(event: WhatsAppInboundEvent): Promise<void> {
     const key = (event.raw as WAMessage | undefined)?.key;
     if (!key) return;
-    const socket = this.socket;
+    const socket = this.socketFor(event);
     if (!socket) return;
     const receiptKey = this.readReceiptKey(key);
     // TEMP diagnostic: dump the inbound key + chosen receipt target so we can see
@@ -1658,10 +1711,11 @@ export class WhatsAppGateway {
   // Typing indicator, sent to the same single JID we reply to. No fan-out.
   private async setTyping(event: WhatsAppInboundEvent, typing: boolean): Promise<void> {
     const jid = this.recipientJid(event);
-    if (!jid || !this.socket?.sendPresenceUpdate) return;
-    await this.socket.sendPresenceUpdate(typing ? "composing" : "paused", jid).catch((err: unknown) => {
+    const socket = this.socketFor(event);
+    if (!jid || !socket?.sendPresenceUpdate) return;
+    await socket.sendPresenceUpdate(typing ? "composing" : "paused", jid).catch((err: unknown) => {
       console.warn("[whatsapp] could not update typing state:", err);
-      this.recoverFromSendError(err);
+      this.recoverFromSocketSendError(socket, err);
     });
   }
 
@@ -1751,10 +1805,11 @@ export class WhatsAppGateway {
       const recipient = claim.contactId || claim.chatId;
       try {
         const scope = this.options.portedReplyIntentScope?.(claim.providerMessageId) ?? null;
+        const out = this.socketForSource(claim.providerMessageId) ?? socket;
         const intent = this.options.store.prepareOutboundIntent({
           sourceMessageId: claim.providerMessageId,
           tenantId: scope?.tenantId ?? null,
-          providerMessageId: generateMessageIDV2(socket.user?.id ?? undefined),
+          providerMessageId: generateMessageIDV2(out.user?.id ?? undefined),
           chatId: recipient,
           contactId: claim.contactId,
           bodyText: claim.replyText,
@@ -1763,7 +1818,7 @@ export class WhatsAppGateway {
         });
         const delivery = intent.state === "sent"
           ? { sentMessageId: intent.sentProviderMessageId ?? intent.providerMessageId }
-          : await this.sendOutboundIntent(socket, intent);
+          : await this.sendOutboundIntent(out, intent);
         this.options.store.completeInterruptedMediaRecovery(claim, {
           sentMessageId: delivery.sentMessageId,
           intentId: intent.intentId,
@@ -1788,7 +1843,7 @@ export class WhatsAppGateway {
     await this.recoverInterruptedMedia(socket);
     for (const intent of this.options.store.pendingReceiptIntents()) {
       try {
-        const delivery = await this.sendOutboundIntent(socket, intent);
+        const delivery = await this.sendOutboundIntent(this.socketForSource(intent.sourceMessageId) ?? socket, intent);
         this.options.store.completeOutboundIntent(intent, delivery);
         this.options.store.recordPortedReceiptDelivery(
           intent.sourceMessageId,
@@ -1817,7 +1872,7 @@ export class WhatsAppGateway {
     await this.recoverInterruptedMedia(socket);
   }
 
-  async handleMessages(messages: WAMessage[], type: string): Promise<void> {
+  async handleMessages(messages: WAMessage[], type: string, origin?: WhatsAppSessionOrigin): Promise<void> {
     this.lastUpsertAt = Date.now();
     this.lastUpsertType = type;
     this.lastUpsertMessageCount = messages.length;
@@ -1831,6 +1886,9 @@ export class WhatsAppGateway {
         this.rememberIgnored(skipReasonForBaileysMessage(message));
         continue;
       }
+      // EPIC-20 A9: every inbound message carries the number it was sent TO (and the extra session, if not default).
+      event.toNumber = origin ? origin.toNumber : this.sharedNumber();
+      event.sessionId = origin?.sessionId ?? null;
       await this.handleEvent(event);
     }
   }
@@ -1860,6 +1918,19 @@ export class WhatsAppGateway {
         status: "denied",
       });
       return;
+    }
+
+    // EPIC-20 A9: an extra number answers only the account that paired it; anyone else is kept, unread and unanswered.
+    if (event.sessionId) {
+      const owner = this.options.sessions?.tenantOf(event.sessionId) ?? null;
+      const allowed = owner && this.options.extraNumberSenderAllowed
+        ? await this.options.extraNumberSenderAllowed(event, owner).catch(() => false)
+        : false;
+      if (!allowed) {
+        this.options.store.markMessageStatus(event.messageId, "denied_extra_number");
+        this.rememberIgnored("extra_number_foreign_sender");
+        return;
+      }
     }
 
     await this.markRead(event);
@@ -2446,7 +2517,7 @@ export class WhatsAppGateway {
   // Deliberately unmetered and not an outbound intent: the paused terminal reply
   // must stay the only recoverable receipt for this message. Throttled per chat.
   private async sendNoCreditNotice(event: WhatsAppInboundEvent): Promise<void> {
-    const socket = this.socket;
+    const socket = this.socketFor(event);
     if (!socket) return;
     const recipientJid = this.recipientJid(event);
     const last = this.noCreditNoticeAt.get(recipientJid) ?? 0;
@@ -2464,7 +2535,7 @@ export class WhatsAppGateway {
     if (!text) return;
     text = linkifyGithubRefs(text, { markdown: false });
     const recipientJid = this.recipientJid(event);
-    const socket = this.socket;
+    const socket = this.socketFor(event);
     if (!socket) throw new Error("WhatsApp is not connected");
     const scope = this.options.portedReplyIntentScope?.(event.messageId) ?? null;
     const intent = this.options.store.prepareOutboundIntent({
@@ -2497,7 +2568,7 @@ export class WhatsAppGateway {
         intent,
         err instanceof Error ? err.message : String(err),
       );
-      this.recoverFromSendError(err);
+      this.recoverFromSocketSendError(socket, err);
       throw err;
     }
   }

@@ -167,10 +167,10 @@ export class TaskJobQueue {
     return this.store.get(id);
   }
 
-  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string, forwardedBy?: string, announceTo?: string[]): void {
+  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string, forwardedBy?: string, announceTo?: string[], toNumber?: string): void {
     if (!evidenceRef || !this.onEntryStored) return;
     try {
-      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}), ...(forwardedBy ? { forwardedBy } : {}), ...(announceTo?.length ? { announceTo } : {}) });
+      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}), ...(forwardedBy ? { forwardedBy } : {}), ...(announceTo?.length ? { announceTo } : {}), ...(toNumber ? { toNumber } : {}) });
     } catch {
       console.warn("[subscribers] notification failed after durable capture");
     }
@@ -420,7 +420,7 @@ export class TaskJobQueue {
         });
         assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job, { status: "done", result });
-        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source, job.input.capturedAt, undefined, job.input.announceTo);
+        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source, job.input.capturedAt, undefined, job.input.announceTo, job.input.toNumber);
         if (completed && (job.input.source === "whatsapp" || job.input.source === "telegram")) {
           try { this.deskHooks?.afterCapture?.(job); } catch { console.warn("[memory-desk] could not look at a chat capture"); }
         }
@@ -444,7 +444,7 @@ export class TaskJobQueue {
           );
           completed = this.store.updateClaimed(job, { status: "done", result });
           if (completed && result.status === "done" && result.digest.evidenceRef) {
-            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint), job.input.capturedAt, job.input.forwardedBy);
+            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint), job.input.capturedAt, job.input.forwardedBy, undefined, job.input.toNumber);
           }
         }
       } else if (job.kind === "enrich_memory") {

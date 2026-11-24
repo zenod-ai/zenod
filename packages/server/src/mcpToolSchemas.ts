@@ -115,6 +115,7 @@ export const INGEST_MEMORY_SHAPE = {
     .optional()
     .describe("Whether to use the supplied transcript or archive audio without another transcription attempt."),
   senderTimestamp: z.string().min(1).optional().describe("Original sender/source timestamp, preferably ISO-8601."),
+  toNumber: z.string().min(1).max(32).optional().describe("The account's own WhatsApp number the note was sent TO (+<digits>), from the channel transport; subscribers get it as note.to_number."),
   hints: z.array(z.string().min(1)).optional().describe("Optional filing hints for the eventual memory digest."),
   idempotencyKey: z
     .string()
