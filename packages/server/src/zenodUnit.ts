@@ -77,7 +77,7 @@ import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
-import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts } from "./testerProgress.js";
+import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts, tenantMcpReads } from "./testerProgress.js";
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
 import { mountTesterFirstNoteNudgeRoutes, parseFirstNoteNudgeMode, TesterFirstNoteNudge } from "./testerFirstNoteNudge.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
@@ -1512,6 +1512,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         counts: (tenantId, sinceMs) => tenantJobCounts(join(storage.dataDir, tenantId, "tasks.sqlite"), tenantId, sinceMs),
         seenAt: (userId) => testerLastSeen.seenAt(userId),
         seenSince: () => testerLastSeen.since(),
+        // E7-S31: MCP connected = the chassis' first OAuth sign-in to this tenant, or a personal MCP token used, whichever came first.
+        mcpSignIn: (accountId, tenantId) => {
+          const oauth = oauthStore.firstSignInForTenant(tenantId);
+          const used = customer.mcpTokens.list(accountId)
+            .filter((record) => record.tenantId === tenantId && record.lastUsedAt !== null)
+            .map((record) => record.lastUsedAt as number)
+            .sort((a, b) => a - b)[0];
+          if (oauth && (used === undefined || oauth.createdAt <= used)) return { via: "oauth", at: oauth.createdAt };
+          return used === undefined ? null : { via: "token", at: used };
+        },
+        mcpReads: (tenantId) => tenantMcpReads(join(storage.dataDir, "usage.sqlite"), tenantId),
         // E7-S27: the link welcome (the earlier of the two) or the first-note message, whichever reached this account.
         welcomeSentAt: (accountId) => onboarding.welcomeSentAt(accountId) ?? testerFirstNoteNudge?.sentAt(accountId) ?? null,
       });

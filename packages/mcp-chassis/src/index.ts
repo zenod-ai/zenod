@@ -1906,7 +1906,9 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     if (tenant && usage && billableUnits > 0) {
       const decision = usage.checkQuota(tenant.quota, billableUnits);
       if (!decision.allowed) return quotaExceededResponse(c, decision);
-      usage.record({ kind: "mcp.request", units: billableUnits });
+      // Zenod E7-S31: the called tool names (names only, never arguments) so a read can be told from a write per tenant.
+      const tools = c.get("mcpLog")?.tools;
+      usage.record({ kind: "mcp.request", units: billableUnits, ...(tools?.length ? { metadata: { tools } } : {}) });
     }
     const turnPreamble = tenant
       ? await operatingRules.turnPreamble(tenant)

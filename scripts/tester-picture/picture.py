@@ -74,10 +74,21 @@ COLUMNS = [
     ("signup", "Signed up"),
     ("drive", "Google Drive set up"),
     ("github", "GitHub set up"),
+    # E7-S31 (Jordi, vn_aa7447c3: "they have MCP connected ... we have not been measuring"): beside the storage and WhatsApp steps
+    ("mcp", "MCP connected"),
     ("whatsapp", "WhatsApp code confirmed"),
     ("memory", "One memory saved"),
     ("voice", "One voice note sent"),
     ("welcome", "Welcome WhatsApp sent"),
+]
+
+# E7-S31 (same note: "the flow that we want to see is them reading and writing into the memory ... from the WhatsApp voice
+# notes or from the agents"): reads and writes per tester since sign-up, as numbers. Counts only, never what was said.
+USE_COLUMNS = [
+    ("wa_writes", "WhatsApp writes"),
+    ("wa_reads", "WhatsApp reads"),
+    ("agent_writes", "Agent writes"),
+    ("agent_reads", "Agent reads"),
 ]
 
 # The four steps, in Jordi's order (vn_b73d7c41). id, short column title, what stuck here means.
@@ -162,8 +173,21 @@ def rows_from_progress(progress, emails=None):
             "notes_24h": t.get("whatsappNotes24h", 0), "saves_24h": t.get("memoriesSaved24h", 0),
             "last_seen_at": t.get("lastSeenAt"), "seen_record_since": progress.get("lastSeenSince"),
             "_since": since,
+            # E7-S31: None until production runs the release that reads them
+            "mcp": bool(t["mcp"]["connected"]) if isinstance(t.get("mcp"), dict) else None,
+            "mcp_via": (t.get("mcp") or {}).get("via"),
+            "use": use_counts(t.get("memoryUse")),
+            "agent_reads_since": (t.get("memoryUse") or {}).get("agentReadsSince"),
         })
     return out
+
+
+def use_counts(memory_use):
+    """The route's memoryUse as the four numbers of USE_COLUMNS, or all None when the route does not give them yet."""
+    if not isinstance(memory_use, dict):
+        return {cid: None for cid, _ in USE_COLUMNS}
+    wa, ag = memory_use.get("whatsapp") or {}, memory_use.get("agents") or {}
+    return {"wa_writes": wa.get("writes"), "wa_reads": wa.get("reads"), "agent_writes": ag.get("writes"), "agent_reads": ag.get("reads")}
 
 
 def rows_from_fallback(setup, watch):
@@ -185,7 +209,7 @@ def rows_from_fallback(setup, watch):
             "our_bug": bool(t.get("ourBug")) and t.get("step") != "linked",
             # no note can be sent over WhatsApp before it is linked; once linked, the notes are not readable here
             "message": None if t.get("step") == "linked" else False, "memory": has_capture,
-            "voice": None, "welcome": None,
+            "voice": None, "welcome": None, "mcp": None, "use": use_counts(None),
             "notes_24h": None, "saves_24h": None,
             "last_seen_at": None, "seen_record_since": None, "_since": None,
         })
@@ -226,6 +250,7 @@ def build(rows, counts, now, source):
             "stuck_at": stuck, "stuck_text": where, "detail": r.get("whatsapp_text") if stuck == "whatsapp" else None, "owner": None if fully else OWNER, "next": nxt,
             "our_bug": bool(r.get("our_bug")),
             "notes_24h": r.get("notes_24h"), "saves_24h": r.get("saves_24h"),
+            "use": r.get("use") or use_counts(None), "mcp_via": r.get("mcp_via"),
         })
     # stuck testers first, then by sign-up
     testers.sort(key=lambda t: (t["fully_set_up"], t["signed_up_at"] or ""))
@@ -240,6 +265,9 @@ def build(rows, counts, now, source):
     unread = sorted({s for t in testers for s, ok in t["steps"].items() if ok is None})
     unread_cells = [cid for cid, _ in COLUMNS if any(cid in t["unread_cells"] for t in testers)]
     column_counts = {cid: sum(1 for t in testers if t["cells"][cid]) for cid, _ in COLUMNS}
+    use_known = bool(testers) and all(t["use"][cid] is not None for t in testers for cid, _ in USE_COLUMNS)
+    use_totals = {cid: sum(t["use"][cid] for t in testers) for cid, _ in USE_COLUMNS} if use_known else None
+    reads_since = min((r.get("agent_reads_since") for r in rows if r.get("agent_reads_since")), default=None)
     c = counts or {}
     return {
         "schema": "zenod-tester-picture/v2", "row": ROW, "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -252,7 +280,9 @@ def build(rows, counts, now, source):
         "stuck_by_step": stuck_by, "unread_steps": unread, "owner": OWNER,
         "columns": [{"id": cid, "title": title} for cid, title in COLUMNS],
         "column_counts": column_counts, "unread_cells": unread_cells,
-        "punchline": headline(n, column_counts, c.get("applications")),
+        "use_columns": [{"id": cid, "title": title} for cid, title in USE_COLUMNS], "use_totals": use_totals,
+        "use_line": use_line(use_totals, reads_since),
+        "punchline": headline(n, column_counts, c.get("applications"), unread_cells),
         "phone_line": phone_line(n, column_counts["whatsapp"]), "key_line": KEY_LINE,
         "page_url": PAGE_URL,
         "caveat": (f"{', '.join(label for cid, label in COLUMNS if cid in unread_cells)} cannot be read from production "
@@ -266,7 +296,7 @@ def table_cells(r):
     vault, provider = r.get("vault"), r.get("vault_provider")
     drive = None if vault is None else bool(vault and provider == "google_drive")
     github = None if vault is None else bool(vault and provider in ("github", "legacy"))
-    raw = {"signup": True, "drive": drive, "github": github, "whatsapp": r.get("whatsapp"), "memory": r.get("memory"),
+    raw = {"signup": True, "drive": drive, "github": github, "mcp": r.get("mcp"), "whatsapp": r.get("whatsapp"), "memory": r.get("memory"),
            "voice": r.get("voice"), "welcome": r.get("welcome")}
     return {k: v is True for k, v in raw.items()}, [k for k, v in raw.items() if v is None]
 
@@ -285,14 +315,16 @@ def row_label(r):
     return f"{day} · …{str(r['key'])[-4:]}"
 
 
-def headline(n, counts, applied):
+def headline(n, counts, applied, unread=()):
     """One line for the table: how many testers, and how many are green in the four columns that matter most."""
     if n == 0:
         who = f"{applied} applied, " if applied else ""
         return f"No tester has signed up yet: {who}nothing to set up"
     vault = counts["drive"] + counts["github"]
-    tail = f"{vault} set up a vault, {counts['whatsapp']} linked WhatsApp, {counts['memory']} saved a memory, {counts['voice']} sent a voice note"
-    if all(counts[c] == n for c in ("whatsapp", "memory", "voice")) and vault == n:
+    mcp = "MCP not readable yet" if "mcp" in unread else f"{counts.get('mcp', 0)} connected MCP"
+    tail = (f"{vault} set up a vault, {mcp}, {counts['whatsapp']} linked WhatsApp, "
+            f"{counts['memory']} saved a memory, {counts['voice']} sent a voice note")
+    if all(counts.get(c, 0) == n for c in ("mcp", "whatsapp", "memory", "voice")) and vault == n:
         return f"{n} {'tester' if n == 1 else 'testers'}, all set up"
     return f"{n} {'tester' if n == 1 else 'testers'}: {tail}"
 
@@ -301,6 +333,19 @@ def headline(n, counts, applied):
 # successfully filled in, so the connection is complete?"): what a green cell means for the two steps that need a handshake.
 KEY_LINE = ("Green WhatsApp code confirmed means the handshake finished: the tester gave their number, got a code, sent it back from the "
             "phone and Zenod confirmed it. Green Google Drive or GitHub set up means their storage is ready.")
+
+
+def use_line(totals, reads_since=None):
+    """E7-S31: what the four count columns mean, with today's totals, in one plain line."""
+    if totals is None:
+        return ("Reads and writes: production gives these numbers from its next release; until then the four count columns show a dash.")
+    since = ""
+    if reads_since:
+        when = parse_time(reads_since)
+        since = f" Agent searches are counted from {when.astimezone(MX).strftime('%-d %b')}; before that only questions to Zenod count." if when else ""
+    return (f"Reads and writes since sign-up, all testers: {totals['wa_writes']} saved from WhatsApp, {totals['wa_reads']} WhatsApp questions "
+            f"answered from the memory, {totals['agent_writes']} saved by an agent over MCP, {totals['agent_reads']} agent reads over MCP. "
+            f"Counts only, never what was said.{since}")
 
 
 def phone_line(n, linked):
@@ -321,6 +366,7 @@ def load_house():
 
 
 GREEN, GREY = "#1f4d3a", "#ddd6c6"
+SPAN = 1 + len(COLUMNS) + len(USE_COLUMNS)
 TICK = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#f6f2e9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
@@ -342,13 +388,20 @@ def table_rows(pic, limit=None, masked=False):
     for t in shown:
         who = mask_email(t["label"]) if masked and t.get("email") else t["label"]
         cells = "".join(f'<td data-label="{html.escape(title)}">{dot(t["cells"][cid], title)}</td>' for cid, title in COLUMNS)
+        cells += "".join(f'<td class="n" data-label="{html.escape(title)}">{number(t["use"][cid])}</td>' for cid, title in USE_COLUMNS)
         rows += (f'<tr><th scope="row" class="who"><span class="em">{html.escape(who)}</span>'
                  f'<small>{html.escape(t.get("since") or "")}</small></th>{cells}</tr>')
     return rows, len(pic["testers"]) - len(shown)
 
 
+def number(value):
+    """A count cell: the number, or a dash when production does not give it yet."""
+    return "–" if value is None else str(int(value))
+
+
 def table_head():
-    return "<tr><th>Tester</th>" + "".join(f"<th>{html.escape(title)}</th>" for _, title in COLUMNS) + "</tr>"
+    return ("<tr><th>Tester</th>" + "".join(f"<th>{html.escape(title)}</th>" for _, title in COLUMNS)
+            + "".join(f'<th class="n">{html.escape(title)}</th>' for _, title in USE_COLUMNS) + "</tr>")
 
 
 def footer_text(pic):
@@ -363,9 +416,9 @@ def render_html(pic, house):
     serif, sans = s["display"][0], s["text"][0]
     rows, more = table_rows(pic, 8)
     if more > 0:
-        rows += f'<tr><th scope="row" class="who" colspan="8">+{more} more on the page</th></tr>'
+        rows += f'<tr><th scope="row" class="who" colspan="{SPAN}">+{more} more on the page</th></tr>'
     if not pic["testers"]:
-        rows = '<tr><th scope="row" class="who" colspan="8">No tester has signed up yet</th></tr>'
+        rows = f'<tr><th scope="row" class="who" colspan="{SPAN}">No tester has signed up yet</th></tr>'
     day = dt.datetime.strptime(pic["day_mexico_city"], "%Y-%m-%d").strftime("%a %-d %b")
     css = f"""{faces}
 *{{box-sizing:border-box;margin:0}}
@@ -374,18 +427,19 @@ body{{width:1600px;height:900px;background:{s['bg']};color:{s['ink']};font-famil
 .k{{font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:{s['muted']};font-weight:600}}
 h1{{font-family:'{serif}',Georgia,serif;font-weight:{s['display'][1]};font-size:46px;letter-spacing:-.01em;line-height:1.12;margin:12px 0 34px;max-width:1440px;text-wrap:balance}}
 table{{width:100%;border-collapse:collapse}}
-th{{text-align:center;font-weight:600;font-size:18px;color:{s['muted']};padding:6px 6px 12px;border-bottom:1.6px solid {s['ink']};line-height:1.2}}
+th{{text-align:center;font-weight:600;font-size:16px;color:{s['muted']};padding:6px 5px 12px;border-bottom:1.6px solid {s['ink']};line-height:1.2}}
+th.n{{border-left:1px solid {s['tones']['muted'][1]}}}td.n{{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums}}
 th:first-child{{text-align:left}}
 td,th.who{{padding:17px 6px;border-bottom:1px solid {s['tones']['muted'][1]};vertical-align:middle;text-align:center}}
 th.who{{text-align:left;font-weight:600;font-size:22px;color:{s['ink']};white-space:nowrap}}
 th.who small{{display:block;margin-top:3px;font-size:15px;font-weight:400;color:{s['muted']}}}
-.dot{{display:inline-flex;width:42px;height:42px;border-radius:50%;align-items:center;justify-content:center}}
+.dot{{display:inline-flex;width:38px;height:38px;border-radius:50%;align-items:center;justify-content:center}}
 .dot.on{{background:{GREEN}}}.dot.off{{background:{GREY}}}
 .ph{{margin-top:20px;font-size:21px;color:{s['ink']};max-width:1440px;line-height:1.35}}.ph.key{{font-size:18px;color:{s['muted']};margin-top:12px}}
 .f{{position:absolute;left:80px;right:80px;bottom:28px;font-size:16px;color:{s['muted']};display:flex;justify-content:space-between;gap:40px}}.f span:last-child{{white-space:nowrap}}"""
     return (f'<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(pic["punchline"])}</title><style>{css}</style></head><body>'
             f'<div class="c"><div class="k">Zenod testers · {day}</div><h1>{html.escape(pic["punchline"])}</h1>'
-            f'<table>{table_head()}{rows}</table><p class="ph">{html.escape(pic["phone_line"])}</p><p class="ph key">{html.escape(pic["key_line"])}</p></div>'
+            f'<table>{table_head()}{rows}</table><p class="ph">{html.escape(pic["use_line"])}</p><p class="ph key">{html.escape(pic["phone_line"])} {html.escape(pic["key_line"])}</p></div>'
             f'<div class="f"><span>{footer_text(pic)}</span><span>zenod · {ROW}</span></div>'
             "</body></html>")
 
@@ -402,6 +456,7 @@ PAGE_CSS = """
 .tt th.who small{display:block;margin-top:.15rem;font:400 .8rem/1.3 var(--sans);color:var(--muted)}
 .dot{display:inline-flex;width:1.7rem;height:1.7rem;border-radius:50%;align-items:center;justify-content:center}
 .dot.on{background:var(--accent)}.dot.off{background:var(--stage-2)}
+.tt th.n{border-left:1px solid var(--line)}.tt td.n{font:600 1.15rem/1 var(--sans);font-variant-numeric:tabular-nums}
 .tt-phone{margin:1.1rem 0 0;font-size:1rem;line-height:1.5}
 .tt-foot{margin:1rem 0 0;font-size:.85rem;color:var(--muted)}
 @media (max-width:640px){
@@ -421,13 +476,14 @@ def render_page(pic, png_name="tester-table.png", masked=False):
     public repo; the full emails are on the main page only."""
     rows, more = table_rows(pic, masked=masked)
     if not pic["testers"]:
-        rows = '<tr><th scope="row" class="who" colspan="8">No tester has signed up yet</th></tr>'
+        rows = f'<tr><th scope="row" class="who" colspan="{SPAN}">No tester has signed up yet</th></tr>'
     day = pic["day_mexico_city"]
     body = (f'<style>{PAGE_CSS}</style>'
             f'<div class="tt-wrap"><table class="tt"><thead>{table_head()}</thead><tbody>{rows}</tbody></table></div>'
-            f'<p class="tt-phone"><b>{html.escape(pic["phone_line"])}</b></p>'
+            f'<p class="tt-phone"><b>{html.escape(pic["use_line"])}</b></p>'
+            f'<p class="tt-phone">{html.escape(pic["phone_line"])}</p>'
             f'<p class="tt-foot">{html.escape(pic["key_line"])}</p>'
-            f'<p class="tt-foot">{footer_text(pic)}{CARD_NOTE if masked else ""} Green means done, grey means not yet. Rebuilt every day at 05:30 Mexico City; '
+            f'<p class="tt-foot">{footer_text(pic)}{CARD_NOTE if masked else ""} Green means done, grey means not yet; the last four columns are counts. Rebuilt every day at 05:30 Mexico City; '
             f'<a href="{png_name}">today\'s picture</a>.</p>')
     return (f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>Zenod tester table</title><link rel="stylesheet" href="/_shell/shell.css"></head>\n<body data-page-shell>\n<main class="ps-page">\n'
