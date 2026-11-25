@@ -1,4 +1,5 @@
 // E7-S9: each tester's own voice feedback link, handed in by the vps3 timer and shown in the app to testers only.
+import { personFacts } from "../src/testerFacts.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,7 +34,7 @@ describe("tester feedback links", () => {
     isTest: (a) => a.stripe_email === "ops@alpha9.io",
     isOps: (c) => c.req.header("authorization") === "Bearer ok",
     sessionAccount: () => signedIn,
-    firstName: (email) => (email === "dana@gmail.com" ? "Dana" : null),
+    facts: (a) => personFacts(a, a.stripe_email === "dana@gmail.com" ? "Dana" : null),
   });
   const ops = { authorization: "Bearer ok", "content-type": "application/json" };
 

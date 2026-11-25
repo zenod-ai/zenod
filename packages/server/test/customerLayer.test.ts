@@ -357,6 +357,8 @@ describe("hosted customer layer", () => {
         avatar_url: "https://example.test/ada.png",
       });
 
+      // E7-S40: the account made at checkout keeps the name Google gives, with where it came from.
+      layer.accounts.upsert("cs_ada", { account_id: "acct-ada", user_id: customerUserId("google", "google-subject-ada") });
       const returningStart = await layer.app.request("/auth/google/start");
       const returningUrl = new URL(returningStart.headers.get("location")!);
       const returning = await layer.app.request(
@@ -365,6 +367,9 @@ describe("hosted customer layer", () => {
       );
       expect(returning.status).toBe(302);
       expect(layer.identities.snapshot().users).toHaveLength(1);
+      expect(layer.accounts.list().find((a) => a.account_id === "acct-ada")).toMatchObject({
+        signin_name: "Ada Lovelace", signin_name_from: "the name on their Google sign-in",
+      });
       expect(exchange).toHaveBeenCalledTimes(2);
     } finally {
       layer.close();

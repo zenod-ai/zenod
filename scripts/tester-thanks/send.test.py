@@ -12,7 +12,8 @@ spec = importlib.util.spec_from_file_location("tester_thanks_send", HERE / "send
 send = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(send)
 
-MAIL = {"id": "acct-1", "to": "ana@example.org", "subject": "Thank you for testing Zenod", "text": "Hi Ana,", "html": "<p>Hi</p>", "queuedAt": "2026-11-15T00:00:00Z"}
+MAIL = {"id": "acct-1", "to": "ana@example.org", "subject": "Thank you for testing Zenod", "text": "Hi Ana,", "html": "<p>Hi</p>", "queuedAt": "2026-11-15T00:00:00Z",
+        "facts": {"address_from": "the address they signed in to Zenod with", "name": "Ana", "name_from": "their tester application"}}
 
 
 class Fake:
@@ -59,6 +60,62 @@ class Fake:
                 return 200, {"result": {"isError": True, "content": [{"type": "text", "text": "daily send cap reached"}]}}
             return 200, {"result": {"content": [{"type": "text", "text": "sent to ana@example.org (Message-ID <abc@mail.gmail.com>); logged"}]}}
         raise AssertionError(path)
+
+
+class FactsTest(unittest.TestCase):
+    """E7-S40: gmail_send gets the facts from the account record; missing or unsure, nothing is sent and it says what."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        send.STATE = pathlib.Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_tick(self, fake, **kw):
+        lines = []
+        code = send.tick(ops_call=fake.ops, console_call=fake.console, log=lines.append, **kw)
+        return code, lines
+
+    def test_facts_are_passed_to_gmail_send(self):
+        fake = Fake([MAIL])
+        self.assertEqual(self.run_tick(fake)[0], 0)
+        self.assertEqual(fake.sends[0]["facts"], {"address_from": "the address they signed in to Zenod with", "name": "Ana", "name_from": "their tester application"})
+
+    def test_no_facts_sends_nothing_and_says_what_is_missing(self):
+        bare = {k: v for k, v in MAIL.items() if k != "facts"}
+        fake = Fake([bare])
+        code, lines = self.run_tick(fake)
+        self.assertEqual((code, fake.sends, fake.marks, fake.runs), (0, [], [], []))
+        self.assertIn("Zenod sent no facts", " ".join(lines))
+
+    def test_unsure_name_sends_nothing(self):
+        unsure = {**MAIL, "text": "Hi,", "facts": {"address_from": "the address they signed in to Zenod with",
+                                                   "missing": ['name: unsure, "Mark" from their application but "Vitor" from their Google sign-in']}}
+        fake = Fake([unsure])
+        code, lines = self.run_tick(fake)
+        self.assertEqual((fake.sends, fake.marks), ([], []))
+        self.assertIn('unsure, "Mark"', " ".join(lines))
+        self.assertNotIn("ana@example.org", " ".join(lines))
+
+    def test_empty_address_from_is_held(self):
+        fake = Fake([{**MAIL, "facts": {"address_from": ""}}])
+        _, lines = self.run_tick(fake)
+        self.assertEqual(fake.sends, [])
+        self.assertIn("address: where it came from", " ".join(lines))
+
+    def test_hold_list_holds_a_listed_tester_and_lets_others_go(self):
+        other = {**MAIL, "id": "acct-2", "to": "bo@example.org"}
+        fake = Fake([MAIL, other])
+        (send.STATE / "hold.json").write_text('{"accounts": ["acct-1"], "reason": "E105-S306 writes the next note"}')
+        _, lines = self.run_tick(fake)
+        self.assertEqual([s["to"] for s in fake.sends], ["bo@example.org"])
+        self.assertIn("on hold: E105-S306 writes the next note", " ".join(lines))
+
+    def test_dry_run_lists_held_mail_too(self):
+        fake = Fake([{**MAIL, "facts": {}}])
+        _, lines = self.run_tick(fake, dry_run=True)
+        self.assertTrue(any(line.startswith("held, not sent") for line in lines))
 
 
 class TickTest(unittest.TestCase):
@@ -115,7 +172,8 @@ class TickTest(unittest.TestCase):
 class NudgeTest(unittest.TestCase):
     """E26-S32: the next-day WhatsApp email rides the same tick and goes once, ever."""
 
-    NUDGE = {"id": "nudge-acct-2", "to": "bo@example.org", "subject": "Your Zenod WhatsApp link", "text": "Hi Bo,", "html": "", "queuedAt": "2026-11-16T00:00:00Z"}
+    NUDGE = {"id": "nudge-acct-2", "to": "bo@example.org", "subject": "Your Zenod WhatsApp link", "text": "Hi Bo,", "html": "", "queuedAt": "2026-11-16T00:00:00Z",
+             "facts": {"address_from": "the address they signed in to Zenod with", "name": "Bo", "name_from": "their Google sign-in"}}
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -153,7 +211,7 @@ class NudgeTest(unittest.TestCase):
 class SetupEmailTest(unittest.TestCase):
     """E7-S28: Jordi's setup email rides the same tick and ledger, once per tester, ever."""
 
-    SETUP = {"id": "setup-acct-3", "to": "cy@example.org", "subject": "Your Zenod setup", "text": "Hey,", "html": "", "queuedAt": "2026-11-19T00:00:00Z"}
+    SETUP = {"id": "setup-acct-3", "to": "cy@example.org", "subject": "Your Zenod setup", "text": "Hey,", "html": "", "queuedAt": "2026-11-19T00:00:00Z", "facts": {"address_from": "the address they signed in to Zenod with"}}
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -196,7 +254,7 @@ class SetupEmailTest(unittest.TestCase):
 class WelcomeTest(unittest.TestCase):
     """E26-S33: the sign-up welcome goes first in the tick, once, ever, on its own route."""
 
-    WELCOME = {"id": "welcome-acct-1", "to": "ana@example.org", "subject": "Welcome to Zenod, here is how to start", "text": "Hi,", "html": "", "queuedAt": "2026-11-17T00:00:00Z"}
+    WELCOME = {"id": "welcome-acct-1", "to": "ana@example.org", "subject": "Welcome to Zenod, here is how to start", "text": "Hi,", "html": "", "queuedAt": "2026-11-17T00:00:00Z", "facts": {"address_from": "the address they signed in to Zenod with"}}
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
