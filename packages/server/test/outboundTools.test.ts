@@ -240,7 +240,7 @@ describe("Reddit via Composio", () => {
 
   it("forgives a value pasted as a whole env line (NAME=value + quotes)", () => {
     // The bug that produced 'Invalid API key: COM**SHOR' — the whole line was pasted.
-    expect(normalizeComposioValue("COMPOSIO_API_KEY=ak_FxycLInZWgeIqix-SHOR", "COMPOSIO_API_KEY")).toBe("ak_FxycLInZWgeIqix-SHOR");
+    expect(normalizeComposioValue("COMPOSIO_API_KEY=ak_test_SHOR", "COMPOSIO_API_KEY")).toBe("ak_test_SHOR");
     expect(normalizeComposioValue('  "ak_clean"  ', "COMPOSIO_API_KEY")).toBe("ak_clean");
     expect(normalizeComposioValue("ak_clean", "COMPOSIO_API_KEY")).toBe("ak_clean");
     expect(normalizeComposioValue("COMPOSIO_USER_ID=jordimr", "COMPOSIO_USER_ID")).toBe("jordimr");
