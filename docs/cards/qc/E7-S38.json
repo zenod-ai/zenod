@@ -4,37 +4,37 @@
   "cardSha": "57c095cbd48f3e94",
   "inputs": {
     "card": "57c095cbd48f3e94",
-    "page": "e0c4d04ba5d0926b",
+    "page": "b03690f9fe1c4a5e",
     "rules": "c1a7854c21d10fb4",
     "words": "a91079ad6fae9f68"
   },
-  "checkedAt": "2026-11-25T14:49:29Z",
+  "checkedAt": "2026-11-25T15:07:47Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "so many whatsapps that I think the briefings are getting a little bit lost",
       "where": "2026-11-25",
       "status": "met",
-      "how": "Evidence page shows 'Messages he did not ask for' falling from 23 to about 12, and the 'Who sent them' table by sender; the card's delivered lines report counts and batching."
+      "how": "Evidence page shows 'Messages he did not ask for' falling from 23 to about 12, and a sender table showing what reaches him."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the punchline first, a clear bar chart and a before-and-after table, with no sideways overflow and readable text; the evidence page holds the delivered result."
+    "summary": "Both widths open with the punchline box under the title, with a bar chart and a before-and-after table; the page does not scroll sideways and text fits at 390 px. The only item noted is a non-fault absence of a feedback block on an evidence page."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether only briefings, alarms and replies should reach him one by one, which the card recommends.",
+    "asked": "Decide whether only briefings, alarms and replies should reach him one by one, and he is recommended to say yes.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "e0c4d04ba5d0926b",
-    "walkedAt": "2026-11-25T14:49:29Z",
+    "page": "b03690f9fe1c4a5e",
+    "walkedAt": "2026-11-25T15:07:47Z",
     "steps": [
       {
         "n": 1,
@@ -44,8 +44,14 @@
       },
       {
         "n": 2,
-        "what": "open the link 'All pages'",
+        "what": "open the link '↑ Pages › EPIC-7'",
         "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
         "result": "answered 200"
       }
     ]
