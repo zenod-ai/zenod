@@ -40,7 +40,10 @@ Verified at: 2026-11-25
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| R-S1 | Ticket worker | run_7bc3eb8f-0dbb-4f23-942d-a3b4b43890b1 — claimed 2026-11-25T18:23Z, lease until 2026-11-25T20:23Z | Baselines: count the AI tool directories that list Zenod today (DOD-1) and ask 10 AI assistants for a memory tool, counting how often Zenod is named (DOD-3); one evidence page with both numbers | active | none | none | main | none | 2026-11-25 | dispatch (Jordi's yes on E7-A45, L-37) |
+| R-S1 | Ticket worker | run_7bc3eb8f (finished 2026-11-25) | Baselines: count the AI tool directories that list Zenod today (DOD-1) and ask 10 AI assistants for a memory tool, counting how often Zenod is named (DOD-3); one evidence page with both numbers | done (no confirm: baselines for DOD-1 and DOD-3; the next steps use them) | none | none | main | evidence http://vps3.taild81fbb.ts.net:9709/ : listed in 4 of 10 directories (MCP Registry, Glama, AI-Powered, addrbook); 0 of 10 AI assistants name Zenod (they pick Basic Memory, Obsidian, MemoryPlugin, Mem0); $0.37 on OpenRouter | 2026-11-25 | followups: start R-S2, R-S3, R-S4 (drafts below) |
+| R-S2 | Ticket worker | unassigned | DOD-1: list Zenod on mcpservers.org, the Docker MCP Catalog and AIBase (Docker and AIBase are draft E10-S6), and chase the mcp.so and awesome-mcp-servers (PR #18864) queues: 9 of 10 if all land | draft | none | none | main | http://vps3.taild81fbb.ts.net:9709/ | 2026-11-25 | draft: proposed by R-S1; ready on Jordi's word |
+| R-S3 | Ticket worker | unassigned | DOD-3: pages that answer 'a memory I own' and compare Zenod with Basic Memory and Mem0 (what assistants recommend today), then re-run the same 10 questions monthly with the R-S1 script | draft | none | none | main | http://vps3.taild81fbb.ts.net:9709/ | 2026-11-25 | draft: proposed by R-S1; ready on Jordi's word |
+| R-S4 | Ticket worker | unassigned | DOD-2: baseline of public reviews or recommendations of Zenod by people outside the team (none known today) | draft | none | none | main | none | 2026-11-25 | draft: proposed by R-S1; ready on Jordi's word |
 
 ## Decisions
 
