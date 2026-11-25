@@ -88,7 +88,12 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
     content,
     source,
     verbatim: job.input.verbatim ?? base?.verbatim ?? false,
-    contentType: job.input.contentType ?? base?.contentType ?? contentTypeFromJob(job, source),
+    // EPIC-24 M43: a voice note stays a voice note whichever side says so. The September 2026 repair
+    // relabelled receipts while their Log lines kept `audio`; three of Jordi's 24-25 Nov WhatsApp notes
+    // were relabelled in the Log while their receipts kept `audio`. Either way it is found as voice_note.
+    contentType: base?.contentType === "voice_note"
+      ? "voice_note"
+      : job.input.contentType ?? base?.contentType ?? contentTypeFromJob(job, source),
     capturedAt: job.input.capturedAt ?? job.input.senderTimestamp ?? new Date(job.createdAt).toISOString(),
     sourceId: job.input.sourceId ?? identity.sourceId,
     ...(job.input.sourceApp?.trim() ? { sourceApp: job.input.sourceApp.trim() } : {}),
