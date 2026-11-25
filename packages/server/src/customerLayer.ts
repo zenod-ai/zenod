@@ -1,4 +1,4 @@
-import { NAME_FROM_GOOGLE, signinNameFromDisplay } from "./testerFacts.js";
+import { CONTACT_FROM_GITHUB, CONTACT_FROM_GOOGLE, NAME_FROM_GOOGLE, signinNameFromDisplay } from "./testerFacts.js";
 import Stripe from "stripe";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
@@ -760,6 +760,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const isNewCustomer = !identities.resolve(provider, providerSubject);
       const principal = identities.resolveOrCreate(identityInput);
       // E7-S40: keep the name Google gave on the account, with where it came from (it was only a display name before).
+      // and keep the sign-in address as the person's one address (Google's wins over GitHub's).
+      try {
+        accounts.keepContactEmail(principal.user_id, identityInput.email ?? null, provider === "google" ? CONTACT_FROM_GOOGLE : CONTACT_FROM_GITHUB);
+      } catch (error) {
+        console.warn("[signin] could not keep the sign-in address:", error instanceof Error ? error.message : error);
+      }
       if (provider === "google") {
         try {
           accounts.keepSigninName(principal.user_id, signinNameFromDisplay(user.login, user.email), NAME_FROM_GOOGLE);

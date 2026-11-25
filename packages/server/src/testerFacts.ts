@@ -11,10 +11,11 @@
 // A mail whose facts are missing or unsure is held by the sender (scripts/tester-thanks/send.py), never guessed.
 import type { Context, Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
-import type { CustomerAccount } from "./customerAccounts.js";
+import { CONTACT_FROM_SIGNIN, type CustomerAccount } from "./customerAccounts.js";
 
-export const ADDRESS_FROM_SIGNIN = "the address they signed in to Zenod with";
+export const ADDRESS_FROM_SIGNIN = CONTACT_FROM_SIGNIN;
 export const ADDRESS_FROM_CHECKOUT = "the address they typed at payment checkout (no sign-in address on the account)";
+export { CONTACT_FROM_GITHUB, CONTACT_FROM_GOOGLE } from "./customerAccounts.js";
 export const NAME_FROM_APPLICATION = "the first name they typed on their tester application (joined by the code they redeemed)";
 export const NAME_FROM_GOOGLE = "the name on their Google sign-in";
 
@@ -60,6 +61,9 @@ export function signinNameFromDisplay(displayName: string | null | undefined, em
 
 /** The address a mail to this account goes to and where it came from: the sign-in address first. */
 export function accountAddress(account: CustomerAccount): { address: string; from: string } | null {
+  // E7-S40: the person's one kept address (their Google sign-in) first.
+  const contact = account.contact_email?.trim() ?? "";
+  if (EMAIL.test(contact)) return { address: contact, from: account.contact_email_from?.trim() || CONTACT_FROM_SIGNIN };
   const signin = account.github_email?.trim() ?? "";
   if (EMAIL.test(signin)) return { address: signin, from: ADDRESS_FROM_SIGNIN };
   const checkout = account.stripe_email?.trim() ?? "";
@@ -100,6 +104,8 @@ export function personFacts(account: CustomerAccount, applicationName: string | 
   const address = accountAddress(account);
   const missing: string[] = [];
   if (!address) missing.push("address: the account has no sign-in or checkout address");
+  // One address per person, the sign-in one: a checkout address alone is billing only, never written to.
+  else if (address.from === ADDRESS_FROM_CHECKOUT) missing.push("address: no sign-in address kept, only the one typed at payment checkout");
   const names: Array<{ name: string; from: string }> = [];
   if (applicationName?.trim()) names.push({ name: applicationName.trim(), from: NAME_FROM_APPLICATION });
   if (account.signin_name?.trim()) names.push({ name: account.signin_name.trim(), from: account.signin_name_from?.trim() || NAME_FROM_GOOGLE });
