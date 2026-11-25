@@ -81,6 +81,8 @@ export type TranscriptionFailureReason =
   | "duration_limit"
   | "disabled"
   | "not_configured"
+  /** EPIC-24 M41: our own code threw (a bug, not the provider); the message names the step. */
+  | "internal_error"
   | "unknown";
 
 export interface TranscriptionEnvelope {

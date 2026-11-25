@@ -123,18 +123,29 @@ function mimeFor(filename: string): string {
   )[ext] ?? "application/octet-stream";
 }
 
+/** EPIC-24 M41: the per-call time limit in whole milliseconds (base plus half a second per second of audio). */
+export function elevenLabsTimeoutMs(baseTimeoutMs: number, seconds: number | null | undefined): number {
+  const extra = Number.isFinite(seconds) ? Math.max(0, seconds as number) * 500 : 0;
+  return Math.max(1, Math.ceil(baseTimeoutMs + extra));
+}
+
 /** One ElevenLabs speech-to-text call. Never throws: every failure is an envelope with provider `elevenlabs`. */
 export async function transcribeWithElevenLabs(cfg: ElevenLabsSttConfig, call: ElevenLabsCall): Promise<TranscriptionEnvelope> {
-  const form = new FormData();
-  form.append("file", new Blob([call.data], { type: mimeFor(call.filename) }), call.filename || "audio");
-  form.append("model_id", cfg.model);
-  // Words only: no "(laughter)" or "(music)" tags in a memory.
-  form.append("tag_audio_events", "false");
-  if (call.language && call.language !== "auto") form.append("language_code", call.language);
-  const timeoutMs = cfg.baseTimeoutMs + Math.max(0, call.seconds ?? 0) * 500;
-  const timeout = AbortSignal.timeout(timeoutMs);
-  const signal = call.signal ? AbortSignal.any([call.signal, timeout]) : timeout;
+  // EPIC-24 M41: AbortSignal.timeout takes whole milliseconds only. A probed length is fractional (150.006 s), so
+  // `base + seconds * 500` was 195003.25 and threw a RangeError before any request, outside this function's try:
+  // every Phylax voice note failed with reason "unknown" and no provider from 25 Nov 14:47Z. Rounded up, and
+  // everything that can throw now sits inside the try, so this function keeps its promise never to throw.
+  const timeoutMs = elevenLabsTimeoutMs(cfg.baseTimeoutMs, call.seconds);
+  let timeout: AbortSignal | undefined;
   try {
+    const form = new FormData();
+    form.append("file", new Blob([call.data], { type: mimeFor(call.filename) }), call.filename || "audio");
+    form.append("model_id", cfg.model);
+    // Words only: no "(laughter)" or "(music)" tags in a memory.
+    form.append("tag_audio_events", "false");
+    if (call.language && call.language !== "auto") form.append("language_code", call.language);
+    timeout = AbortSignal.timeout(timeoutMs);
+    const signal = call.signal ? AbortSignal.any([call.signal, timeout]) : timeout;
     const response = await (call.fetchImpl ?? fetch)(cfg.url, {
       method: "POST",
       headers: { "xi-api-key": cfg.apiKey },
@@ -154,10 +165,20 @@ export async function transcribeWithElevenLabs(cfg: ElevenLabsSttConfig, call: E
     return { success: true, transcript: text, provider: `elevenlabs ${cfg.model}` };
   } catch (err) {
     if (call.signal?.aborted) return { success: false, provider: "elevenlabs", error: "transcription was cancelled", failureReason: "timeout" };
-    if (timeout.aborted) {
+    if (timeout?.aborted) {
       return { success: false, provider: "elevenlabs", error: `elevenlabs did not answer within ${Math.round(timeoutMs / 1000)} s`, failureReason: "timeout", providerCode: "timeout" };
     }
     const cause = (err as { cause?: { code?: unknown } })?.cause?.code;
+    if (!timeout) {
+      // Thrown while building the request (step "request"), before anything was sent.
+      return {
+        success: false,
+        provider: "elevenlabs",
+        error: `elevenlabs request could not be built: ${clean(`${(err as Error)?.name ?? "Error"}: ${(err as Error)?.message ?? String(err)}`)}`,
+        failureReason: "internal_error",
+        providerCode: "request_build",
+      };
+    }
     return {
       success: false,
       provider: "elevenlabs",

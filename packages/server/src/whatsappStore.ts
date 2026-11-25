@@ -382,6 +382,8 @@ export const MAX_TRANSCRIPTION_ATTEMPTS = TRANSCRIPTION_RETRY_DELAYS_MS.length +
 export const RETRYABLE_TRANSCRIPTION_FAILURES = [
   "timeout", "unavailable", "unknown", "provider_credit_exhausted", "provider_auth_failed", "provider_unavailable",
   "provider_rate_limited", "network_error",
+  // EPIC-24 M41: our own bug or an empty answer may pass on the next deploy or try; the audio is kept meanwhile.
+  "internal_error", "empty_transcript",
 ] as const;
 export function isRetryableTranscriptionFailure(reason: string | null | undefined): boolean {
   return (RETRYABLE_TRANSCRIPTION_FAILURES as readonly string[]).includes((reason ?? "").trim().toLowerCase());
@@ -1554,7 +1556,7 @@ export class WhatsAppStore {
     open: Record<string, number>;
     oldestOpenAt: number | null;
     longestOpenSeconds: number | null;
-    recent: Array<{ state: string; durationSeconds: number | null; attempts: number; reason: string | null; provider: string | null; updatedAt: number }>;
+    recent: Array<{ state: string; durationSeconds: number | null; attempts: number; reason: string | null; provider: string | null; code: string | null; updatedAt: number }>;
   } {
     const openRows = this.db.prepare(
       `SELECT job_state AS state, COUNT(*) AS n, MIN(created_at) AS oldest, MAX(duration_seconds) AS longest
@@ -1572,18 +1574,20 @@ export class WhatsAppStore {
     }
     const recent = (this.db.prepare(
       `SELECT job_state AS state, duration_seconds AS durationSeconds, attempts,
-         failure_reason AS reason, failure_provider AS provider, updated_at AS updatedAt
+         failure_reason AS reason, failure_provider AS provider, failure_provider_code AS code, updated_at AS updatedAt
        FROM whatsapp_voice_jobs
        WHERE updated_at >= ? AND (failure_reason IS NOT NULL OR job_state = 'failed')
        ORDER BY updated_at DESC
        LIMIT 10`,
-    ).all(now - recentMs) as Array<{ state: string; durationSeconds: number | null; attempts: number; reason: string | null; provider: string | null; updatedAt: number }>)
+    ).all(now - recentMs) as Array<{ state: string; durationSeconds: number | null; attempts: number; reason: string | null; provider: string | null; code: string | null; updatedAt: number }>)
       .map((row) => ({
         state: row.state,
         durationSeconds: row.durationSeconds === null ? null : Math.round(Number(row.durationSeconds)),
         attempts: Number(row.attempts),
         reason: row.reason,
         provider: row.provider,
+        // EPIC-24 M41: the provider's or our own code (RangeError, quota_exceeded, safety_deadline...): which step broke.
+        code: row.code ?? null,
         updatedAt: Number(row.updatedAt),
       }));
     return { open, oldestOpenAt, longestOpenSeconds, recent };

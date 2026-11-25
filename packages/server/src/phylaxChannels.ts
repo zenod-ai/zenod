@@ -1585,13 +1585,30 @@ export class PhylaxChannelsOrgan {
       });
     } catch (error) {
       if (signal.aborted) throw error;
+      if (controller.signal.aborted) {
+        return {
+          transcription_failed: {
+            code: "timeout",
+            reason: "timeout",
+            provider: "phylax",
+            provider_code: "safety_deadline",
+            message: `transcription exceeded the ${deadlineMs}ms safety deadline`,
+          },
+        };
+      }
+      // EPIC-24 M41: the transcriber threw (our own bug, not a provider's answer). Before, this was reason "unknown"
+      // with no provider, so neither the sender nor we could tell what broke (a RangeError in the ElevenLabs call,
+      // 25 Nov). Now it names the step, the error kind and where it threw; it stays retryable, so a fixed deploy
+      // picks the note up again.
+      const err = error instanceof Error ? error : new Error(String(error));
+      const where = /\bat (?:async )?([\w$.]+) /.exec(err.stack?.split("\n").slice(1).join("\n") ?? "")?.[1];
       return {
         transcription_failed: {
-          code: controller.signal.aborted ? "timeout" : "unavailable",
-          reason: controller.signal.aborted ? "timeout" : "unknown",
-          message: controller.signal.aborted
-            ? `transcription exceeded the ${deadlineMs}ms safety deadline`
-            : error instanceof Error ? error.message : "transcription failed",
+          code: "internal_error",
+          reason: "internal_error",
+          provider: "phylax",
+          provider_code: err.name || "Error",
+          message: `transcriber threw ${err.name || "Error"}${where ? ` in ${where}` : ""}: ${err.message}`.slice(0, 500),
         },
       };
     } finally {

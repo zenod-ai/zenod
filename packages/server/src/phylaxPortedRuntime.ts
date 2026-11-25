@@ -119,6 +119,10 @@ export function transcriptionFailureCode(reason: string | null | undefined): str
       return "ZT-OFF";
     case "not_configured":
       return "ZT-KEY";
+    case "internal_error":
+      return "ZT-BUG";
+    case "empty_transcript":
+      return "ZT-EMPTY";
     default:
       return "ZT-500";
   }
@@ -174,6 +178,8 @@ export function transcriptionFailureWords(failure: Pick<PhylaxTranscriptionFailu
     case "no_speech": return "no speech was found in it";
     case "disabled": return "voice transcription is turned off";
     case "not_configured": return "no transcription service is set up";
+    case "internal_error": return "a fault on our side stopped the transcription";
+    case "empty_transcript": return "the transcription came back empty";
     default: return "transcription was unavailable";
   }
 }
@@ -919,13 +925,15 @@ export class PhylaxPortedRuntime {
               usageSettled = true;
             }
             const failure: PhylaxTranscriptionFailure = transcription.transcription_failed ?? {
-              code: "unavailable",
-              reason: "unknown",
+              code: "empty_transcript",
+              reason: "empty_transcript",
               message: "transcription returned empty text",
+              provider: transcription.transcription_source ?? "phylax",
             };
+            // EPIC-24 M41: every failure names its provider (or "phylax" for our own step), never null.
             const detail: WhatsAppVoiceFailureDetail = {
               reason: failure.reason ?? failure.code,
-              provider: failure.provider ?? null,
+              provider: failure.provider ?? transcription.transcription_source ?? "phylax",
               httpStatus: failure.http_status ?? null,
               providerCode: failure.provider_code ?? null,
               message: failure.message,
@@ -942,6 +950,8 @@ export class PhylaxPortedRuntime {
                 attempt: job.attempts,
                 reason: detail.reason,
                 provider: detail.provider,
+                provider_code: detail.providerCode,
+                message: detail.message?.slice(0, 300) ?? null,
                 retry_in_min: Math.round(waitMs / 60_000),
               }));
               this.whatsappStore.queueVoiceFailureReply(
@@ -965,6 +975,8 @@ export class PhylaxPortedRuntime {
               attempts: job.attempts,
               reason: detail.reason,
               provider: detail.provider,
+              provider_code: detail.providerCode,
+              message: detail.message?.slice(0, 300) ?? null,
             }));
           }
           if (!this.whatsappStore.persistVoiceTranscript(

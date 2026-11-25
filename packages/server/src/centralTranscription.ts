@@ -250,7 +250,8 @@ export async function transcribeWithCentral(cfg: CentralSttConfig, call: Central
   form.append("model", call.model);
   form.append("response_format", "json");
   if (call.language && call.language !== "auto") form.append("language", call.language);
-  const timeout = AbortSignal.timeout(cfg.timeoutMs);
+  // EPIC-24 M41: whole milliseconds only (AbortSignal.timeout throws a RangeError on 1234.5).
+  const timeout = AbortSignal.timeout(Math.max(1, Math.ceil(cfg.timeoutMs)));
   try {
     const response = await (call.fetchImpl ?? fetch)(cfg.url, {
       method: "POST",
