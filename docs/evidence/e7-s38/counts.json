@@ -1,0 +1,257 @@
+{
+ "per": {
+  "2026-11-19": {
+   "briefing": 5,
+   "batch": 10,
+   "test": 8,
+   "reply": 1,
+   "zreply": 9
+  },
+  "2026-11-20": {
+   "briefing": 7,
+   "batch": 21,
+   "test": 2,
+   "zreply": 8
+  },
+  "2026-11-21": {
+   "briefing": 3,
+   "batch": 5,
+   "alarm": 1,
+   "reply": 1,
+   "zreply": 1
+  },
+  "2026-11-22": {
+   "briefing": 10,
+   "batch": 15,
+   "alarm": 3,
+   "zreply": 11
+  },
+  "2026-11-23": {
+   "alarm": 1,
+   "batch": 15,
+   "briefing": 9,
+   "zreply": 5
+  },
+  "2026-11-24": {
+   "batch": 12,
+   "briefing": 9,
+   "alarm": 1,
+   "reply": 2,
+   "zreply": 12
+  },
+  "2026-11-25": {
+   "batch": 17,
+   "briefing": 5,
+   "reply": 1,
+   "alarm": 1,
+   "zreply": 5
+  }
+ },
+ "kinds": [
+  [
+   "batch",
+   "key-result",
+   15
+  ],
+  [
+   "briefing",
+   "morning-picture",
+   15
+  ],
+  [
+   "batch",
+   "ready",
+   12
+  ],
+  [
+   "batch",
+   "vault-approval",
+   12
+  ],
+  [
+   "batch",
+   "new",
+   12
+  ],
+  [
+   "briefing",
+   "zenod-week",
+   8
+  ],
+  [
+   "briefing",
+   "zenod-week-messages",
+   8
+  ],
+  [
+   "briefing",
+   "report",
+   7
+  ],
+  [
+   "batch",
+   "tester",
+   7
+  ],
+  [
+   "batch",
+   "social-digest",
+   6
+  ],
+  [
+   "batch",
+   "stuck-posts",
+   6
+  ],
+  [
+   "batch",
+   "scorecard-airbnb",
+   6
+  ],
+  [
+   "batch",
+   "drift",
+   5
+  ],
+  [
+   "reply",
+   "reply",
+   5
+  ],
+  [
+   "briefing",
+   "morning",
+   5
+  ],
+  [
+   "test",
+   "morning-test-picture",
+   3
+  ],
+  [
+   "briefing",
+   "scorecard-briefing-zenod-live-am",
+   3
+  ],
+  [
+   "test",
+   "zenod-week-test-messages",
+   2
+  ],
+  [
+   "test",
+   "zenod-week-test",
+   2
+  ],
+  [
+   "test",
+   "test",
+   2
+  ],
+  [
+   "batch",
+   "posting-block",
+   2
+  ],
+  [
+   "alarm",
+   "vps3-disk",
+   2
+  ],
+  [
+   "briefing",
+   "scorecard-briefing-zenod-live-pm",
+   2
+  ],
+  [
+   "test",
+   "morning-test",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-1",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-2",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-3",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-4",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-5",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-6",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-7",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-8",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-9",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-10",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-objectives-offline-11",
+   1
+  ],
+  [
+   "alarm",
+   "github-token",
+   1
+  ],
+  [
+   "alarm",
+   "briefing-missed",
+   1
+  ],
+  [
+   "alarm",
+   "git-auth",
+   1
+  ],
+  [
+   "alarm",
+   "checkout-sync",
+   1
+  ],
+  [
+   "alarm",
+   "voice-send-undelivered",
+   1
+  ],
+  [
+   "batch",
+   "scorecard-wheels",
+   1
+  ]
+ ]
+}
