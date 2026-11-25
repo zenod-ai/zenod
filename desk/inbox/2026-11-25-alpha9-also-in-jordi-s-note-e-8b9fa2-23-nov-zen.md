@@ -2,7 +2,8 @@
 from: alpha9
 about: Also in Jordi's note ^e-8b9fa2 (23 Nov): Zenod's online reputation as the goal
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-25-zenod-re-also-in-jordi-s-note-e-8b9fa2-23-nov.md
 product-from: build an online repetition for Z naught. That's the goal. (^e-8b9fa2; Z naught is the transcript's spelling of Zenod)
 ---
 Jordi's 2-hour WhatsApp voice note of 23 Nov 15:25Z (Log/2026-11-24.md#^e-8b9fa2 in his vault). Alignment (agent_team E42-S61) checked all its 38 points on 25 Nov on his ask (^e-64c39b: "check was there activity around all the points or is there anything missing?"). These parts are yours and have no row yet:
