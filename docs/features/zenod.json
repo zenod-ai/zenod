@@ -383,6 +383,16 @@
      ],
      "since": "2026-11-12",
      "draft": true
+    },
+    {
+     "id": "vision-tab",
+     "title": "Why Zenod exists, in eight chapters",
+     "text": "zenod.dev/vision tells why your memory should be yours and how your context compounds, one short chapter per screen, each marked as live today or as where we are going.",
+     "rows": [
+      "E25-S5"
+     ],
+     "since": "2026-11-25",
+     "draft": true
     }
    ]
   }
