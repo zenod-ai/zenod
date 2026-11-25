@@ -1,0 +1,143 @@
+/* zenod.dev/vision (E25-S5): eight frames, one idea each. Paper: one ink, one deep green, flat stages.
+   Each chapter is about one screen: the picture, then number and tag, headline, subtitle, takeaway. */
+.pp-vision {
+  --vz-line: #c9c1ae;
+  --vz-faint: #8d948c;
+  --vz-soft: #cfe0d4;
+}
+
+/* Opening frame: the claim on the left, the chapters as one line down the right. */
+.vz-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+  max-width: var(--pp-max);
+  margin: 0 auto;
+  min-height: calc(100svh - 4.5rem);
+  padding: clamp(1.5rem, 4vw, 3rem) var(--pp-edge);
+}
+.pp .vz-kicker { font: 500 0.95rem var(--pp-sans); color: var(--pp-accent); letter-spacing: 0.02em; margin: 0 0 1rem; }
+.pp-vision h1 { font: 400 clamp(2.5rem, 5vw, 4.8rem)/1.02 var(--pp-serif); letter-spacing: -0.03em; margin: 0 0 1.5rem; }
+.pp .vz-sub { font: 400 clamp(1.15rem, 1.6vw, 1.35rem)/1.5 var(--pp-serif); color: var(--pp-ink); margin: 0 0 1.5rem; max-width: 34rem; }
+.vz-toc { list-style: none; margin: 0; padding: 0; border-left: 1.5px solid var(--pp-ink); }
+.vz-toc a { display: grid; grid-template-columns: 2.25rem 1fr; column-gap: 0.75rem; padding: 0.6rem 0 0.6rem 1.1rem; text-decoration: none; position: relative; }
+.vz-toc a::before { content: ""; position: absolute; left: -0.36rem; top: 1.05rem; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--pp-bg); border: 1.5px solid var(--pp-ink); }
+.vz-toc a:hover .vz-toc-h { color: var(--pp-accent); }
+.vz-toc-no { font: 500 0.85rem/1.9 var(--pp-sans); color: var(--vz-faint); grid-row: span 2; }
+.vz-toc-h { font: 400 1.08rem/1.35 var(--pp-serif); transition: color 0.15s; }
+.vz-toc .vz-kind { justify-self: start; margin-top: 0.2rem; }
+
+/* Tags: what is live, what is the argument, what is the vision. */
+.vz-kind { display: inline-block; font: 500 0.78rem/1.2 var(--pp-sans); letter-spacing: 0.02em; padding: 0.18rem 0.55rem; border-radius: 999px; border: 1px solid; }
+.vz-kind-why { color: var(--pp-muted); border-color: var(--vz-line); }
+.vz-kind-live { color: #8a4b1c; border-color: #8a4b1c; }
+.vz-kind-vision { color: var(--pp-accent); border-color: var(--pp-accent); }
+
+/* A chapter: about one screen. */
+.vz-ch { border-top: 1px solid var(--vz-line); scroll-margin-top: 4.5rem; }
+.vz-ch-in {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+  max-width: var(--pp-max);
+  margin: 0 auto;
+  min-height: min(100svh, 52rem);
+  padding: clamp(2.5rem, 6vw, 4.5rem) var(--pp-edge);
+  box-sizing: border-box;
+}
+.vz-ch:nth-of-type(even) .vz-ch-in { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.vz-ch:nth-of-type(even) .vz-pic { order: 2; }
+.vz-pic { margin: 0; background: var(--pp-stage); border-radius: 6px; padding: clamp(0.75rem, 2.5vw, 2rem); }
+.pp .vz-meta { display: flex; align-items: center; gap: 0.75rem; margin: 0 0 1rem; }
+.vz-no { font: 500 0.9rem var(--pp-sans); color: var(--vz-faint); letter-spacing: 0.04em; }
+.pp-vision h2 { font: 400 clamp(2rem, 3.6vw, 3.25rem)/1.05 var(--pp-serif); letter-spacing: -0.025em; margin: 0 0 1.1rem; }
+.pp .vz-take { font: 500 clamp(1.02rem, 1.3vw, 1.15rem)/1.45 var(--pp-sans); color: var(--pp-accent); margin: 0; padding: 0.9rem 0 0; border-top: 1.5px solid var(--pp-accent); max-width: 30rem; }
+
+/* Pictures. SVG scenes share one viewBox; text sizes are in its units. */
+.vz-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--pp-sans); }
+.vz-win, .vz-box, .vz-pill, .vz-file, .vz-input { fill: var(--pp-bg); stroke: var(--pp-ink); stroke-width: 1.5; }
+.vz-input { stroke: var(--vz-line); }
+.vz-hair { stroke: var(--vz-line); stroke-width: 1.5; }
+.vz-chip { fill: var(--vz-soft); stroke: none; }
+.vz-t-sm { font: 500 19px var(--pp-sans); fill: var(--pp-ink); }
+.vz-t-xs { font: 500 14px var(--pp-sans); fill: var(--pp-muted); }
+.vz-t-faint { font: 400 18px var(--pp-sans); fill: var(--pp-muted); }
+.vz-t-serif { font: 400 26px var(--pp-serif); fill: var(--pp-ink); }
+.vz-t-hub { font: 500 24px var(--pp-serif); fill: var(--pp-accent-ink); }
+.vz-t-muted { fill: var(--pp-muted); }
+.vz-t-accent { fill: var(--pp-accent); }
+.vz-stair { fill: none; stroke: var(--pp-ink); stroke-width: 2; stroke-linejoin: round; }
+.vz-dot { fill: var(--pp-bg); stroke: var(--pp-ink); stroke-width: 1.6; }
+.vz-dot-new { fill: var(--pp-accent); stroke: var(--pp-accent); }
+.vz-link { fill: none; stroke: var(--pp-ink); stroke-width: 1.2; opacity: 0.35; }
+.vz-link-new { stroke: var(--pp-accent); opacity: 0.85; }
+.vz-lock { fill: none; stroke: var(--pp-ink); stroke-width: 6; stroke-linecap: round; }
+.vz-lock-body { fill: var(--pp-ink); }
+.vz-folder { fill: var(--vz-soft); stroke: var(--pp-accent); stroke-width: 1.6; stroke-linejoin: round; }
+.vz-spoke { stroke: var(--pp-ink); stroke-width: 1.4; stroke-dasharray: 4 5; opacity: 0.6; }
+.vz-hub { fill: var(--pp-accent); }
+.vz-ring { fill: none; stroke: var(--pp-ink); stroke-width: 1.4; opacity: 0.45; }
+.vz-ring-new { stroke: var(--pp-accent); opacity: 1; stroke-width: 2; }
+.pp .scene.js svg .st:not(.go) { transform: none; }
+.pp .scene.js .vz-model.st:not(.go) { transform: translateX(-24px); }
+.pp .scene.js.fade .st { opacity: 0; transition: opacity 0.5s ease; }
+
+/* HTML scenes: the folder list, the voice note, the helper. */
+.vz-stage { font-family: var(--pp-sans); color: var(--pp-ink); min-height: 15rem; display: flex; flex-direction: column; justify-content: center; gap: 0.75rem; }
+.pp .vz-stage p { margin: 0; }
+.vz-files { background: var(--pp-bg); border-radius: 4px; padding: 1rem 1.15rem; }
+.pp .vz-files-h { font: 500 1.1rem var(--pp-serif); padding-bottom: 0.5rem; border-bottom: 1.5px solid var(--pp-ink); }
+.vz-files ul { list-style: none; margin: 0; padding: 0; }
+.vz-files li { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.55rem 0; border-bottom: 1px solid var(--vz-line); font: 400 0.98rem/1.3 var(--pp-sans); }
+.vz-files b { font-weight: 500; }
+.vz-files small { margin-left: auto; color: var(--pp-muted); font-size: 0.82rem; white-space: nowrap; }
+.vz-doc { width: 0.75rem; height: 0.95rem; border: 1.5px solid var(--pp-ink); border-radius: 2px; flex: none; align-self: center; }
+.pp .vz-seal { align-self: flex-start; font: 600 0.85rem var(--pp-sans); color: var(--pp-accent); border: 1.5px solid var(--pp-accent); border-radius: 999px; padding: 0.25rem 0.8rem; }
+
+.vz-voice { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.2fr); align-items: center; gap: 1rem; }
+.vz-phone { background: #efeae2; border: 1.5px solid var(--pp-ink); border-radius: 18px; padding: 1.4rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.pp .vz-bubble { align-self: flex-end; display: flex; align-items: center; gap: 0.45rem; background: #d9fdd3; border-radius: 8px; padding: 0.5rem 0.65rem; font: 500 0.85rem var(--pp-sans); width: 88%; box-sizing: border-box; }
+.pp .vz-reply { align-self: flex-start; background: #fff; border-radius: 8px; padding: 0.35rem 0.7rem; font: 400 0.9rem var(--pp-sans); }
+.vz-play { width: 0; height: 0; border-left: 0.55rem solid #54656f; border-top: 0.35rem solid transparent; border-bottom: 0.35rem solid transparent; flex: none; }
+.vz-wave { display: flex; align-items: center; gap: 2px; height: 1.1rem; flex: 1; }
+.vz-wave i { width: 2px; border-radius: 2px; background: #6d8c7c; }
+.vz-arrow { width: 2.2rem; height: 1.5px; background: var(--pp-ink); position: relative; }
+.vz-arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 8px solid var(--pp-ink); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+.vz-page { background: var(--pp-bg); border-radius: 4px; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; font: 400 1rem/1.4 var(--pp-serif); }
+.pp .vz-page-h { font: 500 0.85rem var(--pp-sans); color: var(--pp-muted); border-bottom: 1px solid var(--vz-line); padding-bottom: 0.4rem; }
+.pp .vz-page-link { font: 500 0.85rem var(--pp-sans); color: var(--pp-accent); }
+
+.vz-helpers { max-width: 30rem; margin: 0 auto; width: 100%; }
+.pp .vz-helper { display: flex; flex-direction: column; gap: 0.3rem; background: var(--pp-bg); border-radius: 4px; padding: 0.8rem 1rem; font: 400 0.95rem var(--pp-sans); color: var(--pp-muted); min-height: 3.4rem; }
+.vz-helper b { font-weight: 500; color: var(--pp-ink); }
+.vz-suggest { background: var(--pp-bg); border-radius: 4px; padding: 1rem; box-shadow: inset 0 0 0 1px var(--pp-accent); display: flex; flex-direction: column; gap: 0.8rem; }
+.pp .vz-suggest p:first-child { font: 400 1.1rem/1.4 var(--pp-serif); }
+.vz-suggest-do { display: flex; gap: 0.5rem; }
+.vz-btn-mini { font: 500 0.85rem var(--pp-sans); padding: 0.35rem 0.85rem; border-radius: 999px; border: 1.5px solid var(--pp-ink); }
+.vz-btn-mini-on { background: var(--pp-accent); border-color: var(--pp-accent); color: var(--pp-accent-ink); }
+
+/* The close: the one frame the green fills. */
+.vz-close { background: var(--pp-accent); color: var(--pp-accent-ink); padding: clamp(4rem, 10vw, 8rem) var(--pp-edge); text-align: center; }
+.vz-close h2 { color: var(--pp-accent-ink); }
+.pp .vz-close .vz-sub { color: var(--vz-soft); margin: 0 auto 2rem; }
+.vz-close .pp-actions { justify-content: center; }
+.pp .vz-close .pp-btn { border-color: var(--pp-accent-ink); color: var(--pp-accent-ink); }
+.pp .vz-close .pp-btn-primary { background: var(--pp-accent-ink); color: var(--pp-accent); }
+.pp .vz-close .pp-btn:hover { background: var(--pp-accent-ink); color: var(--pp-accent); }
+
+/* Phone: picture on top, then the three beats; each chapter still about one screen. */
+@media (max-width: 860px) {
+  .vz-hero, .vz-ch-in, .vz-ch:nth-of-type(even) .vz-ch-in { grid-template-columns: minmax(0, 1fr); }
+  .vz-hero { min-height: 0; gap: 2rem; padding-top: 2rem; padding-bottom: 3rem; }
+  .vz-ch:nth-of-type(even) .vz-pic { order: 0; }
+  .vz-ch-in { min-height: 0; gap: 1.5rem; padding-top: 2.5rem; padding-bottom: 3rem; }
+  .pp-vision h2 { font-size: clamp(1.75rem, 7vw, 2.2rem); }
+  .pp .vz-sub { font-size: 1.08rem; }
+  .vz-stage { min-height: 0; }
+  .vz-voice { grid-template-columns: minmax(0, 1fr); }
+  .vz-arrow { width: 1.5px; height: 1.4rem; justify-self: center; }
+  .vz-arrow::after { right: -4px; top: auto; bottom: -1px; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-top: 8px solid var(--pp-ink); border-bottom: 0; }
+  .vz-files small { display: none; }
+}

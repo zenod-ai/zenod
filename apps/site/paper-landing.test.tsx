@@ -151,7 +151,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(app).toContain("window.location.assign(signInPath)");
     expect(app).toContain("window.location.assign(await createHostedCheckout(tier))");
     const hrefs = [...ready.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/testers$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
+    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/testers$|\/vision$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
   });
 
   it("opens the testers program on /testers with the apply form, and links it from home (ZAL-A13)", () => {

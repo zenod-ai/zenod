@@ -25,6 +25,7 @@ describe("site and dashboard routing", () => {
       writeFile(join(siteDist, "assets", "site.js"), "site asset"),
       writeFile(join(siteDist, "connect.html"), "<html>Connect Zenod</html>"),
       writeFile(join(siteDist, "start.html"), "<html>Start with Zenod</html>"),
+      writeFile(join(siteDist, "vision.html"), "<html>Why Zenod exists</html>"),
       writeFile(join(siteDist, "start", "zenod-start.mp4"), "0123456789"),
       writeFile(join(siteDist, "brand", "zenod-icon.svg"), "<svg>Z</svg>"),
       writeFile(join(siteDist, "robots.txt"), "Sitemap: https://zenod.dev/sitemap.xml\n"),
@@ -51,6 +52,11 @@ describe("site and dashboard routing", () => {
     await expect((await app.request("https://zenod.dev/connect")).text()).resolves.toContain("Connect Zenod");
     await expect((await app.request("https://zenod.dev/brand/zenod-icon.svg")).text()).resolves.toBe("<svg>Z</svg>");
     expect((await app.request("https://cloud.zenod.dev/connect")).status).toBe(404);
+  });
+
+  it("serves the Vision tab on the public host only (E25-S5)", async () => {
+    await expect((await app.request("https://zenod.dev/vision")).text()).resolves.toContain("Why Zenod exists");
+    expect((await app.request("https://cloud.zenod.dev/vision")).status).toBe(404);
   });
 
   it("serves the tester start page and its video on the public host only, with range support", async () => {

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Footer, Nav, PaperLanding } from "@/components/paper-landing";
 import { TestersPage } from "@/components/testers-page";
 import { StartPage } from "@/components/start-page";
+import { VisionPage } from "@/components/vision-page";
 import { ConnectPage } from "@/components/connect-page";
 import { NotFoundPage } from "@/components/not-found-page";
 import {
@@ -346,6 +347,13 @@ function SiteApp() {
       <TestersPage
         // EPIC-7 T13: a phone visitor from a post sees the apply step first, never the €9 pricing.
         nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" menu getStartedHref="#apply" getStartedLabel="Apply" />}
+        footer={<Footer />}
+      />
+    );
+  if (path === "/vision")
+    return (
+      <VisionPage
+        nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" menu getStartedHref="/testers" getStartedLabel="Become a tester" />}
         footer={<Footer />}
       />
     );
