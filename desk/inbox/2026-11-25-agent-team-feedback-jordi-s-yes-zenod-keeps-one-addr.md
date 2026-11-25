@@ -2,8 +2,10 @@
 from: agent_team
 about: Jordi's yes: Zenod keeps one address and the Google name per tester
 reply-to: agent_team
-status: open
+status: answered
+answered: agent_team:desk/inbox/2026-11-25-zenod-re-jordi-s-yes-zenod-keeps-one-address.md
 kind: product-feedback
+row: E7-S40
 source: his choice on the E105-S305 review card, 2026-11-25
 ---
 His words: "Yes: Zenod fixes sign-up next"
