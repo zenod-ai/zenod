@@ -1,46 +1,47 @@
 {
   "row": "E25-S5",
   "card": "docs/cards/E25-S5.md",
-  "cardSha": "74637364ae065c3d",
+  "cardSha": "d89a9ebc165e6e2c",
   "inputs": {
-    "card": "74637364ae065c3d",
+    "card": "d89a9ebc165e6e2c",
     "page": "6daeb2cf6ca7afb0",
     "rules": "c1a7854c21d10fb4",
     "words": "251fad56e474dbb2"
   },
-  "checkedAt": "2026-11-25T20:31:10Z",
+  "checkedAt": "2026-11-25T20:36:19Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "each of the products that we're building should have a vision tab in the landing page ... For Zeno, for example, I think we're not so good at telling the bigger picture of you want to own it, like the importance of your context compounding ... It should be like slides, more like mini chapters ... a headline, a subtitle and a takeaway",
       "where": "WhatsApp 25 Nov 14:34Z",
       "status": "met",
-      "how": "Vision page shows eight chapters as slides, each with a number, headline, subtitle and takeaway line, tagged why it matters, live today or the vision."
+      "how": "Vision page shows eight slide-like chapters on owning memory and context compounding, each with headline, subtitle and takeaway; chapter 02 is Context compounds."
     },
     {
       "said": "each of the products ... should have a vision tab",
       "where": "2026-11-25",
       "status": "met",
-      "how": "Card says the Vision tab is live on zenod.dev and the source quotes his request that each product have one."
+      "how": "Card says the Vision tab is live on zenod.dev and quotes his request that each product have one. Only Zenod is shown; the last check accepted this."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both pages load at 390 and 1280 px with no sideways scroll; chapters are clean and consistent, with one accent and grey secondary text, and the card's delivered lines match the page."
+    "summary": "Both screens show a clean eight-chapter slide sequence with pictures, headlines, subtitles and takeaways; the main faults are a prose intro under the h1 and a brown tag colour beside the green accent."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the new Vision tab at zenod.dev, with eight one-screen chapters, tells Zenod's bigger picture the way he pitches it.",
-    "ambiguous": ""
+    "asked": "Does the Vision page at zenod.dev/vision tell Zenod's bigger picture the way you pitch it, so the card can be marked reviewed?",
+    "ambiguous": "",
+    "note": "The source quotes \"each of the products ... should have a vision tab\", but the card delivers a Vision page for Zenod only. A reader could take it as all products now being covered, or as only Zenod being covered and the rest left for later. The decision question is about Zenod, so the answer stays the same."
   },
   "clicks": {
     "dead": null,
     "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
     "page": "6daeb2cf6ca7afb0",
-    "walkedAt": "2026-11-25T20:31:10Z",
+    "walkedAt": "2026-11-25T20:36:19Z",
     "steps": [
       {
         "n": 1,
