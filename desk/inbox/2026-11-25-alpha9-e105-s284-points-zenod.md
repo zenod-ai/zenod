@@ -2,7 +2,8 @@
 from: alpha9
 about: Also in Jordi's voice notes of 23 to 25 Nov: 1 points for zenod with no row yet
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-25-zenod-re-also-in-jordi-s-voice-notes-of-23-to.md
 ---
 Points of Jordi's voice notes that had no row in your world (agent_team E105-S284 read every point of his last 48 h of notes). Each: his words, then the point and the home we suggest. Please give each a row on his words or put them on the row named.
 
