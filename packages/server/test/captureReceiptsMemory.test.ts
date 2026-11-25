@@ -49,6 +49,30 @@ const entry = (evidenceRef: string, extra: Partial<MemoryEntry> = {}): MemoryEnt
   source: "mcp", verbatim: false, capturedAt: "2026-11-01T10:00:00.000Z", url: "", provider: "github", ...extra,
 });
 
+describe("a voice note label holds from either side (EPIC-24 M43)", () => {
+  const media = (id: string, ref: string, contentType: string) => ({
+    id, kind: "media_ingest" as const, input: { mediaType: "audio", contentType, sourceHint: "WhatsApp audio", sourceId: id },
+    result: { status: "done", digest: { evidenceRef: ref } },
+  });
+  it("finds a note relabelled voice_note in the Log while its receipt still says audio", async () => {
+    const jobs = await store();
+    insert(jobs, [media("relabelled", "Log/2026-11-24.md#^e-31a581", "audio"), media("repaired", "Log/2026-09-03.md#^e-cb79fa", "voice_note"),
+      media("plain", "Log/2026-11-06.md#^e-aaaaaa", "audio")]);
+    const vault = [
+      entry("Log/2026-11-24.md#^e-31a581", { source: "whatsapp", contentType: "voice_note" }),
+      entry("Log/2026-09-03.md#^e-cb79fa", { source: "whatsapp", contentType: "audio" }),
+      entry("Log/2026-11-06.md#^e-aaaaaa", { source: "whatsapp", contentType: "audio" }),
+    ];
+    const merged = mergeMemoryEntries(vault, jobs.recent(Number.MAX_SAFE_INTEGER));
+    const typeOf = (ref: string) => merged.find((candidate) => candidate.evidenceRef === ref)?.contentType;
+    expect(typeOf("Log/2026-11-24.md#^e-31a581")).toBe("voice_note");
+    expect(typeOf("Log/2026-09-03.md#^e-cb79fa")).toBe("voice_note");
+    expect(typeOf("Log/2026-11-06.md#^e-aaaaaa")).toBe("audio");
+    const { jobs: lean, loadContent } = captureReceiptsFor(jobs);
+    expect(mergeMemoryEntries(vault, lean, loadContent)).toEqual(merged);
+  });
+});
+
 describe("capture receipts stay lean (EPIC-24 M15)", () => {
   it("merges to exactly the entries the full job history gave", async () => {
     const jobs = await store();
