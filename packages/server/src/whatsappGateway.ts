@@ -223,6 +223,33 @@ function normalizedJid(value: unknown): string {
   return String(value).replace(/:.*@/, "@");
 }
 
+/**
+ * EPIC-24 M43: WhatsApp records every voice note as ogg/opus. Some sends arrive
+ * without the `ptt` flag (three of the owner's own voice notes, 24 and 25 Nov
+ * 2026, were filed as plain audio and missed by voice-note search), so an
+ * ogg/opus audio is a voice note too. An audio file shared as such (mp3, m4a,
+ * wav, aac) stays plain audio.
+ */
+export function isWhatsAppVoiceCodec(mimeType: string | null | undefined): boolean {
+  const value = (mimeType ?? "").trim().toLowerCase();
+  return value.startsWith("audio/ogg") || value.startsWith("audio/opus") || /codecs\s*=\s*"?opus/.test(value);
+}
+
+/**
+ * EPIC-24 M43: one answer, first try or retry, to "is this WhatsApp audio a
+ * voice note?": true for `ptt`, and for a stored `audio` row in the voice-note
+ * codec (rows saved before M43 kept the provider flag only); undefined when the
+ * message is not audio at all.
+ */
+export function whatsAppAudioIsVoiceNote(
+  mediaType: string | null | undefined,
+  mimeType: string | null | undefined,
+): boolean | undefined {
+  if (mediaType === "ptt") return true;
+  if (mediaType === "audio") return isWhatsAppVoiceCodec(mimeType);
+  return undefined;
+}
+
 function contentFromMessage(message: WAMessage): Record<string, unknown> {
   const root = (message.message ?? {}) as Record<string, unknown>;
   const ephemeral = root.ephemeralMessage as { message?: Record<string, unknown> } | undefined;
@@ -307,7 +334,7 @@ function extractBodyAndMedia(content: Record<string, unknown>): Omit<
     return {
       body: "",
       hasMedia: true,
-      mediaType: audio.ptt ? "ptt" : "audio",
+      mediaType: audio.ptt || isWhatsAppVoiceCodec(audio.mimetype) ? "ptt" : "audio",
       mimeType: audio.mimetype ?? null,
       fileName: null,
       mediaRaw: audio,

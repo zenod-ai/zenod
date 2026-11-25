@@ -14,7 +14,7 @@ import { readFile } from "node:fs/promises";
 import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod/state/sqlite";
 import { Settings } from "./settings.js";
-import { WhatsAppGateway, defaultSocketFactory, type SocketFactory } from "./whatsappGateway.js";
+import { WhatsAppGateway, defaultSocketFactory, whatsAppAudioIsVoiceNote, type SocketFactory } from "./whatsappGateway.js";
 import { WhatsAppSessionError, WhatsAppSessionPool } from "./whatsappSessions.js";
 import {
   CAPTURE_NOT_SAVED_REPLY,
@@ -540,7 +540,7 @@ export class PhylaxPortedRuntime {
           ...(media ? { media: {
             ...media,
             ...(event.mediaType === "ptt" || event.mediaType === "audio"
-              ? { isVoiceNote: event.mediaType === "ptt" }
+              ? { isVoiceNote: whatsAppAudioIsVoiceNote(event.mediaType, media.mimeType ?? event.mimeType) }
               : {}),
           } } : {}),
           ...(transcription
@@ -1010,7 +1010,7 @@ export class PhylaxPortedRuntime {
           senderTimestamp: source?.senderTimestamp,
           ...(source?.toNumber ? { toNumber: source.toNumber } : {}),
           ...(source?.mediaType === "ptt" || source?.mediaType === "audio"
-            ? { isVoiceNote: source.mediaType === "ptt" }
+            ? { isVoiceNote: whatsAppAudioIsVoiceNote(source.mediaType, job.mimeType) }
             : {}),
           tenantId: job.tenantId,
           sender: job.senderId,

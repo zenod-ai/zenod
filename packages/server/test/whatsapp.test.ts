@@ -28,6 +28,7 @@ import {
 import {
   WhatsAppGateway,
   eventFromBaileysMessage,
+  whatsAppAudioIsVoiceNote,
   installBaileysSessionLogRedaction,
   whatsappNativeTransportConfig,
   type SocketLike,
@@ -248,9 +249,28 @@ describe("WhatsApp helpers", () => {
 
   it.each([true, false, undefined])("distinguishes voice notes using the provider PTT flag %s", (ptt) => {
     const event = eventFromBaileysMessage(textMessage({
-      message: { audioMessage: { mimetype: "audio/ogg", ...(ptt === undefined ? {} : { ptt }) } },
+      message: { audioMessage: { mimetype: "audio/mpeg", ...(ptt === undefined ? {} : { ptt }) } },
     }));
     expect(event?.mediaType).toBe(ptt === true ? "ptt" : "audio");
+  });
+
+  // EPIC-24 M43: three of the owner's own voice notes (24-25 Nov 2026) arrived as
+  // ogg/opus without the ptt flag and were filed as plain audio.
+  it.each([false, undefined])("files an ogg/opus WhatsApp audio without the PTT flag (%s) as a voice note", (ptt) => {
+    const event = eventFromBaileysMessage(textMessage({
+      message: { audioMessage: { mimetype: "audio/ogg; codecs=opus", ...(ptt === undefined ? {} : { ptt }) } },
+    }));
+    expect(event?.mediaType).toBe("ptt");
+  });
+
+  it("answers voice note or audio the same way for a fresh event and a stored row", () => {
+    expect(whatsAppAudioIsVoiceNote("ptt", "audio/mpeg")).toBe(true);
+    expect(whatsAppAudioIsVoiceNote("audio", "audio/ogg; codecs=opus")).toBe(true);
+    expect(whatsAppAudioIsVoiceNote("audio", "audio/ogg")).toBe(true);
+    expect(whatsAppAudioIsVoiceNote("audio", "audio/mpeg")).toBe(false);
+    expect(whatsAppAudioIsVoiceNote("audio", "audio/mp4")).toBe(false);
+    expect(whatsAppAudioIsVoiceNote("audio", null)).toBe(false);
+    expect(whatsAppAudioIsVoiceNote("image", "image/jpeg")).toBeUndefined();
   });
 
   it("extracts quoted provider message IDs structurally from text and voice context", () => {
