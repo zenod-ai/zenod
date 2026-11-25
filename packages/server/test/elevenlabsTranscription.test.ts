@@ -7,7 +7,9 @@ import {
   ELEVENLABS_STT_DEFAULT_URL,
   elevenLabsFailureFromResponse,
   elevenLabsSttConfig,
+  elevenLabsTimeoutMs,
   estimateElevenLabsUsd,
+  transcribeWithElevenLabs,
   transcribeElevenLabsFirst,
   type ElevenLabsSttConfig,
 } from "../src/elevenlabsTranscription.js";
@@ -219,5 +221,51 @@ describe("EPIC-20 A10: a long note goes to ElevenLabs in parts", () => {
     });
     expect(split).not.toHaveBeenCalled();
     expect(result).toMatchObject({ success: true, transcript: "hello from eleven" });
+  });
+});
+
+describe("EPIC-24 M41: a note whose probed length is fractional", () => {
+  it("the time limit is whole milliseconds (AbortSignal.timeout throws a RangeError on 195003.25)", () => {
+    expect(elevenLabsTimeoutMs(120_000, 150.0065)).toBe(195_004);
+    expect(Number.isInteger(elevenLabsTimeoutMs(120_000, 2511.37))).toBe(true);
+    expect(elevenLabsTimeoutMs(120_000, null)).toBe(120_000);
+    expect(elevenLabsTimeoutMs(120_000, Number.NaN)).toBe(120_000);
+    expect(() => AbortSignal.timeout(elevenLabsTimeoutMs(120_000, 150.0065))).not.toThrow();
+  });
+
+  it("Jordi's 150 s note of 25 Nov (150.0065 s probed) is written by ElevenLabs instead of throwing", async () => {
+    switchOn();
+    const result = await transcribeAudio(Buffer.from("short-note"), "AC261B94.ogg", { durationSeconds: 150.0065 });
+    expect(result).toMatchObject({ success: true, transcript: "hello from eleven", provider: "elevenlabs scribe_v1" });
+    expect(seen).toHaveLength(1);
+  });
+
+  it("a single call never throws: a bad length or request comes back as a named ElevenLabs failure", async () => {
+    const result = await transcribeWithElevenLabs({ ...cfg(), baseTimeoutMs: Number.POSITIVE_INFINITY }, {
+      data: Buffer.from("x"),
+      filename: "x.ogg",
+      seconds: 10.5,
+    });
+    expect(result.success).toBe(false);
+    expect(result.provider).toBe("elevenlabs");
+    expect(result.failureReason).toBe("internal_error");
+    expect(result.providerCode).toBe("request_build");
+    expect(result.error).toContain("RangeError");
+    expect(seen).toHaveLength(0);
+  });
+
+  it("long-note parts with fractional lengths still go to ElevenLabs", async () => {
+    reply = () => ({ status: 200, json: { text: "part" } });
+    const parts = [Buffer.from("PART-1-abc"), Buffer.from("PART-2-abcdefg")].map((data, i) => ({ data, filename: `seg${i}.mp3` }));
+    const result = await transcribeElevenLabsFirst(cfg(), {
+      data: Buffer.from("long"),
+      filename: "long.ogg",
+      durationSeconds: 777.77,
+      chunkSeconds: 300,
+      split: async () => parts,
+      fallback: async () => ({ success: false, provider: "chain", error: "must not be used" }),
+    });
+    expect(result).toMatchObject({ success: true, transcript: "part part", provider: "elevenlabs scribe_v1" });
+    expect(seen).toHaveLength(2);
   });
 });

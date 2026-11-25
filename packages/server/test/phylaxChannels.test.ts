@@ -23,6 +23,7 @@ import type { PeerToolResult } from "../src/peerClient.js";
 import {
   PhylaxPortedRuntime,
   safeVoiceTranscriptionFailure,
+  transcriptionFailureWords,
   TRANSCRIPTION_FAILURE_NOTIFY_COOLDOWN_MS,
   TranscriptionFailureNotifier,
   type TranscriptionFailureEvent,
@@ -32,7 +33,7 @@ import {
   phylaxTranscriptionConfigurationError,
   phylaxTranscriptionOptions,
 } from "../src/phylaxUnit.js";
-import { WhatsAppStore, type WhatsAppInboundEvent } from "../src/whatsappStore.js";
+import { isRetryableTranscriptionFailure, WhatsAppStore, type WhatsAppInboundEvent } from "../src/whatsappStore.js";
 import { transcribeAudio } from "../src/transcribe.js";
 import { PhylaxUsagePausedError } from "../src/phylaxUsageMeter.js";
 
@@ -2808,6 +2809,53 @@ describe("PhylaxChannelsOrgan", () => {
     expect(store.voiceJob("timeout")).toMatchObject({ state: "failed", failureReason: "timeout" });
     // The note whose audio came back was picked up by a later tick.
     expect(store.voiceJob("gone")?.state).toBe("queued");
+    store.close();
+  });
+
+  it("EPIC-24 M41: a transcriber that throws names its step and provider, retries, and health shows the code", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-m41-"));
+    dirs.push(dataDir);
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
+      transcriber: {
+        async transcribe() {
+          // What the ElevenLabs call did on 25 Nov: AbortSignal.timeout(195003.25).
+          AbortSignal.timeout(195_003.25);
+          return { text_transcript: "never" };
+        },
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/${tenantId}/${artifactId}`,
+      async callDownstream() {
+        return { content: [{ type: "text", text: "ok" }] };
+      },
+    });
+    const receipt = await organ.transcribeStagedVoice(
+      { tenantId: "alpha", bytes: Buffer.from("ogg"), mimeType: "audio/ogg", fileName: "AC261B94.ogg", durationSeconds: 150 },
+      new AbortController().signal,
+    );
+    const failure = receipt.transcription_failed!;
+    expect(failure.reason).toBe("internal_error");
+    expect(failure.reason).not.toBe("unknown");
+    expect(failure.provider).toBe("phylax");
+    expect(failure.provider_code).toBe("RangeError");
+    expect(failure.message).toMatch(/^transcriber threw RangeError/);
+    expect(isRetryableTranscriptionFailure(failure.reason)).toBe(true);
+    expect(transcriptionFailureWords(failure)).toBe("a fault on our side stopped the transcription");
+
+    const store = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    store.createVoiceJob({
+      providerMessageId: "m41", tenantId: "alpha", conversationKey: "whatsapp:alpha", senderId: "alpha-sender", chatId: "alpha-chat",
+      artifactRef: "https://phylax.test/artifacts/alpha/m41.ogg", artifactPath: join(dataDir, "m41.ogg"),
+      artifactSha256: "m41".padEnd(64, "a"), mimeType: "audio/ogg", fileName: "m41.ogg", captionText: "",
+      durationSeconds: 150, state: "queued",
+    }, 1_000);
+    store.claimNextVoiceJob(null, 1_000);
+    store.queueVoiceFailureReply("m41", "warned", 1_000, {
+      reason: failure.reason!, provider: failure.provider!, providerCode: failure.provider_code!, message: failure.message,
+    });
+    expect(store.voiceJobHealth(2_000).recent[0]).toMatchObject({ reason: "internal_error", provider: "phylax", code: "RangeError" });
+    expect(store.requeueDueFailedTranscriptions(0, () => true, 1_000 + 5 * 60_000)).toEqual(["m41"]);
     store.close();
   });
 
