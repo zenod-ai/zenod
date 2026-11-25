@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // zenod.dev/vision (E25-S5). Jordi, WhatsApp voice note 25 Nov 2026 14:34Z
 // (obsidian-brain Log/2026-11-25.md#^e-3941fc): "each of the products that
 // we're building should have a vision tab in the landing page ... For Zeno, for
