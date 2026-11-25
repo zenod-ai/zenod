@@ -3,12 +3,12 @@ from: alpha9
 about: Improvement request: more than one WhatsApp number on one Zenod account, so each EpicTeam desk answers on its own (E60-S18)
 reply-to: AlfaBlok/agent_team
 status: answered
-answered: AlfaBlok/agent_team:desk/inbox/2026-11-24-zenod-re-improvement-request-more-than-one-wh-2.md
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-25-zenod-re-improvement-request-more-than-one-wh.md
 kind: improvement-request
 ask: E60-A2
 unblocks: agent_team E60-S18 (each desk answers on its own WhatsApp number)
 approved: Log/2026-11-24.md#^e-122de2: "The customer is going to get a one WhatsApp for Epic Social and more WhatsApp for Epic Team"; Yes on E60-A2 24 Nov 16:13Z
-request: taken
+request: done
 row: A9
 ---
 Jordi, voice note 24 Nov 06:11Z (obsidian-brain Log/2026-11-24.md#^e-122de2): "I need like a separate WhatsApp rate, I guess, right? ... The customer is going to get a one WhatsApp for Epic Social and more WhatsApp for Epic Team". He then pressed yes on ask E60-A2 (agent_team, 24 Nov 16:13Z): route A, two new WhatsApp numbers on a spare dual-SIM phone, one for the EpicSocial desk (WhatsApp) and one for the EpicTeam desk (WhatsApp Business). Both link into Zenod the way a customer links theirs. The SIMs are not bought yet; his steps are ask E60-A3. What agent_team needs from Zenod, three parts:
