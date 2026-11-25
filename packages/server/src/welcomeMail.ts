@@ -12,6 +12,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mailerFromEnv, mailReady, type SendMail, type ZenodMail } from "./zenodMail.js";
+import type { MailFacts } from "./testerFacts.js";
 
 export const WELCOME_MAIL_FILE = "welcome-mail.json";
 const RETRY_MS = 10 * 60 * 1000;
@@ -96,6 +97,8 @@ export interface PendingMail {
   text: string;
   html: string;
   queuedAt: string;
+  /** E7-S40: where the address and the greeted name came from (gmail_send's facts); `missing` lists what is not sure. */
+  facts?: MailFacts;
 }
 
 export type MarkSentResult = "sent" | "already sent" | "dropped" | "unknown";
@@ -114,7 +117,7 @@ export interface WelcomeMailOptions {
   now?: () => Date;
   /** EPIC-26 S13: the same queue for another mail: its own file, words and log label. */
   file?: string;
-  compose?: (record: WelcomeRecord, id: string) => ZenodMail;
+  compose?: (record: WelcomeRecord, id: string) => ZenodMail & { facts?: MailFacts };
   label?: string;
   /**
    * E7-S10: while true for a record, it waits (left out of the queue and not sent) and is composed later; the caller
@@ -189,8 +192,8 @@ export class WelcomeMailer {
       if (record.sentAt || record.droppedAt || done.has(address)) continue;
       done.add(address);
       if (this.options.hold?.(record, id)) continue;
-      const mail = this.options.compose?.(record, id) ?? welcomeMail(record.email, this.options.appUrl);
-      out.push({ id, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html, queuedAt: record.queuedAt });
+      const mail: ZenodMail & { facts?: MailFacts } = this.options.compose?.(record, id) ?? welcomeMail(record.email, this.options.appUrl);
+      out.push({ id, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html, queuedAt: record.queuedAt, ...(mail.facts ? { facts: mail.facts } : {}) });
     }
     return out;
   }
@@ -273,8 +276,12 @@ export class WelcomeMailer {
     for (const [accountId, record] of Object.entries(this.read().accounts)) {
       if (record.sentAt || record.droppedAt || (record.tries ?? 0) >= MAX_TRIES) continue;
       if (this.options.hold?.(record, accountId)) continue;
+      const mail: ZenodMail & { facts?: MailFacts } = this.options.compose?.(record, accountId) ?? welcomeMail(record.email, this.options.appUrl);
+      // E7-S40: a mail whose address or name is missing or unsure waits; nothing is guessed.
+      if (mail.facts?.missing?.length) continue;
       try {
-        await send(this.options.compose?.(record, accountId) ?? welcomeMail(record.email, this.options.appUrl));
+        const { facts: _facts, ...plain } = mail;
+        await send(plain);
         this.update(accountId, { sentAt: this.now().toISOString(), lastError: "" });
         console.log(`[${this.options.label ?? "welcome"}] email sent`);
       } catch (error) {

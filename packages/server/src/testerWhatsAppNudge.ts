@@ -12,7 +12,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { join } from "node:path";
 import type { Context, Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
-import { greetingName } from "./testerOnboarding.js";
+import { mailFacts, type PersonFacts } from "./testerFacts.js";
+import { vaultState } from "./testerProgress.js";
+import type { CustomerAccount } from "./customerAccounts.js";
 import { maskAccount, readTesterSetups, type TesterSetupOptions } from "./testerWhatsAppSetup.js";
 import type { PendingMail } from "./welcomeMail.js";
 import type { ZenodMail } from "./zenodMail.js";
@@ -83,8 +85,10 @@ interface NudgeState {
 export interface TesterNudgeOptions extends TesterSetupOptions {
   dataDir: string;
   envMode: NudgeMode;
-  /** The first name they gave on their application, if any. */
-  firstName: (email: string) => string | null;
+  /** E7-S40: the address and name a mail to this account uses, with where each came from. */
+  facts: (account: CustomerAccount) => PersonFacts;
+  /** E7-S40: the step before WhatsApp, storage connected (tests inject; default: the account's vault state). */
+  vaultSet?: (account: CustomerAccount) => boolean;
   now?: () => Date;
 }
 
@@ -133,15 +137,22 @@ export class TesterWhatsAppNudge {
     const sentAddresses = new Set(Object.values(state.sent).map((r) => r.email.trim().toLowerCase()));
     const now = this.now().getTime();
     const out: NudgeMail[] = [];
-    for (const row of await readTesterSetups(this.options)) {
+    const vaultSet = this.options.vaultSet ?? ((account: CustomerAccount) => vaultState(account).set);
+    const rows = await readTesterSetups(this.options);
+    const stored = new Set(rows.filter((r) => r.email && vaultSet(r.account)).map((r) => r.email));
+    for (const row of rows) {
       const signed = Date.parse(row.account.claimed_at);
       const age = now - signed;
       if (row.step === "linked" || row.ourBug || !row.email || !EMAIL.test(row.email)) continue;
       if (!Number.isFinite(signed) || age < NUDGE_AFTER_MS || age >= NUDGE_UNTIL_MS) continue;
+      // E7-S40: the mail asks for WhatsApp, the step after storage; a tester whose storage is not connected (on any of
+      // their accounts) is still on the step before and does not get it (Vitor got it on 20 Nov with storage not done).
+      if (!vaultSet(row.account) && !stored.has(row.email)) continue;
       if (state.sent[row.account.account_id] || sentAddresses.has(row.email)) continue;
       sentAddresses.add(row.email);
-      const mail = testerWhatsAppNudgeMail(row.email, greetingName(this.options.firstName(row.email)));
-      out.push({ id: `${ID_PREFIX}${row.account.account_id}`, account: maskAccount(row.account), ...mail, queuedAt: new Date(signed + NUDGE_AFTER_MS).toISOString() });
+      const facts = this.options.facts(row.account);
+      const mail = testerWhatsAppNudgeMail(row.email, facts.name);
+      out.push({ id: `${ID_PREFIX}${row.account.account_id}`, account: maskAccount(row.account), ...mail, queuedAt: new Date(signed + NUDGE_AFTER_MS).toISOString(), facts: mailFacts(facts) });
     }
     return out;
   }

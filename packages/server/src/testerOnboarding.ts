@@ -17,6 +17,9 @@ import type { CustomerAccount } from "./customerAccounts.js";
 import { WelcomeMailer, type WelcomeRecord } from "./welcomeMail.js";
 import { mailReady, type SendMail, type ZenodMail } from "./zenodMail.js";
 import { testerFreeMemories } from "./testerFreeMemories.js";
+import { accountEmail, greetingName, mailFacts, type MailFacts, type PersonFacts } from "./testerFacts.js";
+
+export { accountEmail, greetingName };
 
 export const TESTER_ONBOARDING_FILE = "tester-onboarding.json";
 export const TESTER_THANKS_MAIL_FILE = "tester-thanks-mail.json";
@@ -35,12 +38,6 @@ export function parseOnboardingMode(value: unknown): TesterOnboardingMode | null
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
-}
-
-/** A first name worth greeting with: one plain word, else none ("Hi,"). */
-export function greetingName(name: string | null | undefined): string | null {
-  const first = (name ?? "").trim().split(/\s+/)[0] ?? "";
-  return /^[\p{L}][\p{L}'-]{1,29}$/u.test(first) ? first.charAt(0).toUpperCase() + first.slice(1) : null;
 }
 
 /**
@@ -135,8 +132,8 @@ export interface TesterOnboardingOptions {
   isTester: (account: CustomerAccount) => boolean;
   /** One of our own test accounts. */
   isTest: (account: CustomerAccount) => boolean;
-  /** The first name they gave on their application, if any. */
-  firstName: (email: string) => string | null;
+  /** E7-S40: the address and name a mail to this account uses, with where each came from. */
+  facts: (account: CustomerAccount) => PersonFacts;
   /** Phylax's WhatsApp state for the account ("verified" once linked), null when unknown. */
   whatsappState: (accountId: string) => Promise<string | null>;
   /** E7-S10: the tester's own voice feedback link (E7-S9), null while none is made; absent leaves the paragraph out. */
@@ -144,10 +141,6 @@ export interface TesterOnboardingOptions {
   /** Sends the welcome to an account whose WhatsApp is already linked (the test send). */
   sendWelcome: (account: CustomerAccount, operationId: string) => Promise<"sent" | "skipped" | "failed">;
   now?: () => Date;
-}
-
-export function accountEmail(account: CustomerAccount): string | null {
-  return account.stripe_email?.trim() || account.github_email?.trim() || null;
 }
 
 export class TesterOnboarding {
@@ -165,8 +158,18 @@ export class TesterOnboarding {
       sendMail: options.sendMail,
       file: TESTER_THANKS_MAIL_FILE,
       label: "tester-thanks",
-      compose: (record, accountId) =>
-        testerThanksMail(record.email, record.data?.first_name || null, testerFreeMemories(), this.feedbackLink(accountId)),
+      // E7-S40: composed from the account's facts at send time (the sign-in address, the joined name), not the
+      // address kept when it was queued; the facts ride with the mail for the sender and gmail_send.
+      compose: (record, accountId) => {
+        const account = options.account(accountId);
+        const facts = account ? options.facts(account) : null;
+        const to = facts?.address ?? record.email;
+        const mail = testerThanksMail(to, facts ? facts.name : record.data?.first_name || null, testerFreeMemories(), this.feedbackLink(accountId));
+        const carried: MailFacts = facts
+          ? mailFacts(facts)
+          : { address_from: "", missing: ["address: no account behind this queued mail"] };
+        return { ...mail, facts: carried };
+      },
       // E7-S10: no link yet, wait for the link timer (bounded), then send without the paragraph.
       hold: (record, accountId) =>
         Boolean(options.feedbackLink) && !this.feedbackLink(accountId)
@@ -239,10 +242,9 @@ export class TesterOnboarding {
   }
 
   private queueThanks(account: CustomerAccount): string {
-    const email = accountEmail(account);
-    if (!email) return "no email";
-    const first = greetingName(this.options.firstName(email));
-    return this.thanks.queue(account.account_id, email, first ? { first_name: first } : undefined);
+    const facts = this.options.facts(account);
+    if (!facts.address) return "no email";
+    return this.thanks.queue(account.account_id, facts.address, facts.name ? { first_name: facts.name } : undefined);
   }
 
   /** Watches armed accounts for the link; on it, the thank-you mail is queued once. */

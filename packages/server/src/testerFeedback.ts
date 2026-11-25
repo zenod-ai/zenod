@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import type { CustomerAccount } from "./customerAccounts.js";
-import { accountEmail } from "./testerOnboarding.js";
+import { accountEmail, type PersonFacts } from "./testerFacts.js";
 
 /**
  * EPIC-7 E7-S9 (Jordi vn_27afac4e, 8 Nov: "I am so worried that all this feedback is going to get lost"): each tester
@@ -62,8 +62,8 @@ export interface TesterFeedbackOptions {
   isOps: (c: Context) => boolean;
   /** The signed-in user's account (the app's session), null when signed out. */
   sessionAccount: (c: Context) => CustomerAccount | null;
-  /** First name from the tester's application, for the link's "who". */
-  firstName?: (email: string) => string | null;
+  /** E7-S40: the tester's name with where it came from (the application joined by code, or the Google sign-in). */
+  facts?: (account: CustomerAccount) => PersonFacts;
   now?: () => number;
 }
 
@@ -100,7 +100,7 @@ export function mountTesterFeedbackRoutes(app: Hono<{ Bindings: HttpBindings }>,
       generatedAt: now(),
       testers: feedbackTesters(options).map(({ account, test }) => {
         const email = (accountEmail(account) ?? "").toLowerCase();
-        const first = email ? options.firstName?.(email) ?? null : null;
+        const first = options.facts?.(account).name ?? null;
         const link = links[account.account_id];
         return {
           accountId: account.account_id,

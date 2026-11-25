@@ -8,6 +8,7 @@ import type { HttpBindings } from "@hono/node-server";
 import type { CustomerAccount } from "../src/customerAccounts.js";
 import { mountTesterWhatsAppNudgeRoutes, TesterWhatsAppNudge, testerWhatsAppNudgeMail } from "../src/testerWhatsAppNudge.js";
 import type { WhatsAppSetupRead } from "../src/zenodPhylax.js";
+import { personFacts } from "../src/testerFacts.js";
 
 const NOW = new Date("2026-11-16T10:00:00Z");
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString();
@@ -17,7 +18,7 @@ const read = (extra: Partial<WhatsAppSetupRead> = {}): WhatsAppSetupRead => ({
 const account = (id: string, email: string, claimed: string) =>
   ({ account_id: id, stripe_email: email, github_email: null, tenant_id: `t-${id}`, subscription_status: "active", claimed_at: claimed }) as CustomerAccount;
 
-function setup(accounts: CustomerAccount[], reads: Record<string, WhatsAppSetupRead> = {}, envMode: "on" | "off" = "on") {
+function setup(accounts: CustomerAccount[], reads: Record<string, WhatsAppSetupRead> = {}, envMode: "on" | "off" = "on", noStorage = new Set<string>()) {
   const nudge = new TesterWhatsAppNudge({
     dataDir: mkdtempSync(join(tmpdir(), "nudge-")),
     envMode,
@@ -25,7 +26,8 @@ function setup(accounts: CustomerAccount[], reads: Record<string, WhatsAppSetupR
     isTester: () => true,
     isTest: (a) => a.stripe_email === "ops@alpha9.io",
     setup: async (id) => reads[id] ?? read(),
-    firstName: (email) => (email === "ana@x.io" ? "ana maria" : null),
+    facts: (a) => personFacts(a, a.stripe_email === "ana@x.io" ? "ana maria" : null),
+    vaultSet: (a) => !noStorage.has(a.account_id),
     now: () => NOW,
   });
   const app = new Hono<{ Bindings: HttpBindings }>();
@@ -68,6 +70,18 @@ describe("who gets it", () => {
     expect(body.mails.map((m) => m.id)).toEqual(["nudge-acct-ana"]);
     expect(body.mails[0]).toMatchObject({ to: "ana@x.io", subject: "Your first Zenod note is one tap away", account: "a***@x*** …-ana" });
     expect(body.mails[0]?.text.startsWith("Hi Ana,")).toBe(true);
+  });
+
+  it("E7-S40: carries where the address and the name came from", async () => {
+    const { call } = setup([account("acct-ana", "ana@x.io", hoursAgo(25))]);
+    const body = await (await call("/api/ops/testers/whatsapp-nudge/queue")).json() as { mails: Array<{ facts: Record<string, unknown> }> };
+    expect(body.mails[0]?.facts).toMatchObject({ address_from: expect.stringContaining("checkout"), name: "Ana", name_from: expect.stringContaining("application") });
+  });
+
+  it("E7-S40: not to a tester whose storage is not connected (the step before WhatsApp)", async () => {
+    const { call } = setup([account("acct-ana", "ana@x.io", hoursAgo(25)), account("acct-vit", "vit@x.io", hoursAgo(25))], {}, "on", new Set(["acct-vit"]));
+    const body = await (await call("/api/ops/testers/whatsapp-nudge/queue")).json() as { mails: Array<{ id: string }> };
+    expect(body.mails.map((m) => m.id)).toEqual(["nudge-acct-ana"]);
   });
 
   it("is ops only", async () => {

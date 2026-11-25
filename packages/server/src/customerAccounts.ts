@@ -34,6 +34,9 @@ export interface CustomerAccount {
   github_id: number | null;
   github_login: string | null;
   github_email: string | null;
+  /** E7-S40: the name the sign-in gave (Google's profile name), kept with where it came from; absent before 25 Nov 2026. */
+  signin_name?: string | null;
+  signin_name_from?: string | null;
   claimed_at: string;
   tenant_id: string | null;
   tenant_slug: string | null;
@@ -276,6 +279,27 @@ export class CustomerAccountStore {
 
   list(): CustomerAccount[] {
     return Object.values(this.load());
+  }
+
+  /**
+   * E7-S40: keep the name the sign-in gave on every account of this user, with where it came from (Google gives a
+   * profile name; Zenod kept it only as the identity's display name). A null name records that the sign-in gave none.
+   * Returns how many accounts changed.
+   */
+  keepSigninName(userId: string, name: string | null, from: string): number {
+    if (!userId) return 0;
+    const store = this.load();
+    let changed = 0;
+    for (const account of Object.values(store)) {
+      if (account.user_id !== userId) continue;
+      const nextFrom = name ? from : `${from}: no name given`;
+      if (account.signin_name === name && account.signin_name_from === nextFrom) continue;
+      account.signin_name = name;
+      account.signin_name_from = nextFrom;
+      changed += 1;
+    }
+    if (changed) this.save(store);
+    return changed;
   }
 
   private isOwnedBy(account: CustomerAccount, userId: string): boolean {

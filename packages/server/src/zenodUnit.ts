@@ -1,3 +1,4 @@
+import { applicationNameByCode, mountTesterFactsRoute, NAME_FROM_GOOGLE, personFacts, signinNameFromDisplay, type ApplicationRecord, type PersonFacts } from "./testerFacts.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { eventLoopHealth } from "./eventLoopHealth.js";
 import type { HttpBindings } from "@hono/node-server";
@@ -77,7 +78,7 @@ import { mountMailSenderRoutes } from "./mailSenderPage.js";
 import { cloudflareMailConfigured, mailerFromEnv } from "./zenodMail.js";
 import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
-import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts, tenantMcpReads } from "./testerProgress.js";
+import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts, tenantMcpReads, vaultState } from "./testerProgress.js";
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
 import { mountTesterFirstNoteNudgeRoutes, parseFirstNoteNudgeMode, TesterFirstNoteNudge } from "./testerFirstNoteNudge.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
@@ -1449,19 +1450,35 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       const isTester = (account: CustomerAccount) => {
         if (account.fully_discounted && account.free_until) return true;
         const email = account.stripe_email?.trim().toLowerCase() ?? "";
-        return email !== "" && (testerFlow?.snapshot().testers ?? []).some((tester) =>
-          tester.status === "accepted" && tester.email.toLowerCase() === email);
+        // E7-S40: the account that redeemed a tester's code is that tester, whatever address it paid with.
+        return (testerFlow?.snapshot().testers ?? []).some((tester) => tester.status === "accepted"
+          && (tester.redeemedBy === account.account_id || (email !== "" && tester.email.toLowerCase() === email)));
       };
       const isTest = (account: CustomerAccount) => {
         const email = accountEmail(account);
         return Boolean(email && onboardingMarks.isTest(email));
       };
-      const applicantFirstName = (email: string): string | null => {
-        const key = email.trim().toLowerCase();
-        const application = (readApplications(storage.dataDir) as Array<{ contact?: unknown; name?: unknown }>)
-          .filter((entry) => typeof entry.contact === "string" && entry.contact.trim().toLowerCase() === key).pop();
-        return typeof application?.name === "string" ? application.name : null;
+      // E7-S40: the address and name a tester mail uses, each with where it came from (testerFacts.ts). The Google
+      // sign-in name is kept on the account; an account from before that is filled once from the identity store, only
+      // when every identity of the user is Google (a GitHub sign-in would have overwritten the display name).
+      const withSigninName = (account: CustomerAccount): CustomerAccount => {
+        if (account.signin_name !== undefined || !account.user_id) return account;
+        const snapshot = customer.identities.snapshot();
+        const ids = snapshot.identities.filter((identity) => identity.user_id === account.user_id);
+        if (!ids.length || ids.some((identity) => identity.provider !== "google")) return account;
+        const user = snapshot.users.find((entry) => entry.user_id === account.user_id);
+        const name = signinNameFromDisplay(user?.display_name, ids[0]!.email);
+        try {
+          customer.accounts.keepSigninName(account.user_id, name, NAME_FROM_GOOGLE);
+        } catch (error) {
+          console.warn("[tester-facts] could not keep the sign-in name:", error instanceof Error ? error.message : error);
+        }
+        return { ...account, signin_name: name, signin_name_from: name ? NAME_FROM_GOOGLE : `${NAME_FROM_GOOGLE}: no name given` };
       };
+      const testerFacts = (account: CustomerAccount): PersonFacts => personFacts(
+        withSigninName(account),
+        applicationNameByCode(account.account_id, testerFlow?.snapshot().testers ?? [], readApplications(storage.dataDir) as ApplicationRecord[]),
+      );
       const onboarding = new TesterOnboarding({
         dataDir: storage.dataDir,
         envMode: parseOnboardingMode(env.ZENOD_TESTER_ONBOARDING) ?? "off",
@@ -1469,7 +1486,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         account: findAccount,
         isTester,
         isTest,
-        firstName: applicantFirstName,
+        facts: testerFacts,
         // E7-S10: the thank-you carries the tester's own voice feedback link (E7-S9) once the link timer made it.
         feedbackLink: (accountId) => readTesterFeedback(storage.dataDir)[accountId]?.url ?? null,
         whatsappState: (accountId) => zenodPhylax?.whatsappState(accountId) ?? Promise.resolve(null),
@@ -1502,6 +1519,14 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         isTest,
         setup: (accountId: string) => zenodPhylax?.whatsappSetup(accountId) ?? Promise.resolve(null),
       };
+      mountTesterFactsRoute(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        accounts: () => customer.accounts.list(),
+        isTester,
+        isTest,
+        facts: testerFacts,
+        vaultSet: (account) => vaultState(account).set,
+      });
       mountTesterWhatsAppSetupRoute(app, {
         isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
         ...testerSetups,
@@ -1539,7 +1564,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           const session = readCustomerSession(c, env);
           return session ? customer.accounts.resolveActiveTenantForUser(session.user_id) : null;
         },
-        firstName: applicantFirstName,
+        facts: testerFacts,
       });
       // E26-S32 (Jordi's yes on E26-A17): one email the day after sign-up when WhatsApp is still not linked, sent by the
       // thank-you timer through the team's Gmail connection; once per tester, off with mode "off".
@@ -1548,7 +1573,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         nudge: new TesterWhatsAppNudge({
           dataDir: storage.dataDir,
           envMode: parseNudgeMode(env.ZENOD_TESTER_NUDGE) ?? "on",
-          firstName: applicantFirstName,
+          facts: testerFacts,
           ...testerSetups,
         }),
       });

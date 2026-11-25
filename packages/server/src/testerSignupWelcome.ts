@@ -15,6 +15,7 @@ import type { Context, Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { maskAccount, readTesterSetups, type TesterSetupOptions } from "./testerWhatsAppSetup.js";
 import type { PendingMail } from "./welcomeMail.js";
+import { mailFacts, personFacts } from "./testerFacts.js";
 import type { ZenodMail } from "./zenodMail.js";
 
 export const TESTER_SIGNUP_WELCOME_FILE = "tester-signup-welcome.json";
@@ -141,7 +142,9 @@ export class TesterSignupWelcome {
       if (!Number.isFinite(signed) || age < 0 || age >= WELCOME_UNTIL_MS) continue;
       if (state.sent[row.account.account_id] || sentAddresses.has(row.email)) continue;
       sentAddresses.add(row.email);
-      out.push({ id: `${ID_PREFIX}${row.account.account_id}`, account: maskAccount(row.account), ...testerSignupWelcomeMail(row.email), queuedAt: new Date(signed).toISOString() });
+      out.push({ id: `${ID_PREFIX}${row.account.account_id}`, account: maskAccount(row.account), ...testerSignupWelcomeMail(row.email), queuedAt: new Date(signed).toISOString(),
+        // E7-S40: its approved words greet with "Hi,", so it carries only where the address came from.
+        facts: mailFacts(personFacts(row.account, null), false) });
     }
     return out;
   }

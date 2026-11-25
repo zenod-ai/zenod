@@ -18,6 +18,7 @@ import type { CustomerAccount } from "./customerAccounts.js";
 import { vaultState } from "./testerProgress.js";
 import { maskAccount, readTesterSetups, type TesterSetupOptions } from "./testerWhatsAppSetup.js";
 import type { PendingMail } from "./welcomeMail.js";
+import { mailFacts, personFacts } from "./testerFacts.js";
 import type { ZenodMail } from "./zenodMail.js";
 
 export const TESTER_SETUP_EMAIL_FILE = "tester-setup-email.json";
@@ -151,6 +152,8 @@ export class TesterSetupEmail {
         account: maskAccount(row.account),
         ...testerSetupEmail(row.email),
         queuedAt: new Date(signed + SETUP_EMAIL_AFTER_MS).toISOString(),
+        // E7-S40: its approved words open with "Hey,", so it carries only where the address came from.
+        facts: mailFacts(personFacts(row.account, null), false),
       });
     }
     return out;

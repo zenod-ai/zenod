@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { FEEDBACK_LINK_WAIT_MS, FEEDBACK_PARAGRAPH, greetingName, mountTesterMailQueueRoutes, parseOnboardingMode, TesterOnboarding, testerThanksMail } from "../src/testerOnboarding.js";
 import type { SendMail, ZenodMail } from "../src/zenodMail.js";
+import { personFacts } from "../src/testerFacts.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -17,6 +18,8 @@ afterEach(async () => {
 function account(id: string, email: string, extra: Partial<CustomerAccount> = {}): CustomerAccount {
   return { account_id: id, stripe_email: email, github_email: null, ...extra } as CustomerAccount;
 }
+
+const NAMES: Record<string, string> = { "ana@example.org": "ana maria", "pay@example.org": "Pat", "zenod-test@example.org": "Zed" };
 
 async function setup(envMode: "off" | "test" | "on" = "on", ready = true, extra: { feedbackLink?: (id: string) => string | null; now?: () => Date } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), "tester-onboarding-"));
@@ -40,7 +43,7 @@ async function setup(envMode: "off" | "test" | "on" = "on", ready = true, extra:
     account: (id) => accounts.get(id) ?? null,
     isTester: (a) => Boolean(a.fully_discounted && a.free_until),
     isTest: (a) => a.stripe_email === "zenod-test@example.org",
-    firstName: (email) => (email === "ana@example.org" ? "ana maria" : null),
+    facts: (a) => personFacts(a, NAMES[a.stripe_email ?? ""] ?? null),
     whatsappState: async (id) => whatsapp.get(id) ?? "off",
     sendWelcome,
     ...extra,
@@ -142,6 +145,33 @@ describe("tester onboarding (E26-S26)", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("E7-S40: the thank-you goes to the sign-in address with the joined name; a nameless one is held, not guessed", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "tester-onboarding-"));
+    dirs.push(dataDir);
+    const sent: ZenodMail[] = [];
+    const send = (async (mail: ZenodMail) => { sent.push(mail); }) as SendMail;
+    send.ready = () => true;
+    const daniel = account("daniel", "paid@example.org", { github_email: "signin@example.org", signin_name: "Daniel Short", signin_name_from: "the name on their Google sign-in" });
+    const noname = account("noname", "x@example.org", { github_email: "nn@example.org" });
+    const accounts = new Map([["daniel", daniel], ["noname", noname]]);
+    const onboarding = new TesterOnboarding({
+      dataDir, envMode: "on", sendMail: send,
+      account: (id) => accounts.get(id) ?? null,
+      isTester: () => true, isTest: () => true,
+      facts: (a) => personFacts(a, null),
+      whatsappState: async () => "verified",
+      sendWelcome: vi.fn(async () => "sent" as const),
+    });
+    expect(await onboarding.testSend(daniel)).toMatchObject({ mail: "queued" });
+    expect(await onboarding.testSend(noname)).toMatchObject({ mail: "queued" });
+    await onboarding.thanks.process();
+    expect(sent.map((m) => m.to)).toEqual(["signin@example.org"]);
+    expect(sent[0]!.text.startsWith("Hi Daniel,")).toBe(true);
+    expect("facts" in sent[0]!).toBe(false);
+    const held = onboarding.thanks.pending().find((m) => m.id === "noname");
+    expect(held?.facts?.missing).toEqual(["name: none typed on the application and none from the sign-in"]);
+  });
+
   it("lists queued mail for an outside sender and marks it sent once per address (E26-S28 it3)", async () => {
     const { onboarding, sent } = await setup("test", false);
     expect(await onboarding.testSend(account("ourtest-1", "zenod-test@example.org"))).toEqual({ whatsapp: "sent", mail: "queued" });
@@ -152,7 +182,9 @@ describe("tester onboarding (E26-S26)", () => {
     expect(pending).toMatchObject({ id: "ourtest-1", to: "zenod-test@example.org", subject: "Thank you for testing Zenod" });
     expect(pending.text).toContain('Reply "call"');
     expect(pending.html).toContain("zenod.dev/start");
-    expect(Object.keys(pending).sort()).toEqual(["html", "id", "queuedAt", "subject", "text", "to"]);
+    expect(Object.keys(pending).sort()).toEqual(["facts", "html", "id", "queuedAt", "subject", "text", "to"]);
+    // E7-S40: the facts gmail_send needs ride with the mail.
+    expect(pending.facts).toMatchObject({ address_from: expect.stringContaining("checkout"), name: "Zed", name_from: expect.stringContaining("application") });
     expect(onboarding.thanks.markSent("ourtest-1", "team-gmail", "<m1@mail>")).toBe("sent");
     expect(onboarding.thanks.markSent("ourtest-1", "team-gmail", "<m2@mail>")).toBe("already sent");
     expect(onboarding.thanks.markSent("nobody", "team-gmail")).toBe("unknown");
