@@ -486,7 +486,13 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
-  it.each([true, false])("preserves provider voice identity %s and send time through durable staging", async (isVoiceNote) => {
+  // EPIC-24 M43: the third case is a row stored before M43 (provider flag only,
+  // "audio") in WhatsApp's voice-note codec: the retry path files it as a voice note.
+  it.each([
+    { isVoiceNote: true, storedType: "ptt", mimeType: "audio/ogg" },
+    { isVoiceNote: false, storedType: "audio", mimeType: "audio/mpeg" },
+    { isVoiceNote: true, storedType: "audio", mimeType: "audio/ogg; codecs=opus" },
+  ])("preserves provider voice identity $isVoiceNote ($storedType, $mimeType) and send time through durable staging", async ({ isVoiceNote, storedType, mimeType }) => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-source-identity-"));
     dirs.push(dataDir);
     const storePath = phylaxWhatsAppPaths(dataDir).store;
@@ -495,12 +501,12 @@ describe("PhylaxChannelsOrgan", () => {
     store.recordInbound({
       messageId: "source-identity", chatId: "alpha-chat", senderId: "34611111111",
       senderName: "Alpha", chatName: "Alpha", isGroup: false, timestamp, body: "",
-      hasMedia: true, mediaType: isVoiceNote ? "ptt" : "audio", mimeType: "audio/ogg", fileName: null,
+      hasMedia: true, mediaType: storedType, mimeType, fileName: null,
     });
     store.close();
     const restarted = new WhatsAppStore(storePath);
     const source = restarted.inboundMediaIdentity("source-identity")!;
-    expect(source).toEqual({ mediaType: isVoiceNote ? "ptt" : "audio", senderTimestamp: "2026-09-08T08:10:00.000Z" });
+    expect(source).toEqual({ mediaType: storedType, senderTimestamp: "2026-09-08T08:10:00.000Z" });
     expect(restarted.inboundMediaIdentity("missing")).toBeNull();
     const calls: PhylaxDownstreamCall[] = [];
     const organ = new PhylaxChannelsOrgan({
@@ -519,9 +525,9 @@ describe("PhylaxChannelsOrgan", () => {
       const staged = await organ.stageVoice({
         channel: "whatsapp", sender: "34611111111", chatId: "alpha-chat", messageId: "source-identity",
         senderTimestamp: source.senderTimestamp,
-        media: { bytes: Buffer.from("source-identity"), mimeType: "audio/ogg", isVoiceNote: source.mediaType === "ptt" },
+        media: { bytes: Buffer.from("source-identity"), mimeType, isVoiceNote: source.mediaType === "ptt" },
       });
-      expect(staged).toMatchObject({ senderTimestamp: source.senderTimestamp, isVoiceNote });
+      expect(staged).toMatchObject({ senderTimestamp: source.senderTimestamp, isVoiceNote: storedType === "ptt" });
       restarted.createVoiceJob({
         providerMessageId: staged.messageId, tenantId: staged.tenantId, conversationKey: staged.conversationKey,
         senderId: staged.sender, chatId: staged.chatId, artifactRef: staged.artifactRef,
