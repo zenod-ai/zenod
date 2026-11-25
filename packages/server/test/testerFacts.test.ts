@@ -10,6 +10,8 @@ import { CustomerAccountStore, type CustomerAccount } from "../src/customerAccou
 import {
   ADDRESS_FROM_CHECKOUT,
   ADDRESS_FROM_SIGNIN,
+  CONTACT_FROM_GITHUB,
+  CONTACT_FROM_GOOGLE,
   accountEmail,
   applicationNameByCode,
   mailFacts,
@@ -29,8 +31,24 @@ describe("1) the address: sign-in before checkout", () => {
     expect(accountEmail(daniel)).toBe("dshort@gmail.com");
     expect(personFacts(daniel, null)).toMatchObject({ address: "dshort@gmail.com", address_from: ADDRESS_FROM_SIGNIN });
   });
-  it("uses the checkout address only when the account has no sign-in address, and says so", () => {
-    expect(personFacts(account({ stripe_email: "pay@x.io" }), "Ana")).toMatchObject({ address: "pay@x.io", address_from: ADDRESS_FROM_CHECKOUT });
+  it("a checkout address alone is billing only: named, and the mail is held as missing an address", () => {
+    const facts = personFacts(account({ stripe_email: "pay@x.io" }), "Ana");
+    expect(facts).toMatchObject({ address: "pay@x.io", address_from: ADDRESS_FROM_CHECKOUT });
+    expect(facts.missing).toEqual(["address: no sign-in address kept, only the one typed at payment checkout"]);
+  });
+  it("one address per person: the kept Google sign-in address wins over every other", () => {
+    const daniel = account({ contact_email: "dshort@gmail.com", contact_email_from: CONTACT_FROM_GOOGLE, github_email: "old@x.io", stripe_email: "hllcnj@gmail.com" });
+    expect(personFacts(daniel, null)).toMatchObject({ address: "dshort@gmail.com", address_from: CONTACT_FROM_GOOGLE });
+  });
+  it("the store keeps one address per person; a GitHub sign-in never replaces the Google one", () => {
+    const store = new CustomerAccountStore(mkdtempSync(join(tmpdir(), "facts-")));
+    store.upsert("cs_1", { account_id: "acct-1", user_id: "usr_1" });
+    store.upsert("cs_1b", { account_id: "acct-1b", user_id: "usr_1" });
+    expect(store.keepContactEmail("usr_1", "dshort@gmail.com", CONTACT_FROM_GOOGLE)).toBe(2);
+    expect(store.keepContactEmail("usr_1", "dev@github.io", CONTACT_FROM_GITHUB)).toBe(0);
+    expect(store.list().map((a) => [a.contact_email, a.contact_email_from])).toEqual([
+      ["dshort@gmail.com", CONTACT_FROM_GOOGLE], ["dshort@gmail.com", CONTACT_FROM_GOOGLE],
+    ]);
   });
   it("no address at all is missing, never guessed", () => {
     const facts = personFacts(account(), "Ana");

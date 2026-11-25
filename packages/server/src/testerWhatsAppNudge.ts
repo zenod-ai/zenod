@@ -151,7 +151,7 @@ export class TesterWhatsAppNudge {
       if (state.sent[row.account.account_id] || sentAddresses.has(row.email)) continue;
       sentAddresses.add(row.email);
       const facts = this.options.facts(row.account);
-      const mail = testerWhatsAppNudgeMail(row.email, facts.name);
+      const mail = testerWhatsAppNudgeMail(facts.address ?? row.email, facts.name);
       out.push({ id: `${ID_PREFIX}${row.account.account_id}`, account: maskAccount(row.account), ...mail, queuedAt: new Date(signed + NUDGE_AFTER_MS).toISOString(), facts: mailFacts(facts) });
     }
     return out;

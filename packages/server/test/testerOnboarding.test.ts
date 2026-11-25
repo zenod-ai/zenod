@@ -16,7 +16,8 @@ afterEach(async () => {
 });
 
 function account(id: string, email: string, extra: Partial<CustomerAccount> = {}): CustomerAccount {
-  return { account_id: id, stripe_email: email, github_email: null, ...extra } as CustomerAccount;
+  // E7-S40: a real account has the address it signed in with; mail goes only there.
+  return { account_id: id, stripe_email: email, github_email: email, ...extra } as CustomerAccount;
 }
 
 const NAMES: Record<string, string> = { "ana@example.org": "ana maria", "pay@example.org": "Pat", "zenod-test@example.org": "Zed" };
@@ -184,7 +185,7 @@ describe("tester onboarding (E26-S26)", () => {
     expect(pending.html).toContain("zenod.dev/start");
     expect(Object.keys(pending).sort()).toEqual(["facts", "html", "id", "queuedAt", "subject", "text", "to"]);
     // E7-S40: the facts gmail_send needs ride with the mail.
-    expect(pending.facts).toMatchObject({ address_from: expect.stringContaining("checkout"), name: "Zed", name_from: expect.stringContaining("application") });
+    expect(pending.facts).toMatchObject({ address_from: expect.stringContaining("signed in"), name: "Zed", name_from: expect.stringContaining("application") });
     expect(onboarding.thanks.markSent("ourtest-1", "team-gmail", "<m1@mail>")).toBe("sent");
     expect(onboarding.thanks.markSent("ourtest-1", "team-gmail", "<m2@mail>")).toBe("already sent");
     expect(onboarding.thanks.markSent("nobody", "team-gmail")).toBe("unknown");

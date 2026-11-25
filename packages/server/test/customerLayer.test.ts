@@ -369,6 +369,7 @@ describe("hosted customer layer", () => {
       expect(layer.identities.snapshot().users).toHaveLength(1);
       expect(layer.accounts.list().find((a) => a.account_id === "acct-ada")).toMatchObject({
         signin_name: "Ada Lovelace", signin_name_from: "the name on their Google sign-in",
+        contact_email: "ada@example.test", contact_email_from: "the address of their Google sign-in",
       });
       expect(exchange).toHaveBeenCalledTimes(2);
     } finally {

@@ -1,4 +1,5 @@
-import { applicationNameByCode, mountTesterFactsRoute, NAME_FROM_GOOGLE, personFacts, signinNameFromDisplay, type ApplicationRecord, type PersonFacts } from "./testerFacts.js";
+import { CONTACT_FROM_SIGNIN } from "./customerAccounts.js";
+import { applicationNameByCode, CONTACT_FROM_GITHUB, CONTACT_FROM_GOOGLE, mountTesterFactsRoute, NAME_FROM_GOOGLE, personFacts, signinNameFromDisplay, type ApplicationRecord, type PersonFacts } from "./testerFacts.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { eventLoopHealth } from "./eventLoopHealth.js";
 import type { HttpBindings } from "@hono/node-server";
@@ -1461,10 +1462,29 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       // E7-S40: the address and name a tester mail uses, each with where it came from (testerFacts.ts). The Google
       // sign-in name is kept on the account; an account from before that is filled once from the identity store, only
       // when every identity of the user is Google (a GitHub sign-in would have overwritten the display name).
-      const withSigninName = (account: CustomerAccount): CustomerAccount => {
-        if (account.signin_name !== undefined || !account.user_id) return account;
+      const withSigninName = (input: CustomerAccount): CustomerAccount => {
+        if (!input.user_id) return input;
+        let account = input;
         const snapshot = customer.identities.snapshot();
         const ids = snapshot.identities.filter((identity) => identity.user_id === account.user_id);
+        // E7-S40 (Jordi's "Yes: Zenod fixes sign-up next"): the person's one address, kept once: their Google sign-in
+        // address (verified), else the address the account was made with at sign-in; never the one typed at checkout.
+        if (account.contact_email === undefined) {
+          const google = ids.find((identity) => identity.provider === "google" && identity.email_verified && identity.email);
+          const github = ids.find((identity) => identity.provider === "github" && identity.email);
+          const [email, from] = google ? [google.email!, CONTACT_FROM_GOOGLE]
+            : account.github_email ? [account.github_email, CONTACT_FROM_SIGNIN]
+            : github ? [github.email!, CONTACT_FROM_GITHUB] : [null, null];
+          if (email && from) {
+            try {
+              customer.accounts.keepContactEmail(account.user_id, email, from);
+            } catch (error) {
+              console.warn("[tester-facts] could not keep the address:", error instanceof Error ? error.message : error);
+            }
+            account = { ...account, contact_email: email, contact_email_from: from };
+          }
+        }
+        if (account.signin_name !== undefined) return account;
         if (!ids.length || ids.some((identity) => identity.provider !== "google")) return account;
         const user = snapshot.users.find((entry) => entry.user_id === account.user_id);
         const name = signinNameFromDisplay(user?.display_name, ids[0]!.email);
@@ -1742,9 +1762,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
             ? [{
                 subscriptionId: account.stripe_subscription_id,
                 tenantId: account.tenant_id ?? null,
-                who: account.stripe_email || account.github_email || account.github_login || account.tenant_slug || "a tester",
+                who: accountEmail(account) || account.github_login || account.tenant_slug || "a tester",
                 accountId: account.account_id,
-                email: account.stripe_email || account.github_email || null,
+                // E7-S40: every later mail reads the person's one kept address, never the one typed at checkout first.
+                email: accountEmail(account),
                 savedMemories: () => tenantSavedMemories(storage.dataDir, account.tenant_id ?? null),
                 usage: async () => {
                   const usage = await customer.usageForAccount(account);

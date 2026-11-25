@@ -12,6 +12,11 @@ import type { VaultProvider } from "zenod";
 // Legacy Dokploy, watchdog, claim-link, and per-tenant DNS fields are intentionally
 // absent. Z-N3 owns the local tenant-row binding behind checkout completion.
 
+/** E7-S40: where a person's one address came from. */
+export const CONTACT_FROM_GOOGLE = "the address of their Google sign-in";
+export const CONTACT_FROM_GITHUB = "the address of their GitHub sign-in";
+export const CONTACT_FROM_SIGNIN = "the address they signed in to Zenod with";
+
 export interface CustomerAccount {
   session_id: string;
   account_id: string;
@@ -37,6 +42,13 @@ export interface CustomerAccount {
   /** E7-S40: the name the sign-in gave (Google's profile name), kept with where it came from; absent before 25 Nov 2026. */
   signin_name?: string | null;
   signin_name_from?: string | null;
+  /**
+   * E7-S40 (Jordi's "Yes: Zenod fixes sign-up next", 25 Nov): the ONE address Zenod writes to this person, with where it
+   * came from: their Google sign-in address (else their GitHub one). Every tester mail reads this record; the address
+   * typed at payment checkout (stripe_email) is billing only. Absent on accounts from before it, filled on first read.
+   */
+  contact_email?: string | null;
+  contact_email_from?: string | null;
   claimed_at: string;
   tenant_id: string | null;
   tenant_slug: string | null;
@@ -286,6 +298,23 @@ export class CustomerAccountStore {
    * profile name; Zenod kept it only as the identity's display name). A null name records that the sign-in gave none.
    * Returns how many accounts changed.
    */
+  keepContactEmail(userId: string, email: string | null, from: string): number {
+    if (!userId || !email) return 0;
+    const store = this.load();
+    let changed = 0;
+    for (const account of Object.values(store)) {
+      if (account.user_id !== userId) continue;
+      // A Google sign-in address is the person's one address; a GitHub sign-in never replaces it.
+      if (account.contact_email_from === CONTACT_FROM_GOOGLE && from !== CONTACT_FROM_GOOGLE) continue;
+      if (account.contact_email === email && account.contact_email_from === from) continue;
+      account.contact_email = email;
+      account.contact_email_from = from;
+      changed += 1;
+    }
+    if (changed) this.save(store);
+    return changed;
+  }
+
   keepSigninName(userId: string, name: string | null, from: string): number {
     if (!userId) return 0;
     const store = this.load();

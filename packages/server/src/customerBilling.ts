@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { CustomerAccountStore, customerAccountIdForUser, type CustomerAccount } from "./customerAccounts.js";
+import { CONTACT_FROM_SIGNIN, CustomerAccountStore, customerAccountIdForUser, type CustomerAccount } from "./customerAccounts.js";
 import { customerUserId } from "./customerIdentity.js";
 
 // Checkout behavior is transplanted from zenod-ai/cloud services/webhook/src/server.ts
@@ -249,6 +249,8 @@ export async function createCustomerCheckout(
     github_id: normalizedOwner.github_id ?? null,
     github_login: normalizedOwner.github_login ?? null,
     github_email: normalizedOwner.email ?? null,
+    // E7-S40: the sign-in address is the person's one address from the start.
+    ...(normalizedOwner.email ? { contact_email: normalizedOwner.email, contact_email_from: CONTACT_FROM_SIGNIN } : {}),
     claimed_at: new Date().toISOString(),
   });
   return session;
