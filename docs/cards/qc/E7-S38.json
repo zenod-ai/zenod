@@ -1,0 +1,68 @@
+{
+  "row": "E7-S38",
+  "card": "docs/cards/E7-S38.md",
+  "cardSha": "d8513c44486a3612",
+  "inputs": {
+    "card": "d8513c44486a3612",
+    "page": "e0c4d04ba5d0926b",
+    "rules": "c1a7854c21d10fb4",
+    "words": "a91079ad6fae9f68"
+  },
+  "checkedAt": "2026-11-25T14:48:43Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "so many whatsapps that I think the briefings are getting a little bit lost",
+      "where": "2026-11-25",
+      "status": "met",
+      "how": "Evidence page shows 'Messages he did not ask for' falling from 23 to about 12 and the 'Who sent them' table by sender."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths open with the punchline box under the title, show the bar chart and before/after table, fit without sideways scroll, and end in a readable footer; no house-rule breach is clear."
+  },
+  "pass": false,
+  "held": [
+    "ambiguous: The decision asks 'Is your phone quieter by tomorrow evening?' and recommends yes after the console switches; a stranger could not tell whether 'yes' is a claim already true or a promise that depends on the console switching, which may not happen by tomorrow.",
+    "card needs rewriting: its decision asks about the phone quieter, which its title, first delivered line and screenshot do not show: show that first, then ask about it"
+  ],
+  "reader": {
+    "asked": "He is asked to say whether his phone will be quieter by tomorrow evening, after the console switches.",
+    "ambiguous": "The decision asks 'Is your phone quieter by tomorrow evening?' and recommends yes after the console switches; a stranger could not tell whether 'yes' is a claim already true or a promise that depends on the console switching, which may not happen by tomorrow."
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "e0c4d04ba5d0926b",
+    "walkedAt": "2026-11-25T14:48:43Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9905/#before-after",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link 'All pages'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9905/#before-after",
+      "file": "E7-S38-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9905/#before-after",
+      "file": "E7-S38-1280.webp"
+    }
+  ]
+}
