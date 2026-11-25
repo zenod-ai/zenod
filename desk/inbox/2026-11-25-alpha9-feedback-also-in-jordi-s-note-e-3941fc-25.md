@@ -2,8 +2,10 @@
 from: alpha9
 about: Also in Jordi's note e-3941fc (25 Nov 14:34Z): a Vision section on zenod.dev, like a VC pitch in pictured frames
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-25-zenod-re-also-in-jordi-s-note-e-3941fc-25-nov.md
 kind: product-feedback
+row: E25-S5
 source: https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-25.md#^e-3941fc
 product-from: For Zeno, for example (his 25 Nov 14:34Z voice note, e-3941fc; Zeno is the transcriber's Zenod)
 ---
