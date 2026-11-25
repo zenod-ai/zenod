@@ -1,0 +1,77 @@
+{
+  "row": "M41",
+  "card": "docs/cards/M41.md",
+  "cardSha": "c0c1dbaf71b123c0",
+  "inputs": {
+    "card": "c0c1dbaf71b123c0",
+    "page": "7ec7eed0d43cefda",
+    "rules": "c1a7854c21d10fb4",
+    "words": "77db650826b35731"
+  },
+  "checkedAt": "2026-11-25T19:15:12Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "was it lost????",
+      "where": "vn_d197f642",
+      "status": "met",
+      "how": "Evidence page shows the 25 Nov 16:33 note recovered, saved 19:09 UTC and the sender told; card line says it is in memory."
+    },
+    {
+      "said": "at least get the whatsapp thing done ASAP",
+      "where": "vn_d197f642",
+      "status": "met",
+      "how": "Evidence page shows the WhatsApp fix live 18:45 UTC, with no notes affected since; card line says the bug is fixed."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "At 390 px the note table and text fit and the page does not scroll sideways; at 1280 px the layout is clean, with one consistent ink and accent and no feedback block needed on this evidence page."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Confirm whether the voice note saved as 'Your memory, Log of 25 Nov' is the one he sent at 16:33.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "7ec7eed0d43cefda",
+    "walkedAt": "2026-11-25T19:15:12Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9011/#note",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-24: EPIC-24: Zenod errors now: find, fix, and'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-24",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9011/#note",
+      "file": "M41-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9011/#note",
+      "file": "M41-1280.webp"
+    }
+  ]
+}
