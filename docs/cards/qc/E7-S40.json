@@ -1,54 +1,53 @@
 {
   "row": "E7-S40",
   "card": "docs/cards/E7-S40.md",
-  "cardSha": "17406f8a02e38f2e",
+  "cardSha": "f164576e22574096",
   "inputs": {
-    "card": "17406f8a02e38f2e",
+    "card": "f164576e22574096",
     "page": "122ef0a3eb4ca04b",
     "rules": "c1a7854c21d10fb4",
     "words": "4c9fe22c1fac0a79"
   },
-  "checkedAt": "2026-11-25T20:54:43Z",
+  "checkedAt": "2026-11-25T20:55:12Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "how is it possible that we're making these totally ridiculous errors ... We've had problems with these email addresses for a long time ... when they registered, we didn't get their names.",
       "where": "vn_febcc8c2",
       "status": "met",
-      "how": "Evidence shows each address and name taken from the Google sign-in, with sources; unsure greetings are held, not sent."
+      "how": "Evidence shows each address and name from the Google sign-in with sources; unsure greetings are held."
     },
     {
       "said": "Yes: Zenod fixes sign-up next",
       "where": "vn_febcc8c2",
       "status": "met",
-      "how": "Card delivers one address per account and the Google name, matching the chosen fix."
+      "how": "Card delivers one sign-in address per account and the Google name, matching the chosen fix."
     },
     {
       "said": "how is it possible that we're making these totally ridiculous errors ... when they registered, we didn't get their names.",
       "where": "vn_febcc8c2",
       "status": "met",
-      "how": "Evidence shows names found from the Google sign-in and held mails for Vitor and Nox."
+      "how": "Evidence shows names found from Google sign-in and Vitor and Nox greetings held, nothing sent."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "At 390 and 1280 the page opens with the punchline box, a clean three-box flow diagram, then readable tables with no sideways scroll; the look is consistent."
+    "summary": "Both widths open with the diagram and tables fit without sideways scroll; the evidence page is a plain list needing no feedback block."
   },
-  "pass": false,
-  "held": [
-    "ambiguous: The buttons read \"Yes: greet by the typed name\" / \"No: keep Hi, when unsure\", but the delivered line says unsure names are held and nothing was sent. A reader could take \"No\" as sending a bare \"Hi,\" or as holding the mail entirely, and those lead to different actions."
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether testers should be greeted by the name they typed when Google's name disagrees, yes or no.",
-    "ambiguous": "The buttons read \"Yes: greet by the typed name\" / \"No: keep Hi, when unsure\", but the delivered line says unsure names are held and nothing was sent. A reader could take \"No\" as sending a bare \"Hi,\" or as holding the mail entirely, and those lead to different actions."
+    "asked": "Decide whether testers should be greeted by the name they typed when Google's name disagrees, answering yes or no.",
+    "ambiguous": "",
+    "note": "The delivered line 'Unsure names are held, as with Vitor and Nox' may read as already settling the question, while the Yes button says mails greet by the typed name. A reader could take the held state as final, which would change whether he presses Yes."
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "122ef0a3eb4ca04b",
-    "walkedAt": "2026-11-25T20:54:43Z",
+    "walkedAt": "2026-11-25T20:55:12Z",
     "steps": [
       {
         "n": 1,
