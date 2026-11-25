@@ -28,10 +28,10 @@ Jordi's WhatsApp voice note 23 Nov 15:25Z ([Log/2026-11-24.md#^e-8b9fa2](https:/
 ## Current State
 
 Status: active
-Last attempted: 2026-11-25 Delivery Manager (run_7804596f): objective filed on Jordi's yes to E7-A45; key results DOD-1 to DOD-3 written; no work started yet
-Result: objective exists with three key results; directory listings already run in EPIC-10 (E10-S4), which counts toward DOD-1
-Waiting on: nothing from Jordi; the team plans the first step per key result
-Next action: count where Zenod is listed today (DOD-1 baseline) and ask 10 assistants for a memory tool (DOD-3 baseline)
+Last attempted: 2026-11-25 R-S1 ticket worker (run_7bc3eb8f): both baselines measured
+Result: DOD-1 baseline 4 of 10 directories list Zenod (MCP Registry, Glama, AI-Powered, addrbook); DOD-3 baseline 0 of 10 assistants name Zenod (top picks Basic Memory, Obsidian, MemoryPlugin); DOD-2 not measured yet; [evidence page](http://vps3.taild81fbb.ts.net:9709/), [evidence](evidence/r-s1-2026-11-25.md)
+Waiting on: nothing from Jordi; the team plans the next step per key result
+Next action: Delivery Manager writes the next row per key result from R-S1's proposals
 Verified at: 2026-11-25
 
 ## Waiting on

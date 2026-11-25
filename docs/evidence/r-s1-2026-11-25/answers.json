@@ -1,0 +1,399 @@
+{
+ "question": "What is a good tool to give my AI a memory I own?",
+ "tries": [
+  {
+   "label": "ChatGPT-class, web search on",
+   "model": "openai/gpt-6.2-sol:online",
+   "asked_at": "2026-11-25T18:24:33Z",
+   "zenod_named": false,
+   "answer": "If by \u201cown\u201d you mean **keep, edit, back up, and take your AI\u2019s memory to another model**, I\u2019d start with **Obsidian and a `memory.md` file**. Obsidian keeps your notes as plain Markdown files on your device, so you don\u2019t need Obsidian\u2014or any particular AI\u2014to read them later. ([obsidian.md](https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata))\n\nStart with three sections: **Preferences**, **Active projects**, and **Decisions worth remembering**. Attach the file when you start a chat that needs it, and ask the AI to propose updates for you to approve. The trade-off: Obsidian stores the memory, but it doesn\u2019t automatically make your AI remember it.\n\n- **Want automatic recall in a chat app you control?** Use **self-hosted Open WebUI**. It stores memories in your database, lets you review and edit them, and can let a capable model save and recall them across chats. Pair it with Ollama and local embeddings if you also want the processing to stay on your machine. ([docs.openwebui.com](https://docs.openwebui.com/features/chat-conversations/memory/?utm_source=openai))\n- **Building your own AI app?** Look at **Mem0\u2019s open-source edition** for a memory layer you can integrate into your app. ([github.com](https://github.com/mem0ai/mem0))\n\nWhich AI are you using now, and do you want it to **save memories automatically** or only remember what you approve?",
+   "sources": [
+    "https://obsidian.md/help/Files%2Band%2Bfolders/How%2BObsidian%2Bstores%2Bdata",
+    "https://docs.openwebui.com/features/chat-conversations/memory/?utm_source=openai",
+    "https://github.com/mem0ai/mem0"
+   ],
+   "usage": {
+    "prompt_tokens": 20868,
+    "completion_tokens": 619,
+    "total_tokens": 21487,
+    "cost": 0.0901525,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 4453,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.0901525,
+     "upstream_inference_prompt_cost": 0.0439625,
+     "upstream_inference_completions_cost": 0.00619
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 287,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    },
+    "server_tool_use_details": {
+     "web_search_requests": 4
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "ChatGPT-class, no search",
+   "model": "openai/gpt-6.2-sol",
+   "asked_at": "2026-11-25T18:24:51Z",
+   "zenod_named": false,
+   "answer": "If you want memory you can **read, edit, back up, and take to another AI**, my default recommendation is **Obsidian with a dedicated memory folder**. Obsidian stores notes as ordinary Markdown files on your device, so the memory survives even if you switch apps.\n\n- **For a personal assistant:** Give an AI client that supports local file access or MCP access to just that folder. Start with `preferences.md`, `projects.md`, and `decisions.md`. Let it read freely and ask before saving or changing anything.\n- **For an agent you\u2019re building:** Look at **self-hosted Letta** if you want the agent to manage its own memory. If you only need to save and retrieve a few facts, **SQLite** is a simpler starting point.\n\nOne important distinction: **owning the storage isn\u2019t the same as keeping the contents private**. A cloud model can still receive whatever notes your client sends it. If the memories need to stay on your device, use a local model and a local connector too.",
+   "sources": [],
+   "usage": {
+    "prompt_tokens": 20,
+    "completion_tokens": 251,
+    "total_tokens": 271,
+    "cost": 0.00255,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.00255,
+     "upstream_inference_prompt_cost": 4e-05,
+     "upstream_inference_completions_cost": 0.00251
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 32,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Gemini, web search on",
+   "model": "google/gemini-3.8-flash:online",
+   "asked_at": "2026-11-25T18:24:56Z",
+   "zenod_named": false,
+   "answer": "To give an AI long-term memory that **you fully own and control**, the best approach depends on whether you are **building an app/agent via code** or looking for an **out-of-the-box chat interface** for personal use.\n\n---\n\n### Option 1: If You Want a Ready-to-Use Chat App (No Coding)\n\nIf you want a self-hosted ChatGPT alternative that automatically remembers details about you across sessions:\n\n* **Open WebUI (Recommended)**\n  * **How it works:** Open WebUI is a self-hosted, open-source interface (often paired with Ollama or private API keys). It includes a built-in **Memory** feature identical to ChatGPT\u2019s: as you chat, it automatically extracts facts about you (or you can manually add/delete memories).\n  * **Ownership:** All memories are stored in your local SQLite or PostgreSQL database on your machine/server. Nothing leaves your hardware unless you route the prompt through an external cloud LLM.\n* **Khoj**\n  * **How it works:** A personal, open-source AI assistant designed to act as a \"second brain.\" It continuously indexes your local notes (Markdown, Obsidian, Org-mode), PDFs, and chat history.\n  * **Ownership:** Fully self-hostable and local-first.\n\n---\n\n### Option 2: If You Are Building an AI Agent (Frameworks)\n\nIf you are developing your own agent, chatbot, or assistant, you should use a dedicated **memory layer** that you can back with your own local database:\n\n#### 1. **Mem0 (Formerly Embedchain)** \u2014 *Best for personalized, multi-layered memory*\n* **What it does:** Mem0 acts as a persistent memory layer between the user and the LLM. It extracts key facts, preferences, and entity relationships from conversations and intelligently recalls them when relevant.\n* **Why it fits:** It is open source, supports hierarchical memory (User, Session, and Agent-",
+   "sources": [],
+   "usage": {
+    "prompt_tokens": 38,
+    "completion_tokens": 1496,
+    "total_tokens": 1534,
+    "cost": 0.0056385,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.0056385,
+     "upstream_inference_prompt_cost": 2.85e-05,
+     "upstream_inference_completions_cost": 0.00561
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 1077,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Gemini Pro, no search",
+   "model": "google/gemini-3.1-pro-preview",
+   "asked_at": "2026-11-25T18:25:12Z",
+   "zenod_named": false,
+   "answer": "To give your AI a memory that **you completely own**, you need tools that store your data locally on your machine or on a private server, rather than in the cloud of a big tech company. \n\nIn the AI world, \"memory\" is usually achieved through **RAG (Retrieval-Augmented Generation)**, where your documents, notes, and past chats are stored in a local database that the AI searches before answering you.\n\nHere are the best tools for this, categorized by your technical comfort level:\n\n---\n\n### 1. The Easiest \"All-in-One\" Desktop Apps (No coding required)\nThese apps allow you to drag and drop your files (PDFs, Word docs, text) to create a \"brain\" for your AI. All data stays on your hard drive.\n\n*   **AnythingLLM:** This is arguably the best tool for this specific request. It is a desktop app that lets you create \"workspaces.\" You drop your documents into a workspace, and it turns them into a memory bank. \n    *   *Why it\u2019s great:* You can connect it to cloud AIs (like ChatGPT or Claude) OR local AIs (like Ollama) for 100% privacy. Your documents never leave your computer.\n*   **GPT4All:** A free, open-source desktop application that lets you run AI models locally. It has a built-in \"LocalDocs\" feature. You point it to a folder on your computer, and the AI will read and remember those files when you chat with it.\n*   **ChatRTX (by Nvidia):** If you have a Windows PC with a modern Nvidia RTX graphics card, this is a powerful, free app. It lets you connect a local AI directly to your personal files and photos, processing everything lightning-fast on your own GPU.\n\n### 2. For Note-Takers & Writers (Personal Knowledge Management)\nIf your \"memory\" consists of your personal notes, journals, or research, you should use a local-first note-taking app paired with an AI plugin.\n\n*   **Obsidian + \"Smart Connections\" Plugin:** Obsidian is a wildly popular note-taking app where all",
+   "sources": [],
+   "usage": {
+    "prompt_tokens": 14,
+    "completion_tokens": 1496,
+    "total_tokens": 1510,
+    "cost": 0.01798,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.01798,
+     "upstream_inference_prompt_cost": 2.8e-05,
+     "upstream_inference_completions_cost": 0.017952
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 1034,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Claude, web search on",
+   "model": "anthropic/claude-sonnet-5.5:online",
+   "asked_at": "2026-11-25T18:25:35Z",
+   "zenod_named": false,
+   "answer": "The best pick depends on what you're building. Most of the tools below are open source and self-hostable, so you keep the data.\n\n**Mem0** is the easiest to start with.\n- It's the most popular agent-memory project on GitHub by a wide margin (~63.0K stars), so it has plenty of examples and community help.\n- You can start with the library, move to a self-hosted server, or use the hosted platform.\n- One caveat: the smoothest production path is its hosted platform, and at scale most deployments move to an external vector database.\n\n**Cognee** suits you if you want a knowledge graph and strict privacy.\n- It uses embedded-by-default storage (SQLite, LanceDB, Kuzu), so a local start has no mandatory cloud.\n- It supports 100% local deployment, including local LLMs via Ollama.\n- It's more than you need if you only want to remember preferences.\n\n**Letta** (formerly MemGPT) is a full agent runtime with memory built in. If you already have an agent and just want to add memory, it's heavier than you need.\n\n**Supermemory** is the lightest option. It's a personal memory layer with a simple REST API and Docker-based self-hosting, under an MIT license. It has no graph support and no MCP support.\n\n**MemOS** is worth a look if you use OpenClaw or Hermes Agent. Its local plugin is 100% on-device, with persistent SQLite and hybrid search.\n\n**Graphiti** is the open-source engine behind Zep, and it's good at tracking how facts change over time. Zep retired its self-hosted Community Edition, but Graphiti itself stays open source.\n\n**Things to check:**\n- Many of these \"best of\" roundups are written by the vendors they rank first. One source says most \"best open-source memory\" roundups are published by one of the vendors and rank that vendor first. Treat the rankings with skepticism.\n- \"Open source\" doesn't always mean fully self-hosted. Some tools still expect you to run an external vector database or pay at the tier you need in production.\n- Some memory platforms send telemetry by default. Telemetry is enabled by default in many memory platforms. If you want full ownership, turn it off and check the network traffic.\n- Memory only stays yours if the LLM calls and embeddings are also local, for example through Ollama. Otherwise your memories still go to a third-party API.\n\n**My suggestion:**\n- For a quick start, use Mem0 or Supermemory.\n- For maximum privacy and relationships between facts, use Cognee with a local model.\n- For a personal assistant with plain files you can read and edit, look at the Markdown-based options such as EverOS or ReMe.\n\nWhat are you giving memory to (Claude, ChatGPT, a local model, a custom agent)? Do you want to code against it or use it as a ready-made app? With that I can narrow it to one option.",
+   "sources": [
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://opensourceaireview.com/blog/private-ai-agent-memory-platforms-no-telemetry-2026",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://vilix.ai/blog/best-open-source-ai-memory-tools",
+    "https://vilix.ai/blog/best-open-source-ai-memory-tools",
+    "https://github.com/MemTensor/MemOS",
+    "https://opensourceaireview.com/blog/private-ai-agent-memory-platforms-no-telemetry-2026",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://opensourceaireview.com/blog/private-ai-agent-memory-platforms-no-telemetry-2026"
+   ],
+   "usage": {
+    "prompt_tokens": 23519,
+    "completion_tokens": 1322,
+    "total_tokens": 24841,
+    "cost": 0.070258,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.070258,
+     "upstream_inference_prompt_cost": 0.047038,
+     "upstream_inference_completions_cost": 0.01322
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 82,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    },
+    "server_tool_use_details": {
+     "web_search_requests": 1
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Claude, no search",
+   "model": "anthropic/claude-opus-5.5",
+   "asked_at": "2026-11-25T18:25:47Z",
+   "zenod_named": false,
+   "answer": "It depends on how you use your AI, but here are the strongest options where **you control the data**:\n\n## If you use Claude Desktop, Cursor, or another MCP-compatible app\n**Basic Memory** is a top pick for ownership.\n- Stores memories as plain **Markdown files on your computer**\n- You can read, edit, back up, or version them with Git\n- Works well alongside Obsidian\n- If you stop using it, your notes are still just text files\n\n**Official MCP Memory Server** (from the Model Context Protocol project)\n- A simple knowledge graph saved to a local JSON file\n- Easy to set up, but more basic\n\n## If you're building your own AI app or agent\n**Mem0**\n- Open-source memory layer you can self-host\n- Automatically extracts and recalls facts about users\n- Works with most LLMs (OpenAI, Anthropic, local models)\n\n**Letta** (formerly MemGPT)\n- Full agent framework with long-term memory built in\n- Self-hostable, with memory stored in your own database\n\n**Zep / Graphiti**\n- Builds a knowledge graph that tracks how facts change over time\n- Graphiti is the open-source core\n\n## If you want maximum control (DIY)\nStore embeddings in a database you run yourself, such as **Chroma**, **Qdrant**, **SQLite with sqlite-vec**, or **Postgres with pgvector**, and retrieve relevant memories before each prompt.\n\n## For a fully local setup\nPair any of the above with a local model via **Ollama** or **LM Studio**, so nothing leaves your machine.\n\n---\n\n**Quick recommendation:**\n- **Non-developer using Claude Desktop or similar:** Basic Memory\n- **Developer building an app:** Mem0\n- **Building complex autonomous agents:** Letta\n\nWhat's your setup? Tell me which AI tool you use and whether you code, and I can give you specific setup steps.",
+   "sources": [],
+   "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 814,
+    "total_tokens": 839,
+    "cost": 0.01638,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.01638,
+     "upstream_inference_prompt_cost": 0.0001,
+     "upstream_inference_completions_cost": 0.01628
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 186,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Perplexity Sonar Pro",
+   "model": "perplexity/sonar-pro",
+   "asked_at": "2026-11-25T18:25:57Z",
+   "zenod_named": false,
+   "answer": "If you want a tool that gives your AI a **memory you own**, the strongest fit in these results is **MemoryPlugin** if you want one memory layer across multiple AI tools, or **Membase** if you want a shared memory for your own app plus assistants and coding tools.[1][3]\n\nA practical way to choose:\n\n- **MemoryPlugin**: best if your goal is a **cross-tool personal memory** that follows you across many AI apps and runs as a browser extension/MCP integration.[1]\n- **Membase**: best if you want **one shared memory** for consumer assistants and your own agents/coding tools, with hosted and local options.[3]\n- **Mem0**: best if you are building a **personalized agent** and want a common starting point for memory layers.[3][10]\n- **Zep / Graphiti**: better if your AI needs facts that **change over time** or you want graph-structured memory.[3][13]\n- **Qdrant / Weaviate / Pinecone**: better if you are a developer and want to build your own memory stack with a vector database or hybrid retrieval layer.[10]\n\nIf you mean a **personal assistant that remembers you**, not just a developer tool, the results also point to **Claude** and **ChatGPT** as strong general assistants with built-in memory, while **Littlebird** is highlighted for memory built from your work rather than just your chats.[9][12]\n\nIf you want, I can narrow this to:\n- **best no-code option**\n- **best open-source option**\n- **best for ChatGPT/Claude memory**\n- **best for your own app or agent**",
+   "sources": [
+    "https://blog.memoryplugin.com/best-ai-memory-tools/",
+    "https://dazzle.ai/ai-memory-apps/",
+    "https://membase.com/blog/best-ai-agent-memory-tools-2026",
+    "https://ailately.com/articles/best-ai-memory-tools",
+    "https://alignify.co/tools/memory",
+    "https://www.aixploria.com/en/category/memory-en/",
+    "https://www.techtimes.com/articles/331314/20261123/best-ai-memory-platforms-2026-remember-investigate.htm",
+    "https://www.braintrust.dev/articles/best-ai-agent-memory-tools-2026",
+    "https://littlebird.ai/blog/best-ai-assistants-with-memory",
+    "https://www.shaped.ai/blog/the-8-best-tools-for-ai-agent-memory-long-term-recall-2026-guide",
+    "https://topai.tools/s/memory-aid",
+    "https://www.saner.ai/blogs/best-ai-tools-with-memory",
+    "https://www.cognee.ai/best-open-source-ai-memory-tools-for-llm-agents-and-developers",
+    "https://www.vellum.ai/blog/best-personal-ai-assistants-with-memory",
+    "https://evermind.ai/blogs/10-best-ai-assistants-with-long-term-memory-in-2026",
+    "https://tana.inc/blog/best-organizational-memory-tools-2026",
+    "https://www.courier-journal.com/press-release/story/259490/aigeo-publishes-comparison-of-six-character-ai-alternatives-for-long-roleplay-with-memory/",
+    "https://www.pcmag.com/deals/get-the-plaud-note-pro-your-ai-meeting-companion-for-22-off"
+   ],
+   "usage": {
+    "prompt_tokens": 14,
+    "completion_tokens": 365,
+    "total_tokens": 379,
+    "cost": 0.01152,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.01152,
+     "upstream_inference_prompt_cost": 4.2e-05,
+     "upstream_inference_completions_cost": 0.011478
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 0,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Perplexity Sonar",
+   "model": "perplexity/sonar",
+   "asked_at": "2026-11-25T18:26:06Z",
+   "zenod_named": false,
+   "answer": "If you want **memory you control and can carry across AI tools**, a strong choice is **MemoryPlugin**: it\u2019s built for \u201ccarrying one memory across multiple AI tools\u201d and runs as a browser extension with MCP support across 21+ AI tools.[1]\n\nIf you want a more **developer-friendly, shared memory layer** for your own app or agents, **Membase** is a good fit: it is described as \u201cone memory shared across your app, AI assistants and coding tools,\u201d with support for both hosted and local modes.[3]\n\nFor a **personal AI memory** that remembers more of your work context rather than just chats, **Littlebird** is a standout option because it reads your active window and meeting transcripts so the memory is built from your work.[9]\n\nA simple way to choose:\n\n- **MemoryPlugin** \u2014 best if you want one memory to follow you across many AI products.[1]\n- **Membase** \u2014 best if you are building with your own app/agent and want a shared memory layer you own.[3]\n- **Littlebird** \u2014 best if you want memory captured from your work activity, not just chat history.[9]\n\nIf you want, I can narrow this down to the best option for **privacy**, **self-hosting**, or **no-code use**.",
+   "sources": [
+    "https://blog.memoryplugin.com/best-ai-memory-tools/",
+    "https://dazzle.ai/ai-memory-apps/",
+    "https://membase.com/blog/best-ai-agent-memory-tools-2026",
+    "https://ailately.com/articles/best-ai-memory-tools",
+    "https://alignify.co/tools/memory",
+    "https://www.aixploria.com/en/category/memory-en/",
+    "https://www.techtimes.com/articles/331314/20261123/best-ai-memory-platforms-2026-remember-investigate.htm",
+    "https://www.braintrust.dev/articles/best-ai-agent-memory-tools-2026",
+    "https://littlebird.ai/blog/best-ai-assistants-with-memory",
+    "https://www.shaped.ai/blog/the-8-best-tools-for-ai-agent-memory-long-term-recall-2026-guide",
+    "https://topai.tools/s/memory-aid",
+    "https://www.saner.ai/blogs/best-ai-tools-with-memory",
+    "https://www.cognee.ai/best-open-source-ai-memory-tools-for-llm-agents-and-developers",
+    "https://www.vellum.ai/blog/best-personal-ai-assistants-with-memory",
+    "https://evermind.ai/blogs/10-best-ai-assistants-with-long-term-memory-in-2026",
+    "https://tana.inc/blog/best-organizational-memory-tools-2026",
+    "https://www.courier-journal.com/press-release/story/259490/aigeo-publishes-comparison-of-six-character-ai-alternatives-for-long-roleplay-with-memory/",
+    "https://www.pcmag.com/deals/get-the-plaud-note-pro-your-ai-meeting-companion-for-22-off"
+   ],
+   "usage": {
+    "prompt_tokens": 14,
+    "completion_tokens": 277,
+    "total_tokens": 291,
+    "cost": 0.00529,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.00529,
+     "upstream_inference_prompt_cost": 1.4e-05,
+     "upstream_inference_completions_cost": 0.005276
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 0,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "Grok, web search on",
+   "model": "x-ai/grok-4.7:online",
+   "asked_at": "2026-11-25T18:26:09Z",
+   "zenod_named": false,
+   "answer": "A good default is **Basic Memory**: local Markdown files you own, shared across AI tools through MCP.\n\nIt stores what your AI remembers as plain Markdown on your disk. Claude, Cursor, Codex, VS Code, and other MCP clients can read and write the same notes. You can open them in any editor or Obsidian, put them in git, and back them up like any other files. Under the hood it builds a small knowledge graph and supports semantic search, but the files stay the source of truth. It is open source (AGPL-3.0) and free to run locally. [[1]](https://github.com/basicmachines-co/basic-memory/blob/main/README.md) [[2]](https://github.com/basicmachines-co/basic-memory/tree/093dab5f03cf7b090a9f4003c55507859bf355b0)\n\n### Other strong \u201cI own it\u201d options\n\n| Goal | Tool | Why it fits |\n| --- | --- | --- |\n| See and undo every change the AI makes | **OpenMyMemo** | Memory is a folder of Markdown you own. Apps share it; additions are reviewable and undoable. Apache-2.0, no account required for local use. Newer and smaller than Basic Memory. [[3]](https://openmymemo.com/) [[4]](https://github.com/mymemoai/openmymemo) |\n| Simplest possible local memory | **Official MCP knowledge-graph memory server** | One local file, a few tools (`create_entities`, `search_nodes`, etc.). Zero extra stack. |\n| Memory layer inside an app you are building | **Mem0 (self-hosted)** | Most widely used open-source memory layer (Apache-2.0). Run the library or the Docker server; data lives in your Postgres/vector store. Extraction still calls an LLM you configure. Some advanced features (graph memory, decay) are platform-only. [[5]](https://docs.mem0.ai/open-source/overview) [[6]](https://docs.mem0.ai/platform/platform-vs-oss) |\n| Facts that change over time | **Graphiti** | Open-source temporal knowledge graph (the engine behind Zep). Self-host with FalkorDB or Neo4j. [[7]](https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems) |\n| Fully local agent memory with little ops | **Hindsight** or **Cognee** | Both are open source and self-hostable; Hindsight is a simple Docker deploy, Cognee is stronger if you want a knowledge graph over documents and chat. [[7]](https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems) [[8]](https://www.cognee.ai/best-open-source-ai-memory-tools-for-llm-agents-and-developers) |\n\n### How to choose\n\n- **Personal use across the AIs you already chat with:** start with **Basic Memory**. If you care most about auditing and rolling back what the model writes, try **OpenMyMemo**.\n- **Product or agent you ship:** self-host **Mem0**, or **Graphiti** if \u201cwhat was true last month\u201d matters.\n- **Avoid** treating ChatGPT Memory, Claude memory, or a hosted memory API as \u201cyours.\u201d Those stores live with the vendor. Export is not the same as ownership.\n\nOne limit worth knowing: local storage means *you* hold the memory, but anything the model retrieves is still sent to that model\u2019s provider in the prompt. Ownership of the store does not make the inference path private unless you also run a local model.",
+   "sources": [
+    "https://github.com/basicmachines-co/basic-memory/blob/main/README.md",
+    "https://github.com/basicmachines-co/basic-memory/tree/093dab5f03cf7b090a9f4003c55507859bf355b0",
+    "https://openmymemo.com/",
+    "https://github.com/mymemoai/openmymemo",
+    "https://docs.mem0.ai/open-source/overview",
+    "https://docs.mem0.ai/platform/platform-vs-oss",
+    "https://hindsight.vectorize.io/blog/2026/08/11/open-source-agent-memory-systems",
+    "https://www.cognee.ai/best-open-source-ai-memory-tools-for-llm-agents-and-developers"
+   ],
+   "usage": {
+    "prompt_tokens": 70185,
+    "completion_tokens": 2523,
+    "total_tokens": 72708,
+    "cost": 0.149804,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 27136,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.149804,
+     "upstream_inference_prompt_cost": 0.099666,
+     "upstream_inference_completions_cost": 0.015138
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 1642,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    },
+    "server_tool_use_details": {
+     "web_search_requests": 7
+    }
+   },
+   "error": null
+  },
+  {
+   "label": "DeepSeek, no search",
+   "model": "deepseek/deepseek-v4.1-flash",
+   "asked_at": "2026-11-25T18:27:13Z",
+   "zenod_named": false,
+   "answer": "If you want memory **you own**\u2014stored locally or in your own database, exportable, not locked inside ChatGPT/Claude\u2014the best pick depends on how you use the AI.\n\n**Short answer:**\n- **Using Claude Desktop / Cursor / an MCP-capable AI?** \u2192 **Basic Memory** or **Mem0 OpenMemory**.\n- **Building your own AI app/agent?** \u2192 **Mem0** or **Letta**.\n- **Want an all-in-one local personal AI over your notes/docs?** \u2192 **Khoj** or **AnythingLLM**.\n- **Want maximum control/DIY?** \u2192 **SQLite + sqlite-vec / pgvector / Qdrant + embeddings**.\n\n| Tool | Best for | Ownership model |\n|---|---|---|\n| **Basic Memory** | MCP clients like Claude Desktop; memory as plain Markdown files | Local Markdown files, Git-friendly, very ownable |\n| **Mem0 / OpenMemory** | Adding long-term memory to AI agents/apps | Open-source, self-hostable; use your own Postgres/Qdrant/etc. |\n| **Letta (formerly MemGPT)** | Stateful agents with editable memory blocks + archival memory | Self-hosted, DB-backed, open-source |\n| **Zep / Graphiti** | Temporal knowledge-graph memory for agents | Community edition can be self-hosted |\n| **Khoj** | Personal AI over your notes, docs, email | Self-hostable, indexes your own files |\n| **AnythingLLM** | Local ChatGPT-like app with workspaces/RAG | Local-first, works with local models/vector DB |\n| **Open WebUI** | Self-hosted AI chat with RAG/memory features | Local/self-hosted |\n| **Chroma, Qdrant, LanceDB, pgvector, sqlite-vec** | DIY memory store for embeddings | You run and own the database |\n\n**My practical recommendation:**\n- If you just want a memory for your Claude/Cursor/etc. assistant: try **Basic Memory** first. It\u2019s simple, MCP-based, and stores everything in Markdown you can read, edit, back up, and sync.\n- If you\u2019re building an app: use **Mem0** with **pgvector** or **Qdrant**. It handles add/search/update/delete memory and can be self-hosted.\n- If you want an agent that actively manages its own memory: use **Letta**.\n- If you want a local personal AI over your documents: use **Khoj** or **AnythingLLM**.\n\n**Ownership checklist:**\n- Stored in open formats: Markdown, SQLite, Postgres, JSON.\n- Runs locally or on your server.\n- Export/import supported.\n- Backups are possible.\n- No vendor lock-in.\n- You can delete/forget specific memories.\n\nAvoid relying only on built-in ChatGPT/Claude memory if ownership matters. Export is limited and the memory lives in their system. Instead, put memory in your own layer and plug it into the AI via MCP, API, or RAG.",
+   "sources": [],
+   "usage": {
+    "prompt_tokens": 44,
+    "completion_tokens": 3503,
+    "total_tokens": 3547,
+    "cost": 0.00168672,
+    "is_byok": false,
+    "prompt_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 0,
+     "audio_tokens": 0,
+     "video_tokens": 0
+    },
+    "cost_details": {
+     "upstream_inference_cost": 0.00168672,
+     "upstream_inference_prompt_cost": 5.28e-06,
+     "upstream_inference_completions_cost": 0.00168144
+    },
+    "completion_tokens_details": {
+     "reasoning_tokens": 2847,
+     "image_tokens": 0,
+     "audio_tokens": 0
+    }
+   },
+   "error": null
+  }
+ ]
+}
