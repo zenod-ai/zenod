@@ -2360,6 +2360,8 @@ export interface PhylaxTenantDelivery {
   send(channel: PhylaxPortedChannel, recipient: string, text: string, image?: PhylaxNotifyImage, from?: string): Promise<PhylaxDeliveryReceipt>;
   status(): Promise<Record<string, unknown>> | Record<string, unknown>;
   notify?(text: string, image?: PhylaxNotifyImage, from?: string): Promise<PhylaxDeliveryReceipt[]>;
+  /** EPIC-7 E7-S38: hold a notify for the tenant's next batch (one message every few hours); a `queued` receipt. */
+  queue?(text: string): Promise<PhylaxDeliveryReceipt[]>;
   /** EPIC-20 A9: the account's own WhatsApp numbers; absent when extra numbers are off. */
   whatsappNumbers?: PhylaxWhatsAppNumbers;
   /** Tenant-filtered reader backed by Phylax's authoritative transport store. */
@@ -2453,13 +2455,17 @@ export function registerPhylaxChannelTools(server: McpServer, delivery: PhylaxTe
         ),
         imageMimeType: z.string().optional().describe("MIME type of imageBase64: image/png (default), image/jpeg or image/webp."),
         from: fromNumberArg(),
+        urgency: z.enum(["now", "batch"]).optional().describe(
+          "now (default): send at once. batch: hold it and send it inside one combined message with the other held ones, at most every few hours and never at night. Use now only for a briefing, a real alarm or a reply to the user; batch for everything else. A batch call with a picture or from goes now.",
+        ),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ text, imageBase64, imageMimeType, from }) => {
+    async ({ text, imageBase64, imageMimeType, from, urgency }) => {
       if (!delivery.notify) throw new PhylaxChannelError("delivery_error", "tenant notification preferences are not configured");
       try {
         const image = decodeNotifyImage(imageBase64, imageMimeType);
+        if (urgency === "batch" && !image && !from && delivery.queue) return deliveryToolResult(await delivery.queue(text));
         if (from) return deliveryToolResult(await delivery.notify(text, image, from));
         return deliveryToolResult(await (image ? delivery.notify(text, image) : delivery.notify(text)));
       } catch (error) {

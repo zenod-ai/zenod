@@ -64,6 +64,7 @@ import {
   type PhylaxFixedProductAdapter,
   type PhylaxTenantDelivery,
   type PhylaxWhatsAppNumberView,
+  type PhylaxDeliveryReceipt,
   type PhylaxNotifyImage,
   type PhylaxPortedChannel,
   type PhylaxTranscriptionFailure,
@@ -94,6 +95,7 @@ import type { CustomerLayerOptions } from "./customerLayer.js";
 import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { PhylaxWhatsAppWelcome } from "./phylaxWhatsAppWelcome.js";
+import { notifyBatchOptionsFromEnv, PhylaxNotifyBatch } from "./phylaxNotifyBatch.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
@@ -182,6 +184,21 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   const hostedChannelAudit = new HostedChannelMutationAuditStore(storage.dataDir);
   // E26-S26: the tester welcome Zenod arms with the one-time code, sent as the verification reply.
   const whatsappWelcome = new PhylaxWhatsAppWelcome(storage.dataDir);
+  // EPIC-7 E7-S38: notifies marked `urgency: "batch"` wait here and go out as one message per window.
+  const notifyBatch = new PhylaxNotifyBatch(storage.dataDir, notifyBatchOptionsFromEnv(env));
+  const notifyBatchTimer = setInterval(() => {
+    void notifyBatch
+      .flushDue(async (tenantId, text) => {
+        const receipts = await notifyTenantNow(runtime, tenantSettings, tenantId, text);
+        const ok = receipts.some((receipt) => receipt.status !== "queued" && receipt.sentMessageId);
+        console.log(JSON.stringify({ event: "notify_batch.sent", tenant_id: tenantId, ok, receipts: receipts.length }));
+        return ok;
+      })
+      .catch((error: unknown) => {
+        console.warn(JSON.stringify({ event: "notify_batch.failed", error: error instanceof Error ? error.message : String(error) }));
+      });
+  }, 5 * 60_000);
+  notifyBatchTimer.unref?.();
   const allowanceLedger = new PhylaxAllowanceLedger(
     join(storage.dataDir, "phylax-allowance.sqlite"),
   );
@@ -376,7 +393,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         challengeSecret: artifactCapabilitySecret,
         welcome: whatsappWelcome,
       });
-      registerTenantChannelTools(server, context, runtime, tenantSettings);
+      registerTenantChannelTools(server, context, runtime, tenantSettings, notifyBatch);
       options.registerAdditionalTools?.(server, context);
     },
   });
@@ -757,7 +774,9 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     phylaxUsageMeter: usageMeter,
     phylaxCompatibilityMigration: compatibilityMigration,
     ringCaptureTickets: captureTickets,
+    phylaxNotifyBatch: notifyBatch,
     async close() {
+      clearInterval(notifyBatchTimer);
       const failures: unknown[] = [];
       for (const result of await Promise.allSettled([
         runtime.close(),
@@ -1301,11 +1320,42 @@ async function forwardPhylaxUnitRequest(
   return unit.app.fetch(new Request(c.req.raw, { headers }), c.env);
 }
 
+/**
+ * Send one notify to the tenant's own channels now: WhatsApp (with the picture) and Telegram, as the tenant's
+ * notification preferences say. Shared by the `notify` tool and the E7-S38 batch timer.
+ */
+async function notifyTenantNow(
+  runtime: PhylaxPortedRuntime,
+  settings: PhylaxTenantSettingsStore,
+  tenantId: string,
+  text: string,
+  image?: PhylaxNotifyImage,
+): Promise<PhylaxDeliveryReceipt[]> {
+  const tenant = settings.get(tenantId);
+  const delivery = runtime.delivery(tenantId);
+  const send = (channel: PhylaxPortedChannel, recipient: string, body: string, picture?: PhylaxNotifyImage) => {
+    if (!settings.ownsRecipient(tenantId, channel, recipient)) {
+      throw new PhylaxChannelError("delivery_error", "That recipient is not connected to this Zenod account.");
+    }
+    return picture ? delivery.send(channel, recipient, body, picture) : delivery.send(channel, recipient, body);
+  };
+  const requests: Array<Promise<PhylaxDeliveryReceipt>> = [];
+  if (tenant.notificationPrefs.whatsapp && tenant.verified && tenant.phoneNumber) {
+    // EPIC-20 A3: only WhatsApp carries the picture; Telegram keeps the text.
+    requests.push(send("whatsapp", tenant.phoneNumber, text, image));
+  }
+  if (tenant.notificationPrefs.telegram && tenant.telegramBinding) {
+    requests.push(send("telegram", tenant.telegramBinding, text));
+  }
+  return Promise.all(requests);
+}
+
 function registerTenantChannelTools(
   server: McpServer,
   context: UnitContext,
   runtime: PhylaxPortedRuntime,
   settings: PhylaxTenantSettingsStore,
+  notifyBatch?: PhylaxNotifyBatch,
 ): void {
   const tenantId = context.tenant?.id;
   if (!tenantId) throw new Error("Phylax channel tools require a tenant");
@@ -1364,7 +1414,6 @@ function registerTenantChannelTools(
     ...(whatsappNumbers ? { whatsappNumbers } : {}),
     async notify(text, image, from) {
       const tenant = settings.get(tenantId);
-      const requests: Array<Promise<Awaited<ReturnType<typeof send>>>> = [];
       if (from) {
         // EPIC-20 A9: a notify from one of the account's extra numbers goes to its verified WhatsApp only.
         if (!tenant.verified || !tenant.phoneNumber) {
@@ -1372,15 +1421,22 @@ function registerTenantChannelTools(
         }
         return [await send("whatsapp", tenant.phoneNumber, text, image, from)];
       }
-      if (tenant.notificationPrefs.whatsapp && tenant.verified && tenant.phoneNumber) {
-        // EPIC-20 A3: only WhatsApp carries the picture; Telegram keeps the text.
-        requests.push(send("whatsapp", tenant.phoneNumber, text, image));
-      }
-      if (tenant.notificationPrefs.telegram && tenant.telegramBinding) {
-        requests.push(send("telegram", tenant.telegramBinding, text));
-      }
-      return Promise.all(requests);
+      return notifyTenantNow(runtime, settings, tenantId, text, image);
     },
+    ...(notifyBatch
+      ? {
+          async queue(text: string) {
+            const tenant = settings.get(tenantId);
+            if (!(tenant.notificationPrefs.whatsapp && tenant.verified && tenant.phoneNumber)
+              && !(tenant.notificationPrefs.telegram && tenant.telegramBinding)) {
+              throw new PhylaxChannelError("delivery_error", "This Zenod account has no channel to notify.");
+            }
+            const held = notifyBatch.add(tenantId, text);
+            // No message id yet: the batch gets one when it goes out. `whatsapp::queued` is the receipt line.
+            return [{ channel: "whatsapp" as const, recipient: "owner", sentMessageId: "", status: "queued" as const, at: new Date(held.dueAt).toISOString() }];
+          },
+        }
+      : {}),
     status() {
       return {
         settings: settings.view(tenantId),
