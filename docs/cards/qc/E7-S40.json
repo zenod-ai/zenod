@@ -1,0 +1,85 @@
+{
+  "row": "E7-S40",
+  "card": "docs/cards/E7-S40.md",
+  "cardSha": "17406f8a02e38f2e",
+  "inputs": {
+    "card": "17406f8a02e38f2e",
+    "page": "122ef0a3eb4ca04b",
+    "rules": "c1a7854c21d10fb4",
+    "words": "4c9fe22c1fac0a79"
+  },
+  "checkedAt": "2026-11-25T20:54:43Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "how is it possible that we're making these totally ridiculous errors ... We've had problems with these email addresses for a long time ... when they registered, we didn't get their names.",
+      "where": "vn_febcc8c2",
+      "status": "met",
+      "how": "Evidence shows each address and name taken from the Google sign-in, with sources; unsure greetings are held, not sent."
+    },
+    {
+      "said": "Yes: Zenod fixes sign-up next",
+      "where": "vn_febcc8c2",
+      "status": "met",
+      "how": "Card delivers one address per account and the Google name, matching the chosen fix."
+    },
+    {
+      "said": "how is it possible that we're making these totally ridiculous errors ... when they registered, we didn't get their names.",
+      "where": "vn_febcc8c2",
+      "status": "met",
+      "how": "Evidence shows names found from the Google sign-in and held mails for Vitor and Nox."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "At 390 and 1280 the page opens with the punchline box, a clean three-box flow diagram, then readable tables with no sideways scroll; the look is consistent."
+  },
+  "pass": false,
+  "held": [
+    "ambiguous: The buttons read \"Yes: greet by the typed name\" / \"No: keep Hi, when unsure\", but the delivered line says unsure names are held and nothing was sent. A reader could take \"No\" as sending a bare \"Hi,\" or as holding the mail entirely, and those lead to different actions."
+  ],
+  "reader": {
+    "asked": "Decide whether testers should be greeted by the name they typed when Google's name disagrees, yes or no.",
+    "ambiguous": "The buttons read \"Yes: greet by the typed name\" / \"No: keep Hi, when unsure\", but the delivered line says unsure names are held and nothing was sent. A reader could take \"No\" as sending a bare \"Hi,\" or as holding the mail entirely, and those lead to different actions."
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "122ef0a3eb4ca04b",
+    "walkedAt": "2026-11-25T20:54:43Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9009/#testers",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9009/#testers",
+      "file": "E7-S40-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9009/#testers",
+      "file": "E7-S40-1280.webp"
+    }
+  ]
+}
