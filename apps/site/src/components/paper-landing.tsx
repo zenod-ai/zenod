@@ -71,6 +71,8 @@ export function Nav({
 }) {
   const links = [
     { href: `${base}#how`, label: "How it works" },
+    // E25-S5: why Zenod exists, in mini chapters (Jordi, 25 Nov 2026).
+    { href: "/vision", label: "Vision" },
     { href: `${base}#mcp`, label: "Your AI tools" },
     { href: `${base}#start`, label: "Pricing" },
     { href: "/connect", label: "Connect" },
@@ -125,6 +127,7 @@ export function Footer() {
         Zenod is named after Zenodotus, the first librarian of Alexandria.
       </p>
       <p className="pp-foot-links">
+        <a href="/vision">Vision</a>
         <a href="/connect">Docs</a>
         <a href="/testers">Testers</a>
         <a href={GITHUB_URL}>GitHub</a>

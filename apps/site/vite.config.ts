@@ -18,6 +18,8 @@ export default defineConfig({
         testers: path.resolve(__dirname, "testers.html"),
         // E26-S26: the video and WhatsApp how-to page testers are sent to.
         start: path.resolve(__dirname, "start.html"),
+        // E25-S5: the Vision tab, its own title and description for links.
+        vision: path.resolve(__dirname, "vision.html"),
         // ZAL-A19: the not-found page the server sends with HTTP 404.
         notfound: path.resolve(__dirname, "404.html"),
       },
