@@ -40,7 +40,7 @@ Verified at: 2026-11-25
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| R-S1 | Ticket worker | unassigned | Baselines: count the AI tool directories that list Zenod today (DOD-1) and ask 10 AI assistants for a memory tool, counting how often Zenod is named (DOD-3); one evidence page with both numbers | ready | none | none | main | none | 2026-11-25 | dispatch (Jordi's yes on E7-A45, L-37) |
+| R-S1 | Ticket worker | run_7bc3eb8f-0dbb-4f23-942d-a3b4b43890b1 — claimed 2026-11-25T18:23Z, lease until 2026-11-25T20:23Z | Baselines: count the AI tool directories that list Zenod today (DOD-1) and ask 10 AI assistants for a memory tool, counting how often Zenod is named (DOD-3); one evidence page with both numbers | active | none | none | main | none | 2026-11-25 | dispatch (Jordi's yes on E7-A45, L-37) |
 
 ## Decisions
 
