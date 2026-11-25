@@ -41,14 +41,14 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 Status: active
 Phase: tester door open on production; launch work runs in EPIC-7 (testers), EPIC-23 and EPIC-26 (first tester and invites); A0 done 2026-10-25
 Last verified: 2026-11-19
-Last attempted: 2026-11-24T16:19Z roll-up (DM run_a0fc4106): docs/EPIC-7-REAL-USER-TEST.md (active): production now lets a tester import an Obsidian vault and the tester table shows MCP and memory use; 3 testers, 1 WhatsApp linked, 0 saved a memory; a staging test vault is being set up and the testers' replies are read on 25 Nov ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): done since 3 Nov, waits only for Jordi's mark ; M36 (long voice notes) done, live on Phylax 2965d75 and in production
-Result: production zenod-mt 9a7f17c5 healthy (promote 24 Nov 14:58Z); 3 sign-ups, 1 WhatsApp linked, 0 saved memories
+Last attempted: 2026-11-25T16:39Z DM roll-up (run_b0c8dc9d): docs/EPIC-7-REAL-USER-TEST.md (active): production 661df5dd since 25 Nov 09:41Z carries the Obsidian import, short voice-note replies, any-length notes and ElevenLabs; 3 testers, none has saved a note and none replied to 12 mails; tester mails had wrong addresses and lost names, being fixed (E7-S40); fewer WhatsApps to Jordi (E7-S38) in review ; docs/EPIC-6-HEALTH-DASHBOARD.md (review): done, waits only for Jordi's mark
+Result: production zenod-mt 661df5dd healthy (promoted 25 Nov 09:41Z, question set passed); 3 sign-ups, 1 WhatsApp linked, 0 saved memories, 0 tester replies
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: the testers' replies and first notes ; E7-S34 staging test vault (run_7477ee29) ; Jordi's mark on EPIC-6
+Waiting on: the testers' first notes ; E7-S40 (tester mails right address and name) ; Jordi's cards in review and ask E7-A45 ; Jordi's mark on EPIC-6
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: E7-S34 proves the Obsidian import on staging ; 25 Nov 16:00Z E7-S30 reads tester replies and the first named blocker gets fixed
-Verified at: 2026-11-24T16:19Z (production 9a7f17c5 via /api/health; EPIC-7 and EPIC-6 Current States read)
+Next action: E7-S40 lands, then agent_team E105-S306 sends each tester one short next-step message ; E25-S5 Vision page live at the next promote
+Verified at: 2026-11-25T16:39Z (cloud.zenod.dev/api/health 661df5dd; EPIC-7 and EPIC-6 Current States read)
 
 ## Waiting on
 

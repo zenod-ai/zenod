@@ -29,14 +29,14 @@ Goal sentence: zenod.dev shows early, in moving pictures, that your words are ke
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-19T08:45Z roll-up (DM run_464ce9c0): E25-S3 iteration 2 approved by Jordi 18 Nov, zenod.dev tells it with Sara's week, raw and organized files, voice note to Drive or GitHub, less text (live ada4e0f) ; E25-S4 done, a new memory opens in Obsidian with no broken link ; E25-S1, E25-S2 done
-Result: zenod.dev live in Jordi's words with his examples, approved; the Obsidian claim is checked true
+Last attempted: 2026-11-25T16:39Z DM roll-up (run_b0c8dc9d): E25-S5 Vision tab on zenod.dev (Jordi's 25 Nov 14:34Z note) merged in PR #1767 (28a706f0, ci green), waits for the production promote ; E25-S1 to S4 done
+Result: zenod.dev live in Jordi's words, approved; a Vision page (why Zenod exists, owning your memory, context that compounds) is merged and reaches zenod.dev/vision at the next promote
 Evidence: https://zenod.dev/ ; [E25-S3 iteration 2](evidence/e25-s3-it2-2026-11-18.md) ; [E25-S4](evidence/e25-s4-2026-11-18.md)
-Waiting on: nothing in this epic; the /testers first screen has no picture (look check), outside E25-S3
+Waiting on: the hourly promote for E25-S5 (zenod.dev/vision) ; then Jordi's card
 Approved work: none
-Next action: none due; new landing asks from Jordi land here
+Next action: after the promote: check zenod.dev/vision live and set E25-S5 to review
 Source revision: 1f1ebae
-Verified at: 2026-11-19T08:45Z (rows E25-S1 to S4 read; zenod.dev 200)
+Verified at: 2026-11-25T16:39Z (rows E25-S1 to S5 read; E25-S5 PR #1767 merged)
 
 ## Non-Goals
 
