@@ -1,43 +1,40 @@
 {
   "row": "E7-S38",
   "card": "docs/cards/E7-S38.md",
-  "cardSha": "d8513c44486a3612",
+  "cardSha": "57c095cbd48f3e94",
   "inputs": {
-    "card": "d8513c44486a3612",
+    "card": "57c095cbd48f3e94",
     "page": "e0c4d04ba5d0926b",
     "rules": "c1a7854c21d10fb4",
     "words": "a91079ad6fae9f68"
   },
-  "checkedAt": "2026-11-25T14:48:43Z",
+  "checkedAt": "2026-11-25T14:49:29Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "so many whatsapps that I think the briefings are getting a little bit lost",
       "where": "2026-11-25",
       "status": "met",
-      "how": "Evidence page shows 'Messages he did not ask for' falling from 23 to about 12 and the 'Who sent them' table by sender."
+      "how": "Evidence page shows 'Messages he did not ask for' falling from 23 to about 12, and the 'Who sent them' table by sender; the card's delivered lines report counts and batching."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box under the title, show the bar chart and before/after table, fit without sideways scroll, and end in a readable footer; no house-rule breach is clear."
+    "summary": "Both widths show the punchline first, a clear bar chart and a before-and-after table, with no sideways overflow and readable text; the evidence page holds the delivered result."
   },
-  "pass": false,
-  "held": [
-    "ambiguous: The decision asks 'Is your phone quieter by tomorrow evening?' and recommends yes after the console switches; a stranger could not tell whether 'yes' is a claim already true or a promise that depends on the console switching, which may not happen by tomorrow.",
-    "card needs rewriting: its decision asks about the phone quieter, which its title, first delivered line and screenshot do not show: show that first, then ask about it"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "He is asked to say whether his phone will be quieter by tomorrow evening, after the console switches.",
-    "ambiguous": "The decision asks 'Is your phone quieter by tomorrow evening?' and recommends yes after the console switches; a stranger could not tell whether 'yes' is a claim already true or a promise that depends on the console switching, which may not happen by tomorrow."
+    "asked": "Decide whether only briefings, alarms and replies should reach him one by one, which the card recommends.",
+    "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "e0c4d04ba5d0926b",
-    "walkedAt": "2026-11-25T14:48:43Z",
+    "walkedAt": "2026-11-25T14:49:29Z",
     "steps": [
       {
         "n": 1,
