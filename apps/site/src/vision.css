@@ -35,7 +35,7 @@
 .vz-kind-vision { color: var(--pp-accent); border-color: var(--pp-accent); }
 
 /* A chapter: about one screen. */
-.vz-ch { border-top: 1px solid var(--vz-line); }
+.vz-ch { border-top: 1px solid var(--vz-line); scroll-margin-top: 4.5rem; }
 .vz-ch-in {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);

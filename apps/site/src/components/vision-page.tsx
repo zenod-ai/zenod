@@ -368,6 +368,12 @@ function Chapter({ chapter, no }: { chapter: VisionChapter; no: number }) {
 
 export function VisionPage({ nav, footer }: { nav: React.ReactNode; footer: React.ReactNode }) {
   React.useEffect(() => startScenes(document), []);
+  // The page draws after load, so a link to one chapter (/vision#compounds)
+  // scrolls there once the chapter exists.
+  React.useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }, []);
   return (
     <div className="pp pp-vision">
       {nav}
