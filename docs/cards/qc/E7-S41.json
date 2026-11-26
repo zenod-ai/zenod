@@ -1,0 +1,101 @@
+{
+  "row": "E7-S41",
+  "card": "docs/cards/E7-S41.md",
+  "cardSha": "8882dc6e72f218b8",
+  "inputs": {
+    "card": "8882dc6e72f218b8",
+    "page": "a1135d92e57c5c2c",
+    "rules": "c1a7854c21d10fb4",
+    "words": "a3db8fa98c361443"
+  },
+  "checkedAt": "2026-11-26T00:08:37Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "not in top 20 (Google: Did you mean zenodo),",
+      "where": "2026-11-26",
+      "status": "met",
+      "how": "Card line: bare zenod not in top 20, Google suggests Zenodo. Evidence grid shows 'not in the top 20' and 'Did you mean zenodo'."
+    },
+    {
+      "said": "4th (Glama 1st),",
+      "where": "2026-11-26",
+      "status": "met",
+      "how": "Card line: zenod memory ranks 4th. Six-searches table shows zenod mcp 4th with Glama listing 1st."
+    },
+    {
+      "said": "how can we own Znode in Google and Znode memory? Do we have a plan for that?",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Card line: plan has ten steps, three need you. Evidence page shows the plan diagram and step table for zenod and zenod memory."
+    }
+  ],
+  "visual": {
+    "pass": false,
+    "problems": [
+      "at 390 px: The card title leads with 'A plan was written', but the first phone screen shows the comparison grid and step table; the plan diagram sits further down the page, not right under the punchline. (rule 7)",
+      "at 390 px: The Step / Who / What table is clipped at the right edge: the 'What it moves' column is cut off mid-word (e.g. 'Ma', 'bot', 'Wh mo'). (rule 4)",
+      "http://vps3.taild81fbb.ts.net:9960/#plan: a plan opens with a diagram and few words: plan-words: 719 visible words outside a collapsed details; a plan is diagrams with labels and one sentence (max 300); plan-prose: 10 paragraph(s), item(s) or cell(s) over 20 words (46 max): make them labels or move them into details; plan-diagram: 2 section(s) with no diagram: \"Six searches today\"; \"What zenod.dev gives Google today\" (rule 7)"
+    ],
+    "breaches": [
+      {
+        "rule": 7,
+        "width": 390,
+        "what": "The card title leads with 'A plan was written', but the first phone screen shows the comparison grid and step table; the plan diagram sits further down the page, not right under the punchline."
+      },
+      {
+        "rule": 4,
+        "width": 390,
+        "what": "The Step / Who / What table is clipped at the right edge: the 'What it moves' column is cut off mid-word (e.g. 'Ma', 'bot', 'Wh mo')."
+      }
+    ],
+    "summary": "Desktop layout is clean with the diagram under the punchline; at 390 px the plan diagram falls below the first screen and the step table's right column is clipped."
+  },
+  "pass": false,
+  "held": [
+    "ambiguous: The decision says 'We recommend yes, and pressing Enable for Search Console', but the Yes button only says 'the team starts its seven steps'. A reader could take Yes as including his own two-minute Enable press, or as leaving Enable as a separate task he must still do.",
+    "failed the visual check: at 390 px: The card title leads with 'A plan was written', but the first phone screen shows the comparison grid and step table; the plan diagram sits further down the page, not right under the punchline. (rule 7); at 390 px: The Step / Who / What table is clipped at the right edge: the 'What it moves' column is cut off mid-word (e.g. 'Ma', 'bot', 'Wh mo'). (rule 4); http://vps3.taild81fbb.ts.net:9960/#plan: a plan opens with a diagram and few words: plan-words: 719 visible words outside a collapsed details; a plan is diagrams with labels and one sentence (max 300); plan-prose: 10 paragraph(s), item(s) or cell(s) over 20 words (46 max): make them labels or move them into details; plan-diagram: 2 section(s) with no diagram: \"Six searches today\"; \"What zenod.dev gives Google today\" (rule 7)"
+  ],
+  "reader": {
+    "asked": "Decide whether to start the Zenod Memory plan: Yes starts the team's seven steps, No parks it.",
+    "ambiguous": "The decision says 'We recommend yes, and pressing Enable for Search Console', but the Yes button only says 'the team starts its seven steps'. A reader could take Yes as including his own two-minute Enable press, or as leaving Enable as a separate task he must still do."
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "a1135d92e57c5c2c",
+    "walkedAt": "2026-11-26T00:08:37Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9960/#plan",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod-ai/zenod/EPIC-7",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9960/#plan",
+      "file": "E7-S41-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9960/#plan",
+      "file": "E7-S41-1280.webp"
+    }
+  ]
+}
