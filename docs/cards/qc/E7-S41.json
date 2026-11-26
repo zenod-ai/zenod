@@ -1,50 +1,46 @@
 {
   "row": "E7-S41",
   "card": "docs/cards/E7-S41.md",
-  "cardSha": "919ef70d1b4129a0",
+  "cardSha": "f26bbdebb2c3f24a",
   "inputs": {
-    "card": "919ef70d1b4129a0",
-    "page": "b111657a796cb668",
+    "card": "f26bbdebb2c3f24a",
+    "page": "bc5312586351f413",
     "rules": "c1a7854c21d10fb4",
     "words": "6bfefc22bb988166"
   },
-  "checkedAt": "2026-11-26T00:09:49Z",
+  "checkedAt": "2026-11-26T00:10:21Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "not in top 20 (Google: Did you mean zenodo),",
       "where": "2026-11-26",
       "status": "met",
-      "how": "Card line says bare zenod is not in top 20 and Google suggests Zenodo; evidence grid shows 'not in the top 20' and 'Did you mean zenodo'."
+      "how": "Card line says bare zenod is not in top 20 and Google suggests Zenodo; evidence grid shows 'not in the top 20' and 'Did you mean zenodo?'"
     },
     {
       "said": "4th (Glama 1st),",
       "where": "2026-11-26",
       "status": "met",
-      "how": "Card line says zenod memory ranks 4th; evidence shows zenod mcp 4th with Glama listing 1st."
+      "how": "Card says zenod memory ranks 4th; evidence shows zenod.dev 4th and Glama listing 3rd and 1st for zenod mcp."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "http://vps3.taild81fbb.ts.net:9960/#plan: a plan opens with a diagram and few words: plan-diagram: 1 section(s) with no diagram: \"The steps\" (rule 7)"
-    ],
+    "pass": true,
+    "problems": [],
     "breaches": [],
-    "summary": "Both widths open with the punchline box, then a plan diagram of boxes and arrows, then the rank grid and step table; no sideways page scroll and text fits at 390 px."
+    "summary": "The 390 and 1280 px screens open with the punchline box, a clear step diagram and a readable step list; the page does not scroll sideways and the rank grids are legible."
   },
-  "pass": false,
-  "held": [
-    "failed the visual check: http://vps3.taild81fbb.ts.net:9960/#plan: a plan opens with a diagram and few words: plan-diagram: 1 section(s) with no diagram: \"The steps\" (rule 7)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether to start the plan: the team begins its seven steps (yes), or park it (no).",
+    "asked": "Decide whether to start the plan to own Zenod Memory on Google: the team's seven steps, with his three steps (one click, one yes, your name) left to him.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "b111657a796cb668",
-    "walkedAt": "2026-11-26T00:09:49Z",
+    "page": "bc5312586351f413",
+    "walkedAt": "2026-11-26T00:10:21Z",
     "steps": [
       {
         "n": 1,
