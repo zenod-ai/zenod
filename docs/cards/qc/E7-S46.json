@@ -1,40 +1,40 @@
 {
   "row": "E7-S46",
   "card": "docs/cards/E7-S46.md",
-  "cardSha": "10cd6a4134e27922",
+  "cardSha": "e236cca676a7e27a",
   "inputs": {
-    "card": "10cd6a4134e27922",
+    "card": "e236cca676a7e27a",
     "page": "24178f62a2979831",
     "rules": "c1a7854c21d10fb4",
     "words": "5aeb428d67b5c913"
   },
-  "checkedAt": "2026-11-26T14:17:21Z",
+  "checkedAt": "2026-11-26T14:17:50Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "a McKinsey-style study",
       "where": "the card's source",
       "status": "met",
-      "how": "Evidence page: 12 players mapped with prices, stars and positioning in a scatter and table; the card lists this as delivered."
+      "how": "Evidence page shows a 'McKinsey-style' study: scatter map of twelve players, a comparison table with prices, stars and pitch, and a 'Who plays' section."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the punchline box under the title, the scatter map as the first diagram, no sideways overflow, and readable text and buttons; the evidence page has no feedback block, which is correct."
+    "summary": "Both widths open with the punchline box under the title, the 12-player map and table are clear, and the page does not scroll sideways; the only issue is the missing feedback button row visible on the screens."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether to start with replies in the second-brain threads on X (the team recommends yes).",
+    "asked": "Decide whether to start with replies in the second-brain threads on X, which the card recommends, with Yes to draft the replies and demo or No to park the plays.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "24178f62a2979831",
-    "walkedAt": "2026-11-26T14:17:21Z",
+    "walkedAt": "2026-11-26T14:17:50Z",
     "steps": [
       {
         "n": 1,
