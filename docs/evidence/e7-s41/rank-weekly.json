@@ -42,5 +42,60 @@
     "read": true
    }
   }
+ },
+ {
+  "date": "2026-11-26",
+  "at": "2026-11-26T01:54Z",
+  "depth": 6,
+  "results": {
+   "zenod": {
+    "pos": null,
+    "ours": 0,
+    "first": "Zenodo",
+    "read": true,
+    "engine": "google",
+    "depth": 6
+   },
+   "zenod memory": {
+    "pos": 4,
+    "ours": 4,
+    "first": "Zenodo",
+    "read": true,
+    "engine": "google",
+    "depth": 6
+   },
+   "zenod ai": {
+    "pos": 5,
+    "ours": 1,
+    "first": "Zenode.ai - Electronic Component Search Engine.",
+    "read": true,
+    "engine": "google",
+    "depth": 6
+   },
+   "zenod mcp": {
+    "pos": 4,
+    "ours": 2,
+    "first": "Zenod - MCP Connector",
+    "read": true,
+    "engine": "google",
+    "depth": 6
+   },
+   "zenod memory app": {
+    "pos": 3,
+    "ours": 3,
+    "first": "Looking for 10 testers for Zenod, a memory your AI tools ...",
+    "read": true,
+    "engine": "google",
+    "depth": 6
+   },
+   "zenod.dev": {
+    "pos": 1,
+    "ours": 5,
+    "first": "Zenod — a digital memory that organizes itself",
+    "read": true,
+    "engine": "google",
+    "depth": 6
+   }
+  }
  }
 ]
