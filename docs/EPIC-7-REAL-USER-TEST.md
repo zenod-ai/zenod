@@ -32,15 +32,15 @@ Goal sentence before agent_team E40-A5 (Jordi 2026-11-13, "A yes, build as shown
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-24T16:19Z Delivery Manager (run_a0fc4106) ; E7-S32 Obsidian vault import live on production 9a7f17c5 (promote 24 Nov 14:58Z), closed by Jordi ; E7-S31 MCP connected plus memory reads and writes per tester live on production and in review ; E7-S34 staging test vault (Jordi's yes on E7-A43) worker run_7477ee29 running ; E7-S30 watching tester replies until 25 Nov 16:00Z
-Result: production 9a7f17c5: 3 testers, 2 set up a vault, 1 WhatsApp linked, 0 connected MCP, 0 saved a memory (tester table rebuilt 24 Nov 15:11Z)
+Last attempted: 2026-11-26T00:36Z DM roll-up (run_9e859198): in review for Jordi: E7-S31 MCP and memory use in the tester table, E7-S35 short voice-note replies, E7-S38 fewer WhatsApps, E7-S40 tester mails right address and name (live 1973840c), E7-S41 plan to own Zenod Memory on Google ; done: E7-S32 Obsidian import, E7-S34 staging test vault, E7-S39 filed as objective Zenod: Build an online reputation ; draft: E7-S37 suggested first note ; the three testers are on the mail hold list until agent_team E105-S306 writes their next note
+Result: production 1973840c: 3 testers, 2 set up a vault, 1 WhatsApp linked, 0 connected MCP, 0 saved a memory, 0 replies to 12 mails; tester mails now use one Google sign-in address and name per person (Vitor and Nox held on name clashes)
 Evidence: [E7-S31](evidence/e7-s31-2026-11-24.md) · [E7-S15](evidence/e7-s15-2026-11-19.md) · [E7-S12](evidence/e7-s12-2026-11-18.md) · [public counts](https://cloud.zenod.dev/api/public/counts) · [E7-S9 feedback link](http://vps3.taild81fbb.ts.net:8921/e7-s9/)
 Waiting on: agent_team: the daily tester picture (E7-S17) and a jordi@zenod.dev sender for the team (desk notes) ; nothing waits on the owner here — about: tester picture brief and team sender
 Monitoring: the 3 testers' replies to 'A quick question about Zenod' since 2026-11-24T04:04Z until 2026-11-27T16:00Z · next check 2026-11-25T16:00Z read the replies (the founder's inbox, agent_team feedback/voice/) · then fix the first thing they name
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
-Next action: E7-S34: staging gets a test vault and proves the import end to end ; E7-S30: on 25 Nov 16:00Z read the testers' replies and fix the first thing they name
+Next action: Jordi's cards (E7-S31, S35, S38, S40, S41) ; agent_team E105-S306 sends each tester one next-step message and lifts the hold ; zenod-social answers why no tester applied this week
 Source revision: see git log
-Verified at: 2026-11-24T16:19Z (cloud.zenod.dev/api/health sha 9a7f17c5; tester table :9008 read; rows E7-S30 to E7-S34 read)
+Verified at: 2026-11-26T00:36Z (cloud.zenod.dev/api/health 1973840c; rows E7-S30 to E7-S41 read)
 
 ## Waiting on
 - [answered E7-A45 2026-11-25 @Jordi · done 2026-11-25 objective zenod-reputation, EPIC-28] You approve: a new objective, Zenod: Build an online reputation, placed after Zenod: Get 5 testers. Why: in your 23 Nov voice note you said "build an online reputation for Zenod. That's the goal", and a goal is yours to set. — context: the alignment check of that 2-hour note found this point with no work on it; your note is at https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-24.md#^e-8b9fa2 — impact: with your yes the team drafts its key results (Zenod listed where agents look, reviews, people talking about it) for your next look; with no, it stays parked — risk: none, nothing is built or published by this yes; the objective can be parked later — recommend: yes, after Get 5 testers, because testers come first and reputation brings the next ones — why Jordi: it adds a goal and sets its place in your order — unblocks: E7-S39 — about: Zenod's online reputation as a goal — answer: APPROVED
