@@ -52,7 +52,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(html).toContain('href="/pricing"');
     expect(html).toContain('href="/connect"');
     const pricing = render("/pricing");
-    expect(pricing).toContain("Zenod plans");
+    expect(pricing).toContain("Zenod Memory pricing");
     expect(pricing).not.toContain('class="pp"');
     expect(render("/connect")).toContain("cloud.zenod.dev/mcp");
   });
@@ -151,7 +151,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(app).toContain("window.location.assign(signInPath)");
     expect(app).toContain("window.location.assign(await createHostedCheckout(tier))");
     const hrefs = [...ready.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/testers$|\/vision$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
+    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/testers$|\/vision$|\/zenod-memory$|\/zenod-vs-basic-memory-mem0$|\/zenod-vs-zenodo$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
   });
 
   it("opens the testers program on /testers with the apply form, and links it from home (ZAL-A13)", () => {
@@ -254,7 +254,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     for (const path of ["/pricing", "/connect"]) {
       const html = render(path);
       expect(html).toContain('<div class="pp pp-bar"><header class="pp-nav">');
-      expect(html).toContain('<a class="pp-brand" href="/" aria-label="Zenod home">Zenod</a>');
+      expect(html).toContain('<a class="pp-brand" href="/" aria-label="Zenod Memory home">Zenod</a>');
       expect(html).not.toContain('class="v5-nav"');
       expect(html).toContain("v5-paper");
     }

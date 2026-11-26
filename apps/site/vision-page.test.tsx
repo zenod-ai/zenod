@@ -54,7 +54,7 @@ describe("Vision tab (E25-S5)", () => {
 
   it("has its own page title and description for links", () => {
     const doc = readFileSync(new URL("./vision.html", import.meta.url), "utf8");
-    expect(doc).toContain("<title>Why Zenod exists");
+    expect(doc).toContain("<title>Why Zenod Memory exists");
     expect(doc).toContain('href="https://zenod.dev/vision"');
   });
 });

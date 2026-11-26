@@ -326,7 +326,7 @@ export function TestersPage({ nav, footer }: { nav: React.ReactNode; footer: Rea
       {nav}
       <main id="top">
         <section className="pp-testers-hero" aria-labelledby="testers-title">
-          <h1 id="testers-title">Test Zenod with us.</h1>
+          <h1 id="testers-title">Test Zenod Memory with us.</h1>
           <p className="pp-lead pp-testers-offer" data-testid="tester-offer">
             <strong>Your first {free} memories free. No card.</strong>
           </p>

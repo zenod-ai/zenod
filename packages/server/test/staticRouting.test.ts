@@ -26,6 +26,10 @@ describe("site and dashboard routing", () => {
       writeFile(join(siteDist, "connect.html"), "<html>Connect Zenod</html>"),
       writeFile(join(siteDist, "start.html"), "<html>Start with Zenod</html>"),
       writeFile(join(siteDist, "vision.html"), "<html>Why Zenod exists</html>"),
+      writeFile(join(siteDist, "pricing.html"), "<html>Zenod Memory pricing</html>"),
+      writeFile(join(siteDist, "zenod-memory.html"), "<html>What is Zenod Memory</html>"),
+      writeFile(join(siteDist, "zenod-vs-basic-memory-mem0.html"), "<html>Zenod Memory vs Basic Memory and Mem0</html>"),
+      writeFile(join(siteDist, "zenod-vs-zenodo.html"), "<html>Zenod is not Zenodo</html>"),
       writeFile(join(siteDist, "start", "zenod-start.mp4"), "0123456789"),
       writeFile(join(siteDist, "brand", "zenod-icon.svg"), "<svg>Z</svg>"),
       writeFile(join(siteDist, "robots.txt"), "Sitemap: https://zenod.dev/sitemap.xml\n"),
@@ -44,7 +48,8 @@ describe("site and dashboard routing", () => {
 
   it("serves the public landing and pricing documents at product routes", async () => {
     await expect((await app.request("https://zenod.dev/")).text()).resolves.toContain("public landing");
-    await expect((await app.request("https://zenod.dev/pricing")).text()).resolves.toContain("public landing");
+    // E7-S42: /pricing is its own page, with its own title and canonical.
+    await expect((await app.request("https://zenod.dev/pricing")).text()).resolves.toContain("Zenod Memory pricing");
     await expect((await app.request("/site/assets/site.js")).text()).resolves.toBe("site asset");
   });
 
@@ -52,6 +57,13 @@ describe("site and dashboard routing", () => {
     await expect((await app.request("https://zenod.dev/connect")).text()).resolves.toContain("Connect Zenod");
     await expect((await app.request("https://zenod.dev/brand/zenod-icon.svg")).text()).resolves.toBe("<svg>Z</svg>");
     expect((await app.request("https://cloud.zenod.dev/connect")).status).toBe(404);
+  });
+
+  it("serves the three Zenod Memory pages on the public host only (E7-S42)", async () => {
+    await expect((await app.request("https://zenod.dev/zenod-memory")).text()).resolves.toContain("What is Zenod Memory");
+    await expect((await app.request("https://zenod.dev/zenod-vs-basic-memory-mem0")).text()).resolves.toContain("Basic Memory and Mem0");
+    await expect((await app.request("https://zenod.dev/zenod-vs-zenodo")).text()).resolves.toContain("not Zenodo");
+    expect((await app.request("https://cloud.zenod.dev/zenod-memory")).status).toBe(404);
   });
 
   it("serves the Vision tab on the public host only (E25-S5)", async () => {

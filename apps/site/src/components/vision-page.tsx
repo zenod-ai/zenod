@@ -380,7 +380,7 @@ export function VisionPage({ nav, footer }: { nav: React.ReactNode; footer: Reac
       <main id="top">
         <section className="vz-hero" aria-labelledby="vision-title">
           <div className="vz-hero-text">
-            <p className="vz-kicker">The vision</p>
+            <p className="vz-kicker">Zenod Memory: the vision</p>
             <h1 id="vision-title">The most valuable thing you give an AI is your context.</h1>
             <p className="vz-sub">
               Why Zenod exists, in eight short chapters: why your memory should be yours, and why it gets worth more every

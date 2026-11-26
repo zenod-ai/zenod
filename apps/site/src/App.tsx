@@ -11,6 +11,7 @@ import { StartPage } from "@/components/start-page";
 import { VisionPage } from "@/components/vision-page";
 import { ConnectPage } from "@/components/connect-page";
 import { NotFoundPage } from "@/components/not-found-page";
+import { ArticlePage, isArticlePath } from "@/components/article-pages";
 import {
   consumePendingHostedTier,
   createHostedCheckout,
@@ -287,6 +288,7 @@ function SiteFooter() {
         </a>
         <a href={PRIVACY_URL}>Privacy</a>
         <a href={TERMS_URL}>Terms</a>
+        <a href="/zenod-memory">What is Zenod Memory</a>
         <a href="/legal/legal-notice.html">Legal notice</a>
         <a href="/legal/cookies.html">Cookies</a>
         <a href={DATA_URL}>Data</a>
@@ -315,8 +317,8 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
       <PaperBar customer={customer} getStartedHref="#start" />
       <main className="v5-wrap">
         <section className="v5-pricing-intro">
-          <p className="v5-kicker">Zenod plans</p>
-          <h1>Your agents share one library. You decide where it runs.</h1>
+          <p className="v5-kicker">Plans</p>
+          <h1>Zenod Memory pricing: free to self-host, or Hosted for €9 a month.</h1>
           <p className="v5-lead">
             Self-host Zenod free with your AI provider and Telegram, or choose
             Zenod Hosted for €9/month + VAT with managed AI usage and WhatsApp
@@ -332,15 +334,19 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
   );
 }
 
-export default function App() {
+// E7-S42: `path` is given when the build prerenders each page to real HTML
+// (src/entry-server.tsx); in the browser it is the page's own address.
+export default function App({ path }: { path?: string }) {
   // ZAL-A19: 404.html marks itself; the server sends it with HTTP 404.
-  if (typeof document !== "undefined" && document.body.dataset.page === "not-found") return <NotFoundPage />;
-  return <SiteApp />;
+  if (path === NOT_FOUND_PATH) return <NotFoundPage />;
+  if (path === undefined && typeof document !== "undefined" && document.body.dataset.page === "not-found") return <NotFoundPage />;
+  return <SiteApp path={path ?? window.location.pathname} />;
 }
 
-function SiteApp() {
+export const NOT_FOUND_PATH = "/404";
+
+function SiteApp({ path }: { path: string }) {
   const customer = useCustomerJourney();
-  const path = window.location.pathname;
   if (path === "/pricing") return <PricingPage customer={customer} />;
   if (path === "/testers")
     return (
@@ -361,6 +367,15 @@ function SiteApp() {
     return (
       <StartPage
         nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" />}
+        footer={<Footer />}
+      />
+    );
+  // E7-S42: what Zenod Memory is, vs Basic Memory and Mem0, not Zenodo.
+  if (isArticlePath(path))
+    return (
+      <ArticlePage
+        path={path}
+        nav={<Nav customer={{ signedIn: Boolean(customer.session) }} base="/" menu getStartedHref="/testers" getStartedLabel="Become a tester" />}
         footer={<Footer />}
       />
     );

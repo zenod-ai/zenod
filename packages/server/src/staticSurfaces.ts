@@ -145,7 +145,12 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
     app.get("/account", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
   }
   app.get("/", publicHostOnly(staticFile({ root: siteRoot, path: "index.html", ...noCache })));
-  app.get("/pricing", publicHostOnly(staticFile({ root: siteRoot, path: "index.html", ...noCache })));
+  // E7-S42: /pricing has its own page (title, canonical), no longer the home page's.
+  app.get("/pricing", publicHostOnly(staticFile({ root: siteRoot, path: "pricing.html", ...noCache })));
+  // E7-S42: what Zenod Memory is, vs Basic Memory and Mem0, Zenod is not Zenodo.
+  for (const page of ["zenod-memory", "zenod-vs-basic-memory-mem0", "zenod-vs-zenodo"]) {
+    app.get(`/${page}`, publicHostOnly(staticFile({ root: siteRoot, path: `${page}.html`, ...noCache })));
+  }
   // Testers program (ZAL-A13): its own page title and description for links.
   app.get("/testers", publicHostOnly(staticFile({ root: siteRoot, path: "testers.html", ...noCache })));
   // Vision tab (E25-S5): why Zenod exists, in mini chapters.

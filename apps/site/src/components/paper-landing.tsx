@@ -81,7 +81,7 @@ export function Nav({
   return (
     <header className="pp-nav">
       <div className="pp-nav-in">
-        <a className="pp-brand" href="/" aria-label="Zenod home">
+        <a className="pp-brand" href="/" aria-label="Zenod Memory home">
           Zenod
         </a>
         <nav aria-label="Primary">
@@ -130,6 +130,9 @@ export function Footer() {
         <a href="/vision">Vision</a>
         <a href="/connect">Docs</a>
         <a href="/testers">Testers</a>
+        <a href="/zenod-memory">What is Zenod Memory</a>
+        <a href="/zenod-vs-basic-memory-mem0">vs Basic Memory and Mem0</a>
+        <a href="/zenod-vs-zenodo">Zenod is not Zenodo</a>
         <a href={GITHUB_URL}>GitHub</a>
         <a href="/legal/privacy.html">Privacy</a>
         <a href="/legal/terms.html">Terms</a>
@@ -279,6 +282,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
         <section className="pp-hero" aria-labelledby="hero-title">
           <div className="pp-hero-text">
             <h1 id="hero-title">
+              <span className="pp-h1-name">Zenod Memory</span>{" "}
               <span className="pp-line"><span>A digital memory</span></span>{" "}
               <span className="pp-line"><span>that organizes itself.</span></span>
             </h1>
