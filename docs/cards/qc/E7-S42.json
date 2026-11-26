@@ -1,0 +1,96 @@
+{
+  "row": "E7-S42",
+  "card": "docs/cards/E7-S42.md",
+  "cardSha": "f1437527871f6f66",
+  "inputs": {
+    "card": "f1437527871f6f66",
+    "page": "afa8d9dceddcf47e",
+    "rules": "c1a7854c21d10fb4",
+    "words": "98f5472f61f7f77f"
+  },
+  "checkedAt": "2026-11-26T17:15:27Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "say Zenod memory, not Zenod",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Page titles and h1s say Zenod Memory throughout; the evidence page shows 'What is Zenod Memory' and the body uses Zenod Memory, not bare Zenod."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths render the page without errors or sideways overflow; the sequence is drawn as boxes with arrows, and the lower sections are plain text and fit the screen."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether these three pages say what he wants people to read on Google, keeping them live or asking for changes.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a paste box; his buttons: Sara’s birthday: show the voice notes it came from, Dinner for six: show the voice notes it came from, Concert tickets: show the voice notes it came from, Cake from Ana: show the voice notes it came from",
+    "page": "afa8d9dceddcf47e",
+    "walkedAt": "2026-11-26T17:15:27Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "https://zenod.dev/zenod-memory",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "press 'Become a tester'",
+        "url": "https://zenod.dev/testers",
+        "result": "leads to https://zenod.dev/testers"
+      },
+      {
+        "n": 3,
+        "what": "follow 'Become a tester' to",
+        "url": "https://zenod.dev/testers",
+        "result": "his screen: a paste box (nothing of his pressed)"
+      },
+      {
+        "n": 4,
+        "what": "press 'Apply'",
+        "url": "https://zenod.dev/testers#apply",
+        "result": "leads to https://zenod.dev/testers#apply"
+      },
+      {
+        "n": 5,
+        "what": "press 'Apply now, it takes a minute'",
+        "url": "https://zenod.dev/testers#apply",
+        "result": "leads to https://zenod.dev/testers#apply"
+      },
+      {
+        "n": 6,
+        "what": "press 'Concert tickets 0.95'",
+        "url": "https://zenod.dev/testers",
+        "result": "changes the page"
+      },
+      {
+        "n": 7,
+        "what": "press 'Dinner for six 0.9'",
+        "url": "https://zenod.dev/testers",
+        "result": "changes the page"
+      }
+    ],
+    "unfinished": "https://zenod.dev/testers"
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "https://zenod.dev/zenod-memory",
+      "file": "E7-S42-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "https://zenod.dev/zenod-memory",
+      "file": "E7-S42-1280.webp"
+    }
+  ]
+}
