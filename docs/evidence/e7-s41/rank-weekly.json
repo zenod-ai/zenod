@@ -45,7 +45,7 @@
  },
  {
   "date": "2026-11-26",
-  "at": "2026-11-26T01:54Z",
+  "at": "2026-11-26T06:30Z",
   "depth": 6,
   "results": {
    "zenod": {
@@ -58,7 +58,7 @@
    },
    "zenod memory": {
     "pos": 4,
-    "ours": 4,
+    "ours": 3,
     "first": "Zenodo",
     "read": true,
     "engine": "google",
@@ -81,9 +81,9 @@
     "depth": 6
    },
    "zenod memory app": {
-    "pos": 3,
+    "pos": 4,
     "ours": 3,
-    "first": "Looking for 10 testers for Zenod, a memory your AI tools ...",
+    "first": "memoryOS: Improve Your Memory - Apps on Google Play",
     "read": true,
     "engine": "google",
     "depth": 6
