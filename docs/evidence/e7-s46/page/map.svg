@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 660" font-family="Instrument Sans, system-ui, sans-serif" role="img" aria-label="Positioning map of memory MCP players">
+<rect width="700" height="660" fill="#f6f2e9"/>
+<rect x="402" y="30" width="284" height="259" fill="#e9e3d5"/>
+<text x="410" y="52" font-size="16" fill="#4a554e">for one person, in your files</text>
+<line x1="56" y1="570" x2="686" y2="570" stroke="#18211c" stroke-width="1.4"/>
+<line x1="56" y1="30" x2="56" y2="570" stroke="#18211c" stroke-width="1.4"/>
+<text x="56" y="600" font-size="19" fill="#18211c">for developers' apps</text>
+<text x="686" y="600" font-size="19" text-anchor="end" fill="#18211c">for one person →</text>
+<text transform="translate(42,570) rotate(-90)" font-size="19" fill="#18211c">their database</text>
+<text transform="translate(42,30) rotate(-90)" font-size="19" text-anchor="end" fill="#18211c">files you own →</text>
+<circle cx="144" cy="462" r="25.0" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="174" y="468" font-size="19" fill="#18211c">Mem0 69.5k</text>
+<circle cx="88" cy="376" r="18.8" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="111" y="382" font-size="19" fill="#18211c">Zep 33.1k</text>
+<circle cx="245" cy="322" r="17.1" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="267" y="328" font-size="19" fill="#18211c">Letta 25.6k</text>
+<circle cx="106" cy="230" r="18.9" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="130" y="236" font-size="19" fill="#18211c">Cognee 33.6k</text>
+<circle cx="308" cy="527" r="18.5" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="332" y="533" font-size="19" fill="#18211c">Supermemory 31.8k</text>
+<circle cx="333" cy="214" r="23.7" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="333" y="257" font-size="19" text-anchor="middle" fill="#18211c">MemPalace 60.7k</text>
+<circle cx="434" cy="392" r="31.3" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="470" y="398" font-size="19" fill="#18211c">claude-mem 119.9k</text>
+<circle cx="522" cy="484" r="10.2" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="537" y="490" font-size="19" fill="#18211c">Notion 4.7k</text>
+<circle cx="623" cy="430" r="14.0" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="604" y="436" font-size="19" text-anchor="end" fill="#18211c">Omi 14k</text>
+<circle cx="434" cy="106" r="18.9" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="410" y="112" font-size="19" text-anchor="end" fill="#18211c">gbrain 33.6k</text>
+<circle cx="510" cy="170" r="10.2" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="494" y="176" font-size="19" text-anchor="end" fill="#18211c">Basic Memory 4.7k</text>
+<circle cx="610" cy="95" r="22.6" fill="#ded6c4" stroke="#4a554e" stroke-width="1"/>
+<text x="610" y="137" font-size="19" text-anchor="middle" fill="#18211c">Obsidian 53.9k</text>
+<circle cx="654" cy="235" r="17" fill="none" stroke="#1f4d3a" stroke-width="2.2" stroke-dasharray="4 3"/>
+<circle cx="654" cy="235" r="7" fill="#1f4d3a"/>
+<text x="630" y="233" font-size="21" font-weight="600" text-anchor="end" fill="#1f4d3a">Zenod, 3 stars</text>
+<text x="630" y="256" font-size="17" text-anchor="end" fill="#1f4d3a">filled by voice notes</text>
+<text x="630" y="276" font-size="17" text-anchor="end" fill="#1f4d3a">on your phone</text>
+<text x="56" y="648" font-size="15" fill="#8d948c">Circle size: GitHub stars, 26 Nov 2026. Place: our reading of each site.</text>
+</svg>
