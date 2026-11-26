@@ -1,0 +1,209 @@
+{
+  "row": "E7-S46",
+  "card": "docs/cards/E7-S46.md",
+  "cardSha": "10cd6a4134e27922",
+  "inputs": {
+    "card": "10cd6a4134e27922",
+    "page": "24178f62a2979831",
+    "rules": "c1a7854c21d10fb4",
+    "words": "5aeb428d67b5c913"
+  },
+  "checkedAt": "2026-11-26T14:17:21Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "a McKinsey-style study",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Evidence page: 12 players mapped with prices, stars and positioning in a scatter and table; the card lists this as delivered."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths show the punchline box under the title, the scatter map as the first diagram, no sideways overflow, and readable text and buttons; the evidence page has no feedback block, which is correct."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether to start with replies in the second-brain threads on X (the team recommends yes).",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "24178f62a2979831",
+    "walkedAt": "2026-11-26T14:17:21Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9013/#plays",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link '@gregisenberg'",
+        "url": "https://x.com/gregisenberg",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 5,
+        "what": "open the link '13 Nov 2026'",
+        "url": "https://x.com/gregisenberg/status/2121331227009364340",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 6,
+        "what": "open the link '15 Nov'",
+        "url": "https://x.com/gregisenberg/status/2122043488728649787",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 7,
+        "what": "open the link '@garrytan'",
+        "url": "https://x.com/garrytan",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 8,
+        "what": "open the link '17 Nov 2026'",
+        "url": "https://x.com/garrytan/status/2122517681740124271",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 9,
+        "what": "open the link '@kepano'",
+        "url": "https://x.com/kepano",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 10,
+        "what": "open the link '20 Nov'",
+        "url": "https://x.com/kepano/status/2123924915586007501",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 11,
+        "what": "open the link '26 Nov 2026'",
+        "url": "https://x.com/kepano/status/2125949636322181286",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 12,
+        "what": "open the link '@DhravyaShah'",
+        "url": "https://x.com/DhravyaShah",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 13,
+        "what": "open the link '26 Nov'",
+        "url": "https://x.com/DhravyaShah/status/2125786632611922432",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 14,
+        "what": "open the link '24 Nov 2026'",
+        "url": "https://x.com/DhravyaShah/status/2125047763046220138",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 15,
+        "what": "open the link '@coreyganim'",
+        "url": "https://x.com/coreyganim",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 16,
+        "what": "open the link '21 Nov 2026'",
+        "url": "https://x.com/coreyganim/status/2124237589830054074",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 17,
+        "what": "open the link '@woody_research'",
+        "url": "https://x.com/woody_research",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 18,
+        "what": "open the link '21 Nov 2026'",
+        "url": "https://x.com/woody_research/status/2124076332854247799",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 19,
+        "what": "open the link '@VivianBala'",
+        "url": "https://x.com/VivianBala",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 20,
+        "what": "open the link '21 Nov 2026'",
+        "url": "https://x.com/VivianBala/status/2124150500199424163",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 21,
+        "what": "open the link '@taranjeetio'",
+        "url": "https://x.com/taranjeetio",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 22,
+        "what": "open the link '@mem0ai'",
+        "url": "https://x.com/mem0ai",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 23,
+        "what": "open the link '17 Nov 2026'",
+        "url": "https://x.com/taranjeetio/status/2122789826248528017",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 24,
+        "what": "open the link 'DolphinBench, 22 Sep'",
+        "url": "https://x.com/mem0ai/status/2102438126941876590",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 25,
+        "what": "open the link '@imryven'",
+        "url": "https://x.com/imryven",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 26,
+        "what": "open the link '@danikkk_wqs'",
+        "url": "https://x.com/danikkk_wqs",
+        "result": "answered 403 (another site)"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9013/#plays",
+      "file": "E7-S46-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9013/#plays",
+      "file": "E7-S46-1280.webp"
+    }
+  ]
+}
