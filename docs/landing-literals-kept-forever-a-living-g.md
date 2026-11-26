@@ -23,20 +23,30 @@ Goal sentence: zenod.dev shows early, in moving pictures, that your words are ke
 ## Done means
 
 - [x] E25-1 (G1, live 2026-11-10 on 1f1ebae, [evidence](evidence/e25-g1-2026-11-10.md)) zenod.dev opens with short animated sections, true of production today: your raw words kept forever in your own Drive or GitHub; a cloud of thoughts with weighted links built from them; helpers that read it and make new memories; Zenod the librarian of your library; one memory every AI reads and writes (WhatsApp, Claude, Codex, Gemini, Cursor, MCP)
-- [ ] E25-2 Jordi says yes to the live page
+- [x] E25-2 (Jordi approved the live page: E25-S3 on 2026-11-18, the Vision page E25-S5 on 2026-11-26) Jordi says yes to the live page
+
+## Outcome
+
+Outcome: zenod.dev tells Zenod in Jordi's words (raw words kept forever in your own vault, a living graph, one memory every AI reads) with a Vision page, live on production and approved by Jordi.
+Risk: none for this epic; ranking on Google continues under EPIC-7 E7-S41 to S43 (Zenod: Build an online reputation).
+
+| Done means | Evidence |
+|---|---|
+| E25-1 animated sections true of production | [evidence](evidence/e25-g1-2026-11-10.md), live 1f1ebae, https://zenod.dev/ |
+| E25-2 Jordi says yes to the live page | E25-S3 approved 2026-11-18 ([evidence](evidence/e25-s3-it2-2026-11-18.md)); E25-S5 Vision approved 2026-11-26, https://zenod.dev/vision ([card](cards/E25-S5.md)) |
 
 ## Current State
 
 Owner: Delivery manager (zenod)
-Status: active
-Last attempted: 2026-11-25T16:39Z DM roll-up (run_b0c8dc9d): E25-S5 Vision tab on zenod.dev (Jordi's 25 Nov 14:34Z note) merged in PR #1767 (28a706f0, ci green), waits for the production promote ; E25-S1 to S4 done
-Result: zenod.dev live in Jordi's words, approved; a Vision page (why Zenod exists, owning your memory, context that compounds) is merged and reaches zenod.dev/vision at the next promote
+Status: review
+Last attempted: 2026-11-26T17:10Z DM roll-up (run_46b34ad3): E25-S1 to S5 all done ; E25-S5 Vision page live on zenod.dev/vision since the 25 Nov promote and approved by Jordi 26 Nov
+Result: zenod.dev live in Jordi's words and approved, with the Vision page (why Zenod exists, owning your memory, context that compounds) at zenod.dev/vision
 Evidence: https://zenod.dev/ ; [E25-S3 iteration 2](evidence/e25-s3-it2-2026-11-18.md) ; [E25-S4](evidence/e25-s4-2026-11-18.md)
-Waiting on: the hourly promote for E25-S5 (zenod.dev/vision) ; then Jordi's card
+Waiting on: nothing: every row is closed
 Approved work: none
-Next action: after the promote: check zenod.dev/vision live and set E25-S5 to review
+Next action: none for agents; the Outcome is written and Ready to mark shows it to Jordi
 Source revision: 1f1ebae
-Verified at: 2026-11-25T16:39Z (rows E25-S1 to S5 read; E25-S5 PR #1767 merged)
+Verified at: 2026-11-26T17:10Z (rows E25-S1 to S5 read; zenod.dev/vision answers 200)
 
 ## Non-Goals
 
