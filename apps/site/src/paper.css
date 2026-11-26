@@ -74,6 +74,8 @@ body:has(.pp) {
 .pp h1 { font: 400 clamp(2.9rem, 5.5vw, 5.5rem)/0.98 var(--pp-serif); letter-spacing: -0.035em; margin: 0 0 2rem; }
 .pp-line { display: block; overflow: hidden; padding-bottom: 0.08em; margin-bottom: -0.08em; }
 .pp-line > span { display: block; }
+/* E7-S42: the name people search for opens the home heading, small, above the claim. */
+.pp h1 .pp-h1-name { display: block; font: 500 clamp(1rem, 1.4vw, 1.2rem)/1.2 var(--pp-sans); letter-spacing: 0.02em; color: var(--pp-accent); margin: 0 0 1rem; }
 .pp-lead { font-size: clamp(1.2rem, 1.7vw, 1.45rem); line-height: 1.5; margin: 0 0 2.25rem; max-width: 34rem; }
 .pp-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 0; }
 .pp-hero-testers { margin: 1.25rem 0 0; }

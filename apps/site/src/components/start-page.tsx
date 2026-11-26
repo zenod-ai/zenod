@@ -21,7 +21,7 @@ export function StartPage({ nav, footer }: { nav: React.ReactNode; footer: React
       {nav}
       <main id="top">
         <section className="pp-start-hero" aria-labelledby="start-title">
-          <h1 id="start-title">Start with Zenod in one minute</h1>
+          <h1 id="start-title">Start with Zenod Memory in one minute</h1>
           <video
             className="pp-start-video"
             controls

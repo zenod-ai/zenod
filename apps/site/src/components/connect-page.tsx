@@ -74,7 +74,7 @@ export function ConnectPage({
             alt="Zenod icon"
           />
           <p className="v5-kicker">Connect Zenod over MCP</p>
-          <h1>Your memory, inside the AI you already use.</h1>
+          <h1>Zenod Memory, inside the AI you already use.</h1>
           <p className="v5-lead">
             Send notes on WhatsApp; Zenod files them into a
             Markdown vault you own on GitHub or Google Drive and answers from it

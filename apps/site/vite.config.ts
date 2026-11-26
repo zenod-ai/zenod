@@ -22,6 +22,13 @@ export default defineConfig({
         vision: path.resolve(__dirname, "vision.html"),
         // ZAL-A19: the not-found page the server sends with HTTP 404.
         notfound: path.resolve(__dirname, "404.html"),
+        // E7-S42: /pricing with its own title and canonical, and three pages
+        // that answer what people search for: what Zenod Memory is, vs Basic
+        // Memory and Mem0, Zenod is not Zenodo.
+        pricing: path.resolve(__dirname, "pricing.html"),
+        "zenod-memory": path.resolve(__dirname, "zenod-memory.html"),
+        "zenod-vs-basic-memory-mem0": path.resolve(__dirname, "zenod-vs-basic-memory-mem0.html"),
+        "zenod-vs-zenodo": path.resolve(__dirname, "zenod-vs-zenodo.html"),
       },
     },
   },

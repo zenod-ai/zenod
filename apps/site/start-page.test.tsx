@@ -8,7 +8,7 @@ describe("zenod.dev/start", () => {
   const html = renderToStaticMarkup(<StartPage nav={null} footer={null} />)
 
   it("shows the heading, the video and its poster", () => {
-    expect(html).toContain("Start with Zenod in one minute")
+    expect(html).toContain("Start with Zenod Memory in one minute")
     expect(html).toContain(`src="${START_VIDEO_SRC}"`)
     expect(html).toContain(`poster="${START_POSTER_SRC}"`)
     expect(html).toContain("controls")
@@ -26,7 +26,7 @@ describe("zenod.dev/start", () => {
   it("ships its own title and canonical URL and the video files", () => {
     const page = readFileSync(new URL("./start.html", import.meta.url), "utf8")
     expect(page).toContain('<link rel="canonical" href="https://zenod.dev/start" />')
-    expect(page).toContain("<title>Start with Zenod in one minute</title>")
+    expect(page).toContain("<title>Start with Zenod Memory in one minute</title>")
     for (const file of ["zenod-start.mp4", "zenod-start.jpg"]) {
       expect(readFileSync(new URL(`./public/start/${file}`, import.meta.url)).length).toBeGreaterThan(1000)
     }

@@ -2362,6 +2362,7 @@ describe("Zenod chassis unit", () => {
     await writeFile(join(siteDist, "index.html"), "PUBLIC SITE", "utf8");
     await writeFile(join(siteDist, "connect.html"), "CONNECT", "utf8");
     await writeFile(join(siteDist, "testers.html"), "TESTERS", "utf8");
+    await writeFile(join(siteDist, "pricing.html"), "PRICING", "utf8");
     await writeFile(join(siteDist, "404.html"), "NOT FOUND PAGE", "utf8");
     await writeFile(join(webDist, "index.html"), "CUSTOMER APP", "utf8");
     await writeFile(join(webDist, "favicon.ico"), "ICO", "utf8");
@@ -2375,7 +2376,7 @@ describe("Zenod chassis unit", () => {
     const get = (host: string, path: string) => unit.app.request(path, { headers: { host } });
     try {
       for (const [path, body] of [
-        ["/", "PUBLIC SITE"], ["/pricing", "PUBLIC SITE"], ["/connect", "CONNECT"], ["/testers", "TESTERS"],
+        ["/", "PUBLIC SITE"], ["/pricing", "PRICING"], ["/connect", "CONNECT"], ["/testers", "TESTERS"],
         ["/favicon.ico", "ICO"], ["/?tab=memory", "PUBLIC SITE"],
       ] as const) {
         const response = await get("zenod.dev", path);
