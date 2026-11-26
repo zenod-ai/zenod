@@ -1,0 +1,16 @@
+[
+ {
+  "date": "2026-11-26",
+  "at": "2026-11-26T00:10Z",
+  "baseline": true,
+  "depth": 20,
+  "results": {
+   "zenod": {"pos": null, "ours": 0, "first": "Zenodo", "read": true},
+   "zenod memory": {"pos": 4, "ours": 4, "first": "Zenodo", "read": true},
+   "zenod ai": {"pos": 5, "ours": null, "first": "Zenode.ai", "read": true},
+   "zenod mcp": {"pos": 4, "ours": 2, "first": "Our Glama listing", "read": true},
+   "zenod memory app": {"pos": 3, "ours": 2, "first": "Our Reddit post", "read": true},
+   "zenod.dev": {"pos": 1, "ours": 2, "first": "zenod.dev", "read": true}
+  }
+ }
+]

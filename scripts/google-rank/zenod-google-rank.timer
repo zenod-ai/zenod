@@ -1,0 +1,10 @@
+[Unit]
+Description=Zenod weekly Google rank every Thursday 06:20 UTC (E7-S43)
+
+[Timer]
+OnCalendar=Thu *-*-* 06:20:00 UTC
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

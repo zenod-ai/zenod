@@ -1,0 +1,11 @@
+[Unit]
+Description=Zenod weekly Google rank: the six E7-S41 searches through the team browser, one dated line on page :9960#weekly (E7-S43)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+Environment=PATH=/home/t3agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The script as on origin/main; it commits in its own detached worktree (~/.local/state/zenod-google-rank/repo).
+ExecStart=/bin/bash -c 'R=/var/lib/vps3-scratch/t3agent/github/zenod; L=%h/.local/lib/zenod-google-rank; mkdir -p $L && git -C $R fetch -q origin main && git -C $R show origin/main:scripts/google-rank/rank.py > $L/rank.py && python3 -I $L/rank.py run --commit'
+TimeoutStartSec=20min
