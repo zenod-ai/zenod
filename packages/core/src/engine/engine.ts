@@ -73,6 +73,7 @@ import { assertVaultProviderUrl, type VaultPullTiming, type VaultRepository, typ
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString, unfiledEvidenceEntries } from "./evidence.js";
+import { anchorNode, chooseTreeNode, notePageChoice, pickRootTopic, type NodeChoice } from "./treePlacement.js";
 import { appendOpsRollup, isAgentOpsReport, isOneOff, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree, TREE_PATH } from "../vault/tree.js";
@@ -2159,11 +2160,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
       // E22-S5: a one-off note ("And the reply now done.") stays in the Log only; it makes no file.
       if (isOneOff(content)) continue;
       const writes = new TrackedWrites(vaultPath);
+      const treeIndex = await buildTreeIndex(vaultPath);
+      const leafAnchors = [...new Set(anchors.map(normalizeMarkdownNotePath))];
+      // E22-S6: the pages this same note already reached (its other points, a leaf it made a moment ago).
+      const notePages = [...new Set(outcomes.filter(other => other !== outcome).flatMap(other => other.filedPages))];
+      // E22-S6: with no page of its own and only a weak word match, the classifier picks among the root topics first.
+      let fallback: NodeChoice | null = null;
+      if (!(await notePageChoice(vaultPath, treeIndex, `${outcome.topic}\n\n${text}`, notePages, evidenceRef)) && !anchorNode(treeIndex, leafAnchors)) {
+        const byWords = await chooseTreeNode(vaultPath, treeIndex, `${outcome.topic}\n\n${text}`, { rootsOnly: true });
+        if (!byWords || byWords.weak) {
+          fallback = await pickRootTopic(vaultPath, treeIndex, { title: outcome.topic, content: text }, async (bounded: ClassifyInput) => {
+            reportTokenCost("classify", [bounded.content, ...bounded.hints, bounded.pageIndex.map(page => `${page.path} | ${page.title} | ${page.summary}`).join("\n")], undefined, "root-topic-pick");
+            return llm.classify(bounded);
+          }, { threshold: config.confidenceThreshold, tags: config.tags });
+        }
+      }
       // E12-S20: a rescued memory hangs on the branch of its subject page when that page is in the tree;
       // otherwise under a top-level branch, never deep under a page that only shares a word with it.
-      const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath),
+      const leaf = await writeProvisionalLeaf(vaultPath, treeIndex,
         { title: outcome.topic, content: text, evidenceRef, reason: why, today: todayString(now()) }, writes,
-        { rootsOnly: true, anchors: [...new Set(anchors.map(normalizeMarkdownNotePath))] }).catch(() => null);
+        { rootsOnly: true, anchors: leafAnchors, notePages, fallback }).catch(() => null);
       const written = leaf ? await readFile(join(vaultPath, leaf.path), "utf8").catch(() => null) : null;
       const before = leaf ? writes.original(leaf.path) ?? null : null;
       await writes.revert();
@@ -2188,7 +2204,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         continue;
       }
       Object.assign(outcome, { ...(rejectedPages.length ? { reroutedFrom: rejectedPages } : {}), pages: [leaf.path], filedPages: [leaf.path],
-        status: "uncertain", reason: `provisional_leaf: ${why}`.slice(0, 240) });
+        status: "uncertain", reason: `${leaf.grown ? "grown_topic" : "provisional_leaf"}: ${why}`.slice(0, 240) });
       if (!touched.includes(leaf.path)) touched.push(leaf.path);
       await checkpoint();
     }

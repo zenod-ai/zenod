@@ -2,7 +2,8 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseNote } from "../vault/frontmatter.js";
 import { basenameOf, MEANING_FOLDERS, tierOf } from "../vault/files.js";
-import { scanVault } from "../vault/pages.js";
+import { scanVault, type PageIndexEntry } from "../vault/pages.js";
+import type { Classification, ClassifyInput } from "../llm/types.js";
 import {
   buildTreeIndex,
   formatLineage,
@@ -326,9 +327,22 @@ export async function writeProvisionalLeaf(
   index: TreeIndex,
   input: { content: string; evidenceRef: string; reason: string; today: string; title?: string },
   writes: TrackedWrites = new TrackedWrites(vaultPath),
-  options: { rootsOnly?: boolean; anchors?: readonly string[]; fallback?: NodeChoice | null } = {},
+  options: { rootsOnly?: boolean; anchors?: readonly string[]; fallback?: NodeChoice | null; notePages?: readonly string[] } = {},
 ): Promise<{ path: string; parent: string; grown?: boolean } | null> {
+  // E22-S6 (alpha9 E105-S252, 11 of 19 misses): a later point of a note that already reached a page grows
+  // the closest of those pages instead of starting a leaf beside them. A leaf this same note already made
+  // counts too (4 notes made 16 leaves): a note makes at most one new page, its other points join it.
   const anchored = anchorNode(index, options.anchors ?? []);
+  // A point the organiser gave its own subject page keeps it: a note that truly touches two topics grows both.
+  if (!anchored && options.notePages?.length) {
+    const own = await notePageChoice(vaultPath, index, input.title ? `${input.title}\n\n${input.content}` : input.content, options.notePages, input.evidenceRef);
+    if (own) {
+      const { date, anchor } = splitEvidenceRef(input.evidenceRef);
+      const quoted = input.content.trimEnd().split("\n").map(line => `> ${line}`).join("\n");
+      const grown = await growTopic(vaultPath, own, { citation: `[[${date}#^${anchor}]]`, date, quoted, title: input.title ?? input.content, today: input.today }, writes);
+      if (grown) return { path: own, parent: index.fields.get(own)?.provisional ? (parentPathOf(index, own) ?? own) : own, grown: true };
+    }
+  }
   const choice = anchored ?? options.fallback ?? await chooseTreeNode(vaultPath, index, input.title ? `${input.title}\n\n${input.content}` : input.content, options.rootsOnly ? { rootsOnly: true } : {});
   if (!choice) return null;
   const { date, anchor } = splitEvidenceRef(input.evidenceRef);
@@ -379,18 +393,122 @@ export async function writeProvisionalLeaf(
   }
 }
 
+/** Folders whose pages are never a topic a point grows on (the Log, receipts, the archive). */
+const NOT_A_TOPIC_RE = /^(?:Log|Inbox|Archive)\//;
+
+/**
+ * E22-S6: of the pages this note already reached, the one closest to this point (its name weighs twice its
+ * summary; a tie keeps a confirmed topic over the note's own leaf, then the caller's order). A provisional
+ * page counts only when it is this note's own leaf (it holds the note's Log link). Null when none can grow.
+ */
+export async function notePageChoice(vaultPath: string, index: TreeIndex, text: string, pages: readonly string[], evidenceRef: string): Promise<string | null> {
+  const { date, anchor } = splitEvidenceRef(evidenceRef);
+  const citation = `[[${date}#^${anchor}]]`;
+  const words = tokens(text);
+  let best: { path: string; score: number; leaf: boolean } | null = null;
+  for (const raw of new Set(pages)) {
+    const path = raw.endsWith(".md") ? raw : `${raw}.md`;
+    if (NOT_A_TOPIC_RE.test(path)) continue;
+    const fields = index.fields.get(path);
+    if (!fields || fields.merged) continue;
+    const body = await readFile(join(vaultPath, path), "utf8").catch(() => null);
+    if (body === null || !/^---\r?\n/.test(body)) continue;
+    const leaf = !!fields.provisional;
+    if (leaf && !body.includes(citation)) continue;
+    const name = tokens(`${fields.title} ${basenameOf(path)}`);
+    const rest = tokens(await pageSummary(vaultPath, path));
+    let score = 0;
+    for (const word of words) score += name.has(word) ? 2 : rest.has(word) || prefixHit(word, name) ? 1 : 0;
+    if (!best || score > best.score || (score === best.score && best.leaf && !leaf)) best = { path, score, leaf };
+  }
+  return best?.path ?? null;
+}
+
+function parentPathOf(index: TreeIndex, path: string): string | null {
+  const lineage = index.lineage(path);
+  return lineage.ok && lineage.steps.length > 1 ? lineage.steps[lineage.steps.length - 2]!.path : null;
+}
+
+/** E22-S6: how many page titles under a root describe it to the root-topic pick. */
+const ROOT_PICK_PAGE_TITLES = 12;
+/** Tree.md and digest summaries that only count ("12 pages, incl.", "329 of your captures in the last 30 days, latest …"). */
+const COUNT_ONLY_RE = /\b\d+ pages?,?(?: incl\.)?|(?:Your own captures that name [^:]+: )?\d+ (?:of your captures )?in the last 30 days(?:, on \d+ days)?(?:, latest \d{4}-\d{2}-\d{2})?\.?|no recent capture of yours\.?/gi;
+
+/** E22-S6: what the root-topic pick tells the classifier. */
+export const ROOT_PICK_HINT = "Root-topic pick: the memory below matched no topic by its words. The page index lists only the person's top-level topics. "
+  + "If the memory is about one of them (the same product, project, person or place, or work done inside it), choose that page with disposition "
+  + "integrate_page, action update and your confidence. Never create a page. If none of them is clearly its subject, use needs_clarification with no page.";
+
+/**
+ * E22-S6 (alpha9 E105-S252 cause 3): when the word match is weak, the classifier picks among the root topics
+ * before a leaf is made ("the debriefer call cut off" is Epic Team, not the Poly-Maker campaign it shared a word
+ * with). Only a confident pick of a listed root counts; anything else (or a failed call) is null.
+ */
+export async function pickRootTopic(
+  vaultPath: string,
+  index: TreeIndex,
+  input: { content: string; title?: string },
+  classify: (input: ClassifyInput) => Promise<Classification>,
+  options: { threshold: number; tags?: string[] },
+): Promise<NodeChoice | null> {
+  // A root's own summary is often only a count ("329 captures in the last 30 days"): the titles of the pages
+  // already under it say what it is about.
+  const below = new Map<string, string[]>();
+  for (const [path, fields] of index.fields) {
+    if (fields.merged) continue;
+    const lineage = index.lineage(path);
+    if (!lineage.ok || lineage.steps.length < 2) continue;
+    const root = lineage.steps[0]!.path;
+    const titles = below.get(root) ?? [];
+    if (titles.length < ROOT_PICK_PAGE_TITLES) titles.push(oneLine(fields.title, 90));
+    below.set(root, titles);
+  }
+  const roots: PageIndexEntry[] = [];
+  for (const node of index.tree?.nodes ?? []) {
+    const path = index.resolveRef(node.path);
+    if (!path || isNoteRoot(path) || roots.some(root => root.path === path)) continue;
+    const fields = index.fields.get(path);
+    if (!fields || fields.provisional || fields.merged) continue;
+    const said = `${node.summary} ${await pageSummary(vaultPath, path)}`.replace(COUNT_ONLY_RE, " ");
+    const titles = below.get(path) ?? [];
+    roots.push({ path, title: node.name || fields.title, type: "project", tags: [],
+      summary: oneLine(`${said}${titles.length ? ` Pages under it: ${titles.join("; ")}.` : ""}`, 900) });
+  }
+  if (!roots.length) return null;
+  let result: Classification;
+  try {
+    result = await classify({ content: input.title ? `${input.title}\n\n${input.content}` : input.content, hints: [ROOT_PICK_HINT], pageIndex: roots, tagVocabulary: options.tags ?? [] });
+  } catch {
+    return null;
+  }
+  const allowed = new Set(roots.map(root => root.path.toLowerCase()));
+  for (const topic of result.topics ?? [result]) {
+    if (!Number.isFinite(topic.confidence) || topic.confidence < options.threshold) continue;
+    if (topic.disposition !== "integrate_page" && topic.disposition !== "append_compact_note") continue;
+    for (const page of topic.pages) {
+      const path = page.path.endsWith(".md") ? page.path : `${page.path}.md`;
+      if (allowed.has(path.toLowerCase())) return { path: roots.find(root => root.path.toLowerCase() === path.toLowerCase())!.path, score: CONFIDENT_SCORE, weak: false };
+    }
+  }
+  return null;
+}
+
 /** E22-S5: a capture under this many content words, in at most this many words, has no lasting point. */
 export const ONE_OFF_MAX_CONTENT_WORDS = 2;
 export const ONE_OFF_MAX_WORDS = 12;
-const INGEST_LINE_RE = /^(?:voice note "|raw artifact|original:|media type:|source:|source timestamp:|transcribed by\b|extraction artifact:|user context:|captured-at:)/i;
+const INGEST_LINE_RE = /^(?:voice note "|raw artifact|original:|media type:|source(?: app| id| timestamp)?:|transcribed by\b|extraction artifact:|user context:|captured-at:)/i;
 
 /** E22-S5: a short acknowledgement or aside ("Amen, it was painful to get here.") that stays in the Log only. */
 export function isOneOff(content: string): boolean {
   const spoken = content.split("\n").filter(line => !INGEST_LINE_RE.test(line.trim().replace(/^-\s*/, ""))).join(" ").trim();
   if (!spoken) return false;
   if (spoken.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length > ONE_OFF_MAX_WORDS) return false;
-  return tokens(spoken).size <= ONE_OFF_MAX_CONTENT_WORDS;
+  // E22-S6: a fragment cut off mid-sentence ("Okay, so I'm gonna open the-") says no more than an aside.
+  const fragment = /(?:[\p{L}\p{N}][-–—]|\.\.\.|…)\s*$/u.test(spoken);
+  return tokens(spoken).size <= (fragment ? ONE_OFF_MAX_FRAGMENT_WORDS : ONE_OFF_MAX_CONTENT_WORDS);
 }
+/** E22-S6: a cut-off fragment with at most this many content words stays in the Log only. */
+export const ONE_OFF_MAX_FRAGMENT_WORDS = 4;
 
 /** E22-S5: the chosen node is a confirmed topic page close enough to grow (not a weak guess, not a pointer or a single note). */
 function canGrow(index: TreeIndex, choice: NodeChoice): boolean {

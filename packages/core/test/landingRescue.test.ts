@@ -156,7 +156,8 @@ describe("E12-S20 a rescued memory lands on its subject's branch", { timeout: 12
     const { captured, result } = await enrich(repo, llm);
     const topic = result.topics![0]!;
     expect(topic.status).toBe("uncertain");
-    expect(topic.reason).toMatch(/^provisional_leaf: reconciliation_needs_clarification/);
+    // E22-S6: a point that grew a topic says so (grown_topic), a new leaf says provisional_leaf.
+    expect(topic.reason).toMatch(/^grown_topic: reconciliation_needs_clarification/);
     // Tide Cart brand sits under Launching Tide Cart: the sister apps' branch, not Moss Lantern's.
     // E22-S5: that branch is a topic within reach, so it grows a dated section instead of a new leaf.
     expect(topic.filedPages[0]).toBe("Projects/Launching Tide Cart.md");

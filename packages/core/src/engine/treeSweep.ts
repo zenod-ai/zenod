@@ -298,7 +298,7 @@ async function sweepReceipt(
   for (const point of points) {
     const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath), {
       ...(point.topic ? { title: point.topic } : {}), content: point.text, evidenceRef: ref, reason: point.reason, today: options.today,
-    }, writes, { anchors: point.anchors, rootsOnly: true });
+    }, writes, { anchors: point.anchors, rootsOnly: true, notePages: [...existing, ...leaves] });
     if (leaf && !leaves.includes(leaf.path)) leaves.push(leaf.path);
   }
   if (!points.length) {
