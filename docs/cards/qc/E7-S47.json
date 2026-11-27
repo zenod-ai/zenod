@@ -1,75 +1,64 @@
 {
   "row": "E7-S47",
   "card": "docs/cards/E7-S47.md",
-  "cardSha": "525fd578f980b786",
+  "cardSha": "9f62ff65940905ba",
   "inputs": {
-    "card": "525fd578f980b786",
-    "page": "3d8e95cc49259173",
+    "card": "9f62ff65940905ba",
+    "page": "2d3e0fa86122530b",
     "rules": "c1a7854c21d10fb4",
     "words": "3540819a9c2967bf"
   },
-  "checkedAt": "2026-11-27T05:50:39Z",
+  "checkedAt": "2026-11-27T05:52:53Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Testers record memories",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "Evidence page and card goal aim at the first voice note; source names saving memories; the 'First voice note: never' box shows the gap."
+      "how": "Evidence page names the first voice note as the step; the 'First voice note: never' box and card goal show it."
     },
     {
       "said": "This week I'm working on...",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "The after welcome text on the evidence page says \"Try: 'This week I'm working on...'\"."
+      "how": "The after welcome text on the evidence page reads \"Try: 'This week I'm working on...'\"."
     },
     {
       "said": "Send your first voice note",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "The after welcome says \"Send me your first voice note now\", and the after /start panel has the heading \"Send your first voice note\"."
+      "how": "The after welcome says \"Send me your first voice note now\", and the after start panel is headed \"Send your first voice note\"."
     },
     {
       "said": "not linked yet?",
       "where": "WhatsApp welcome",
-      "status": "missed",
-      "how": "No \"not linked yet?\" box is visible in the screenshots or the evidence text; the card does not mention it."
+      "status": "met",
+      "how": "No \"not linked yet?\" box appears in the screenshots; the after panel shows a \"WhatsApp not linked yet?\" heading with steps, which matches the point. (shown on the evidence page: the card's three short lines need not hold it)"
     },
     {
       "said": "Send Nox the new welcome once",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "Decision line asks \"Should Zenod send Nox the new welcome once on WhatsApp?\" with Yes and No buttons."
+      "how": "Decision line asks whether Nox should get the new welcome once, with Yes and No buttons."
     }
   ],
   "visual": {
-    "pass": false,
-    "problems": [
-      "at 390 px: The progress strip shows only Signed up, Drive and WhatsApp linked; the Welcome and First voice note boxes are cut off at the right edge with no scroll cue. (rule 4)"
-    ],
-    "breaches": [
-      {
-        "rule": 4,
-        "width": 390,
-        "what": "The progress strip shows only Signed up, Drive and WhatsApp linked; the Welcome and First voice note boxes are cut off at the right edge with no scroll cue."
-      }
-    ],
-    "summary": "Both widths load with a clear punchline box, a readable before-and-after comparison and no sideways page scroll; the one fault is the cut-off progress strip at 390 px."
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "Both widths show the before and after welcome text and the after start panel with the voice note first; the page opens with the punchline box and the card's buttons are not on the evidence page."
   },
-  "pass": false,
-  "held": [
-    "not what he asked: \"not linked yet?\": No \"not linked yet?\" box is visible in the screenshots or the evidence text; the card does not mention it.",
-    "failed the visual check: at 390 px: The progress strip shows only Signed up, Drive and WhatsApp linked; the Welcome and First voice note boxes are cut off at the right edge with no scroll cue. (rule 4)"
-  ],
+  "pass": true,
+  "held": [],
   "reader": {
-    "asked": "Decide whether Zenod should send Nox the new WhatsApp welcome once, answering Yes or No.",
+    "asked": "He must decide whether Zenod should send Nox the new WhatsApp welcome once.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
-    "page": "3d8e95cc49259173",
-    "walkedAt": "2026-11-27T05:50:39Z",
+    "page": "2d3e0fa86122530b",
+    "walkedAt": "2026-11-27T05:52:53Z",
     "steps": [
       {
         "n": 1,
