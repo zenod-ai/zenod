@@ -73,7 +73,7 @@ import { assertVaultProviderUrl, type VaultPullTiming, type VaultRepository, typ
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { AnswerCancelledError, answerCancelReason } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString, unfiledEvidenceEntries } from "./evidence.js";
-import { anchorNode, chooseTreeNode, notePageChoice, pickRootTopic, type NodeChoice } from "./treePlacement.js";
+import { anchorNode, chooseTreeNode, notePageChoice, pickRootTopic, ROOT_PICK_MIN_CONFIDENCE, type NodeChoice } from "./treePlacement.js";
 import { appendOpsRollup, isAgentOpsReport, isOneOff, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree, TREE_PATH } from "../vault/tree.js";
@@ -2169,10 +2169,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (!(await notePageChoice(vaultPath, treeIndex, `${outcome.topic}\n\n${text}`, notePages, evidenceRef)) && !anchorNode(treeIndex, leafAnchors)) {
         const byWords = await chooseTreeNode(vaultPath, treeIndex, `${outcome.topic}\n\n${text}`, { rootsOnly: true });
         if (!byWords || byWords.weak) {
-          fallback = await pickRootTopic(vaultPath, treeIndex, { title: outcome.topic, content: text }, async (bounded: ClassifyInput) => {
+          fallback = await pickRootTopic(vaultPath, treeIndex, { title: outcome.topic, content: text, note: content }, async (bounded: ClassifyInput) => {
             reportTokenCost("classify", [bounded.content, ...bounded.hints, bounded.pageIndex.map(page => `${page.path} | ${page.title} | ${page.summary}`).join("\n")], undefined, "root-topic-pick");
             return llm.classify(bounded);
-          }, { threshold: config.confidenceThreshold, tags: config.tags });
+          }, { threshold: Math.min(config.confidenceThreshold, ROOT_PICK_MIN_CONFIDENCE), tags: config.tags });
         }
       }
       // E12-S20: a rescued memory hangs on the branch of its subject page when that page is in the tree;

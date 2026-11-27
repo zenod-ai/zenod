@@ -5,7 +5,7 @@ import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import type { ReconciliationInput, ReconciliationOperation } from "../src/engine/reconciliation.js";
-import { isOneOff, pickRootTopic, ROOT_PICK_HINT, TrackedWrites, writeProvisionalLeaf } from "../src/engine/treePlacement.js";
+import { isOneOff, pickRootTopic, ROOT_PICK_HINT, ROOT_PICK_MIN_CONFIDENCE, TrackedWrites, writeProvisionalLeaf } from "../src/engine/treePlacement.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import type { BrainLlm, Classification, ClassifyInput } from "../src/llm/types.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
@@ -124,7 +124,11 @@ describe("E22-S6 cause 3: a weak word match lets the classifier pick a root topi
     const seen: ClassifyInput[] = [];
     const text = "I just had a long call with the debriefer and it got disconnected; can you see what was saved?";
     const index = await buildTreeIndex(dir);
-    const pick = await pickRootTopic(dir, index, { content: text }, async input => { seen.push(input); return answer("Projects/Epic Team.md"); }, { threshold: 0.7 });
+    const note = `${text} Also the inbox cards look fine today.`;
+    const pick = await pickRootTopic(dir, index, { content: text, note }, async input => { seen.push(input); return answer("Projects/Epic Team.md"); }, { threshold: 0.7 });
+    expect(seen[0]!.context).toBe(note);
+    await pickRootTopic(dir, index, { content: text, note: `Source app: EpicTeam Chat\n\n${text}` }, async input => { seen.push(input); return answer(null); }, { threshold: 0.7 });
+    expect(seen[1]!.context).toBe("Recorded in: EpicTeam Chat.");
     expect(pick).toMatchObject({ path: "Projects/Epic Team.md", weak: false });
     expect(seen[0]!.hints).toEqual([ROOT_PICK_HINT]);
     expect(seen[0]!.pageIndex.map(page => page.path).sort()).toEqual(ROOTS.map(root => root.path).sort());
@@ -137,6 +141,9 @@ describe("E22-S6 cause 3: a weak word match lets the classifier pick a root topi
     const index = await buildTreeIndex(dir);
     const text = { content: "The button keeps moving around and I cannot find it." };
     expect(await pickRootTopic(dir, index, text, async () => answer("Projects/Epic Team.md", 0.5), { threshold: 0.7 })).toBeNull();
+    expect(await pickRootTopic(dir, index, text, async () => answer("Projects/Epic Team.md", 0.4), { threshold: ROOT_PICK_MIN_CONFIDENCE })).toBeNull();
+    expect(await pickRootTopic(dir, index, text, async () => answer("Projects/Epic Team.md", 0.55), { threshold: ROOT_PICK_MIN_CONFIDENCE }))
+      .toMatchObject({ path: "Projects/Epic Team.md" });
     expect(await pickRootTopic(dir, index, text, async () => answer("Notes/Something else.md"), { threshold: 0.7 })).toBeNull();
     expect(await pickRootTopic(dir, index, text, async () => answer(null), { threshold: 0.7 })).toBeNull();
     expect(await pickRootTopic(dir, index, text, async () => { throw new Error("provider down"); }, { threshold: 0.7 })).toBeNull();

@@ -85,7 +85,7 @@ try {
         how = "word match";
         const byWords = await tp.chooseTreeNode(scratch, index, `${outcome.topic}\n\n${text}`, { rootsOnly: true });
         if ((!byWords || byWords.weak) && classify) {
-          fallback = await tp.pickRootTopic(scratch, index, { title: outcome.topic, content: text }, classify, { threshold: 0.7 });
+          fallback = await tp.pickRootTopic(scratch, index, { title: outcome.topic, content: text, note: entry.content }, classify, { threshold: Math.min(0.7, tp.ROOT_PICK_MIN_CONFIDENCE) });
           how = fallback ? "root-topic pick" : "root-topic pick: none";
         }
       } else if (tp.anchorNode(index, anchors)) how = "own subject";
