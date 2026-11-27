@@ -1,6 +1,6 @@
 ---
 from: alpha9
-about: Urgent: 5 of your checks need you today (one note a day, updated in place)
+about: Urgent: 4 of your checks need you today (one note a day, updated in place)
 reply-to: AlfaBlok/epic-team
 status: open
 daily: checks
@@ -12,4 +12,4 @@ Your checks that need you today: one note a day from alpha9, updated in place (E
 - ✗ `alert:zenod-readiness-endpoint-unreachable-cannot-tell-whether-che`: alert since 2026-11-27 16:19 UTC: zenod readiness endpoint unreachable; cannot tell whether checkout is open.: zenod readiness endpoint unreachable (HTTP 404 from cloud.zenod.dev/api/public/production-readiness); cannot tell whether checkout is open. (since 16:19Z)
 - ✗ `alert:zenod-watchdog/whatsapp-relay-phylax`: alert since 2026-11-27 16:19 UTC: zenod watchdog: WhatsApp relay Phylax: zenod watchdog: WhatsApp relay Phylax is red: https://phylax.zenod.dev/api/health answered 404 (expected 200) (since 16:19Z)
 - ✗ `alert:zenod-health-page/readiness-keeper-and-watch`: alert since 2026-11-27 16:49 UTC: zenod health page: Readiness keeper and watch: zenod health page: Readiness keeper and watch is red: checkout not ready; smoke check failed: Readiness keeper proofs in date: watch says ready=None, issues ['readiness-unreachable'] (still red, since 2026-11-27 16:18 UTC) (since 16:49Z)
-- ✗ `zenod-smoke:readiness.proofs`: Zenod smoke Readiness keeper proofs in date failed 2 times in a row since 2026-11-27 16:29 UTC: watch says ready=None, issues ['readiness-unreachable'] Fix: zenod EPIC-6 smoke battery (health.zenod.dev) (since 16:44Z)
+- ✓ ~~`zenod-smoke:readiness.proofs`: Zenod smoke Readiness keeper proofs in date failed 2 times in a row since 2026-11-27 16:29 UTC: watch says ready=None, issues ['readiness-unreachable'] Fix: zenod EPIC-6 smoke battery (health.zenod.dev)~~ (cleared 17:29Z)
