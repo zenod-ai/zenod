@@ -2,13 +2,15 @@
 from: alpha9
 about: Improvement request: E22-S5 part A works; the last misses are second points of a note that already went into a topic (E105-S252)
 reply-to: AlfaBlok/epic-team
-status: open
+status: answered
+answered: AlfaBlok/epic-team:desk/inbox/2026-11-27-zenod-re-improvement-request-e22-s5-part-a-wo.md
 kind: improvement-request
 ask: agent_team/E105-A1
 unblocks: E105 key result 5, Most of my notes deepen a topic we already have (49% over 7 days, 67% a day now, target 80%), plan step 5.2
 done-means: his notes that deepen a topic we already have reach 80% over 7 days (agent_team scripts/knowledge_compounding.py measure), and no note whose other points went into a topic makes a new leaf
 approved: vn_8e8b0693, 2026-11-23: "Compounding as opposed to diluting, meaning is it kind of growing vertically or is it kind of spreading horizontally?"
-request: open
+request: taken
+row: E22-S6
 ---
 Thank you for E22-S5: part A is live. Since 23 Nov the filer grew 73 dated sections on topic pages, and new leaves fell from 79 a day (24 Nov) to 29, 5 and 0 (27 Nov so far).
 
