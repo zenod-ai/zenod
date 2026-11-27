@@ -1,0 +1,112 @@
+{
+  "row": "E7-S47",
+  "card": "docs/cards/E7-S47.md",
+  "cardSha": "525fd578f980b786",
+  "inputs": {
+    "card": "525fd578f980b786",
+    "page": "3d8e95cc49259173",
+    "rules": "c1a7854c21d10fb4",
+    "words": "3540819a9c2967bf"
+  },
+  "checkedAt": "2026-11-27T05:50:39Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Testers record memories",
+      "where": "WhatsApp welcome",
+      "status": "met",
+      "how": "Evidence page and card goal aim at the first voice note; source names saving memories; the 'First voice note: never' box shows the gap."
+    },
+    {
+      "said": "This week I'm working on...",
+      "where": "WhatsApp welcome",
+      "status": "met",
+      "how": "The after welcome text on the evidence page says \"Try: 'This week I'm working on...'\"."
+    },
+    {
+      "said": "Send your first voice note",
+      "where": "WhatsApp welcome",
+      "status": "met",
+      "how": "The after welcome says \"Send me your first voice note now\", and the after /start panel has the heading \"Send your first voice note\"."
+    },
+    {
+      "said": "not linked yet?",
+      "where": "WhatsApp welcome",
+      "status": "missed",
+      "how": "No \"not linked yet?\" box is visible in the screenshots or the evidence text; the card does not mention it."
+    },
+    {
+      "said": "Send Nox the new welcome once",
+      "where": "WhatsApp welcome",
+      "status": "met",
+      "how": "Decision line asks \"Should Zenod send Nox the new welcome once on WhatsApp?\" with Yes and No buttons."
+    }
+  ],
+  "visual": {
+    "pass": false,
+    "problems": [
+      "at 390 px: The progress strip shows only Signed up, Drive and WhatsApp linked; the Welcome and First voice note boxes are cut off at the right edge with no scroll cue. (rule 4)"
+    ],
+    "breaches": [
+      {
+        "rule": 4,
+        "width": 390,
+        "what": "The progress strip shows only Signed up, Drive and WhatsApp linked; the Welcome and First voice note boxes are cut off at the right edge with no scroll cue."
+      }
+    ],
+    "summary": "Both widths load with a clear punchline box, a readable before-and-after comparison and no sideways page scroll; the one fault is the cut-off progress strip at 390 px."
+  },
+  "pass": false,
+  "held": [
+    "not what he asked: \"not linked yet?\": No \"not linked yet?\" box is visible in the screenshots or the evidence text; the card does not mention it.",
+    "failed the visual check: at 390 px: The progress strip shows only Signed up, Drive and WhatsApp linked; the Welcome and First voice note boxes are cut off at the right edge with no scroll cue. (rule 4)"
+  ],
+  "reader": {
+    "asked": "Decide whether Zenod should send Nox the new WhatsApp welcome once, answering Yes or No.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "3d8e95cc49259173",
+    "walkedAt": "2026-11-27T05:50:39Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9103/#welcome",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link '#1776'",
+        "url": "https://github.com/zenod-ai/zenod/pull/1776",
+        "result": "answered 200 (another site)"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9103/#welcome",
+      "file": "E7-S47-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9103/#welcome",
+      "file": "E7-S47-1280.webp"
+    }
+  ]
+}
