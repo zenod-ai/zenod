@@ -1,64 +1,70 @@
 {
   "row": "E7-S47",
   "card": "docs/cards/E7-S47.md",
-  "cardSha": "9f62ff65940905ba",
+  "cardSha": "b02b0352be789430",
   "inputs": {
-    "card": "9f62ff65940905ba",
+    "card": "b02b0352be789430",
     "page": "2d3e0fa86122530b",
     "rules": "c1a7854c21d10fb4",
-    "words": "3540819a9c2967bf"
+    "words": "90816c875d25edf8"
   },
-  "checkedAt": "2026-11-27T05:52:53Z",
+  "checkedAt": "2026-11-27T05:58:03Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Testers record memories",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "Evidence page names the first voice note as the step; the 'First voice note: never' box and card goal show it."
+      "how": "Evidence page names the first voice note as the step; 'First voice note: never' box and goal show it."
     },
     {
       "said": "This week I'm working on...",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "The after welcome text on the evidence page reads \"Try: 'This week I'm working on...'\"."
+      "how": "After welcome text reads \"Try: 'This week I'm working on...'\" in both 390 and 1280 captures."
     },
     {
       "said": "Send your first voice note",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "The after welcome says \"Send me your first voice note now\", and the after start panel is headed \"Send your first voice note\"."
+      "how": "After welcome says \"Send me your first voice note now\"; after start panel headed \"Send your first voice note\"."
     },
     {
       "said": "not linked yet?",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "No \"not linked yet?\" box appears in the screenshots; the after panel shows a \"WhatsApp not linked yet?\" heading with steps, which matches the point. (shown on the evidence page: the card's three short lines need not hold it)"
+      "how": "After start panel shows \"WhatsApp not linked yet?\" heading with steps, as the one-tap box."
     },
     {
       "said": "Send Nox the new welcome once",
       "where": "WhatsApp welcome",
       "status": "met",
-      "how": "Decision line asks whether Nox should get the new welcome once, with Yes and No buttons."
+      "how": "Decision line asks whether Nox gets the new welcome once, with Yes and No buttons."
+    },
+    {
+      "said": "follow the tester with the fewest memories",
+      "where": "the card's source",
+      "status": "met",
+      "how": "Card goal and source line carry the fewest-memories step; the evidence page names the first voice note as the stuck step."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the before and after welcome text and the after start panel with the voice note first; the page opens with the punchline box and the card's buttons are not on the evidence page."
+    "summary": "Both widths show the before and after welcome text and the start page; the evidence page is clean, with the punchline box first and a diagram-free but non-plan card."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "He must decide whether Zenod should send Nox the new WhatsApp welcome once.",
+    "asked": "He is asked whether Zenod should send Nox the new welcome once on WhatsApp, answered with Yes or No.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "2d3e0fa86122530b",
-    "walkedAt": "2026-11-27T05:52:53Z",
+    "walkedAt": "2026-11-27T05:58:03Z",
     "steps": [
       {
         "n": 1,
