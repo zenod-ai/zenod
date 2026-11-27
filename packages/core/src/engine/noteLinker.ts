@@ -219,6 +219,8 @@ export async function applyNoteLinks(vaultPath: string, report: NoteLinksReport,
   const wholeNotes: Array<{ words: Set<string>; title: string }> = [];
   for (const note of report.notes) {
     if (note.state === "partial" && !options.partial) continue;
+    // E22-S6: the pages this note already reached, and any it reaches now: a later point grows one of them.
+    const notePages = [...note.citedBy];
     for (const point of note.points) {
       const index = await buildTreeIndex(vaultPath);
       const anchored = anchorNode(index, point.anchors) !== null;
@@ -235,8 +237,9 @@ export async function applyNoteLinks(vaultPath: string, report: NoteLinksReport,
       const leaf = await writeProvisionalLeaf(vaultPath, index, {
         title, content: point.text, evidenceRef: note.evidenceRef,
         reason: `linked when its filing was repaired (${point.reason})`, today,
-      }, writes, { anchors: point.anchors, rootsOnly: true, fallback });
+      }, writes, { anchors: point.anchors, rootsOnly: true, fallback, notePages });
       if (!leaf) continue;
+      if (!notePages.includes(leaf.path)) notePages.push(leaf.path);
       out.push({ evidenceRef: note.evidenceRef, topic: point.topic, leaf: leaf.path, parent: leaf.parent, anchored });
     }
   }
