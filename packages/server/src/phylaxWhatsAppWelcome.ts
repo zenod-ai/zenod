@@ -16,14 +16,18 @@ export const ZENOD_START_URL = "https://zenod.dev/start";
 
 export type PhylaxWelcomeKind = "tester";
 
-/** The one WhatsApp message a tester gets when their number links (proposal E26-S22, section 2). */
+/**
+ * The one WhatsApp message a tester gets when their number links (proposal E26-S22, section 2). E7-S47: the tester who
+ * got furthest (linked 21 Nov) never sent a note; the message sent them to a video first and never said what to say. The
+ * voice note now comes first, with one example to say, and the five-things video stays as the link Jordi asked for.
+ */
 export const ZENOD_WHATSAPP_TESTER_WELCOME = [
   "Your WhatsApp is linked. Thank you for testing Zenod!",
   "",
-  "Here is a 1-minute video of five things to try first:",
-  ZENOD_START_URL,
+  "Send me your first voice note now, right here. Try: \"This week I'm working on...\" I'll answer Saved and keep a copy in your own Drive or GitHub.",
   "",
-  "Then send me your first voice note, right here.",
+  "A 1-minute video of five things to try:",
+  ZENOD_START_URL,
 ].join("\n");
 
 /**
