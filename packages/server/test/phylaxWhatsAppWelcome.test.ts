@@ -41,6 +41,9 @@ describe("PhylaxWhatsAppWelcome", () => {
   it("is the proposal's text with the zenod.dev/start link, also as the account notice", () => {
     expect(ZENOD_WHATSAPP_TESTER_WELCOME).toContain("Your WhatsApp is linked. Thank you for testing Zenod!");
     expect(ZENOD_WHATSAPP_TESTER_WELCOME).toContain("https://zenod.dev/start");
+    // E7-S47: the voice note is asked first, with what to say, before the video link.
+    expect(ZENOD_WHATSAPP_TESTER_WELCOME).toContain("Try: \"This week I'm working on...\"");
+    expect(ZENOD_WHATSAPP_TESTER_WELCOME.indexOf("first voice note")).toBeLessThan(ZENOD_WHATSAPP_TESTER_WELCOME.indexOf("https://zenod.dev/start"));
     expect(phylaxAccountNoticeText("zenod", "tester_welcome", "https://zenod.dev/start")).toBe(ZENOD_WHATSAPP_TESTER_WELCOME);
   });
 });
