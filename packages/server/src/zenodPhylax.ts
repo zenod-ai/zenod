@@ -1698,6 +1698,36 @@ export class ZenodPhylaxAdapter {
   }
 
   /**
+   * E7-S48: the tester welcome once more, to an account whose first welcome went out before E7-S47 rewrote it. The caller
+   * gives a fresh operationId (the first welcome's is spent); Phylax audits it, so a retry cannot send twice. Returns the
+   * delivery receipt so the send can be recorded with its message id.
+   */
+  async sendTesterWelcomeOnce(account: CustomerAccount, operationId: string): Promise<{
+    result: "sent" | "skipped" | "failed"; messageId?: string | null; status?: string | null; at?: string | null;
+  }> {
+    if (!this.config.enabled || this.closed) return { result: "skipped" };
+    const binding = this.row(account.account_id);
+    if (!binding || binding.state !== "active") return { result: "skipped" };
+    try {
+      const call = await this.remote.call(this.token(binding), "phylax_management_v1_account_notice", {
+        kind: "tester_welcome",
+        operationId,
+        consoleUrl: "https://zenod.dev/start",
+      });
+      const content = (call.structuredContent ?? {}) as Record<string, unknown>;
+      if (call.isError) {
+        const error = content.error as Record<string, unknown> | undefined;
+        return { result: error?.code === "not_connected" ? "skipped" : "failed" };
+      }
+      const receipt = (content.receipt ?? {}) as Record<string, unknown>;
+      const text = (value: unknown) => (typeof value === "string" ? value : null);
+      return { result: "sent", messageId: text(receipt.sentMessageId), status: text(receipt.status), at: text(receipt.at) };
+    } catch {
+      return { result: "failed" };
+    }
+  }
+
+  /**
    * E7-S26: the one first-note invitation to an account whose WhatsApp is linked. One operationId sends at most once
    * (Phylax audits it), so a retry after a lost answer cannot message the tester twice.
    */
