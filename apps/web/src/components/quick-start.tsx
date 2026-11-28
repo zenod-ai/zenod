@@ -11,6 +11,7 @@ import {
 import { readPersonas, setPersonaEnabled, type Persona } from "@/lib/personas"
 import type { DashboardPlace } from "@/views/dashboard-navigation"
 import { WhatsAppOneTap } from "@/components/whatsapp-one-tap"
+import { FirstNoteSuggestion } from "@/components/first-note"
 import { showObsidianImport } from "@/components/obsidian-import"
 
 // EPIC-26 S15 (Jordi's E26-A8, "build as shown", mockup E26-S12): one card every new tester sees above
@@ -136,13 +137,15 @@ function StepBody({ id, go, ai, setAi }: { id: QuickStartStepId; go: Go; ai: "cl
         <>
           <WhatsAppOneTap
             fallback={
-              <ol>
-                <li>Open <b>Settings › WhatsApp &amp; Telegram</b> and type your phone number.</li>
-                <li>From that phone, send the code it shows to Zenod’s WhatsApp number.</li>
-              </ol>
+              <>
+                <ol>
+                  <li>Open <b>Settings › WhatsApp &amp; Telegram</b> and type your phone number.</li>
+                  <li>From that phone, send the code it shows to Zenod’s WhatsApp number.</li>
+                </ol>
+                <FirstNoteSuggestion when="before" />
+              </>
             }
           />
-          <p className="qs-after">Then send Zenod a voice note, a thought, a link or a photo.</p>
           <div className="qs-tick">Ticks itself when your first message arrives and Zenod replies.</div>
           <div className="qs-row">
             <button type="button" className="qs-btn ghost" onClick={() => go({ section: "settings", settings: "channels" })}>
