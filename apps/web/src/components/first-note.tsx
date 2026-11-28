@@ -28,10 +28,11 @@ export function FirstNoteSuggestion({ when }: { when: "before" | "after" }) {
       data-when={when}
     >
       <MicIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <p className="m-0">
+      <span>
         <b>{when === "after" ? "Send your first voice note now." : "Then send your first voice note."}</b>{" "}
-        Hold the microphone in the Zenod chat and try: <q>{FIRST_NOTE_EXAMPLE}</q> Zenod answers “Saved”.
-      </p>
+        Hold the microphone in the Zenod chat and try: <q>{FIRST_NOTE_EXAMPLE}</q>
+        {when === "before" ? " Zenod answers “Saved”." : null}
+      </span>
     </div>
   )
 }
