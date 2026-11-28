@@ -60,6 +60,7 @@ import {
   type ChannelState,
 } from "@/components/channel-experience"
 import { WhatsAppOneTap } from "@/components/whatsapp-one-tap"
+import { FirstNoteSuggestion } from "@/components/first-note"
 import {
   clearHostedChannelOperation,
   clearHostedWhatsAppRecovery,
@@ -1018,6 +1019,9 @@ export function HostedWhatsAppConnect({
           detail={`Not verified yet. The code ran out at ${codeExpiryTime(expiresAt!)}.`}
         />
       )}
+
+      {/* E7-S49: the screen right after linking suggests the welcome's first note until one is filed. */}
+      {connected && <FirstNoteSuggestion when="after" />}
 
       {showOneTap && (
         <WhatsAppOneTap

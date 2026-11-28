@@ -10,6 +10,7 @@ import {
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { FirstNoteSuggestion } from "@/components/first-note"
 import { hostedChannelOperationKey } from "@/lib/hosted-channel-operations"
 
 // E7-S16 (Jordi 18 Nov: "What can we do to activate this guy?"): sign-up to the first Saved reply on
@@ -239,11 +240,15 @@ export function WhatsAppOneTap({
 
   if (linked) {
     return (
-      <div className="flex items-start gap-2 text-sm" data-testid="whatsapp-one-tap" data-state="linked">
-        <CheckIcon className="mt-0.5 size-4 text-emerald-700" aria-hidden="true" />
-        <span>
-          <b>WhatsApp is linked.</b> Send Zenod a voice note there and it answers “Saved”.
-        </span>
+      <div className="flex flex-col gap-3" data-testid="whatsapp-one-tap" data-state="linked">
+        <div className="flex items-start gap-2 text-sm">
+          <CheckIcon className="mt-0.5 size-4 text-emerald-700" aria-hidden="true" />
+          <span>
+            <b>WhatsApp is linked.</b> Send Zenod a voice note there and it answers “Saved”.
+          </span>
+        </div>
+        {/* E7-S49: right after linking, the same first note the WhatsApp welcome suggests. */}
+        <FirstNoteSuggestion when="after" />
       </div>
     )
   }
@@ -303,6 +308,8 @@ export function WhatsAppOneTap({
           {error}
         </p>
       ) : null}
+      {/* E7-S49: what to say once linked, the same words as the WhatsApp welcome. */}
+      <FirstNoteSuggestion when="before" />
     </div>
   )
 }
