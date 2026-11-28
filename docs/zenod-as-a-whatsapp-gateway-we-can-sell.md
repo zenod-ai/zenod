@@ -48,7 +48,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| S1 | Delivery manager | Delivery manager | One-page offer for Zenod as a WhatsApp gateway (what, for whom, price, cost from Phylax metering) for Jordi's yes or no (E13-1) | draft | none | - | main | [Jordi's 7 Nov note](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-07.md#%5Ee-5fc46c) | 2026-11-07 | Jordi readies it (or says not now) |
+| S1 | Delivery manager | Delivery manager | One-page offer for Zenod as a WhatsApp gateway (what, for whom, price, cost from Phylax metering) for Jordi's yes or no (E13-1) | done (folded into agent_team E10-S10: the one-page offer is http://vps3.taild81fbb.ts.net:9834/, 15 dollars a month a line, closed test of 10; Jordi's try-or-park card is there; his 28 Nov 01:25Z words, Log/2026-11-28.md#^e-99550a: "what about the WhatsApp gateway? Could we try that?") | none | - | main | [Jordi's 7 Nov note](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-07.md#%5Ee-5fc46c) | 2026-11-07 | Jordi readies it (or says not now) |
 
 ## Decisions
 
