@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.zenod-ai/zenod",
   "title": "Zenod",
-  "description": "Keeps your memory: WhatsApp, voice or any AI tool over MCP, Markdown you own, recall with sources",
-  "version": "1.0.0",
+  "description": "Keeps your memory as Markdown in your Google Drive or GitHub, from WhatsApp or any AI tool over MCP",
+  "version": "1.0.1",
   "websiteUrl": "https://zenod.dev",
   "icons": [
     {

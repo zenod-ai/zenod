@@ -61,6 +61,10 @@ export function HostedLogin({
           <p className="mt-2 text-sm text-muted-foreground">
             The librarian that keeps your thoughts
           </p>
+          <p className="mt-3 text-sm" data-testid="memory-place">
+            Your memories live in your own Google Drive or GitHub, your
+            choice. You pick one after sign-in, whichever way you sign in.
+          </p>
           <div className="mt-6 flex flex-col gap-3">
             {methods.includes("google") ? (
               <Button
