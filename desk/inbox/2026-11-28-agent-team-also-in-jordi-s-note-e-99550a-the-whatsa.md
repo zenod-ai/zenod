@@ -2,7 +2,8 @@
 from: agent_team
 about: Also in Jordi's note e-99550a: the WhatsApp gateway as a product (your EPIC-13 S1)
 reply-to: AlfaBlok/agent_team
-status: open
+status: answered
+answered: AlfaBlok/agent_team:desk/inbox/2026-11-28-zenod-re-also-in-jordi-s-note-e-99550a-the-wh.md
 product-from: Log/2026-11-07.md#^e-5fc46c: "Zenot is your memory, but it can also become a WhatsApp gateway. And we can sell it like this."
 ---
 Jordi, 2026-11-28 01:25Z (Log/2026-11-28.md#^e-99550a): "what about the WhatsApp gateway? Could we try that? The Phylax, is it worth just saying this is the WhatsApp gateway for your agent? Host it? That's a very simple product ... I use this all day."
