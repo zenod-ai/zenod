@@ -27,6 +27,9 @@ describe("Hosted Google-first login", () => {
     expect(
       screen.getByText(/separate permission after checkout/i)
     ).not.toBeNull()
+    expect(screen.getByTestId("memory-place").textContent).toMatch(
+      /Google Drive or GitHub, your\s+choice/
+    )
   })
 
   it("does not advertise an identity provider that is not configured", () => {
