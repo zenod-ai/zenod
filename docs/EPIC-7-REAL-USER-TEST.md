@@ -32,15 +32,15 @@ Goal sentence before agent_team E40-A5 (Jordi 2026-11-13, "A yes, build as shown
 
 Owner: Delivery manager (zenod)
 Status: active
-Last attempted: 2026-11-26T17:10Z DM roll-up (run_46b34ad3): in review for Jordi: E7-S42 zenod.dev says Zenod Memory with three new pages (live f45bbf3a), E7-S46 memory MCP market study (page :9013) ; done: E7-S31, S35, S38, S40, S41 approved by Jordi, E7-S43 weekly Google rank running every Thursday ; waiting on agent_team: E7-S44 one morning briefing, E7-S45 (E105-S306) the testers' next note and lifting the mail hold ; draft: E7-S37
-Result: production f45bbf3a: 3 testers, 1 WhatsApp linked, 0 saved a memory, 0 replies to 16 mails; zenod.dev now reads Zenod Memory on every page; a market study says Zenod is the only memory that fills itself from phone voice notes
+Last attempted: 2026-11-28T12:55Z DM roll-up (run_3db10e47): done: E7-S46 market study and E7-S47 first-note welcome, both approved by Jordi 28 Nov ; in review: E7-S42 Zenod Memory pages ; running: E7-S48 sends Nox the new welcome once on WhatsApp (his yes), E7-S49 app screens suggest the first voice note (merged d9d72d9d, staging, production at the next promote) ; waiting: E7-S50 seven X reply drafts, Jordi said send them, zenod-social posts them ; E7-S45 every email to the three testers paused until one returns (E7-A46) ; E7-S44 on agent_team
+Result: production 2dbbdaf6: 3 testers, 1 WhatsApp linked, 0 voice notes, 0 replies to 16 mails; the WhatsApp welcome and zenod.dev/start ask for a first voice note with one example, the app screens follow at the next promote
 Evidence: [E7-S31](evidence/e7-s31-2026-11-24.md) · [E7-S15](evidence/e7-s15-2026-11-19.md) · [E7-S12](evidence/e7-s12-2026-11-18.md) · [public counts](https://cloud.zenod.dev/api/public/counts) · [E7-S9 feedback link](http://vps3.taild81fbb.ts.net:8921/e7-s9/)
-Waiting on: agent_team: E105-S306 (testers' next note, lifts the hold) and the daily tester picture (E7-S17) ; nothing waits on the owner here beyond his cards — about: tester next note and briefing
+Waiting on: zenod-social sending the seven X replies (E7-S50) ; the promote of d9d72d9d (E7-S49) ; Jordi's card E7-S42 ; nothing else waits on the owner here
 Monitoring: the 3 testers' replies to 'A quick question about Zenod' since 2026-11-24T04:04Z until 2026-11-27T16:00Z · next check 2026-11-25T16:00Z read the replies (the founder's inbox, agent_team feedback/voice/) · then fix the first thing they name
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
-Next action: Jordi's cards E7-S42 and E7-S46 ; agent_team E105-S306 sends each tester one next-step message ; on Jordi's yes to E7-S46, draft replies and a voice-note demo for second-brain threads on X
+Next action: E7-S48 reports the one message to Nox ; E7-S49 to review once production shows d9d72d9d, then E7-S37 closes folded ; E7-S50 back to review with the live reply links
 Source revision: see git log
-Verified at: 2026-11-26T17:10Z (cloud.zenod.dev/api/health f45bbf3a; rows E7-S31 to E7-S46 read)
+Verified at: 2026-11-28T12:55Z (cloud.zenod.dev/api/health 2dbbdaf6; promote 12:41Z batching; rows E7-S42 to E7-S50 read)
 
 ## Waiting on
 - [answered E7-A46 2026-11-27 @Delivery-Manager] Pause every email to the three testers until one comes back on their own — answer: the tester mail hold stays on for all three and agent_team E105-S306's next note waits; nothing is deleted — why: the Zenod strategist read 16 mails and 0 replies on 27 Nov, and a seventh mail from your address starts to read as spam; your 25 Nov note asked the team to write their next note, so this pauses it rather than drops it — rollback: one click reverses it, and the hold list (hold.json of the tester mail sender) goes back to letting E105-S306 send — about: no more mails to the three testers
