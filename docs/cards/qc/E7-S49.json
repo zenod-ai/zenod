@@ -1,40 +1,40 @@
 {
   "row": "E7-S49",
   "card": "docs/cards/E7-S49.md",
-  "cardSha": "ffe1912118b47b15",
+  "cardSha": "2144776636527ced",
   "inputs": {
-    "card": "ffe1912118b47b15",
+    "card": "2144776636527ced",
     "page": "7a831d65e6bd2e00",
     "rules": "c1a7854c21d10fb4",
     "words": "10e760a0823ac9b8"
   },
-  "checkedAt": "2026-11-28T13:55:02Z",
+  "checkedAt": "2026-11-28T13:55:32Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "This week I'm working on...",
       "where": "WhatsApp half is done here",
       "status": "met",
-      "how": "The WhatsApp setup screens at 390 and 1280 px show \"This week I'm working on...\" as the suggested first voice note, matching the welcome."
+      "how": "The WhatsApp setup screens at 390 and 1280 px show 'Then send your first voice note... \"This week I'm working on...\"', and the evidence page shows the same words in the suggestion and the card."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "Both widths show the WhatsApp setup and post-linking suggestion with the same words, the page does not scroll sideways, and the layout is one consistent quiet style."
+    "summary": "Both widths show the WhatsApp setup and the after-linking suggestion clearly with no sideways overflow; the page opens with the punchline box and the screens are readable."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the words \"This week I'm working on...\" fit the app as a tester's first step.",
+    "asked": "Does the words 'This week I'm working on...' fit the app as a tester's first step, so the team should keep this suggested first voice note.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "7a831d65e6bd2e00",
-    "walkedAt": "2026-11-28T13:55:02Z",
+    "walkedAt": "2026-11-28T13:55:32Z",
     "steps": [
       {
         "n": 1,
