@@ -81,6 +81,7 @@ import { TesterMarks, teamEmailsFromEnv } from "./testerMarks.js";
 import { mountTesterWhatsAppSetupRoute } from "./testerWhatsAppSetup.js";
 import { mountTesterProgressRoute, TesterLastSeen, tenantJobCounts, tenantMcpReads, vaultState } from "./testerProgress.js";
 import { mountTesterFeedbackRoutes, readTesterFeedback } from "./testerFeedback.js";
+import { mountTesterWelcomeOnceRoutes, TesterWelcomeOnce } from "./testerWelcomeOnce.js";
 import { mountTesterFirstNoteNudgeRoutes, parseFirstNoteNudgeMode, TesterFirstNoteNudge } from "./testerFirstNoteNudge.js";
 import { mountTesterWhatsAppNudgeRoutes, parseNudgeMode, TesterWhatsAppNudge } from "./testerWhatsAppNudge.js";
 import { mountTesterSetupEmailRoutes, parseSetupEmailMode, TesterSetupEmail } from "./testerSetupEmail.js";
@@ -1634,6 +1635,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           dataDir: storage.dataDir,
           envMode: parseSignupWelcomeMode(env.ZENOD_TESTER_SIGNUP_WELCOME) ?? "on",
           ...testerSetups,
+        }),
+      });
+      // E7-S48 (Jordi's Yes on E7-S47, 28 Nov): the new tester welcome once to a named, already linked tester; no email.
+      mountTesterWelcomeOnceRoutes(app, {
+        isOps: (c) => bearerMatches(c.req.header("authorization"), env.ZENOD_TESTER_OPS_TOKEN),
+        welcome: new TesterWelcomeOnce({
+          dataDir: storage.dataDir,
+          accounts: () => customer.accounts.list(),
+          isTester,
+          whatsappState: (accountId) => zenodPhylax?.whatsappState(accountId) ?? Promise.resolve(null),
+          send: (account, operationId) => zenodPhylax?.sendTesterWelcomeOnce(account, operationId) ?? Promise.resolve({ result: "skipped" as const }),
         }),
       });
       app.post("/api/ops/testers/onboarding/test-send", async (c) => {
