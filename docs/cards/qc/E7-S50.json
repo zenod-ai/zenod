@@ -1,40 +1,40 @@
 {
   "row": "E7-S50",
   "card": "docs/cards/E7-S50.md",
-  "cardSha": "1f4d119b91d9ae09",
+  "cardSha": "1b9d79daf78e8bc1",
   "inputs": {
-    "card": "1f4d119b91d9ae09",
+    "card": "1b9d79daf78e8bc1",
     "page": "f44cff1ea9d30351",
     "rules": "c1a7854c21d10fb4",
     "words": "078c3cff20335377"
   },
-  "checkedAt": "2026-11-28T10:55:23Z",
+  "checkedAt": "2026-11-28T10:56:00Z",
   "by": "card_qc.py (console judge)",
   "words": [
     {
       "said": "Draft replies and a voice-note demo for the second-brain threads: follow-up of E7-S46",
       "where": "the row's ask (no quote of his found)",
       "status": "met",
-      "how": "Seven reply drafts for live X threads are shown with links, why lines and draft text; the voice-note demo is shown with three stills."
+      "how": "Seven drafts with links, why lines and draft text are on the page; the voice-note demo with search and get results is shown, with the test-account gap declared."
     }
   ],
   "visual": {
     "pass": true,
     "problems": [],
     "breaches": [],
-    "summary": "The drafts page opens with the punchline box and a sequence of boxes with arrows; the seven drafts are cards with clear text, and the 390 px view fits without sideways scrolling."
+    "summary": "Both widths show the title, punchline box, a four-step sequence in one line and the seven drafts as stacked cards; no sideways page scroll, text readable and the demo's limits declared."
   },
   "pass": true,
   "held": [],
   "reader": {
-    "asked": "Decide whether the seven reply drafts for the X threads sound like him, so they can be sent.",
+    "asked": "Decide whether the seven drafts sound like him: yes to send them, or no to rewrite them.",
     "ambiguous": ""
   },
   "clicks": {
     "dead": null,
     "end": "a page to read",
     "page": "f44cff1ea9d30351",
-    "walkedAt": "2026-11-28T10:55:23Z",
+    "walkedAt": "2026-11-28T10:56:00Z",
     "steps": [
       {
         "n": 1,
