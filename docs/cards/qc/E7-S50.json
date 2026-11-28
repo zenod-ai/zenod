@@ -1,0 +1,119 @@
+{
+  "row": "E7-S50",
+  "card": "docs/cards/E7-S50.md",
+  "cardSha": "1f4d119b91d9ae09",
+  "inputs": {
+    "card": "1f4d119b91d9ae09",
+    "page": "f44cff1ea9d30351",
+    "rules": "c1a7854c21d10fb4",
+    "words": "078c3cff20335377"
+  },
+  "checkedAt": "2026-11-28T10:55:23Z",
+  "by": "card_qc.py (console judge)",
+  "words": [
+    {
+      "said": "Draft replies and a voice-note demo for the second-brain threads: follow-up of E7-S46",
+      "where": "the row's ask (no quote of his found)",
+      "status": "met",
+      "how": "Seven reply drafts for live X threads are shown with links, why lines and draft text; the voice-note demo is shown with three stills."
+    }
+  ],
+  "visual": {
+    "pass": true,
+    "problems": [],
+    "breaches": [],
+    "summary": "The drafts page opens with the punchline box and a sequence of boxes with arrows; the seven drafts are cards with clear text, and the 390 px view fits without sideways scrolling."
+  },
+  "pass": true,
+  "held": [],
+  "reader": {
+    "asked": "Decide whether the seven reply drafts for the X threads sound like him, so they can be sent.",
+    "ambiguous": ""
+  },
+  "clicks": {
+    "dead": null,
+    "end": "a page to read",
+    "page": "f44cff1ea9d30351",
+    "walkedAt": "2026-11-28T10:55:23Z",
+    "steps": [
+      {
+        "n": 1,
+        "what": "open the card's link",
+        "url": "http://vps3.taild81fbb.ts.net:9014/#drafts",
+        "result": "opened"
+      },
+      {
+        "n": 2,
+        "what": "open the link '↑ Pages › EPIC-7'",
+        "url": "https://team.alpha9.io/pages",
+        "result": "answered 200"
+      },
+      {
+        "n": 3,
+        "what": "open the link 'Epic deck'",
+        "url": "https://team.alpha9.io/deck/zenod/EPIC-7",
+        "result": "answered 200"
+      },
+      {
+        "n": 4,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/gregisenberg/status/2121331227009364340",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 5,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/coreyganim/status/2124237589830054074",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 6,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/woody_research/status/2124076332854247799",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 7,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/Ovrento/status/2125289641247182851",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 8,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/JiteshGhanchi/status/2124525327473103276",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 9,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/jawestenberg/status/2124270534691357169",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 10,
+        "what": "open the link 'open the thread'",
+        "url": "https://x.com/imryven/status/2124137409646330226",
+        "result": "answered 403 (another site)"
+      },
+      {
+        "n": 11,
+        "what": "open the link 'page :9013'",
+        "url": "http://vps3.taild81fbb.ts.net:9013/",
+        "result": "answered 200"
+      }
+    ]
+  },
+  "shots": [
+    {
+      "width": 390,
+      "url": "http://vps3.taild81fbb.ts.net:9014/#drafts",
+      "file": "E7-S50-390.webp"
+    },
+    {
+      "width": 1280,
+      "url": "http://vps3.taild81fbb.ts.net:9014/#drafts",
+      "file": "E7-S50-1280.webp"
+    }
+  ]
+}
